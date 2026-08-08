@@ -1,0 +1,115 @@
+[project]
+name = "healthcurve"
+version = "0.1.0"
+description = "Private personal health record and analysis for adrenal insufficiency"
+readme = "README.md"
+# ADR-0006: Python 3.13 is pinned. Moving to 3.14 requires a superseding ADR.
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.1",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.15.0",
+    "sqlalchemy==2.0.51",
+    "alembic==1.19.1",
+    "psycopg[binary]==3.3.4",
+    "python-dateutil==2.9.0.post0",
+    "tzdata==2026.3",
+    "structlog==26.1.0",
+    "httpx==0.28.1",
+    "jinja2==3.1.6",
+    "pyyaml==6.0.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pytest-asyncio==1.4.0",
+    "hypothesis==6.165.2",
+    "testcontainers[postgres]==4.15.0",
+    "ruff==0.16.2",
+    "pyright==1.1.411",
+    "import-linter==2.13",
+    "pre-commit==4.6.1",
+    "pip-audit==2.10.1",
+    "detect-secrets==1.5.0",
+    "httpx2>=2.9.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/healthcurve"]
+
+# ---------------------------------------------------------------------------
+# Lint / format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests", "migrations"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "B",         # bugbear
+    "UP",        # pyupgrade
+    "S",         # bandit (security)
+    "DTZ",       # flake8-datetimez -- naive datetimes are a clinical bug here
+    "ANN",       # annotations
+    "RUF",
+]
+ignore = [
+    "ANN401",  # allow typing.Any where genuinely dynamic
+    "S101",    # assert is fine in tests; guarded per-file below for src
+]
+
+[tool.ruff.lint.per-file-ignores]
+# S608: tests interpolate hardcoded schema names into DDL to probe privileges;
+# there is no untrusted input involved. Application code gets no such exemption.
+"tests/**" = ["S101", "S105", "S106", "S608", "ANN"]
+# Alembic writes these; the template is not ours to restyle.
+"migrations/versions/*.py" = ["ANN", "UP", "I", "E501"]
+"src/healthcurve/**" = []
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+# FastAPI registers route handlers via decorator, so they read as unused.
+reportUnusedFunction = false
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+markers = [
+    # Ties a test to a rule in docs/safety-spec.md. The CI gate in
+    # tests/test_safety_coverage.py fails if a test_required rule has no test.
+    "safety(rule_id): the docs/safety-spec.md rule this test enforces",
+    "postgres: requires a real PostgreSQL (Testcontainers), not SQLite",
+    "slow: excluded from the fast feedback loop",
+]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["src/healthcurve"]
+branch = true

@@ -1,0 +1,203 @@
+"""SAFE-15 / SAFE-16 enforced as a database privilege, not a convention.
+
+These tests run against a real PostgreSQL started from ``deploy/postgres-init``, so
+they verify the file that actually provisions production -- not a re-statement of it.
+SQLite cannot express any of this, which is why ADR-0001 requires real PostgreSQL here.
+
+They also cover the failure this build actually hit: the init script silently failing
+and PostgreSQL starting anyway with no schemas. A missing schema or a missing revoke
+now fails the suite instead of quietly widening what AI can write.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.exc import ProgrammingError
+from testcontainers.community.postgres import PostgresContainer
+
+pytestmark = [pytest.mark.postgres, pytest.mark.slow]
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INIT_DIR = REPO_ROOT / "deploy" / "postgres-init"
+
+OWNER_PASSWORD = "owner-test-password"  # ephemeral container credential
+AI_PASSWORD = "ai-test-password"  # ephemeral container credential
+
+SAFETY_SCHEMAS = ("fact", "plan")
+
+
+@pytest.fixture(scope="module")
+def postgres() -> Iterator[PostgresContainer]:
+    container = (
+        PostgresContainer(
+            "postgres:16-alpine",
+            username="healthcurve",
+            password=OWNER_PASSWORD,
+            dbname="healthcurve",
+            driver="psycopg",  # psycopg 3, matching the pinned application driver
+        )
+        .with_env("POSTGRES_AI_PASSWORD", AI_PASSWORD)
+        .with_volume_mapping(str(INIT_DIR), "/docker-entrypoint-initdb.d", "ro")
+    )
+    with container as running:
+        yield running
+
+
+@pytest.fixture(scope="module")
+def owner_engine(postgres: PostgresContainer) -> Iterator[Engine]:
+    engine = create_engine(postgres.get_connection_url())
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def ai_engine(postgres: PostgresContainer) -> Iterator[Engine]:
+    url = postgres.get_connection_url().replace(
+        f"healthcurve:{OWNER_PASSWORD}@", f"healthcurve_ai:{AI_PASSWORD}@"
+    )
+    engine = create_engine(url)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def probe_tables(owner_engine: Engine) -> None:
+    """Owner-created tables in each safety schema for the AI role to be denied on."""
+    with owner_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS fact.probe (id int primary key, note text)"))
+        conn.execute(text("CREATE TABLE IF NOT EXISTS plan.probe (id int primary key, note text)"))
+        conn.execute(text("INSERT INTO fact.probe VALUES (1, 'owner') ON CONFLICT DO NOTHING"))
+        conn.execute(text("INSERT INTO plan.probe VALUES (1, 'owner') ON CONFLICT DO NOTHING"))
+
+
+# ---------------------------------------------------------------------------
+# The init script ran at all
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.safety("SAFE-01")
+def test_all_four_schemas_exist(owner_engine: Engine) -> None:
+    """Guards the silent-init-failure mode: PostgreSQL starting with no schemas."""
+    with owner_engine.connect() as conn:
+        found = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT nspname FROM pg_namespace WHERE nspname IN ('fact','plan','ai','ops')")
+            )
+        }
+    assert found == {"fact", "plan", "ai", "ops"}, (
+        f"schema partition incomplete: {sorted(found)}. deploy/postgres-init did not run correctly."
+    )
+
+
+def test_required_extensions_are_installed(owner_engine: Engine) -> None:
+    """btree_gist backs the non-overlapping regimen version constraint (ADR-0001)."""
+    with owner_engine.connect() as conn:
+        found = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT extname FROM pg_extension WHERE extname IN ('btree_gist','pgcrypto')")
+            )
+        }
+    assert found == {"btree_gist", "pgcrypto"}
+
+
+def test_ai_role_exists(owner_engine: Engine) -> None:
+    with owner_engine.connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT 1 FROM pg_roles WHERE rolname = 'healthcurve_ai'")
+            ).scalar_one_or_none()
+            == 1
+        )
+
+
+# ---------------------------------------------------------------------------
+# The privilege boundary
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("schema", SAFETY_SCHEMAS)
+def test_ai_role_can_read_facts_and_plans(ai_engine: Engine, schema: str) -> None:
+    """AI must be able to read what it cites -- the restriction is on writing."""
+    with ai_engine.connect() as conn:
+        assert conn.execute(text(f"SELECT count(*) FROM {schema}.probe")).scalar_one() == 1
+
+
+@pytest.mark.safety("SAFE-15")
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "INSERT INTO fact.probe VALUES (99, 'ai-written')",
+        "UPDATE fact.probe SET note = 'tampered'",
+        "DELETE FROM fact.probe",
+    ],
+)
+def test_ai_role_cannot_write_facts(ai_engine: Engine, statement: str) -> None:
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(text(statement))
+
+
+@pytest.mark.safety("SAFE-16")
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "INSERT INTO plan.probe VALUES (99, 'ai-approved')",
+        "UPDATE plan.probe SET note = 'approved'",
+        "DELETE FROM plan.probe",
+    ],
+)
+def test_ai_role_cannot_write_plans(ai_engine: Engine, statement: str) -> None:
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(text(statement))
+
+
+@pytest.mark.safety("SAFE-15")
+@pytest.mark.parametrize("schema", SAFETY_SCHEMAS)
+def test_tables_created_later_are_also_protected(
+    owner_engine: Engine, ai_engine: Engine, schema: str
+) -> None:
+    """The real risk is a future migration adding a table without a revoke.
+
+    ALTER DEFAULT PRIVILEGES is what makes a *new* table protected on creation. Without
+    this test, a forgotten grant statement in a migration would silently give AI write
+    access to whatever table that migration added.
+    """
+    table = f"{schema}.future_migration_table"
+    with owner_engine.begin() as conn:
+        conn.execute(text(f"CREATE TABLE IF NOT EXISTS {table} (id int primary key)"))
+
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(text(f"INSERT INTO {table} VALUES (1)"))
+
+
+def test_ai_role_owns_its_own_namespace(ai_engine: Engine) -> None:
+    """The restriction must not make the AI module unable to do its own work."""
+    with ai_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS ai.analysis_probe (id int primary key)"))
+        conn.execute(text("INSERT INTO ai.analysis_probe VALUES (1) ON CONFLICT DO NOTHING"))
+        assert conn.execute(text("SELECT count(*) FROM ai.analysis_probe")).scalar_one() == 1
+
+
+def test_ai_role_can_record_job_progress(owner_engine: Engine, ai_engine: Engine) -> None:
+    """AI jobs write to ops, so the restriction must not block the queue (ADR-0004)."""
+    with owner_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS ops.job_probe (id int primary key)"))
+    with ai_engine.begin() as conn:
+        conn.execute(text("INSERT INTO ops.job_probe VALUES (1) ON CONFLICT DO NOTHING"))
+
+
+@pytest.mark.safety("SAFE-15")
+@pytest.mark.parametrize("schema", SAFETY_SCHEMAS)
+def test_ai_role_cannot_create_tables_in_safety_schemas(ai_engine: Engine, schema: str) -> None:
+    """Creating a table in `fact` would let AI own -- and therefore write -- it."""
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(text(f"CREATE TABLE {schema}.ai_created (id int)"))

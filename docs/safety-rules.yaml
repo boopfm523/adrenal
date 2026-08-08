@@ -1,0 +1,155 @@
+# Machine-readable index of docs/safety-spec.md.
+# CI asserts that every rule with test_required: true is referenced by at least one
+# test (via the @safety("SAFE-nn") marker). Rule IDs are stable and never reused.
+#
+# layer:  where the rule is enforced -- storage | api | ui | export | ai | ops
+# status: 'enforced' once a test covers it (CI then forbids losing that coverage);
+#         absent/'pending' means not yet implemented, and CI reports it as a gap.
+#         Moving enforced -> pending requires an ADR.
+version: 1
+
+rules:
+  - id: SAFE-01
+    title: Separate storage namespaces for fact, plan, and AI
+    layer: storage
+    test_required: true
+    status: enforced
+  - id: SAFE-02
+    title: Category discriminator present on every API resource
+    layer: api
+    test_required: true
+  - id: SAFE-03
+    title: No cross-category writes
+    layer: api
+    test_required: true
+  - id: SAFE-04
+    title: AI output labeled wherever it appears, not by color alone
+    layer: ui
+    test_required: true
+  - id: SAFE-05
+    title: AI output cites source records and model/prompt versions
+    layer: ai
+    test_required: true
+  - id: SAFE-06
+    title: Deleting or regenerating AI never mutates facts or plans
+    layer: ai
+    test_required: true
+  - id: SAFE-07
+    title: Exports and reports preserve the partition; AI off by default
+    layer: export
+    test_required: true
+
+  - id: SAFE-08
+    title: Corrections supersede, never overwrite
+    layer: storage
+    test_required: true
+    status: enforced
+  - id: SAFE-09
+    title: Every fact carries full temporal and source provenance
+    layer: storage
+    test_required: true
+    status: enforced
+  - id: SAFE-10
+    title: Missing is not zero
+    layer: storage
+    test_required: true
+    status: enforced
+
+  - id: SAFE-11
+    title: High-impact fields require confirmation before persistence
+    layer: api
+    test_required: true
+    high_impact_fields:
+      - medication
+      - amount
+      - unit
+      - route
+      - time
+      - stress_dose
+      - injection
+  - id: SAFE-12
+    title: Drafts are not facts
+    layer: api
+    test_required: true
+  - id: SAFE-13
+    title: Ambiguity is surfaced, not resolved silently
+    layer: ai
+    test_required: true
+    status: enforced
+  - id: SAFE-14
+    title: Confirmation state is recorded, not inferred
+    layer: storage
+    test_required: true
+
+  - id: SAFE-15
+    title: AI cannot write facts
+    layer: ai
+    test_required: true
+    prohibited_ai_action: true
+    status: enforced
+  - id: SAFE-16
+    title: AI cannot write, approve, or retire plans
+    layer: ai
+    test_required: true
+    prohibited_ai_action: true
+    status: enforced
+  - id: SAFE-17
+    title: AI cannot prescribe or propose a dose change as guidance
+    layer: ai
+    test_required: true
+    prohibited_ai_action: true
+  - id: SAFE-18
+    title: AI output cannot be promoted into a plan or a fact
+    layer: api
+    test_required: true
+    prohibited_ai_action: true
+  - id: SAFE-19
+    title: Untrusted text cannot instruct the model
+    layer: ai
+    test_required: true
+    prohibited_ai_action: true
+  - id: SAFE-20
+    title: Analysis is computed deterministically, not imagined
+    layer: ai
+    test_required: true
+    prohibited_ai_action: true
+
+  - id: SAFE-21
+    title: Emergency plan renders with AI and integrations unavailable
+    layer: ui
+    test_required: true
+  - id: SAFE-22
+    title: Emergency content is physician-authored only and shows its date
+    layer: ui
+    test_required: true
+  - id: SAFE-23
+    title: Emergency injection logging is fast, confirmed, and auditable
+    layer: api
+    test_required: true
+
+  - id: SAFE-24
+    title: Never distinguish category by color alone
+    layer: ui
+    test_required: true
+  - id: SAFE-25
+    title: No correlation presented as causation
+    layer: ui
+    test_required: true
+  - id: SAFE-26
+    title: Missingness is always visible and distinct from zero
+    layer: ui
+    test_required: true
+  - id: SAFE-27
+    title: Every metric states its definition and timezone
+    layer: ui
+    test_required: true
+
+  - id: SAFE-28
+    title: Safety-relevant actions are audited
+    layer: ops
+    test_required: true
+  - id: SAFE-29
+    title: Logs, fixtures, and issues carry no health data or secrets
+    layer: ops
+    test_required: true
+    status: enforced

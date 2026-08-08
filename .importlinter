@@ -1,0 +1,52 @@
+; Module boundaries for the modular monolith (ADR-0002).
+;
+; The monolith stays modular only if something checks. These contracts fail the build
+; on a cross-module import that bypasses a boundary, which is what preserves the
+; option of extracting a module later without paying distributed-systems costs now.
+
+[importlinter]
+root_package = healthcurve
+include_external_packages = False
+
+; ---------------------------------------------------------------------------
+; Layering: a module may import downwards, never upwards.
+; Highest first. `operations` (jobs, audit) is infrastructure, so it sits lowest
+; and must not reach up into any domain.
+; ---------------------------------------------------------------------------
+[importlinter:contract:layers]
+name = Domain modules form a one-way dependency stack
+type = layers
+layers =
+    healthcurve.reports
+    healthcurve.analytics
+    healthcurve.ai
+    healthcurve.integrations
+    healthcurve.episodes
+    healthcurve.labs
+    healthcurve.medications
+    healthcurve.events
+    healthcurve.identity
+    healthcurve.operations
+
+; ---------------------------------------------------------------------------
+; SAFE-15 / SAFE-16 defence in depth.
+;
+; The primary enforcement is a database privilege (ADR-0001): the AI role holds no
+; INSERT or UPDATE on the fact and plan schemas. This contract is the second layer --
+; it stops AI code from even reaching the write paths, so a privilege misconfiguration
+; is not the only thing standing between AI and a fact.
+;
+; AI reads facts and plans through the interfaces its layer already allows; what it
+; must never touch is a writer/repository/service module.
+; ---------------------------------------------------------------------------
+[importlinter:contract:ai-cannot-reach-write-paths]
+name = AI code cannot import fact or plan write paths (SAFE-15, SAFE-16)
+type = forbidden
+source_modules =
+    healthcurve.ai
+forbidden_modules =
+    healthcurve.events.writers
+    healthcurve.medications.writers
+    healthcurve.episodes.writers
+    healthcurve.labs.writers
+allow_indirect_imports = False

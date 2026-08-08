@@ -1,0 +1,47 @@
+# Public edge (ADR-0002). The only service that listens outside the private network.
+#
+# Development: plain HTTP on loopback only. Production overrides the site address
+# with the real hostname so Caddy provisions TLS automatically (deploy/Caddyfile.prod).
+
+{
+	admin off
+	# The admin API is off: it can reconfigure the proxy, and nothing should be able
+	# to reach it (threat model T2).
+}
+
+:80 {
+	encode zstd gzip
+
+	# --- Security headers -------------------------------------------------
+	header {
+		# No third-party anything: a health record must not describe itself to
+		# anyone else (ADR-0005).
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		-Server
+	}
+
+	# Health endpoints stay unlogged -- they are polled constantly and reveal nothing.
+	@health path /health/live /health/ready
+	handle @health {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	log {
+		output stdout
+		format json
+		# Query strings can carry filters describing the record; paths are enough.
+		# No health data in URLs is an application rule (T7); this is defence in depth.
+	}
+}

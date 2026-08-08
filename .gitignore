@@ -1,6 +1,45 @@
-
-# Beads / Dolt files (added by bd init)
-.dolt/
+# --- Secrets and real data: never commit. See docs/threat-model.md (T3, C8) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+*.sqlite
 *.db
-.beads-credential-key
-.beads/proxieddb/
+!.beads/**
+# Backups and restores may contain the complete health record (class C12)
+backups/
+restores/
+*.dump
+*.sql.gz
+# Rendered reports aggregate C2-C5 health data (class C11)
+reports_out/
+*.pdf
+!docs/**/*.pdf
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Node / frontend ---
+node_modules/
+web/dist/
+.vite/
+
+# --- Tooling / OS ---
+.DS_Store
+.idea/
+*.swp
+.pyright/
+.audit-requirements.txt

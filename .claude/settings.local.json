@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v bd)",
+      "Bash(command -v beads)",
+      "Bash(command -v uv)",
+      "Bash(command -v poetry)",
+      "Bash(command -v pipx)",
+      "Bash(git init *)",
+      "Bash(brew info *)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\)['formulae'][0]; print\\(d['homepage']\\); print\\(d['desc']\\)\")",
+      "Bash(brew install *)",
+      "Bash(bd --version)",
+      "Bash(rm -f migrations/versions/*.py)",
+      "Bash(docker compose *)",
+      "Bash(python3 -)",
+      "Bash(uv run *)",
+      "Bash(make check *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(bd comment *)",
+      "Bash(bd close *)",
+      "Bash(git add *)"
+    ]
+  }
+}

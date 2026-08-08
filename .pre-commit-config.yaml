@@ -1,0 +1,52 @@
+# Fast local gate. The authoritative checks run in CI (.github/workflows/ci.yml);
+# these are the ones worth catching before a commit exists.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+      # A committed .env is the most common credential leak (threat model T3).
+      - id: check-case-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: ^(uv\.lock|\.beads/)
+
+  - repo: local
+    hooks:
+      - id: no-env-file
+        name: refuse to commit .env
+        entry: bash -c 'git diff --cached --name-only | grep -qx ".env" && { echo "refusing to commit .env (threat model T3)"; exit 1; } || exit 0'
+        language: system
+        pass_filenames: false
+
+      - id: safety-coverage
+        name: safety rule coverage gate
+        entry: uv run pytest tests/test_safety_coverage.py -q
+        language: system
+        pass_filenames: false
+        files: ^(docs/safety-rules\.yaml|docs/safety-spec\.md|tests/.*\.py)$
+
+      - id: import-boundaries
+        name: module boundaries (ADR-0002)
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        files: ^(src/.*\.py|\.importlinter)$

@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # ADR-0006. The assert-runtime job fails the build if the interpreter differs.
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  quality:
+    name: lint, types, boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.9"
+          enable-cache: true
+
+      - name: Install pinned dependencies
+        run: uv sync --frozen --dev
+
+      - name: Assert the pinned runtime (ADR-0006)
+        run: |
+          uv run python -c "
+          import sys
+          assert sys.version_info[:2] == (3, 13), f'expected 3.13, got {sys.version}'
+          print('runtime', sys.version)
+          "
+
+      - name: Lint
+        run: |
+          uv run ruff check src tests migrations
+          uv run ruff format --check src tests migrations
+
+      - name: Type check
+        run: uv run pyright
+
+      - name: Module boundaries (ADR-0002)
+        run: uv run lint-imports
+
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.9"
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      # Runs the safety-rule coverage gate along with everything else: a rule marked
+      # `enforced` in docs/safety-rules.yaml that has lost its test fails here.
+      - name: Test
+        run: uv run pytest --cov --cov-report=term-missing
+
+  security:
+    name: dependency and secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.9"
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: Dependency vulnerabilities (threat model T6)
+        # Audit the lockfile rather than the environment: pip-audit cannot resolve
+        # the editable local package, and the lock is what CI and production install.
+        run: |
+          uv export --format requirements-txt --no-emit-project --no-hashes \
+            --all-groups -o .audit-requirements.txt
+          uv run pip-audit --strict -r .audit-requirements.txt
+
+      - name: Secret scan (SAFE-29)
+        run: |
+          uv run detect-secrets scan --baseline .secrets.baseline \
+            --exclude-files 'uv\.lock|\.beads/'
+          uv run detect-secrets audit --report --fail-on-unaudited .secrets.baseline
+
+      - name: Refuse a committed .env (threat model T3)
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env is committed; it must be git-ignored"
+            exit 1
+          fi
+
+  compose:
+    name: compose topology
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # ADR-0002 and threat model T2: only caddy may publish ports. This is the
+      # single most important deployment invariant, so it is checked mechanically
+      # rather than trusted to review.
+      - name: Only caddy publishes ports
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          compose = yaml.safe_load(open("docker-compose.yml"))
+          offenders = [
+              name for name, svc in compose["services"].items()
+              if svc.get("ports") and name != "caddy"
+          ]
+          if offenders:
+              print(f"::error::services publishing ports besides caddy: {offenders}")
+              sys.exit(1)
+          for required in ("postgres", "redis", "ollama"):
+              assert not compose["services"][required].get("ports"), required
+          print("topology ok: only caddy publishes ports")
+          PY
+
+      - name: Images are pinned by digest (threat model T6)
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          compose = yaml.safe_load(open("docker-compose.yml"))
+          unpinned = [
+              name for name, svc in compose["services"].items()
+              if "image" in svc and "@sha256:" not in svc["image"]
+          ]
+          if unpinned:
+              print(f"::error::images not pinned by digest: {unpinned}")
+              sys.exit(1)
+          print("all images pinned by digest")
+          PY
+
+      - name: Compose file is valid
+        run: docker compose config --quiet
+        env:
+          POSTGRES_PASSWORD: ci-placeholder-not-a-secret
+          POSTGRES_AI_PASSWORD: ci-placeholder-not-a-secret
