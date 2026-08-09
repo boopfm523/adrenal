@@ -227,7 +227,10 @@ So you don't go looking for it:
 
 - **No web interface.** Not started. See [web-frontend-guide.md](web-frontend-guide.md).
 - **No analytics or reports.** Empty packages.
-- **No backups.** Nothing is protecting this data yet — the most consequential gap.
+- **No backups are implemented.** The encrypted backup and isolated-restore design is
+  documented in [backup-restore-design.md](backup-restore-design.md), but until its
+  implementation and first passing restore drill, nothing protects this data from host
+  loss.
 - **No lab results.** PDF upload and lab storage are designed but not built.
 - **No Garmin or weather.** Not started.
 - **No deletion or retention.** Only the SQL above.
