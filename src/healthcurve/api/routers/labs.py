@@ -15,9 +15,11 @@ from sqlalchemy import select, text
 from starlette.concurrency import run_in_threadpool
 
 from healthcurve.ai.models import DraftState, ExtractionDraft
+from healthcurve.ai.vision import apply_vision_fallback
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import ApiModel, EventTimeIn
+from healthcurve.config import Settings
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.labs.documents import (
     DocumentLayout,
@@ -96,6 +98,7 @@ def _reconcile_extraction(
     owner: CurrentOwner,
     document: LabDocument,
     layout: DocumentLayout,
+    settings: Settings,
 ) -> ExtractionDraft | None:
     if document.status is not LabDocumentStatus.STORED:
         return None
@@ -107,6 +110,7 @@ def _reconcile_extraction(
         return None
     if not hmac.compare_digest(result.sha256, document.sha256):
         raise HTTPException(status_code=500, detail={"code": "extraction_checksum_mismatch"})
+    result = apply_vision_fallback(result, layout=layout, settings=settings)
     if session.get_bind().dialect.name == "postgresql":
         session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
@@ -132,6 +136,9 @@ def _reconcile_extraction(
                 "extractor_version": result.extractor_version,
                 "schema_version": result.schema_version,
                 "adequate": result.adequate,
+                "model_name": result.model_name,
+                "model_digest": result.model_digest,
+                "prompt_version": result.prompt_version,
             }
         )
         candidates.append(payload)
@@ -143,9 +150,9 @@ def _reconcile_extraction(
         candidates=candidates,
         original_candidates=copy.deepcopy(candidates),
         state=DraftState.PENDING,
-        model_name=None,
-        model_digest=None,
-        prompt_version="deterministic-no-prompt-v1",
+        model_name=result.model_name,
+        model_digest=result.model_digest,
+        prompt_version=result.prompt_version or "deterministic-no-prompt-v1",
         schema_version=result.schema_version,
     )
     session.add(draft)
@@ -229,7 +236,7 @@ def get_lab_document(
     document = _owned_document(session, owner, document_id)
     layout = DocumentLayout(settings.uploads_dir)
     _reconcile_document(document, layout)
-    draft = _reconcile_extraction(session, owner, document, layout)
+    draft = _reconcile_extraction(session, owner, document, layout, settings)
     payload = _document_payload(document)
     payload["extraction_status"] = "draft_ready" if draft is not None else "pending"
     payload["extraction_draft_id"] = str(draft.id) if draft is not None else None
@@ -246,7 +253,7 @@ def get_lab_document_extraction(
     document = _owned_document(session, owner, document_id)
     layout = DocumentLayout(settings.uploads_dir)
     _reconcile_document(document, layout)
-    draft = _reconcile_extraction(session, owner, document, layout)
+    draft = _reconcile_extraction(session, owner, document, layout, settings)
     if draft is None:
         raise HTTPException(status_code=409, detail={"code": "lab_extraction_not_ready"})
     return {

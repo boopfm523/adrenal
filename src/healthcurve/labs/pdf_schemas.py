@@ -15,7 +15,7 @@ MAX_SOURCE_LINE_CHARS: Final = 2_000
 class PdfDraftCandidate(BaseModel):
     page_number: int = Field(ge=1, le=100)
     row_index: int = Field(ge=1)
-    extraction_tier: Literal["embedded_text", "ocr"] = "embedded_text"
+    extraction_tier: Literal["embedded_text", "ocr", "vision"] = "embedded_text"
     coordinate_space: Literal["pdf_points", "rendered_pixels"] = "pdf_points"
     parsed: bool
     analyte_name: str | None = None
@@ -56,9 +56,13 @@ class EmbeddedExtractionResult(BaseModel):
     schema_version: Literal["lab-pdf-v1", "lab-pdf-v2"] = EXTRACTION_SCHEMA_VERSION
     extractor_name: str = Field(default="pdfplumber", min_length=1, max_length=64)
     extractor_version: str = Field(min_length=1, max_length=64)
-    extraction_tier: Literal["embedded_text", "ocr", "mixed"] = "embedded_text"
+    extraction_tier: Literal["embedded_text", "ocr", "mixed", "vision"] = "embedded_text"
     textless_pages: list[int] = Field(default_factory=list, max_length=100)
     ocr_pages: list[int] = Field(default_factory=list, max_length=100)
+    vision_pages: list[int] = Field(default_factory=list, max_length=100)
+    model_name: str | None = Field(default=None, min_length=1, max_length=120)
+    model_digest: str | None = Field(default=None, min_length=1, max_length=128)
+    prompt_version: str | None = Field(default=None, min_length=1, max_length=32)
     page_count: int = Field(ge=1, le=100)
     parsed_count: int = Field(ge=0)
     unparsed_count: int = Field(ge=0)
@@ -74,7 +78,12 @@ class EmbeddedExtractionResult(BaseModel):
         if self.adequate and parsed == 0:
             raise ValueError("adequate extraction requires at least one parsed row")
         if any(
-            page < 1 or page > self.page_count for page in (*self.textless_pages, *self.ocr_pages)
+            page < 1 or page > self.page_count
+            for page in (*self.textless_pages, *self.ocr_pages, *self.vision_pages)
         ):
             raise ValueError("extraction page list is outside document bounds")
+        if self.model_name is not None and (
+            self.model_digest is None or self.prompt_version is None
+        ):
+            raise ValueError("model extraction requires digest and prompt version")
         return self

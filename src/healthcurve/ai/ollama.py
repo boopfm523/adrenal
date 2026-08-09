@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import time
+from base64 import b64encode
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Final
@@ -102,8 +103,9 @@ class OllamaClient:
     def model_name(self) -> str:
         return self._settings.ollama_model
 
-    def identity(self) -> ModelIdentity | None:
+    def identity(self, model_name: str | None = None) -> ModelIdentity | None:
         """Resolve the configured tag to the immutable local Ollama digest."""
+        selected_model = model_name or self._settings.ollama_model
         try:
             with httpx.Client(
                 base_url=self._settings.ollama_base_url, timeout=httpx.Timeout(3.0)
@@ -114,10 +116,10 @@ class OllamaClient:
         except (httpx.HTTPError, ValueError):
             return None
         for model in models:
-            if model.get("name") == self._settings.ollama_model:
+            if model.get("name") == selected_model:
                 digest = model.get("digest")
                 if isinstance(digest, str) and digest:
-                    return ModelIdentity(name=self._settings.ollama_model, digest=digest)
+                    return ModelIdentity(name=selected_model, digest=digest)
         return None
 
     def generate_json(
@@ -127,6 +129,8 @@ class OllamaClient:
         user_content: str,
         json_schema: dict[str, Any],
         temperature: float = 0.0,
+        model_name: str | None = None,
+        images: list[bytes] | None = None,
     ) -> ModelResult:
         """Ask for a JSON object matching ``json_schema``.
 
@@ -134,14 +138,19 @@ class OllamaClient:
         never merged into the system prompt, and the caller must still validate the
         result against a Pydantic model before trusting any of it.
         """
+        selected_model = model_name or self._settings.ollama_model
         if self._breaker.is_open:
             return ModelResult(
                 outcome=ModelOutcome.UNAVAILABLE,
+                model_name=selected_model,
                 detail="circuit breaker open after repeated failures",
             )
 
+        user_message: dict[str, Any] = {"role": "user", "content": user_content}
+        if images:
+            user_message["images"] = [b64encode(image).decode("ascii") for image in images]
         payload: dict[str, Any] = {
-            "model": self._settings.ollama_model,
+            "model": selected_model,
             "stream": False,
             # Ollama's structured-output mode. Constrains decoding to the schema, which
             # makes invalid JSON rare -- but never assumed away.
@@ -149,7 +158,7 @@ class OllamaClient:
             "options": {"temperature": temperature},
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
+                user_message,
             ],
         }
         if not self._settings.ollama_thinking:
@@ -177,7 +186,7 @@ class OllamaClient:
                     # Losing the speed-up beats losing the call.
                     log.info(
                         "model does not accept the think field; retrying without it",
-                        model_name=self._settings.ollama_model,
+                        model_name=selected_model,
                         reason_code="think_unsupported",
                     )
                     payload.pop("think")
@@ -186,61 +195,74 @@ class OllamaClient:
                 body = response.json()
         except httpx.TimeoutException:
             self._breaker.record_failure()
-            return self._failed(ModelOutcome.TIMEOUT, started, "model timed out")
+            return self._failed(ModelOutcome.TIMEOUT, started, "model timed out", selected_model)
         except httpx.HTTPStatusError as exc:
             self._breaker.record_failure()
             return self._failed(
-                ModelOutcome.ERROR, started, f"model returned HTTP {exc.response.status_code}"
+                ModelOutcome.ERROR,
+                started,
+                f"model returned HTTP {exc.response.status_code}",
+                selected_model,
             )
         except httpx.HTTPError:
             self._breaker.record_failure()
-            return self._failed(ModelOutcome.UNAVAILABLE, started, "model unreachable")
+            return self._failed(
+                ModelOutcome.UNAVAILABLE, started, "model unreachable", selected_model
+            )
 
         latency_ms = int((time.monotonic() - started) * 1000)
         content = (body.get("message") or {}).get("content")
         if not content:
             self._breaker.record_failure()
-            return self._failed(ModelOutcome.INVALID_JSON, started, "empty response")
+            return self._failed(
+                ModelOutcome.INVALID_JSON, started, "empty response", selected_model
+            )
 
         try:
             data = json.loads(content)
         except json.JSONDecodeError:
             self._breaker.record_failure()
-            return self._failed(ModelOutcome.INVALID_JSON, started, "response was not JSON")
+            return self._failed(
+                ModelOutcome.INVALID_JSON, started, "response was not JSON", selected_model
+            )
 
         if not isinstance(data, dict):
             self._breaker.record_failure()
-            return self._failed(ModelOutcome.INVALID_JSON, started, "response was not an object")
+            return self._failed(
+                ModelOutcome.INVALID_JSON, started, "response was not an object", selected_model
+            )
 
         self._breaker.record_success()
         log.info(
             "model call",
             outcome=ModelOutcome.OK.value,
-            model_name=self._settings.ollama_model,
+            model_name=selected_model,
             latency_ms=latency_ms,
             schema_valid=True,
         )
         return ModelResult(
             outcome=ModelOutcome.OK,
             data=data,
-            model_name=self._settings.ollama_model,
+            model_name=selected_model,
             model_digest=body.get("model_digest"),
             latency_ms=latency_ms,
         )
 
-    def _failed(self, outcome: ModelOutcome, started: float, detail: str) -> ModelResult:
+    def _failed(
+        self, outcome: ModelOutcome, started: float, detail: str, model_name: str
+    ) -> ModelResult:
         latency_ms = int((time.monotonic() - started) * 1000)
         # Outcome and timing only -- never the prompt or any partial completion (C9).
         log.warning(
             "model call failed",
             outcome=outcome.value,
-            model_name=self._settings.ollama_model,
+            model_name=model_name,
             latency_ms=latency_ms,
             reason_code=outcome.value,
         )
         return ModelResult(
             outcome=outcome,
-            model_name=self._settings.ollama_model,
+            model_name=model_name,
             latency_ms=latency_ms,
             detail=detail,
         )

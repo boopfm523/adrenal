@@ -7,6 +7,7 @@ model problem can never propagate into a write path or take down capture.
 from __future__ import annotations
 
 import json
+from base64 import b64decode
 from collections.abc import Callable
 from typing import Any
 
@@ -151,6 +152,30 @@ def test_schema_is_sent_to_constrain_decoding(monkeypatch: pytest.MonkeyPatch) -
     assert seen["format"] == SCHEMA
     assert seen["options"]["temperature"] == 0.0
     assert seen["stream"] is False
+
+
+def test_vision_image_is_data_on_the_selected_private_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "{}"}})
+
+    _patch_transport(monkeypatch, handler)
+    image = b"\x89PNG\r\n\x1a\nsynthetic"
+    _client().generate_json(
+        system_prompt="VISION RULES",
+        user_content="page evidence only",
+        json_schema=SCHEMA,
+        model_name="qwen3-vl:30b",
+        images=[image],
+    )
+
+    assert seen["model"] == "qwen3-vl:30b"
+    assert b64decode(seen["messages"][1]["images"][0]) == image
+    assert "images" not in seen["messages"][0]
 
 
 # ---------------------------------------------------------------------------

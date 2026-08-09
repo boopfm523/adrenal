@@ -98,10 +98,11 @@ class QpdfRunner:
 
 
 class OcrToolRunner(QpdfRunner):
-    def __init__(self, *, width: int = 1200, height: int = 800) -> None:
+    def __init__(self, *, width: int = 1200, height: int = 800, tsv: str | None = None) -> None:
         super().__init__()
         self.width = width
         self.height = height
+        self.tsv = tsv
 
     def __call__(
         self, args: list[str], *, timeout: float, stdout_path: Path | None = None
@@ -113,7 +114,7 @@ class OcrToolRunner(QpdfRunner):
         if args[0] == "tesseract":
             self.calls.append(args)
             assert stdout_path is not None
-            stdout_path.write_text(_synthetic_tesseract_tsv())
+            stdout_path.write_text(self.tsv or _synthetic_tesseract_tsv())
             return CommandResult(0, "")
         return super().__call__(args, timeout=timeout, stdout_path=stdout_path)
 

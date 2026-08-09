@@ -26,6 +26,7 @@ from healthcurve.labs.documents import (
     is_deleted,
     load_validation_result,
     write_extraction_result,
+    write_page_preview,
     write_validation_result,
 )
 from healthcurve.labs.ocr_extraction import OcrError, extract_textless_pages, failed_ocr_result
@@ -263,7 +264,14 @@ def _extract_if_needed(
         )
         if extraction.textless_pages:
             try:
-                extraction = extract_textless_pages(source, embedded=extraction, runner=runner)
+                extraction = extract_textless_pages(
+                    source,
+                    embedded=extraction,
+                    runner=runner,
+                    preview_sink=lambda page, image: write_page_preview(
+                        layout, validation.document_id, page, image
+                    ),
+                )
             except OcrError as exc:
                 extraction = failed_ocr_result(extraction, reason_code=str(exc))
     except Exception:  # A hostile parser failure becomes visible unparsed evidence.

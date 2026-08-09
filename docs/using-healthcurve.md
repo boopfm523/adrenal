@@ -192,6 +192,22 @@ live in a temporary directory and are purged on success or failure. The extracti
 records whether it used `embedded_text`, `ocr`, or `mixed`; OCR still creates only a
 confirmation-required draft.
 
+If OCR still cannot produce a high-confidence row, the networkless worker publishes a
+bounded inert PNG for that page. On extraction review, HealthCurve sends only that PNG
+and capped lower-tier candidates through the private Ollama boundary to
+`qwen3-vl:30b`. The response is constrained to a strict schema and rejected unless
+every candidate cites the expected page and a bounding box inside the rendered image.
+The draft records the model tag, immutable digest, prompt version, page evidence, and
+`model_generated` flag; suspected prompt-injection text is flagged. Earlier OCR
+evidence remains beside the proposal and is never overwritten. A missing model,
+timeout, invalid schema, missing preview, or empty result becomes an explicit unparsed
+candidate and creates no fact or plan. Pull the selected local model before relying on
+this fallback:
+
+```bash
+ollama pull qwen3-vl:30b
+```
+
 ---
 
 ## Analytics
@@ -287,9 +303,9 @@ So you don't go looking for it:
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
-- **No vision fallback or PDF review UI yet.** Manual/CSV lab facts, private PDF source
-  storage, deterministic embedded-text drafts, and bounded scanned-page OCR exist.
-  Vision fallback and per-result review remain `hc-xo6.5.3` and `hc-xo6.6`.
+- **No PDF review UI yet.** Manual/CSV lab facts, private PDF source storage,
+  deterministic embedded-text drafts, bounded scanned-page OCR, and private local
+  vision fallback exist. Per-result review remains `hc-xo6.6`.
 - **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
   implemented; direct Garmin API access remains gated by vendor approval.
 - **No record/account deletion.** Backup retention exists; application-data deletion

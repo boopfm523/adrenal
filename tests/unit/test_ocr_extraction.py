@@ -75,3 +75,23 @@ def test_document_wall_clock_cap_stops_before_ocr(tmp_path: Path) -> None:
             runner=OcrToolRunner(),
             clock=lambda: next(ticks),
         )
+
+
+def test_unresolved_ocr_page_publishes_only_bounded_inert_preview(tmp_path: Path) -> None:
+    path, embedded = _embedded_scan(tmp_path)
+    tsv = (
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\t"
+        "height\tconf\ttext\n1\t1\t1\t1\t1\t1\t80\t100\t170\t45\t42\tUnclear"
+    )
+    published: list[tuple[int, bytes]] = []
+
+    result = extract_textless_pages(
+        path,
+        embedded=embedded,
+        runner=OcrToolRunner(tsv=tsv),
+        preview_sink=lambda page, preview: published.append((page, preview.read_bytes())),
+    )
+
+    assert result.vision_pages == [1]
+    assert published[0][0] == 1
+    assert published[0][1].startswith(b"\x89PNG\r\n\x1a\n")

@@ -44,12 +44,14 @@ def extract_textless_pages(
     embedded: EmbeddedExtractionResult,
     runner: OcrRunner,
     clock: Callable[[], float] = time.monotonic,
+    preview_sink: Callable[[int, Path], None] | None = None,
 ) -> EmbeddedExtractionResult:
     if not embedded.textless_pages:
         return embedded
     started = clock()
     candidates = list(embedded.candidates)
     total_pixels = 0
+    vision_pages: list[int] = []
     with TemporaryDirectory(prefix="hc-ocr-") as scratch_name:
         scratch = Path(scratch_name)
         for page_number in embedded.textless_pages:
@@ -126,6 +128,12 @@ def extract_textless_pages(
             )
             if not page_candidates:
                 page_candidates = [_empty_page_candidate(page_number)]
+            if not any(
+                candidate.parsed and candidate.confidence >= 0.8 for candidate in page_candidates
+            ):
+                vision_pages.append(page_number)
+                if preview_sink is not None:
+                    preview_sink(page_number, image_path)
             candidates.extend(page_candidates)
 
     parsed_count = sum(candidate.parsed for candidate in candidates)
@@ -142,6 +150,7 @@ def extract_textless_pages(
         page_count=embedded.page_count,
         textless_pages=embedded.textless_pages,
         ocr_pages=embedded.textless_pages,
+        vision_pages=vision_pages,
         parsed_count=parsed_count,
         unparsed_count=unparsed_count,
         adequate=any(candidate.parsed and candidate.confidence >= 0.8 for candidate in candidates),
@@ -187,6 +196,7 @@ def failed_ocr_result(
         page_count=embedded.page_count,
         textless_pages=embedded.textless_pages,
         ocr_pages=embedded.textless_pages,
+        vision_pages=embedded.textless_pages,
         parsed_count=parsed_count,
         unparsed_count=len(candidates) - parsed_count,
         adequate=embedded.adequate,

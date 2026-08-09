@@ -106,6 +106,7 @@ class Settings(BaseSettings):
     # --- Local LLM (ADR-0003). Never public. ---
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "qwen3:30b"
+    ollama_vision_model: str = "qwen3-vl:30b"
     ollama_connect_timeout_s: float = Field(default=5.0, gt=0)
     ollama_read_timeout_s: float = Field(default=60.0, gt=0)
     ollama_max_retries: int = Field(default=2, ge=0)

@@ -39,8 +39,10 @@ class StubOllamaClient(OllamaClient):
         user_content: str,
         json_schema: dict[str, Any],
         temperature: float = 0.0,
+        model_name: str | None = None,
+        images: list[bytes] | None = None,
     ) -> ModelResult:
-        del system_prompt, user_content, json_schema, temperature
+        del system_prompt, user_content, json_schema, temperature, model_name, images
         return self.result
 
 
