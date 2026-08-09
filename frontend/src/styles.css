@@ -59,10 +59,12 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .category-card--fact { border: 1px solid #728179; border-left: 0.45rem solid #365f50; }
 .category-card--plan { border: 2px solid #29437a; border-radius: 0.75rem; }
 .category-card--ai { border: 1px dashed #684a76; border-radius: 0.75rem; }
+.category-card--context { border: 1px solid #55708a; border-left: 0.45rem double #55708a; background: #f5f9fc; }
 .category-label { font-weight: 750; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.8rem; }
 .category-card--fact .category-label::after { content: " · source record"; text-transform: none; font-weight: 500; }
 .category-card--plan .category-label::after { content: " · approved version"; text-transform: none; font-weight: 500; }
 .category-card--ai .category-label::after { content: " · derived content"; text-transform: none; font-weight: 500; }
+.category-card--context .category-label::after { content: " · optional context"; text-transform: none; font-weight: 500; }
 .category-disclaimer { font-size: 0.9rem; font-weight: 650; }
 
 .login-page { display: grid; min-height: 100vh; place-items: center; padding: 1rem; }
@@ -156,6 +158,17 @@ circle.chart-series { fill: white; }
 .privacy-action { display: grid; gap: 0.8rem; }
 .privacy-action label:not(.checkbox-label) { display: grid; gap: 0.35rem; font-weight: 700; }
 .privacy-action input:not([type="checkbox"]) { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.context-privacy-summary { border-left: 0.45rem solid #55708a; }
+.context-entry-form { display: grid; grid-template-columns: repeat(2, minmax(14rem, 1fr)); gap: 0.9rem; margin-block: 1rem 2rem; }
+.context-entry-form > label:not(.checkbox-label), .coordinate-fields label, .weather-fields label, .context-delete-form label { display: grid; gap: 0.35rem; font-weight: 700; }
+.context-entry-form input:not([type="checkbox"]), .context-entry-form select, .context-entry-form textarea, .context-delete-form input { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.context-entry-form textarea { min-height: 6rem; resize: vertical; }
+.exact-location-control { border-left: 0.35rem solid #a86712; padding: 0.8rem; background: #fffbf3; }
+.coordinate-fields, .weather-fields { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 0.8rem; }
+.weather-fields { border: 1px solid #55708a; border-radius: 0.5rem; }
+.weather-fields legend { padding-inline: 0.4rem; font-weight: 800; }
+.context-delete-form { display: grid; grid-template-columns: minmax(12rem, 1fr) auto; align-items: end; gap: 0.8rem; margin-top: 1rem; padding: 0.8rem; }
+.missing-value { color: #48554f; font-style: italic; }
 .danger-zone { border: 2px solid #8a260f; }
 .danger-zone button { background: #8a260f; border-color: #8a260f; }
 .quality-section { margin-top: 2rem; }
@@ -188,7 +201,7 @@ circle.chart-series { fill: white; }
   .dose-slot button { width: 100%; }
   .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values { grid-template-columns: 1fr; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
-  .settings-grid { grid-template-columns: 1fr; }
+  .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: 1fr; }
   .quality-grid { grid-template-columns: 1fr; }
   .report-layout, .report-range { grid-template-columns: 1fr; }
   .report-range label:last-child { grid-column: auto; }

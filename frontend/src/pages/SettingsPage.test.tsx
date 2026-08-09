@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
@@ -26,7 +27,8 @@ describe("Settings and privacy page", () => {
     expect(screen.getByText(/Telegram itself may retain messages/)).toBeVisible();
     expect(screen.getByText(/Encrypted backups can retain deleted data until/)).toBeVisible();
     expect(screen.getByText(/Structural audit entries recording deletion survive/)).toBeVisible();
-    expect(screen.getByText(/Location collection is not configured/)).toBeVisible();
+    expect(screen.getByText(/Default: coarse location/)).toBeVisible();
+    expect(screen.getByText(/Exact location is opt-in per record/)).toBeVisible();
 
     for (const provider of ["garmin", "telegram"] as const) {
       const button = screen.getByRole("button", { name: `Disconnect ${provider}` });
@@ -51,6 +53,74 @@ describe("Settings and privacy page", () => {
     fireEvent.change(within(deleteForm).getByLabelText("Type DELETE MY HEALTHCURVE ACCOUNT"), { target: { value: "DELETE MY HEALTHCURVE ACCOUNT" } });
     fireEvent.click(deleteButton);
     await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/privacy/account") && (request.body as { confirmation?: string }).confirmation === "DELETE MY HEALTHCURVE ACCOUNT")).toBe(true); });
+  });
+
+  it("gates exact coordinates and supports manual context review and deletion", async () => {
+    const requests: { url: string; method: string; body: unknown }[] = [];
+    const recordId = "33333333-3333-4333-8333-333333333333";
+    const deletionPassword = ["synthetic", "password"].join("-");
+    const recorded = [{
+      category: "fact",
+      id: recordId,
+      location_precision: "coarse",
+      coarse_location_label: "Synthetic Boston",
+      exact_location_consent: false,
+      time: { occurred_at: "2026-08-09T12:00:00Z", local_time: "2026-08-09T08:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+      provenance: { recorded_at: "2026-08-09T12:01:00Z", source_type: "web", confirmation_state: "direct", supersedes_id: null, correction_reason: null, is_correction: false },
+    }];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? "GET";
+      const body = init?.body === undefined ? null : JSON.parse(init.body as string);
+      requests.push({ url, method, body });
+      if (url.endsWith("/auth/mfa")) return Promise.resolve(new Response(JSON.stringify({ enabled: false, recovery_codes_remaining: 0 }), { headers: { "Content-Type": "application/json" } }));
+      if (url.endsWith("/context-events") && method === "GET") return Promise.resolve(new Response(JSON.stringify(recorded), { headers: { "Content-Type": "application/json" } }));
+      if (url.endsWith("/context-events") && method === "POST") return Promise.resolve(new Response(JSON.stringify(recorded[0]), { status: 201, headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+
+    expect(await screen.findByRole("heading", { name: "Synthetic Boston", level: 4 })).toBeVisible();
+    expect(screen.getByText("Weather not recorded—not zero and not inferred.")).toBeVisible();
+    const precision = screen.getByLabelText("Location precision");
+    expect(precision).toHaveValue("coarse");
+    fireEvent.change(precision, { target: { value: "exact" } });
+    expect(screen.queryByLabelText("Latitude")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record context" })).toBeDisabled();
+    const consent = screen.getByRole("checkbox", { name: /I consent to storing exact coordinates/ });
+    consent.focus();
+    await userEvent.keyboard("[Space]");
+    expect(screen.getByLabelText("Latitude")).toBeEnabled();
+    expect(screen.getByLabelText("Longitude")).toBeEnabled();
+    fireEvent.change(precision, { target: { value: "coarse" } });
+
+    fireEvent.change(screen.getByLabelText("Experienced local date and time"), { target: { value: "2026-08-09T08:30" } });
+    fireEvent.change(screen.getByLabelText("Coarse location label"), { target: { value: "Synthetic Cambridge" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Add a manual weather observation" }));
+    fireEvent.change(screen.getByLabelText("Observed at (UTC)"), { target: { value: "2026-08-09T12:30" } });
+    fireEvent.change(screen.getByLabelText("Temperature"), { target: { value: "24.50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record context" }));
+    await waitFor(() => {
+      const created = requests.find((request) => request.url.endsWith("/context-events") && request.method === "POST");
+      expect(created?.body).toMatchObject({
+        location_precision: "coarse",
+        coarse_location_label: "Synthetic Cambridge",
+        exact_location_consent: false,
+        weather_provider: "manual",
+        weather_observed_at: "2026-08-09T12:30:00Z",
+        temperature: "24.50",
+        temperature_unit: "c",
+      });
+    });
+
+    const deleteButton = screen.getByRole("button", { name: "Delete this context record" });
+    const deleteForm = deleteButton.closest("form");
+    if (deleteForm === null) throw new Error("context deletion form missing");
+    fireEvent.change(within(deleteForm).getByLabelText("Current password"), { target: { value: deletionPassword } });
+    fireEvent.click(deleteButton);
+    await waitFor(() => {
+      expect(requests.some((request) => request.url.endsWith(`/context-events/${recordId}`) && request.method === "DELETE" && (request.body as { password?: string }).password === deletionPassword)).toBe(true);
+    });
   });
 
   it("enrolls MFA and shows recovery codes exactly in the confirmation response", async () => {

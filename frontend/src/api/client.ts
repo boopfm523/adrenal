@@ -25,6 +25,8 @@ export type ReportCreate = components["schemas"]["ReportCreateRequest"];
 export type MfaStatus = components["schemas"]["MfaStatus"];
 export type MfaEnrollment = components["schemas"]["MfaEnrollmentOut"];
 export type MfaRecoveryCodes = components["schemas"]["MfaRecoveryCodesOut"];
+export type ContextEvent = components["schemas"]["ContextOut"];
+export type ContextInput = components["schemas"]["ContextIn"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -209,6 +211,24 @@ export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
   if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
   if (filters.includeSensitive) params.set("include_sensitive", "true");
   return apiRequest<Timeline>(`/timeline?${params.toString()}`);
+}
+
+export function getContextEvents(): Promise<ContextEvent[]> {
+  return apiRequest<ContextEvent[]>("/context-events");
+}
+
+export function createContextEvent(payload: ContextInput): Promise<ContextEvent> {
+  return apiRequest<ContextEvent>("/context-events", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteContextEvent(id: string, password: string): Promise<void> {
+  await apiRequest<unknown>(`/context-events/${id}`, {
+    method: "DELETE",
+    body: JSON.stringify({ password }),
+  });
 }
 
 export function getSymptoms(includeSuperseded = false): Promise<Symptom[]> {

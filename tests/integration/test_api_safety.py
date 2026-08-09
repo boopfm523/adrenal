@@ -382,6 +382,18 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
     assert replacement["provenance"]["supersedes_id"] == original["id"]
     assert replacement["latitude"] == "35.676200"
 
+    context_timeline = client.get(
+        "/api/v1/timeline",
+        params={"types": "context", "timezone": "Asia/Tokyo"},
+    )
+    assert context_timeline.status_code == 200, context_timeline.text
+    context_item = next(
+        item for item in context_timeline.json()["items"] if item["id"] == replacement["id"]
+    )
+    assert context_item["event_type"] == "context"
+    assert context_item["summary"] == "Exact location recorded (consent on file)"
+    assert "35.676200" not in context_item["summary"]
+
     current = client.get("/api/v1/context-events").json()
     history = client.get("/api/v1/context-events", params={"include_superseded": True}).json()
     assert replacement["id"] in {row["id"] for row in current}

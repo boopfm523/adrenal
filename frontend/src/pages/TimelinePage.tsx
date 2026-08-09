@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { getTimeline, type TimelineFilters } from "../api/client";
 import { useAuth } from "../auth/context";
-import { FactCard } from "../components/CategoryCards";
+import { ContextCard, FactCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
 
 const eventTypes = [
@@ -13,6 +13,7 @@ const eventTypes = [
   ["diary", "Diary"],
   ["life_event", "Life events"],
   ["emergency_injection", "Emergency injections"],
+  ["context", "Environmental context"],
 ] as const;
 
 function localTime(value: string): string {
@@ -62,8 +63,10 @@ export function TimelinePage(): React.JSX.Element {
         </section>
       ) : null}
       <div className="timeline-list">
-        {timeline.data?.items.map((item) => (
-          <FactCard key={item.id} title={item.summary} metadata={
+        {timeline.data?.items.map((item) => {
+          const Card = item.event_type === "context" ? ContextCard : FactCard;
+          return (
+          <Card key={item.id} title={item.summary} metadata={
             <span>{item.provenance?.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>
           }>
             <dl className="provenance-grid">
@@ -72,8 +75,9 @@ export function TimelinePage(): React.JSX.Element {
               <div><dt>Source</dt><dd>{item.provenance?.source_type.replace("_", " ") ?? "Not available"}</dd></div>
               <div><dt>Confirmation</dt><dd>{item.provenance?.confirmation_state.replace("_", " ") ?? "Not available"}</dd></div>
             </dl>
-          </FactCard>
-        ))}
+          </Card>
+          );
+        })}
       </div>
     </Page>
   );

@@ -235,6 +235,13 @@ the `manual` provider is accepted today. HealthCurve makes no external weather o
 geocoding request in this implementation; provider-based enrichment remains blocked
 until the owner chooses a service and explicitly approves transmitting location.
 
+The **Settings & privacy** page provides the owner workflow: coarse-by-default entry,
+per-record exact-coordinate consent, optional manual weather, retained-context review,
+and password-confirmed deletion. Context also appears on the Timeline as
+“Environmental context,” visually and textually separate from health facts,
+physician-approved plans, and AI analysis. Exact coordinates are never included in a
+timeline summary.
+
 ## Analytics
 
 HealthCurve now provides an authenticated `/analytics` page and

@@ -24,6 +24,7 @@ from healthcurve.api.schemas import (
     TimelineItem,
     TimelinePage,
 )
+from healthcurve.context.models import ContextEvent, LocationPrecision
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
@@ -256,6 +257,7 @@ _TIMELINE_TYPES: tuple[tuple[type[EventMixin], str], ...] = (
     (DiaryEvent, "diary"),
     (LifeEvent, "life_event"),
     (EmergencyInjectionEvent, "emergency_injection"),
+    (ContextEvent, "context"),
 )
 
 
@@ -345,6 +347,16 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             return f"{row.title} ({row.category})"  # type: ignore[attr-defined]
         case "emergency_injection":
             return f"Emergency injection {row.amount} {row.unit}"  # type: ignore[attr-defined]
+        case "context":
+            context = row  # type: ignore[assignment]
+            if context.location_precision is LocationPrecision.COARSE:  # type: ignore[attr-defined]
+                location = context.coarse_location_label  # type: ignore[attr-defined]
+            elif context.location_precision is LocationPrecision.EXACT:  # type: ignore[attr-defined]
+                location = "Exact location recorded (consent on file)"
+            else:
+                location = f"Timezone context: {context.timezone}"  # type: ignore[attr-defined]
+            conditions = context.conditions  # type: ignore[attr-defined]
+            return f"{location} · {conditions}" if conditions else location
         case _:  # pragma: no cover
             return type_name
 

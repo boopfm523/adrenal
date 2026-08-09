@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -83,5 +83,41 @@ describe("Timeline page", () => {
     await userEvent.selectOptions(screen.getByLabelText("Record type"), "symptom");
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(await screen.findByRole("heading", { name: "No records match these filters" })).toBeVisible();
+  });
+
+  it("labels environmental context separately from health facts and AI", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      timezone: "America/New_York",
+      next_cursor: null,
+      items: [{
+        id: "22222222-2222-4222-8222-222222222222",
+        category: "fact",
+        event_type: "context",
+        summary: "Boston · Synthetic clear",
+        is_sensitive: false,
+        time: {
+          occurred_at: "2026-08-09T12:00:00Z",
+          local_time: "2026-08-09T08:00:00",
+          timezone: "America/New_York",
+          utc_offset_minutes: -240,
+        },
+        provenance: {
+          recorded_at: "2026-08-09T12:01:00Z",
+          source_type: "web",
+          confirmation_state: "direct",
+          supersedes_id: null,
+          correction_reason: null,
+          is_correction: false,
+        },
+      }],
+    }), { headers: { "Content-Type": "application/json" } }));
+
+    renderPage();
+    const heading = await screen.findByRole("heading", { name: "Boston · Synthetic clear" });
+    const card = heading.closest("[data-category='context']");
+    if (card === null) throw new Error("context card missing");
+    expect(within(card as HTMLElement).getByText("Environmental context", { exact: false })).toBeVisible();
+    expect(within(card as HTMLElement).getByText(/not a symptom, dose, physician instruction, or AI conclusion/)).toBeVisible();
+    expect(screen.getByRole("option", { name: "Environmental context" })).toHaveValue("context");
   });
 });
