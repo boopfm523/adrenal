@@ -21,6 +21,7 @@ from healthcurve.integrations.telegram import handlers
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.models import TelegramUpdate
 from healthcurve.logging import get_logger
+from healthcurve.operations.rate_limit import RateLimiter, RateLimitPolicy
 
 log = get_logger(__name__)
 
@@ -54,6 +55,8 @@ def process_update(
     *,
     allowed_chat_id: int,
     client: TelegramClient,
+    limiter: RateLimiter | None = None,
+    model_policy: RateLimitPolicy | None = None,
 ) -> UpdateOutcome:
     """Handle one update. Safe to call twice with the same update.
 
@@ -99,7 +102,12 @@ def process_update(
         return UpdateOutcome.IGNORED
 
     reply = handlers.handle_message(
-        session, owner, text=text, message_id=str(message.get("message_id"))
+        session,
+        owner,
+        text=text,
+        message_id=str(message.get("message_id")),
+        limiter=limiter,
+        model_policy=model_policy,
     )
     client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
     return UpdateOutcome.PROCESSED

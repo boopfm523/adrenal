@@ -140,6 +140,17 @@ class Settings(BaseSettings):
     # --- Durable worker queue (ADR-0004) ---
     job_poll_interval_s: float = Field(default=2.0, gt=0, le=60)
 
+    # --- Abuse controls (hc-cbs.5) ---
+    #: Optional only for local, non-Compose development. Production refuses to boot
+    #: without the durable shared limiter.
+    redis_url: str | None = None
+    login_rate_limit: int = Field(default=5, ge=1, le=100)
+    login_rate_window_s: int = Field(default=900, ge=1, le=86_400)
+    model_rate_limit: int = Field(default=30, ge=1, le=1_000)
+    model_rate_window_s: int = Field(default=3_600, ge=1, le=86_400)
+    report_rate_limit: int = Field(default=6, ge=1, le=100)
+    report_rate_window_s: int = Field(default=3_600, ge=1, le=86_400)
+
     # --- Sensitive local artifacts (ADR-0010) ---
     #: Exact source documents live outside the web root. In Compose this path is a
     #: bind mount shared only with the network-isolated document worker and backup.
@@ -223,6 +234,15 @@ class Settings(BaseSettings):
         ):
             raise ValueError(
                 "HC_CREDENTIAL_KEY_FILE is required when Telegram is enabled in production"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_production_rate_limiter(self) -> Self:
+        if self.environment is Environment.PROD and not self.redis_url:
+            raise ValueError(
+                "HC_REDIS_URL is required in production: abuse limits must be shared "
+                "and survive application restarts"
             )
         return self
 

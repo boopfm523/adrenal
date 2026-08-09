@@ -41,6 +41,12 @@ from healthcurve.events.timekeeping import (
 from healthcurve.identity.models import Owner
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
+from healthcurve.operations.rate_limit import (
+    RateLimiter,
+    RateLimitExceeded,
+    RateLimitPolicy,
+    RateLimitUnavailable,
+)
 
 #: A draft the owner never answers is purged rather than left to be confirmed days
 #: later against a time nobody remembers.
@@ -105,6 +111,8 @@ def handle_message(
     text: str,
     message_id: str | None = None,
     client: OllamaClient | None = None,
+    limiter: RateLimiter | None = None,
+    model_policy: RateLimitPolicy | None = None,
     now: datetime | None = None,
 ) -> Reply:
     """Entry point for an inbound text message."""
@@ -116,7 +124,16 @@ def handle_message(
     if text.startswith("/"):
         return _handle_command(session, owner, text, now=now)
 
-    return _handle_free_text(session, owner, text, message_id=message_id, client=client, now=now)
+    return _handle_free_text(
+        session,
+        owner,
+        text,
+        message_id=message_id,
+        client=client,
+        limiter=limiter,
+        model_policy=model_policy,
+        now=now,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -463,8 +480,24 @@ def _handle_free_text(
     *,
     message_id: str | None,
     client: OllamaClient | None,
+    limiter: RateLimiter | None,
+    model_policy: RateLimitPolicy | None,
     now: datetime,
 ) -> Reply:
+    if limiter is not None and model_policy is not None:
+        try:
+            limiter.check("model", str(owner.id), model_policy)
+        except RateLimitExceeded as exc:
+            return Reply(
+                "You've reached the automatic-reading limit. Nothing was recorded. "
+                f"Try again in about {exc.result.retry_after} seconds, or use /dose, "
+                "/symptom, or /injection now."
+            )
+        except RateLimitUnavailable:
+            return Reply(
+                "I can't safely check the automatic-reading limit right now. Nothing "
+                "was recorded. You can still use /dose, /symptom, or /injection."
+            )
     result = extract(
         session,
         owner_id=owner.id,

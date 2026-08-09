@@ -24,6 +24,7 @@ dependencies = [
     "cryptography==50.0.0",
     "garmin-fit-sdk==21.208.0",
     "playwright==1.62.0",
+    "redis==8.1.0",
 ]
 
 [project.optional-dependencies]

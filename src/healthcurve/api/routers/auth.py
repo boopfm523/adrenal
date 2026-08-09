@@ -7,10 +7,19 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 
-from healthcurve.api.deps import CurrentOwner, CurrentSession, DbSession, require_csrf
+from healthcurve.api.deps import (
+    AppRateLimiter,
+    AppSettings,
+    CurrentOwner,
+    CurrentSession,
+    DbSession,
+    enforce_rate_limit,
+    require_csrf,
+)
 from healthcurve.config import Environment, get_settings
 from healthcurve.identity import service as auth
 from healthcurve.operations import audit
+from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -51,7 +60,23 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(payload: LoginRequest, request: Request, response: Response, session: DbSession):
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    settings: AppSettings,
+    limiter: AppRateLimiter,
+):
+    # Check before password hashing, which is intentionally expensive. The normalized
+    # address is hashed by the limiter, so Redis never receives an email address.
+    enforce_rate_limit(
+        response,
+        limiter,
+        scope="login",
+        identity=str(payload.email),
+        policy=RateLimitPolicy(settings.login_rate_limit, settings.login_rate_window_s),
+    )
     try:
         owner = auth.authenticate(session, payload.email, payload.password)
     except auth.AccountLockedError:

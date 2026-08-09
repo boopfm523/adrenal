@@ -26,6 +26,7 @@ from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.dispatch import process_update
 from healthcurve.integrations.telegram.secrets import load_telegram_secrets
 from healthcurve.logging import get_logger
+from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/integrations/telegram", tags=["telegram"])
 log = get_logger(__name__)
@@ -83,5 +84,10 @@ async def webhook(
         update,
         allowed_chat_id=allowed_chat_id,
         client=TelegramClient(settings, token=telegram_secrets.bot_token),
+        limiter=request.app.state.rate_limiter,
+        model_policy=RateLimitPolicy(
+            settings.model_rate_limit,
+            settings.model_rate_window_s,
+        ),
     )
     return _ACK

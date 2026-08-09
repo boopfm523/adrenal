@@ -31,6 +31,7 @@ from healthcurve.api.routers import (
 )
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.logging import configure_logging
+from healthcurve.operations.rate_limit import RateLimiter
 
 API_PREFIX = "/api/v1"
 
@@ -58,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         default_response_class=NoStoreJSONResponse,
     )
     app.state.settings = settings
+    app.state.rate_limiter = RateLimiter(settings.redis_url)
 
     @app.get("/health/live", tags=["health"])
     async def health_live() -> dict[Literal["status"], str]:

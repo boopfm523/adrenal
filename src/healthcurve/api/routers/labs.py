@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import Field, model_validator
 from sqlalchemy import select, text
@@ -16,7 +16,14 @@ from starlette.concurrency import run_in_threadpool
 
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.vision import apply_vision_fallback
-from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
+from healthcurve.api.deps import (
+    AppRateLimiter,
+    AppSettings,
+    CurrentOwner,
+    DbSession,
+    enforce_rate_limit,
+    require_csrf,
+)
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import ApiModel, EventTimeIn
 from healthcurve.config import Settings
@@ -38,6 +45,7 @@ from healthcurve.labs.service import (
     manual_candidate,
 )
 from healthcurve.operations import audit
+from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/labs", tags=["labs"])
 
@@ -99,6 +107,8 @@ def _reconcile_extraction(
     document: LabDocument,
     layout: DocumentLayout,
     settings: Settings,
+    response: Response,
+    limiter: AppRateLimiter,
 ) -> ExtractionDraft | None:
     if document.status is not LabDocumentStatus.STORED:
         return None
@@ -110,7 +120,6 @@ def _reconcile_extraction(
         return None
     if not hmac.compare_digest(result.sha256, document.sha256):
         raise HTTPException(status_code=500, detail={"code": "extraction_checksum_mismatch"})
-    result = apply_vision_fallback(result, layout=layout, settings=settings)
     if session.get_bind().dialect.name == "postgresql":
         session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
@@ -125,6 +134,16 @@ def _reconcile_extraction(
     )
     if existing is not None:
         return existing
+    if result.vision_pages:
+        enforce_rate_limit(
+            response,
+            limiter,
+            scope="model",
+            identity=str(owner.id),
+            policy=RateLimitPolicy(settings.model_rate_limit, settings.model_rate_window_s),
+            cost=len(result.vision_pages),
+        )
+        result = apply_vision_fallback(result, layout=layout, settings=settings)
     candidates = []
     for candidate in result.candidates:
         payload = candidate.model_dump(mode="json")
@@ -229,14 +248,16 @@ async def upload_lab_document(
 @router.get("/documents/{document_id}")
 def get_lab_document(
     document_id: uuid.UUID,
+    response: Response,
     session: DbSession,
     owner: CurrentOwner,
     settings: AppSettings,
+    limiter: AppRateLimiter,
 ) -> dict[str, Any]:
     document = _owned_document(session, owner, document_id)
     layout = DocumentLayout(settings.uploads_dir)
     _reconcile_document(document, layout)
-    draft = _reconcile_extraction(session, owner, document, layout, settings)
+    draft = _reconcile_extraction(session, owner, document, layout, settings, response, limiter)
     payload = _document_payload(document)
     payload["extraction_status"] = "draft_ready" if draft is not None else "pending"
     payload["extraction_draft_id"] = str(draft.id) if draft is not None else None
@@ -246,14 +267,16 @@ def get_lab_document(
 @router.get("/documents/{document_id}/extraction")
 def get_lab_document_extraction(
     document_id: uuid.UUID,
+    response: Response,
     session: DbSession,
     owner: CurrentOwner,
     settings: AppSettings,
+    limiter: AppRateLimiter,
 ) -> dict[str, Any]:
     document = _owned_document(session, owner, document_id)
     layout = DocumentLayout(settings.uploads_dir)
     _reconcile_document(document, layout)
-    draft = _reconcile_extraction(session, owner, document, layout, settings)
+    draft = _reconcile_extraction(session, owner, document, layout, settings, response, limiter)
     if draft is None:
         raise HTTPException(status_code=409, detail={"code": "lab_extraction_not_ready"})
     return {

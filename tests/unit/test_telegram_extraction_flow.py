@@ -20,6 +20,12 @@ from healthcurve.ai.models import ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import handlers
+from healthcurve.operations.rate_limit import (
+    RateLimiter,
+    RateLimitExceeded,
+    RateLimitPolicy,
+    RateLimitResult,
+)
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
@@ -80,6 +86,30 @@ def test_model_failure_is_visible_and_writes_nothing(outcome: ModelOutcome) -> N
     assert "language model is unavailable" in reply.text
     assert "Nothing was recorded" in reply.text
     assert reply.draft_id is None
+    mocked.add.assert_not_called()
+
+
+def test_model_rate_limit_is_visible_and_deterministic_commands_remain_available() -> None:
+    session, mocked = _empty_session()
+    client = MagicMock(spec=OllamaClient)
+    limiter = MagicMock(spec=RateLimiter)
+    limiter.check.side_effect = RateLimitExceeded(RateLimitResult(30, 0, 47))
+
+    reply = handlers.handle_message(
+        session,
+        _owner(),
+        text=f"{SYNTHETIC_MARKER}: fictional diary event just now.",
+        client=client,
+        limiter=limiter,
+        model_policy=RateLimitPolicy(30, 3600),
+        now=NOW,
+    )
+
+    assert "automatic-reading limit" in reply.text
+    assert "Nothing was recorded" in reply.text
+    assert "47 seconds" in reply.text
+    assert "/dose" in reply.text
+    client.generate_json.assert_not_called()
     mocked.add.assert_not_called()
 
 

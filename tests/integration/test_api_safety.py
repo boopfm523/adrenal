@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -39,6 +39,11 @@ from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, La
 from healthcurve.medications.models import DoseUnit, Medication, Route
 from healthcurve.operations.audit import AuditAction, AuditEntry
 from healthcurve.operations.jobs import Job, JobStatus
+from healthcurve.operations.rate_limit import (
+    RateLimiter,
+    RateLimitExceeded,
+    RateLimitResult,
+)
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 from tests.fixtures.pdf import (
@@ -199,6 +204,54 @@ def test_login_does_not_reveal_whether_an_account_exists(client: TestClient) -> 
     wrong = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": "wrong-password"})
     assert unknown.status_code == wrong.status_code == 401
     assert unknown.json()["detail"] == wrong.json()["detail"]
+
+
+def test_login_limit_returns_observable_429_before_authentication(client: TestClient) -> None:
+    client.cookies.clear()
+    app = cast(Any, client.app)
+    original = app.state.rate_limiter
+    limiter = mock.MagicMock(spec=RateLimiter)
+    limiter.check.side_effect = RateLimitExceeded(RateLimitResult(5, 0, 81))
+    app.state.rate_limiter = limiter
+    try:
+        response = client.post(
+            "/api/v1/auth/login",
+            # The limiter runs before authentication; reuse the synthetic fixture
+            # rather than adding another password-like literal to the repository.
+            json={"email": EMAIL, "password": PASSWORD},
+        )
+    finally:
+        app.state.rate_limiter = original
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "rate_limit_exceeded"
+    assert response.headers["retry-after"] == "81"
+    assert response.headers["ratelimit-limit"] == "5"
+    assert response.headers["ratelimit-remaining"] == "0"
+
+
+def test_report_limit_returns_observable_429(client: TestClient, logged_in: dict[str, str]) -> None:
+    app = cast(Any, client.app)
+    original = app.state.rate_limiter
+    limiter = mock.MagicMock(spec=RateLimiter)
+    limiter.check.side_effect = RateLimitExceeded(RateLimitResult(6, 0, 120))
+    app.state.rate_limiter = limiter
+    try:
+        response = client.post(
+            "/api/v1/reports",
+            headers=logged_in,
+            json={
+                "date_from": "2026-08-09",
+                "date_to": "2026-08-09",
+                "selected_sections": ["metrics"],
+            },
+        )
+    finally:
+        app.state.rate_limiter = original
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "rate_limit_exceeded"
+    assert response.headers["retry-after"] == "120"
 
 
 def test_state_changing_requests_require_csrf(

@@ -71,6 +71,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     # No `ports:` -- reachable only through caddy.
 
   document-worker:
@@ -133,6 +135,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   postgres:
     # postgres:16-alpine
@@ -161,12 +165,20 @@ services:
     # No `ports:` -- never reachable from the host or the internet (T2).
 
   redis:
-    # redis:7-alpine -- rate limiting and caching only; the job queue is in
-    # PostgreSQL (ADR-0004).
+    # redis:7-alpine -- durable shared abuse counters only; the job queue is in
+    # PostgreSQL (ADR-0004). AOF + a named volume ensures restarting either the app
+    # or Redis does not reset a security limit.
     image: redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     <<: *restart
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis_data:/data
     networks: [hc-internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     # No `ports:`.
 
   ollama:
@@ -185,6 +197,7 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
   caddy_data:
   caddy_config:
   ollama_models:

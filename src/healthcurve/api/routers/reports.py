@@ -11,8 +11,16 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
+from healthcurve.api.deps import (
+    AppRateLimiter,
+    AppSettings,
+    CurrentOwner,
+    DbSession,
+    enforce_rate_limit,
+    require_csrf,
+)
 from healthcurve.operations import audit
+from healthcurve.operations.rate_limit import RateLimitPolicy
 from healthcurve.reports import builder, rendering, storage
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
 from healthcurve.reports.service import SnapshotValidationError, document
@@ -118,10 +126,19 @@ def _artifacts(
 )
 def create_report(
     payload: ReportCreateRequest,
+    response: Response,
     session: DbSession,
     owner: CurrentOwner,
     settings: AppSettings,
+    limiter: AppRateLimiter,
 ) -> ReportOut:
+    enforce_rate_limit(
+        response,
+        limiter,
+        scope="report",
+        identity=str(owner.id),
+        policy=RateLimitPolicy(settings.report_rate_limit, settings.report_rate_window_s),
+    )
     zone_name = payload.timezone or owner.default_timezone
     try:
         ZoneInfo(zone_name)

@@ -26,6 +26,7 @@ from healthcurve.integrations.telegram.client import API_BASE, TelegramClient
 from healthcurve.integrations.telegram.dispatch import UpdateOutcome, process_update
 from healthcurve.integrations.telegram.secrets import TelegramSecrets
 from healthcurve.logging import get_logger
+from healthcurve.operations.rate_limit import RateLimiter, RateLimitPolicy
 
 log = get_logger(__name__)
 
@@ -74,6 +75,7 @@ class TelegramPoller:
         self._token_value = token or self._settings.telegram_bot_token
         self._client = client or TelegramClient(self._settings, token=self._token_value)
         self._stop = stop_event or threading.Event()
+        self._limiter = RateLimiter(self._settings.redis_url)
         self._offset: int | None = None
         self.stats = PollerStats()
 
@@ -208,6 +210,11 @@ class TelegramPoller:
                     update,
                     allowed_chat_id=self._allowed_chat_id(),
                     client=self._client,
+                    limiter=self._limiter,
+                    model_policy=RateLimitPolicy(
+                        self._settings.model_rate_limit,
+                        self._settings.model_rate_window_s,
+                    ),
                 )
         except Exception as exc:
             self.stats.errors += 1
