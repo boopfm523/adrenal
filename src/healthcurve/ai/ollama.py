@@ -54,6 +54,12 @@ class ModelResult:
         return self.outcome is ModelOutcome.OK
 
 
+@dataclass(frozen=True, slots=True)
+class ModelIdentity:
+    name: str
+    digest: str
+
+
 class CircuitBreaker:
     """Stops hammering a model that is down.
 
@@ -95,6 +101,24 @@ class OllamaClient:
     @property
     def model_name(self) -> str:
         return self._settings.ollama_model
+
+    def identity(self) -> ModelIdentity | None:
+        """Resolve the configured tag to the immutable local Ollama digest."""
+        try:
+            with httpx.Client(
+                base_url=self._settings.ollama_base_url, timeout=httpx.Timeout(3.0)
+            ) as client:
+                response = client.get("/api/tags")
+                response.raise_for_status()
+                models = response.json().get("models", [])
+        except (httpx.HTTPError, ValueError):
+            return None
+        for model in models:
+            if model.get("name") == self._settings.ollama_model:
+                digest = model.get("digest")
+                if isinstance(digest, str) and digest:
+                    return ModelIdentity(name=self._settings.ollama_model, digest=digest)
+        return None
 
     def generate_json(
         self,

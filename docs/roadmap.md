@@ -171,9 +171,9 @@ Grouped by why it matters rather than by phase.
 
 ### Correctness gaps
 
-- **No extraction evaluation.** Nothing stops a model or prompt change silently
-  degrading extraction. Phase 2's acceptance criteria explicitly require a gold set
-  with per-field thresholds. `hc-h5r.6`.
+- **Extraction evaluation is gated.** The versioned synthetic gold set records the
+  local model digest and prompt version, and CI recomputes explicit per-field
+  thresholds from the checked-in predictions. See `docs/extraction-evaluation.md`.
 - **No draft edit.** A wrong amount can only be cancelled and retyped. The plan
   specifies confirm/**edit**/cancel. `hc-h5r.5`.
 - **Draft expiry is scheduled.** The durable worker runs it every fifteen minutes;

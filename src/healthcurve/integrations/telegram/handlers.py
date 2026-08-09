@@ -409,6 +409,7 @@ def _handle_free_text(
             source="telegram",
             message_id=message_id,
             model_name=result.model_name,
+            model_digest=result.model_digest,
         )
     return _draft_reply(draft, result.candidates)
 
@@ -422,6 +423,7 @@ def _store_draft(
     source: str,
     message_id: str | None = None,
     model_name: str | None = None,
+    model_digest: str | None = None,
 ) -> ExtractionDraft:
     """Persist candidates as a pending draft. Supersedes any earlier pending draft."""
     existing = _pending_draft(session, owner.id)
@@ -440,6 +442,7 @@ def _store_draft(
         candidates=[c.model_dump(mode="json") for c in candidates],
         state=DraftState.PENDING,
         model_name=model_name,
+        model_digest=model_digest,
         prompt_version=PROMPT_VERSION,
         schema_version=SCHEMA_VERSION,
     )

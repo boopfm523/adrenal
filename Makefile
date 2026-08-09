@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help setup fmt lint types imports test test-fast test-pg audit secrets frontend-generate frontend-check check up down logs migrate ready
+.PHONY: help setup fmt lint types imports test test-fast test-pg eval audit secrets frontend-generate frontend-check check up down logs migrate ready
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -36,6 +36,9 @@ test-fast: ## Skip tests needing a real PostgreSQL
 test-pg: ## Only the tests that need real PostgreSQL constraints
 	uv run pytest -m postgres
 
+eval: ## Verify the checked-in local-model extraction regression baseline
+	uv run python scripts/evaluate_extraction.py
+
 audit: ## Dependency vulnerability scan (threat model T6)
 	@# Audit the lockfile, not the installed environment: pip-audit cannot resolve
 	@# the editable local package, and the lock is what CI and production install.
@@ -56,7 +59,7 @@ frontend-check: ## Verify OpenAPI drift, frontend lint/tests, and production bui
 	uv run python scripts/export_openapi.py --check
 	cd frontend && npm run check
 
-check: lint types imports test audit secrets frontend-check ## Everything CI runs
+check: lint types imports test eval audit secrets frontend-check ## Everything CI runs
 
 up: ## Start the local stack
 	docker compose up -d --build

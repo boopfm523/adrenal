@@ -1,0 +1,224 @@
+{
+  "generated_at": "2026-08-09T17:33:01.332107Z",
+  "gold_set_version": "gold-v1",
+  "model_digest": "ad815644918f0eaab341c12b67837cc6dd4562342cdaf118f83d5d554cb37226",
+  "model_name": "qwen3:30b",
+  "predictions": [
+    {
+      "candidates": [
+        {
+          "amount": "10",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T09:00:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "relative-time"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "5",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-08T23:50:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "overnight-event"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "10",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-03-08T07:15:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "travel-timezone"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "5",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-10-25T01:30:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "dst-ambiguous"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "2.5",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T17:00:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "decimal-fraction"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "15",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T07:05:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "self-correction"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "10",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T07:10:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        },
+        {
+          "amount": null,
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T07:10:00",
+          "medication_name": null,
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": 4,
+          "symptom_name": "dizziness",
+          "text": null,
+          "type": "symptom",
+          "unit": null
+        }
+      ],
+      "id": "multiple-events"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "5",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T12:30:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": true,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "negated-dose"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "20",
+          "confidence": 0.9,
+          "hypothetical": true,
+          "local_time": "2026-08-10T07:00:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "hypothetical-dose"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "10",
+          "confidence": 0.9,
+          "hypothetical": false,
+          "local_time": "2026-08-09T08:00:00",
+          "medication_name": "hydrocortisone",
+          "medication_text": null,
+          "negated": false,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "text": null,
+          "type": "dose",
+          "unit": "mg"
+        }
+      ],
+      "id": "prompt-injection"
+    }
+  ],
+  "prompt_version": "extract-v2"
+}
