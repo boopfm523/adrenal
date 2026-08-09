@@ -70,6 +70,48 @@ jobs:
       - name: Test
         run: uv run pytest --cov --cov-report=term-missing
 
+  frontend:
+    name: frontend contract, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.9"
+          enable-cache: true
+
+      - name: Install Python contract dependencies
+        run: uv sync --frozen --dev
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pinned frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Reject stale OpenAPI and generated types
+        run: |
+          uv run python scripts/export_openapi.py --check
+          cd frontend && npm run check:api
+
+      - name: Frontend lint, tests, and production build
+        working-directory: frontend
+        run: |
+          npm run lint
+          npm run test
+          npm run build
+
+      - name: Frontend dependency vulnerabilities
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
   security:
     name: dependency and secret scanning
     runs-on: ubuntu-latest
@@ -155,7 +197,7 @@ jobs:
       - name: Images are pinned by digest (threat model T6)
         run: |
           python3 - <<'PY'
-          import sys, yaml
+          import pathlib, sys, yaml
           compose = yaml.safe_load(open("docker-compose.yml"))
           unpinned = [
               name for name, svc in compose["services"].items()
@@ -163,6 +205,17 @@ jobs:
           ]
           if unpinned:
               print(f"::error::images not pinned by digest: {unpinned}")
+              sys.exit(1)
+          caddy = compose["services"]["caddy"]
+          if caddy.get("build", {}).get("dockerfile") != "deploy/Caddy.Dockerfile":
+              print("::error::caddy must use the reviewed frontend build image")
+              sys.exit(1)
+          from_lines = [
+              line for line in pathlib.Path("deploy/Caddy.Dockerfile").read_text().splitlines()
+              if line.startswith("FROM ")
+          ]
+          if not from_lines or any("@sha256:" not in line for line in from_lines):
+              print(f"::error::unpinned Caddy build stage: {from_lines}")
               sys.exit(1)
           print("all images pinned by digest")
           PY

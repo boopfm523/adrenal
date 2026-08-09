@@ -37,11 +37,16 @@ It is deliberately excluded in ADR-0005.
 
 ## Getting started
 
+The foundation now lives in `frontend/`. Install its exact lockfile from the repository
+root:
+
 ```bash
-cd /Users/jeff/Documents/adrenal
-npm create vite@latest frontend -- --template react-ts
-cd frontend && npm install
+make setup
 ```
+
+For frontend-only work, `cd frontend && npm ci --ignore-scripts` is sufficient after
+the Python environment already exists. Do not re-run a Vite scaffold over the committed
+directory.
 
 Then point Vite's dev server at the API so cookies work in development:
 
@@ -62,9 +67,10 @@ origin will silently log you out on every request.
 
 ### Production serving
 
-Caddy already proxies everything to the API. Add a static file root ahead of it in
-[deploy/Caddyfile](../deploy/Caddyfile), matching `/api/*` and `/emergency` to the API
-and everything else to the built assets. The CSP already in that file is strict —
+Caddy builds the locked SPA in [deploy/Caddy.Dockerfile](../deploy/Caddy.Dockerfile).
+[deploy/Caddyfile](../deploy/Caddyfile) sends `/api/*`, `/emergency`, and
+`/emergency/*` to FastAPI and serves all other routes from the built assets. The CSP is
+strict —
 `script-src 'self'`, no CDNs — so **inline scripts and external fonts will be blocked.**
 Vite's default build complies; don't add an inline analytics snippet and wonder why the
 page is blank.
@@ -77,9 +83,14 @@ Every route is under `/api/v1`. Read [using-healthcurve.md](using-healthcurve.md
 the full surface. Generate types rather than hand-writing them:
 
 ```bash
-curl -s http://localhost:8080/api/v1/openapi.json > frontend/openapi.json
-npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
+make frontend-generate
 ```
+
+This creates deterministic `frontend/openapi.json` directly from the development
+FastAPI application without reading `.env`, then regenerates
+`frontend/src/api/schema.d.ts`. Both are committed. `make frontend-check` independently
+recreates each artifact and fails on drift, so changing a backend schema without
+updating the generated types breaks CI.
 
 ### Authentication
 
@@ -91,7 +102,9 @@ in the body.
   token" means you dropped it.
 
 Keep the CSRF token in memory. Putting it in `localStorage` re-opens the XSS path the
-HTTP-only cookie was chosen to close.
+HTTP-only cookie was chosen to close. The central client restores both owner identity
+and a fresh in-memory CSRF token through `GET /api/v1/auth/me`; any API `401` clears
+TanStack Query's cache and returns the application to the login screen.
 
 ### Three rules that will cause bugs if ignored
 
@@ -135,6 +148,10 @@ Stop after 2 if you want something useful quickly. Today plus login is a real to
 ---
 
 ## Testing
+
+Run all frontend gates with `make frontend-check`. It runs the contract drift checks,
+ESLint (including the `dangerouslySetInnerHTML` ban), Vitest, strict TypeScript, and the
+production Vite build. `make audit` also runs the high-severity npm vulnerability gate.
 
 Vitest and React Testing Library. The tests worth writing are the ones covering the
 three rules above:

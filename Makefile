@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help setup fmt lint types imports test test-fast test-pg audit secrets check up down logs migrate ready
+.PHONY: help setup fmt lint types imports test test-fast test-pg audit secrets frontend-generate frontend-check check up down logs migrate ready
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -10,15 +10,16 @@ help: ## Show this help
 setup: ## Install the pinned runtime and dependencies (ADR-0006)
 	uv python install 3.13
 	uv sync --dev
+	cd frontend && npm ci --ignore-scripts
 	uv run pre-commit install
 
 fmt: ## Format
-	uv run ruff format src tests migrations
-	uv run ruff check --fix src tests migrations
+	uv run ruff format src tests migrations scripts
+	uv run ruff check --fix src tests migrations scripts
 
 lint: ## Lint
-	uv run ruff check src tests migrations
-	uv run ruff format --check src tests migrations
+	uv run ruff check src tests migrations scripts
+	uv run ruff format --check src tests migrations scripts
 
 types: ## Type check
 	uv run pyright
@@ -42,11 +43,20 @@ audit: ## Dependency vulnerability scan (threat model T6)
 		-o .audit-requirements.txt
 	uv run pip-audit --strict -r .audit-requirements.txt
 	@rm -f .audit-requirements.txt
+	cd frontend && npm audit --audit-level=high
 
 secrets: ## Secret scan (SAFE-29)
 	uv run detect-secrets scan --baseline .secrets.baseline
 
-check: lint types imports test audit secrets ## Everything CI runs
+frontend-generate: ## Regenerate the committed OpenAPI contract and TypeScript client types
+	uv run python scripts/export_openapi.py
+	cd frontend && npm run generate:api
+
+frontend-check: ## Verify OpenAPI drift, frontend lint/tests, and production build
+	uv run python scripts/export_openapi.py --check
+	cd frontend && npm run check
+
+check: lint types imports test audit secrets frontend-check ## Everything CI runs
 
 up: ## Start the local stack
 	docker compose up -d --build

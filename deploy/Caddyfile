@@ -23,6 +23,8 @@
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Resource-Policy "same-origin"
 		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		# The authenticated record and its shell must not survive in a shared browser cache.
+		Cache-Control "no-store"
 		-Server
 	}
 
@@ -32,10 +34,20 @@
 		reverse_proxy api:8000
 	}
 
-	handle {
+	# API and emergency HTML stay on FastAPI. The emergency route deliberately never
+	# enters the SPA and continues to work with JavaScript or the bundle unavailable.
+	@backend path /api /api/* /emergency /emergency/*
+	handle @backend {
 		reverse_proxy api:8000 {
 			header_up X-Forwarded-Proto {scheme}
 		}
+	}
+
+	# Client routes resolve to the same shell; asset paths resolve to their exact files.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
 	}
 
 	log {

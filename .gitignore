@@ -34,7 +34,7 @@ build/
 
 # --- Node / frontend ---
 node_modules/
-web/dist/
+frontend/dist/
 .vite/
 
 # --- Tooling / OS ---

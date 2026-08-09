@@ -1,0 +1,14 @@
+.git
+.beads
+.env
+.env.*
+.venv
+__pycache__
+*.pyc
+frontend/node_modules
+frontend/dist
+.pytest_cache
+.ruff_cache
+backups
+restores
+reports_out

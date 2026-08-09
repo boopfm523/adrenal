@@ -46,6 +46,7 @@ read [docs/roadmap.md](docs/roadmap.md) for what remains and in what order.
 
 - [uv](https://docs.astral.sh/uv/) — provisions Python 3.13 (ADR-0006) and locks deps
 - Docker with Compose — PostgreSQL, Redis, Ollama, Caddy
+- Node.js 24 or newer — builds and tests the locked React client
 - [Beads](https://github.com/gastownhall/beads) (`bd`) — issue tracking, mandatory
 
 The host's system Python is not used. `uv` installs and pins 3.13.
@@ -53,8 +54,7 @@ The host's system Python is not used. `uv` installs and pins 3.13.
 ## Getting started
 
 ```bash
-uv python install 3.13     # pinned runtime (ADR-0006)
-uv sync --dev              # install locked dependencies
+make setup                 # pinned Python and frontend dependencies
 cp .env.example .env       # then set POSTGRES_PASSWORD and POSTGRES_AI_PASSWORD
 
 make check                 # lint, types, module boundaries, tests
@@ -63,6 +63,11 @@ make migrate               # apply migrations (never automatic -- ADR-0002)
 ```
 
 `make help` lists every target.
+
+The web client is a React/TypeScript SPA in `frontend/`; the emergency page remains
+server-rendered by FastAPI. `make frontend-generate` refreshes the committed OpenAPI
+contract and generated types, and `make frontend-check` runs its contract, lint, test,
+and production-build gates. See [docs/web-frontend-guide.md](docs/web-frontend-guide.md).
 
 ### Putting your own data in
 

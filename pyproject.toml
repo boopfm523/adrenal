@@ -54,7 +54,7 @@ packages = ["src/healthcurve"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-src = ["src", "tests", "migrations"]
+src = ["src", "tests", "migrations", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -91,7 +91,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
 # Types
 # ---------------------------------------------------------------------------
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
