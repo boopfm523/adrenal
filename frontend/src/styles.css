@@ -136,6 +136,21 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; vertical-align: top; }
 .analytics-range { font-size: 1.05rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.association-caution { margin-block: 0.75rem; border-left: 0.3rem solid #684a76; padding: 0.75rem; background: #f7f1fa; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: 1rem; }
+.chart-legend span { display: flex; align-items: center; gap: 0.4rem; }
+.series-key { width: 2rem; border-top: 0.25rem solid #174c3c; }
+.series-key--1 { border-color: #6b3f82; border-top-style: dashed; }
+.series-key--2 { border-color: #a14c12; border-top-style: dotted; }
+.line-chart { display: block; width: 100%; min-height: 12rem; background: #fbfcfb; }
+.chart-axis { stroke: #68756f; stroke-width: 1.5; }
+.chart-series { fill: none; stroke: #174c3c; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.chart-series--1 { stroke: #6b3f82; stroke-dasharray: 10 7; }
+.chart-series--2 { stroke: #a14c12; stroke-dasharray: 2 7; }
+circle.chart-series { fill: white; }
+.chart-table { margin-top: 1rem; }
+.chart-table summary { cursor: pointer; font-weight: 750; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }

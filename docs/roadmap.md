@@ -28,7 +28,7 @@ Before closing anything: `make check` must exit 0.
 | **P0 Foundation** | **Done.** Safety, threat model, architecture, CI, schemas, UI IA, and feasibility spikes are complete |
 | **P1 Trusted record** | **Done.** Auth, plans, doses, events, episodes, corrections, audit, timeline, export, emergency page |
 | **P2 Telegram + AI** | In progress. Capture, long polling, safe fallback, and live local extraction work; draft editing, expiry, and evaluation remain |
-| **P3 Dashboard, labs, reports** | In progress. Today, timeline, plan, episode, symptom/diary, and deterministic analytics pages are live; charts, data quality, and reports remain |
+| **P3 Dashboard, labs, reports** | In progress. Today, timeline, plan, episode, symptom/diary, deterministic analytics, and accessible chart/table views are live; data quality and reports remain |
 | **P4 Integrations** | Garmin export ingestion is complete; direct provider API work remains conditional |
 | **P5 Production** | In progress. Hosting, credential, and local backup foundations exist; launch controls remain |
 | **P6 Hardening** | Not started |

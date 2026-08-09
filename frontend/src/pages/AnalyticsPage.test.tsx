@@ -18,9 +18,10 @@ describe("Analytics page", () => {
     expect(screen.getByText(/Association does not establish causation/)).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Daily medication totals versus plan" })).toBeVisible();
     expect(screen.getAllByText("Europe/London").length).toBeGreaterThan(3);
-    expect(screen.getByText("Missing—no dose facts")).toBeVisible();
-    expect(screen.getByText("Missing—no approved plan")).toBeVisible();
-    expect(screen.getAllByText("20 mg")).toHaveLength(2);
+    expect(screen.getAllByText("Gap—no value")).toHaveLength(2);
+    expect(screen.getByText(/actual Missing—no dose facts/)).toBeInTheDocument();
+    expect(screen.getByText(/planned Missing—no approved plan/)).toBeInTheDocument();
+    expect(screen.getAllByText("20")).toHaveLength(2);
     expect(screen.getAllByText("Metric definition")).toHaveLength(4);
     expect(screen.getAllByText("Missing—no resolved durations")).toHaveLength(2);
     expect(screen.getByText("Missing—no severity values")).toBeVisible();

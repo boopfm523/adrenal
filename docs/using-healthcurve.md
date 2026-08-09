@@ -221,8 +221,9 @@ HealthCurve now provides an authenticated `/analytics` page and
 actual totals, dose timing, stress-episode duration, symptom frequency/severity, and
 missingness for a selected local-date range and IANA timezone. Every result states its
 definition, timezone, sample count, and missing values. There are no inferential
-insights or causal claims; charts and physician report snapshots remain separate P3
-work.
+insights or causal claims. Daily plan-versus-actual totals also have a local SVG chart
+whose adjacent semantic table is authoritative and preserves gaps. Physician report
+snapshots remain separate P3 work.
 
 What you have today for answering questions:
 

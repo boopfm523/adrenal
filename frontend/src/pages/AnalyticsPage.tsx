@@ -4,6 +4,7 @@ import { useState, type PropsWithChildren } from "react";
 import { getAnalyticsSummary, type AnalyticsSummary } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
+import { AccessibleLineChart } from "../components/AccessibleLineChart";
 import { localDate } from "../time";
 
 interface MetricFrameProps extends PropsWithChildren {
@@ -26,7 +27,9 @@ function doseTotal(day: DoseDay, kind: "planned" | "actual"): string {
 
 function DailyDoses({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
   const metric = summary.daily_doses;
-  return <MetricFrame title="Daily medication totals versus plan" metric={metric}><p>{metric.days_without_approved_plan} day(s) have no physician-approved plan in force.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Daily medication totals table"><table><thead><tr><th scope="col">Date</th><th scope="col">Approved plan total</th><th scope="col">Recorded actual total</th><th scope="col">Dose facts</th></tr></thead><tbody>{metric.values.map((day) => <tr key={day.date}><th scope="row">{day.date}</th><td>{doseTotal(day, "planned")}</td><td>{doseTotal(day, "actual")}</td><td>{day.recorded_dose_count}</td></tr>)}</tbody></table></div></MetricFrame>;
+  const units = new Set(metric.values.map((day) => day.unit).filter((unit) => unit !== null));
+  const chartUnit = units.size === 1 ? [...units][0] ?? "unit unavailable" : "mixed or unavailable units";
+  return <><AccessibleLineChart title="Daily medication totals versus plan" summary={`${metric.days_without_approved_plan.toString()} day(s) have no physician-approved plan in force. Gaps mean the value is missing or unavailable.`} unit={chartUnit} timezone={metric.timezone} dateRange={`${summary.date_from} through ${summary.date_to}`} definition={metric.definition} sampleCount={metric.sample_count} missingCount={metric.missing_count} series={[{ name: "Physician-approved plan total", source: "approved regimen versions", values: metric.values.map((day) => ({ label: day.date, value: day.incompatible_units ? null : day.planned_total })) }, { name: "Recorded actual total", source: "current dose facts", values: metric.values.map((day) => ({ label: day.date, value: day.incompatible_units ? null : day.actual_total })) }]} /><div className="visually-hidden" aria-live="polite">{metric.values.map((day) => `${day.date}: planned ${doseTotal(day, "planned")}; actual ${doseTotal(day, "actual")}.`).join(" ")}</div></>;
 }
 
 function Timing({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
