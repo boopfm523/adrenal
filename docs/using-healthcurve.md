@@ -214,6 +214,27 @@ ollama pull qwen3-vl:30b
 
 ---
 
+## Location, timezone, and weather context
+
+Authenticated clients can record contextual observations through
+`POST /api/v1/context-events`, list current observations with
+`GET /api/v1/context-events`, and request retained correction history with
+`include_superseded=true`. Each observation stores the experienced local time, IANA
+timezone, resolved UTC instant, and historical offset together. This preserves travel
+and daylight-saving context without rewriting any health event.
+
+Location privacy is explicit. `none` stores no location; `coarse` requires a label
+such as a city or region and forbids coordinates; `exact` requires a latitude,
+longitude, and `exact_location_consent=true`. Those rules are enforced by both the API
+and PostgreSQL. Context is a separate fact type, so password-confirmed
+`DELETE /api/v1/context-events/{id}` removes its complete correction chain without
+deleting doses, symptoms, diary entries, or other medical facts.
+
+Weather values always carry an observation time, provider, and explicit units. Only
+the `manual` provider is accepted today. HealthCurve makes no external weather or
+geocoding request in this implementation; provider-based enrichment remains blocked
+until the owner chooses a service and explicitly approves transmitting location.
+
 ## Analytics
 
 HealthCurve now provides an authenticated `/analytics` page and
@@ -354,14 +375,18 @@ So you don't go looking for it:
 - **No PDF review UI yet.** Manual/CSV lab facts, private PDF source storage,
   deterministic embedded-text drafts, bounded scanned-page OCR, and private local
   vision fallback exist. Per-result review remains `hc-xo6.6`.
-- **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
-  implemented; direct Garmin API access remains gated by vendor approval.
+- **No automatic Garmin sync or weather enrichment.** Reviewed Garmin FIT/CSV/ZIP
+  import and manual context recording are implemented. Direct Garmin API access
+  remains gated by vendor approval, and external weather requires an owner-approved
+  provider and location-sharing decision.
 - **Deletion is available from Settings & privacy.** Eligible individual records,
   integration data, and the complete account use password-confirmed physical deletion;
   correction-linked facts require account deletion so history cannot be made partial.
   Structural audit entries survive, and encrypted backup copies retain deleted data
   until their configured expiry.
-- **No rate limiting or MFA.** Integration token encryption and rotation are
-  implemented; provider connections beyond Telegram are not.
+- **Production access still needs its deployment gates.** Persistent rate limiting,
+  TOTP/recovery-code MFA, and integration-token encryption are implemented. The
+  Tailscale identity/hostname, offsite backup destination, and restore drill still
+  require owner deployment choices.
 
 `bd ready` lists what's actually next.

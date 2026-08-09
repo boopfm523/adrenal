@@ -25,7 +25,9 @@ from testcontainers.community.postgres import PostgresContainer
 from healthcurve import privacy
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
 from healthcurve.config import Settings, get_settings
+from healthcurve.context.models import ContextEvent, LocationPrecision
 from healthcurve.document_worker import process_available, validate_one
+from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.models import (
@@ -163,6 +165,7 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/medications",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
         "/api/v1/reports",
+        "/api/v1/context-events",
     ):
         assert client.get(path).status_code == 401, path
 
@@ -264,6 +267,154 @@ def test_state_changing_requests_require_csrf(
 
 def test_reads_do_not_require_csrf(client: TestClient, logged_in: dict[str, str]) -> None:
     assert client.get("/api/v1/medications").status_code == 200
+
+
+def test_context_privacy_time_provenance_corrections_and_deletion(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    hidden_id: uuid.UUID
+    secondary_id: uuid.UUID
+    observed_at = datetime.now(UTC)
+    with Session(engine) as session, session.begin():
+        secondary = Owner(
+            email="context-owner@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(secondary)
+        session.flush()
+        secondary_id = secondary.id
+        hidden = ContextEvent(
+            owner_id=secondary.id,
+            occurred_at=observed_at,
+            local_time=observed_at.replace(tzinfo=None),
+            timezone="UTC",
+            utc_offset_minutes=0,
+            recorded_at=observed_at,
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            location_precision=LocationPrecision.NONE,
+            exact_location_consent=False,
+        )
+        session.add(hidden)
+        session.flush()
+        hidden_id = hidden.id
+
+    coarse_payload = {
+        "time": {"local_time": "2026-03-29T08:15:00", "timezone": "Europe/London"},
+        "location_precision": "coarse",
+        "coarse_location_label": "Central London",
+        "weather_provider": "manual",
+        "weather_observed_at": "2026-03-29T07:15:00Z",
+        "temperature": "12.50",
+        "temperature_unit": "c",
+        "pressure": "1012.30",
+        "pressure_unit": "hpa",
+        "humidity_percent": "72.00",
+        "conditions": "Synthetic overcast",
+    }
+    without_csrf = client.post("/api/v1/context-events", json=coarse_payload)
+    assert without_csrf.status_code == 403
+
+    missing_consent = client.post(
+        "/api/v1/context-events",
+        headers=logged_in,
+        json={
+            "time": {"local_time": "2026-03-29T08:15:00", "timezone": "Europe/London"},
+            "location_precision": "exact",
+            "latitude": "51.507400",
+            "longitude": "-0.127800",
+        },
+    )
+    assert missing_consent.status_code == 422
+
+    naive_weather_time = client.post(
+        "/api/v1/context-events",
+        headers=logged_in,
+        json={**coarse_payload, "weather_observed_at": "2026-03-29T07:15:00"},
+    )
+    assert naive_weather_time.status_code == 422
+
+    created = client.post("/api/v1/context-events", headers=logged_in, json=coarse_payload)
+    assert created.status_code == 201, created.text
+    original = created.json()
+    assert original["time"] == {
+        "occurred_at": "2026-03-29T07:15:00Z",
+        "local_time": "2026-03-29T08:15:00",
+        "timezone": "Europe/London",
+        "utc_offset_minutes": 60,
+    }
+    assert original["coarse_location_label"] == "Central London"
+    assert original["latitude"] is None
+    assert original["weather_provider"] == "manual"
+    assert original["temperature"] == "12.50"
+
+    diary = client.post(
+        "/api/v1/diary-events",
+        headers=logged_in,
+        json={
+            "text": "Synthetic fact independent of context",
+            "time": {"local_time": "2026-03-29T08:20:00", "timezone": "Europe/London"},
+        },
+    )
+    assert diary.status_code == 201, diary.text
+    diary_id = diary.json()["id"]
+
+    corrected = client.post(
+        f"/api/v1/context-events/{original['id']}/correct",
+        headers=logged_in,
+        json={
+            "reason": "Synthetic travel correction",
+            "replacement": {
+                "time": {"local_time": "2026-03-30T18:00:00", "timezone": "Asia/Tokyo"},
+                "location_precision": "exact",
+                "latitude": "35.676200",
+                "longitude": "139.650300",
+                "exact_location_consent": True,
+                "notes": "Synthetic exact-location consent fixture",
+            },
+        },
+    )
+    assert corrected.status_code == 201, corrected.text
+    replacement = corrected.json()
+    assert replacement["time"]["occurred_at"] == "2026-03-30T09:00:00Z"
+    assert replacement["time"]["utc_offset_minutes"] == 540
+    assert replacement["provenance"]["supersedes_id"] == original["id"]
+    assert replacement["latitude"] == "35.676200"
+
+    current = client.get("/api/v1/context-events").json()
+    history = client.get("/api/v1/context-events", params={"include_superseded": True}).json()
+    assert replacement["id"] in {row["id"] for row in current}
+    assert str(hidden_id) not in {row["id"] for row in current}
+    assert original["id"] not in {row["id"] for row in current}
+    assert {original["id"], replacement["id"]} <= {row["id"] for row in history}
+    with Session(engine) as session:
+        original_row = session.get(ContextEvent, uuid.UUID(original["id"]))
+        assert original_row is not None
+        assert original_row.coarse_location_label == "Central London"
+        assert original_row.latitude is None
+
+    path = f"/api/v1/context-events/{replacement['id']}"
+    wrong = client.request("DELETE", path, headers=logged_in, json={"password": "wrong-password"})
+    assert wrong.status_code == 403
+    deleted = client.request("DELETE", path, headers=logged_in, json={"password": PASSWORD})
+    assert deleted.status_code == 204, deleted.text
+    remaining_ids = {row["id"] for row in client.get("/api/v1/context-events").json()}
+    assert original["id"] not in remaining_ids
+    assert replacement["id"] not in remaining_ids
+    assert diary_id in {row["id"] for row in client.get("/api/v1/diary-events").json()}
+    with Session(engine) as session:
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.RECORD_DELETED,
+                AuditEntry.target_id == uuid.UUID(original["id"]),
+            )
+        )
+        assert entry is not None
+        assert entry.change_summary == "deleted context correction chain (2 revisions)"
+        session.delete(session.get(ContextEvent, hidden_id))
+        session.delete(session.get(Owner, secondary_id))
+        session.commit()
 
 
 def test_individual_deletion_requires_password_and_preserves_audit(

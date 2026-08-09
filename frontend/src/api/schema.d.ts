@@ -178,6 +178,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/context-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Context */
+        get: operations["list_context_api_v1_context_events_get"];
+        put?: never;
+        /** Create Context */
+        post: operations["create_context_api_v1_context_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/context-events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Context */
+        delete: operations["delete_context_api_v1_context_events__event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/context-events/{event_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct Context */
+        post: operations["correct_context_api_v1_context_events__event_id__correct_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-quality": {
         parameters: {
             query?: never;
@@ -1042,6 +1094,109 @@ export interface components {
          * @enum {string}
          */
         ConfirmationState: "direct" | "confirmed_from_draft" | "provider_imported";
+        /** ContextCorrectionIn */
+        ContextCorrectionIn: {
+            /** Reason */
+            reason: string;
+            replacement: components["schemas"]["ContextIn"];
+        };
+        /** ContextDeleteIn */
+        ContextDeleteIn: {
+            /** Password */
+            password: string;
+        };
+        /** ContextIn */
+        ContextIn: {
+            /** Coarse Location Label */
+            coarse_location_label?: string | null;
+            /** Conditions */
+            conditions?: string | null;
+            /**
+             * Exact Location Consent
+             * @default false
+             */
+            exact_location_consent: boolean;
+            /** Humidity Percent */
+            humidity_percent?: number | string | null;
+            /** Latitude */
+            latitude?: number | string | null;
+            /** @default none */
+            location_precision: components["schemas"]["LocationPrecision"];
+            /** Longitude */
+            longitude?: number | string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Precipitation */
+            precipitation?: number | string | null;
+            precipitation_unit?: components["schemas"]["PrecipitationUnit"] | null;
+            /** Pressure */
+            pressure?: number | string | null;
+            pressure_unit?: components["schemas"]["PressureUnit"] | null;
+            /** Temperature */
+            temperature?: number | string | null;
+            temperature_unit?: components["schemas"]["TemperatureUnit"] | null;
+            time: components["schemas"]["EventTimeIn"];
+            /** Weather Confidence */
+            weather_confidence?: number | string | null;
+            /** Weather Observation Id */
+            weather_observation_id?: string | null;
+            /** Weather Observed At */
+            weather_observed_at?: string | null;
+            /** Weather Provider */
+            weather_provider?: string | null;
+        };
+        /** ContextOut */
+        ContextOut: {
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /** Coarse Location Label */
+            coarse_location_label?: string | null;
+            /** Conditions */
+            conditions?: string | null;
+            /**
+             * Exact Location Consent
+             * @default false
+             */
+            exact_location_consent: boolean;
+            /** Humidity Percent */
+            humidity_percent?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Latitude */
+            latitude?: string | null;
+            /** @default none */
+            location_precision: components["schemas"]["LocationPrecision"];
+            /** Longitude */
+            longitude?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Precipitation */
+            precipitation?: string | null;
+            precipitation_unit?: components["schemas"]["PrecipitationUnit"] | null;
+            /** Pressure */
+            pressure?: string | null;
+            pressure_unit?: components["schemas"]["PressureUnit"] | null;
+            provenance: components["schemas"]["ProvenanceOut"];
+            /** Temperature */
+            temperature?: string | null;
+            temperature_unit?: components["schemas"]["TemperatureUnit"] | null;
+            time: components["schemas"]["EventTimeOut"];
+            /** Weather Confidence */
+            weather_confidence?: string | null;
+            /** Weather Observation Id */
+            weather_observation_id?: string | null;
+            /** Weather Observed At */
+            weather_observed_at?: string | null;
+            /** Weather Provider */
+            weather_provider?: string | null;
+        };
         /** DailyDoseMetric */
         DailyDoseMetric: {
             /** Days Without Approved Plan */
@@ -1629,6 +1784,11 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * LocationPrecision
+         * @enum {string}
+         */
+        LocationPrecision: "none" | "coarse" | "exact";
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -1839,6 +1999,16 @@ export interface components {
             status: string;
             unit: components["schemas"]["DoseUnit"];
         };
+        /**
+         * PrecipitationUnit
+         * @enum {string}
+         */
+        PrecipitationUnit: "mm" | "in";
+        /**
+         * PressureUnit
+         * @enum {string}
+         */
+        PressureUnit: "hpa" | "inhg";
         /** PrivateExportRequest */
         PrivateExportRequest: {
             /**
@@ -2177,6 +2347,11 @@ export interface components {
             severity: number | null;
             time: components["schemas"]["EventTimeOut"];
         };
+        /**
+         * TemperatureUnit
+         * @enum {string}
+         */
+        TemperatureUnit: "c" | "f";
         /**
          * TimelineItem
          * @description One entry on the unified timeline.
@@ -2630,6 +2805,152 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MfaRecoveryCodesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_context_api_v1_context_events_get: {
+        parameters: {
+            query?: {
+                include_superseded?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_context_api_v1_context_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_context_api_v1_context_events__event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextDeleteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_context_api_v1_context_events__event_id__correct_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextCorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextOut"];
                 };
             };
             /** @description Validation Error */

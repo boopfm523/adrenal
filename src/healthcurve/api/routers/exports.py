@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from healthcurve.api.deps import CurrentOwner, DbSession
+from healthcurve.context.models import ContextEvent
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.integrations.garmin.models import (
@@ -128,6 +129,7 @@ def create_export(
             "life_events": _rows(session, LifeEvent, owner.id),
             "stress_episodes": _rows(session, StressEpisode, owner.id),
             "emergency_injections": _rows(session, EmergencyInjectionEvent, owner.id),
+            "context_events": _rows(session, ContextEvent, owner.id),
             "garmin_import_batches": _rows(session, GarminImportBatch, owner.id),
             "garmin_metrics": _rows(session, GarminMetricEvent, owner.id),
             "garmin_sleep": _rows(session, GarminSleepEvent, owner.id),

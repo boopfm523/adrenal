@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.models import AIAnalysis, ExtractionDraft
+from healthcurve.context.models import ContextEvent
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.base import EventMixin
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
@@ -152,7 +153,14 @@ def delete_account(
     for model in (AIAnalysis, ExtractionDraft, LabPanel, LabDocument, ReportSnapshot):
         session.execute(delete(model).where(model.owner_id == owner_id))
     session.execute(delete(GarminImportBatch).where(GarminImportBatch.owner_id == owner_id))
-    for model in (EmergencyInjectionEvent, DoseEvent, SymptomEvent, DiaryEvent, LifeEvent):
+    for model in (
+        EmergencyInjectionEvent,
+        ContextEvent,
+        DoseEvent,
+        SymptomEvent,
+        DiaryEvent,
+        LifeEvent,
+    ):
         session.execute(delete(model).where(model.owner_id == owner_id))
     session.execute(delete(StressEpisode).where(StressEpisode.owner_id == owner_id))
     session.execute(delete(RegimenVersion).where(RegimenVersion.owner_id == owner_id))
