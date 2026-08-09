@@ -47,6 +47,9 @@ def postgres() -> Iterator[PostgresContainer]:
 @pytest.fixture(scope="module")
 def settings(postgres: PostgresContainer) -> Settings:
     return Settings(
+        # Never read the developer's .env: a real HC_OLLAMA_BASE_URL once made this
+        # fixture fail startup validation for reasons unrelated to the test.
+        _env_file=None,  # type: ignore[call-arg]
         database_url=postgres.get_connection_url(),
         ollama_base_url="http://ollama:11434",
     )

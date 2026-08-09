@@ -26,6 +26,7 @@ from healthcurve.ai.extraction import (
 )
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
+from healthcurve.db import get_ai_session_factory
 from healthcurve.episodes.models import EmergencyInjectionEvent, EpisodeStatus, StressEpisode
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
@@ -395,15 +396,20 @@ def _handle_free_text(
             "Try something like: Took 15mg hydrocortisone at 7:08"
         )
 
-    draft = _store_draft(
-        session,
-        owner,
-        result.candidates,
-        raw_text=text,
-        source="telegram",
-        message_id=message_id,
-        model_name=result.model_name,
-    )
+    # SAFE-15 / SAFE-16: this is the one write that carries model output, so it goes
+    # through the restricted role. Even a prompt injection that survives validation
+    # reaches a connection with no INSERT on fact or plan. The deterministic command
+    # paths above are not model output and keep the caller's session.
+    with get_ai_session_factory()() as ai_session, ai_session.begin():
+        draft = _store_draft(
+            ai_session,
+            owner,
+            result.candidates,
+            raw_text=text,
+            source="telegram",
+            message_id=message_id,
+            model_name=result.model_name,
+        )
     return _draft_reply(draft, result.candidates)
 
 
@@ -450,7 +456,8 @@ _FLAG_EXPLANATIONS: Final[dict[FlagCode, str]] = {
     FlagCode.MISSING_UNIT: "no unit given",
     FlagCode.UNPARSEABLE_AMOUNT: "I couldn't read the amount",
     FlagCode.IMPLAUSIBLE_AMOUNT: "that amount looks too large",
-    FlagCode.MISSING_TIME: "no time given, so I assumed now",
+    FlagCode.MISSING_TIME: "no time given",
+    FlagCode.ASSUMED_TIME: "you didn't give a time, so I've used when you sent this",
     FlagCode.UNPARSEABLE_TIME: "I couldn't read the time",
     FlagCode.AMBIGUOUS_TIME: "that time happened twice (clocks went back) - which one?",
     FlagCode.NONEXISTENT_TIME: "that time doesn't exist (clocks went forward)",
@@ -554,7 +561,13 @@ def confirm_draft(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
 
 def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> Any | None:
     """Write one confirmed candidate as a fact."""
-    local = candidate.local_time or _local_now(owner, datetime.now(UTC))
+    if candidate.local_time is None:
+        # Never invent a time here. Substituting the confirmation moment would record
+        # something the owner was never shown -- a dose stamped 21:00 because that is
+        # when they pressed Confirm on "took my morning dose". Validation proposes a
+        # time and flags it; if it could not, this candidate is not recordable.
+        return None
+    local = candidate.local_time
     try:
         event_time = resolve_event_time(local, candidate.timezone)
     except Exception:

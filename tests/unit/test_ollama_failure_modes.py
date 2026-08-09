@@ -193,3 +193,42 @@ def test_open_breaker_short_circuits_without_a_network_call(
     result = _call(client)
     assert result.outcome is ModelOutcome.UNAVAILABLE
     assert calls["n"] == attempts_before, "breaker should stop the call being made"
+
+
+# ---------------------------------------------------------------------------
+# Reasoning phase (hc-cxf)
+# ---------------------------------------------------------------------------
+
+
+def test_thinking_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Measured at 29.1s with reasoning vs 1.9s without, same accuracy."""
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "{}"}})
+
+    _patch_transport(monkeypatch, handler)
+    _call(_client())
+    assert seen["think"] is False
+
+
+def test_a_model_that_rejects_the_think_field_still_works(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-reasoning models 400 on it. Losing speed beats losing the call."""
+    attempts: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        attempts.append(body)
+        if "think" in body:
+            return httpx.Response(400, json={"error": "unknown field think"})
+        return httpx.Response(200, json={"message": {"content": '{"candidates": []}'}})
+
+    _patch_transport(monkeypatch, handler)
+    result = _call(_client())
+
+    assert result.outcome is ModelOutcome.OK
+    assert len(attempts) == 2
+    assert "think" not in attempts[1]

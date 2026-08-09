@@ -164,11 +164,19 @@ no public endpoint.
 Also expected, and the main practical cost of polling. Telegram holds updates for about
 24 hours, so messages sent while the laptop was closed arrive once the worker is back.
 
-**Bot replies to `/help` but ignores plain sentences.**
-That's the language model being unreachable, and it's the designed fallback. Check
-`docker compose logs ollama` and confirm the model is pulled:
-`docker compose exec ollama ollama list`. Pull it if not:
-`docker compose exec ollama ollama pull qwen3-coder`.
+**Bot replies to `/help` but says "the language model is unavailable" for plain
+sentences.**
+Expected on a fresh install: no model is pulled yet, and this is the designed
+fallback rather than a guess. Check with `docker compose exec ollama ollama list`.
+Pull one with `docker compose exec ollama ollama pull <model>` and set
+`HC_OLLAMA_MODEL` to match. The commands (`/dose`, `/symptom`, `/today`) are
+deterministic and keep working without any model at all.
+
+**`telegram update failed` with a `reason_code`.**
+The `reason_code` is the exception type. `ProgrammingError` is usually a database
+permission problem; `ConnectError` and `ReadTimeout` are network. The message itself
+is deliberately not logged — httpx errors embed the URL, which contains the bot token,
+and database errors echo bound parameters, which contain health values.
 
 **"I don't know 'x'" when naming a medication.**
 The name must match one you loaded. List them with `/today`, or add the medication in

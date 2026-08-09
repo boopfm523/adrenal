@@ -21,6 +21,9 @@ from sqlalchemy import Engine, MetaData, String, TypeDecorator, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from healthcurve.config import Settings, get_settings
+from healthcurve.logging import get_logger
+
+log = get_logger(__name__)
 
 
 class StrEnumType(TypeDecorator[Any]):
@@ -165,11 +168,15 @@ def category_of(model: type[Any]) -> Category | None:
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=1)
-def get_engine(settings: Settings | None = None) -> Engine:
-    settings = settings or get_settings()
+def build_engine(url: str) -> Engine:
+    """Construct an engine. Uncached, so callers can build one per role.
+
+    Kept separate from the cached accessors below because ``Settings`` is unhashable:
+    an ``lru_cache`` that accepted one would raise ``TypeError`` for every caller that
+    actually passed it.
+    """
     return create_engine(
-        settings.database_url,
+        url,
         pool_pre_ping=True,
         # Health data must never reach the logs, and echo would print every bound
         # parameter (docs/threat-model.md C2).
@@ -177,9 +184,51 @@ def get_engine(settings: Settings | None = None) -> Engine:
     )
 
 
+def build_ai_engine(settings: Settings) -> Engine:
+    """Engine for the restricted role. See :func:`get_ai_engine`."""
+    if not settings.ai_database_url:
+        # Refused outright in production by Settings; here it keeps a bare checkout
+        # runnable, but it must never pass silently.
+        log.warning(
+            "ai database url not set; extraction shares the privileged connection",
+            reason_code="ai_role_not_separated",
+            outcome="degraded",
+        )
+        return build_engine(settings.database_url)
+    return build_engine(settings.ai_database_url)
+
+
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    return build_engine(get_settings().database_url)
+
+
+@lru_cache(maxsize=1)
+def get_ai_engine() -> Engine:
+    """Engine bound to the restricted role (SAFE-15, SAFE-16).
+
+    Used only where model output becomes a draft. The separation is a database
+    privilege rather than a code convention: the connection the model's output flows
+    through is denied INSERT, UPDATE and DELETE on ``fact`` and ``plan``, so a prompt
+    injection that reaches the query layer still cannot alter the record.
+
+    An earlier design applied the restriction per *process* -- the whole worker ran as
+    the AI role. That was the wrong boundary: the worker also performs the owner's
+    confirmation, which is a privileged write, so the restriction blocked the human it
+    was meant to protect.
+    """
+    return build_ai_engine(get_settings())
+
+
 @lru_cache(maxsize=1)
 def get_session_factory() -> sessionmaker[Session]:
     return sessionmaker(get_engine(), expire_on_commit=False)
+
+
+@lru_cache(maxsize=1)
+def get_ai_session_factory() -> sessionmaker[Session]:
+    """Sessions for the extraction path. See :func:`get_ai_engine`."""
+    return sessionmaker(get_ai_engine(), expire_on_commit=False)
 
 
 def session_scope() -> Iterator[Session]:

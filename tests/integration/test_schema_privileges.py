@@ -201,3 +201,17 @@ def test_ai_role_cannot_create_tables_in_safety_schemas(ai_engine: Engine, schem
     with pytest.raises(ProgrammingError, match="permission denied"):
         with ai_engine.begin() as conn:
             conn.execute(text(f"CREATE TABLE {schema}.ai_created (id int)"))
+
+
+@pytest.mark.safety("SAFE-15")
+def test_ai_role_cannot_read_identity(ai_engine: Engine) -> None:
+    """The AI role has no business reading credentials -- and this is deliberate.
+
+    `identity.owner` holds the owner's email and password hash. The denial is also
+    why the worker cannot simply run as this role: it must look up the owner to
+    handle any message at all. That is a reason to give the worker two connections,
+    not a reason to widen this one.
+    """
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(text("SELECT count(*) FROM identity.owner"))

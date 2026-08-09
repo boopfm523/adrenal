@@ -89,6 +89,12 @@ def test_defaults_are_safe() -> None:
         ("169.254.1.1", True),
         ("8.8.8.8", False),
         ("ollama", True),  # single-label name cannot be public
+        # Docker Desktop's host gateway: reserved, and unresolvable outside a container.
+        ("host.docker.internal", True),
+        ("gateway.docker.internal", True),
+        # Matched exactly. A suffix match here would accept an attacker's domain.
+        ("host.docker.internal.evil.com", False),
+        ("nothost.docker.internal", False),
     ],
 )
 def test_is_private_host(host: str, expected: bool) -> None:
@@ -136,6 +142,29 @@ def test_telegram_configuration_is_transport_aware() -> None:
         ).telegram_configured
         is True
     )
+
+
+# ---------------------------------------------------------------------------
+# The restricted AI role (SAFE-15, SAFE-16)
+# ---------------------------------------------------------------------------
+
+
+def test_production_requires_a_separate_ai_role() -> None:
+    """Without it, SAFE-15/16 stop being database privileges and become a convention."""
+    with pytest.raises(ValueError, match="HC_AI_DATABASE_URL must be set in production"):
+        _settings(environment=Environment.PROD)
+
+
+def test_pointing_both_urls_at_the_same_role_is_rejected() -> None:
+    """The dangerous case: it looks configured while enforcing nothing."""
+    url = "postgresql+psycopg://healthcurve@postgres:5432/healthcurve"
+    with pytest.raises(ValueError, match="must not equal"):
+        _settings(database_url=url, ai_database_url=url)
+
+
+def test_development_may_omit_the_ai_role() -> None:
+    """A bare checkout has to run; db.get_ai_engine logs the downgrade loudly."""
+    assert _settings(environment=Environment.DEV).ai_database_url is None
 
 
 def test_the_chat_allow_list_is_required_in_both_modes() -> None:

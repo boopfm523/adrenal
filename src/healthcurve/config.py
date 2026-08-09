@@ -15,7 +15,7 @@ import ipaddress
 import socket
 from enum import StrEnum
 from functools import lru_cache
-from typing import Any, Self
+from typing import Any, Final, Self
 from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, model_validator
@@ -43,12 +43,22 @@ class PublicOllamaError(ValueError):
     """Raised when the configured Ollama URL is not on a private network."""
 
 
+#: Docker Desktop reserves these for the host gateway. They cannot resolve to a public
+#: address, and they do not resolve at all outside a container -- so the resolution
+#: check below would reject a legitimately private target. Matched exactly, never by
+#: suffix: "host.docker.internal.example.com" is somebody else's domain.
+DOCKER_HOST_ALIASES: Final = frozenset({"host.docker.internal", "gateway.docker.internal"})
+
+
 def is_private_host(host: str) -> bool:
     """True if every address ``host`` resolves to is private, loopback, or link-local.
 
     A hostname is accepted only if *all* of its addresses are private -- a name that
     resolves to both a private and a public address is treated as public.
     """
+    if host in DOCKER_HOST_ALIASES:
+        return True
+
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
@@ -87,6 +97,10 @@ class Settings(BaseSettings):
     # --- Database (ADR-0001) ---
     database_url: str = "postgresql+psycopg://healthcurve@localhost:5432/healthcurve"
     database_password: SecretStr | None = None
+    #: The restricted role used only where model output becomes a draft (SAFE-15/16).
+    #: Unset means the AI path shares the privileged connection, which downgrades those
+    #: rules from a database privilege to a convention -- refused in production.
+    ai_database_url: str | None = None
 
     # --- Local LLM (ADR-0003). Never public. ---
     ollama_base_url: str = "http://ollama:11434"
@@ -94,6 +108,10 @@ class Settings(BaseSettings):
     ollama_connect_timeout_s: float = Field(default=5.0, gt=0)
     ollama_read_timeout_s: float = Field(default=60.0, gt=0)
     ollama_max_retries: int = Field(default=2, ge=0)
+    #: Reasoning models "think" before answering. Extraction is a parsing task with a
+    #: fixed output schema, and measurement showed the reasoning phase cost 15x the
+    #: latency with no accuracy gain, so it is off by default. Set true to compare.
+    ollama_thinking: bool = False
 
     # --- Telegram (docs/telegram-setup.md). All three are class C8 secrets. ---
     telegram_bot_token: SecretStr | None = None
@@ -149,6 +167,27 @@ class Settings(BaseSettings):
             raise ValueError(
                 "debug must be disabled in production (docs/threat-model.md T2): "
                 "interactive tracebacks leak health data and internals.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_ai_role_is_separate_in_prod(self) -> Self:
+        """SAFE-15/16 are database privileges, not conventions.
+
+        Sharing one connection would let a prompt-injected extraction write straight
+        into the record. In development the fallback is allowed so a bare checkout
+        runs, but it is logged loudly by :func:`healthcurve.db.get_ai_engine`.
+        """
+        if self.environment is Environment.PROD and not self.ai_database_url:
+            raise ValueError(
+                "HC_AI_DATABASE_URL must be set in production (SAFE-15, SAFE-16): "
+                "the extraction path must connect as a role that is denied writes to "
+                "the fact and plan schemas.",
+            )
+        if self.ai_database_url and self.ai_database_url == self.database_url:
+            raise ValueError(
+                "HC_AI_DATABASE_URL must not equal HC_DATABASE_URL: pointing both at "
+                "the same role defeats SAFE-15/16 while appearing to satisfy them.",
             )
         return self
 

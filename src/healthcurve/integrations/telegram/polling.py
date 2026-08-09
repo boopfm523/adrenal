@@ -133,13 +133,13 @@ class TelegramPoller:
                 updates = self.fetch_updates()
             except TelegramNotConfiguredError:
                 raise
-            except Exception:
+            except Exception as exc:
                 self.stats.errors += 1
                 log.warning(
                     "telegram poll failed",
                     integration="telegram",
                     outcome="failed",
-                    reason_code="poll_error",
+                    reason_code=type(exc).__name__,
                 )
                 # Wait on the stop event rather than sleeping, so shutdown stays prompt.
                 self._stop.wait(backoff)
@@ -205,13 +205,18 @@ class TelegramPoller:
                     allowed_chat_id=self._allowed_chat_id(),
                     client=self._client,
                 )
-        except Exception:
+        except Exception as exc:
             self.stats.errors += 1
+            # The exception *type* is safe to log and is usually the whole diagnosis;
+            # a constant here once made a permission error indistinguishable from a
+            # network blip. The message is not logged: httpx embeds the URL, which
+            # carries the bot token (class C8), and database errors echo bound
+            # parameters, which carry health values (C2).
             log.warning(
                 "telegram update failed",
                 integration="telegram",
                 outcome="failed",
-                reason_code="dispatch_error",
+                reason_code=type(exc).__name__,
             )
 
         if isinstance(update_id, int):

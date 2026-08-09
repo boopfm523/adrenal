@@ -10,7 +10,12 @@ from healthcurve.config import Environment, Settings
 
 
 def _client(environment: Environment = Environment.DEV) -> TestClient:
-    settings = Settings(environment=environment, ollama_base_url="http://ollama:11434")
+    settings = Settings(
+        environment=environment,
+        ollama_base_url="http://ollama:11434",
+        # Production refuses to start without a separate AI role (SAFE-15/16).
+        ai_database_url="postgresql+psycopg://healthcurve_ai:pw@postgres:5432/healthcurve",
+    )
     return TestClient(create_app(settings))
 
 

@@ -8,15 +8,21 @@ parser.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
+
 import pytest
 
 from healthcurve.ai.extraction import (
     MAX_PLAUSIBLE_MG,
     SYSTEM_PROMPT,
     ExtractionResponse,
+    find_time_expression,
     has_negation,
     is_hypothetical,
     looks_like_prompt_injection,
+    normalise_amount,
+    normalise_local_time,
 )
 
 
@@ -155,3 +161,135 @@ def test_amount_is_carried_as_a_string_not_a_float() -> None:
     )
     assert parsed.candidates[0].amount == "2.5"
     assert isinstance(parsed.candidates[0].amount, str)
+
+
+# ---------------------------------------------------------------------------
+# Normalising what the model actually returns
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("15", Decimal("15")),
+        ("15mg", Decimal("15")),  # the model attaches the unit despite the schema
+        ("15 mg", Decimal("15")),
+        ("7.5mg", Decimal("7.5")),
+        ("20 MG", Decimal("20")),
+    ],
+)
+def test_unambiguous_amounts_are_normalised(raw: str, expected: Decimal) -> None:
+    """A message read correctly must not be thrown away over formatting."""
+    assert normalise_amount(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["1-2", "a couple", "half", "", "1/2", "15mg or 20mg"])
+def test_ambiguous_amounts_are_refused(raw: str) -> None:
+    """SAFE-14: an amount we cannot read exactly is flagged, never guessed."""
+    assert normalise_amount(raw) is None
+
+
+def test_clock_time_resolves_to_the_most_recent_occurrence() -> None:
+    now_local = datetime(2026, 8, 9, 9, 0)  # noqa: DTZ001
+    assert normalise_local_time("7:08am", now_local) == datetime(2026, 8, 9, 7, 8)  # noqa: DTZ001
+
+
+def test_clock_time_never_resolves_into_the_future() -> None:
+    """ "7:08am" sent at half past midnight means yesterday morning, not in nine hours."""
+    now_local = datetime(2026, 8, 9, 0, 30)  # noqa: DTZ001
+    assert normalise_local_time("7:08am", now_local) == datetime(2026, 8, 8, 7, 8)  # noqa: DTZ001
+
+
+@pytest.mark.parametrize(
+    ("raw", "hour"),
+    [("07:08", 7), ("7:08", 7), ("7:08 PM", 19), ("12:30am", 0), ("12:30pm", 12)],
+)
+def test_clock_formats(raw: str, hour: int) -> None:
+    now_local = datetime(2026, 8, 9, 23, 59)  # noqa: DTZ001
+    parsed = normalise_local_time(raw, now_local)
+    assert parsed is not None and parsed.hour == hour
+
+
+@pytest.mark.parametrize("raw", ["this morning", "25:00", "7:70", "later", ""])
+def test_vague_times_are_refused(raw: str) -> None:
+    """SAFE-13: the owner supplies a time we cannot read. We do not invent one."""
+    now_local = datetime(2026, 8, 9, 9, 0)  # noqa: DTZ001
+    assert normalise_local_time(raw, now_local) is None
+
+
+def test_iso_datetimes_still_work() -> None:
+    now_local = datetime(2026, 8, 9, 9, 0)  # noqa: DTZ001
+    expected = datetime(2026, 8, 9, 7, 8)  # noqa: DTZ001
+    assert normalise_local_time("2026-08-09T07:08:00", now_local) == expected
+
+
+@pytest.mark.parametrize("raw", ["just now", "now", "right now", "Just Now"])
+def test_just_now_is_a_time(raw: str) -> None:
+    """It is unambiguous, and it is how people actually write."""
+    now_local = datetime(2026, 8, 9, 9, 48, 30)  # noqa: DTZ001
+    assert normalise_local_time(raw, now_local) == datetime(2026, 8, 9, 9, 48)  # noqa: DTZ001
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected_hour", "expected_minute"),
+    [
+        ("an hour ago", 8, 48),
+        ("1 hour ago", 8, 48),
+        ("2 hours ago", 7, 48),
+        ("20 minutes ago", 9, 28),
+        ("half an hour ago", 9, 18),
+        ("30 min ago", 9, 18),
+    ],
+)
+def test_relative_times_are_resolved(raw: str, expected_hour: int, expected_minute: int) -> None:
+    now_local = datetime(2026, 8, 9, 9, 48)  # noqa: DTZ001
+    parsed = normalise_local_time(raw, now_local)
+    assert parsed is not None
+    assert (parsed.hour, parsed.minute) == (expected_hour, expected_minute)
+
+
+def test_a_missing_time_is_proposed_and_flagged_not_left_unknown() -> None:
+    """The draft must show the time that will actually be recorded.
+
+    Regression: the draft said "at time unknown" and confirmation then stamped the
+    moment Confirm was pressed. Say "took my morning dose" at 21:00 and the record
+    gained a 21:00 dose that the owner never saw or agreed to.
+    """
+    import healthcurve.ai.extraction as extraction
+    from healthcurve.ai.extraction import FlagCode
+
+    validate_time = getattr(extraction, "_validate_time")  # noqa: B009 -- avoids a private import
+    flags: list[FlagCode] = []
+    now = datetime(2026, 8, 9, 13, 48, 30, tzinfo=UTC)
+    parsed = validate_time(None, "America/New_York", now, flags)
+
+    assert parsed == datetime(2026, 8, 9, 9, 48)  # noqa: DTZ001 -- local, not UTC
+    assert FlagCode.ASSUMED_TIME in flags
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Took 15mg hydrocortisone an hour ago", "an hour ago"),
+        ("Took 15mg of hydrocortisone just now", "just now"),
+        ("Took 15mg at 7:08am", "7:08am"),
+        ("20 minutes ago I took my dose", "20 minutes ago"),
+    ],
+)
+def test_time_expressions_are_recovered_from_the_message(message: str, expected: str) -> None:
+    """The model returns 'an hour ago' on one call and null on the next.
+
+    Treating a stated time as absent is not a harmless default: it recorded the
+    current hour under the label "you didn't give a time".
+    """
+    found = find_time_expression(message)
+    assert found is not None and found.lower() == expected.lower()
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Took my dose this morning", "Had my hydrocortisone earlier", "Took 15mg"],
+)
+def test_vague_wording_is_not_mistaken_for_a_time(message: str) -> None:
+    """There is no honest way to turn "this morning" into a timestamp."""
+    assert find_time_expression(message) is None

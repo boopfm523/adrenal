@@ -38,7 +38,14 @@ services:
     environment:
       HC_ENVIRONMENT: dev
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
-      HC_OLLAMA_BASE_URL: http://ollama:11434
+      # Used only where model output becomes a draft (SAFE-15/16).
+      HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
+      # Defaults to the bundled container. Override in .env to use a host-native
+      # Ollama -- on macOS, Docker cannot reach the Metal GPU, so a model running
+      # in this container is CPU-only. Must still resolve to a private address
+      # (ADR-0003); the app refuses to start otherwise.
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
+      HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3-coder}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
@@ -70,10 +77,20 @@ services:
     command: ["python", "-m", "healthcurve.worker"]
     environment:
       HC_ENVIRONMENT: dev
-      # The worker runs AI jobs, so it connects as the restricted role that holds no
-      # INSERT/UPDATE on the fact and plan schemas (ADR-0001, SAFE-15/16).
-      HC_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
-      HC_OLLAMA_BASE_URL: http://ollama:11434
+      # Two roles, chosen per operation rather than per process (SAFE-15/16).
+      # The worker also performs the owner's confirmation, which is a privileged
+      # write, so the process cannot be restricted wholesale -- an earlier version
+      # ran entirely as the AI role and could neither read identity.owner nor record
+      # a confirmed dose.
+      HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
+      # Used only where model output becomes a draft. Denied writes on fact and plan.
+      HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
+      # Defaults to the bundled container. Override in .env to use a host-native
+      # Ollama -- on macOS, Docker cannot reach the Metal GPU, so a model running
+      # in this container is CPU-only. Must still resolve to a private address
+      # (ADR-0003); the app refuses to start otherwise.
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
+      HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3-coder}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
