@@ -974,6 +974,38 @@ def test_comparison_states_its_metric_definition_and_timezone(
     assert "never stored as a zero dose" in body["metric_definition"]
 
 
+@pytest.mark.safety("SAFE-27")
+def test_analytics_states_definitions_timezone_and_missingness(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    response = client.get(
+        "/api/v1/analytics/summary",
+        params={
+            "date_from": "2030-01-01",
+            "date_to": "2030-01-02",
+            "timezone": "Pacific/Kiritimati",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["timezone"] == "Pacific/Kiritimati"
+    assert body["daily_doses"]["sample_count"] == 0
+    assert body["daily_doses"]["missing_count"] == 2
+    assert body["daily_doses"]["values"][0]["actual_total"] is None
+    assert "No recorded doses is shown as missing" in body["daily_doses"]["definition"]
+    assert "30 minutes" in body["timing"]["definition"]
+    assert body["episodes"]["definition"]
+    assert body["symptoms"]["definition"]
+    for metric_name in ("daily_doses", "timing", "episodes", "symptoms"):
+        assert body[metric_name]["timezone"] == "Pacific/Kiritimati"
+
+    invalid = client.get(
+        "/api/v1/analytics/summary",
+        params={"date_from": "2030-01-02", "date_to": "2030-01-01", "timezone": "UTC"},
+    )
+    assert invalid.status_code == 422
+
+
 def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

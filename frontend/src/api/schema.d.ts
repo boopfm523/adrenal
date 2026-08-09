@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/analytics/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Summary */
+        get: operations["analytics_summary_api_v1_analytics_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-password": {
         parameters: {
             query?: never;
@@ -699,6 +716,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalyticsSummaryOut */
+        AnalyticsSummaryOut: {
+            daily_doses: components["schemas"]["DailyDoseMetric"];
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            episodes: components["schemas"]["EpisodeMetric"];
+            symptoms: components["schemas"]["SymptomMetric"];
+            /** Timezone */
+            timezone: string;
+            timing: components["schemas"]["TimingMetric"];
+        };
         /** Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post */
         Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post: {
             /**
@@ -793,6 +829,39 @@ export interface components {
          * @enum {string}
          */
         ConfirmationState: "direct" | "confirmed_from_draft" | "provider_imported";
+        /** DailyDoseMetric */
+        DailyDoseMetric: {
+            /** Days Without Approved Plan */
+            days_without_approved_plan: number;
+            /** Definition */
+            definition: string;
+            /** Missing Count */
+            missing_count: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Timezone */
+            timezone: string;
+            /** Values */
+            values: components["schemas"]["DailyDoseValue"][];
+        };
+        /** DailyDoseValue */
+        DailyDoseValue: {
+            /** Actual Total */
+            actual_total: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Incompatible Units */
+            incompatible_units: boolean;
+            /** Planned Total */
+            planned_total: string | null;
+            /** Recorded Dose Count */
+            recorded_dose_count: number;
+            /** Unit */
+            unit: string | null;
+        };
         /** DiaryIn */
         DiaryIn: {
             /**
@@ -991,6 +1060,23 @@ export interface components {
             time: components["schemas"]["EventTimeIn"];
             /** Trigger */
             trigger: string;
+        };
+        /** EpisodeMetric */
+        EpisodeMetric: {
+            /** Average Duration Minutes */
+            average_duration_minutes: string | null;
+            /** Count */
+            count: number;
+            /** Definition */
+            definition: string;
+            /** Missing Count */
+            missing_count: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Timezone */
+            timezone: string;
+            /** Total Duration Minutes */
+            total_duration_minutes: string | null;
         };
         /** EpisodeOut */
         EpisodeOut: {
@@ -1601,6 +1687,25 @@ export interface components {
             severity?: number | null;
             time: components["schemas"]["EventTimeIn"];
         };
+        /** SymptomMetric */
+        SymptomMetric: {
+            /** Average Severity */
+            average_severity: string | null;
+            /** Count */
+            count: number;
+            /** Definition */
+            definition: string;
+            /** Frequency */
+            frequency: {
+                [key: string]: number;
+            };
+            /** Missing Count */
+            missing_count: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Timezone */
+            timezone: string;
+        };
         /** SymptomOut */
         SymptomOut: {
             /** Body Area */
@@ -1666,6 +1771,25 @@ export interface components {
             /** Timezone */
             timezone: string;
         };
+        /** TimingMetric */
+        TimingMetric: {
+            /** Definition */
+            definition: string;
+            /** Early */
+            early: number;
+            /** Late */
+            late: number;
+            /** Missing Count */
+            missing_count: number;
+            /** On Time */
+            on_time: number;
+            /** Sample Count */
+            sample_count: number;
+            /** Timezone */
+            timezone: string;
+            /** Unplanned */
+            unplanned: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1699,6 +1823,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    analytics_summary_api_v1_analytics_summary_get: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+                timezone?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     change_password_api_v1_auth_change_password_post: {
         parameters: {
             query?: never;

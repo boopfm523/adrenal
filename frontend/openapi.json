@@ -1,6 +1,48 @@
 {
   "components": {
     "schemas": {
+      "AnalyticsSummaryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "daily_doses": {
+            "$ref": "#/components/schemas/DailyDoseMetric"
+          },
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "episodes": {
+            "$ref": "#/components/schemas/EpisodeMetric"
+          },
+          "symptoms": {
+            "$ref": "#/components/schemas/SymptomMetric"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "timing": {
+            "$ref": "#/components/schemas/TimingMetric"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "timezone",
+          "daily_doses",
+          "timing",
+          "episodes",
+          "symptoms"
+        ],
+        "title": "AnalyticsSummaryOut",
+        "type": "object"
+      },
       "Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post": {
         "properties": {
           "analyte_map_json": {
@@ -210,6 +252,113 @@
         ],
         "title": "ConfirmationState",
         "type": "string"
+      },
+      "DailyDoseMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "days_without_approved_plan": {
+            "minimum": 0.0,
+            "title": "Days Without Approved Plan",
+            "type": "integer"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "missing_count": {
+            "minimum": 0.0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/DailyDoseValue"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "definition",
+          "timezone",
+          "sample_count",
+          "missing_count",
+          "days_without_approved_plan",
+          "values"
+        ],
+        "title": "DailyDoseMetric",
+        "type": "object"
+      },
+      "DailyDoseValue": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Total"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "incompatible_units": {
+            "title": "Incompatible Units",
+            "type": "boolean"
+          },
+          "planned_total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Total"
+          },
+          "recorded_dose_count": {
+            "minimum": 0.0,
+            "title": "Recorded Dose Count",
+            "type": "integer"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "date",
+          "planned_total",
+          "actual_total",
+          "recorded_dose_count",
+          "unit",
+          "incompatible_units"
+        ],
+        "title": "DailyDoseValue",
+        "type": "object"
       },
       "DiaryIn": {
         "additionalProperties": false,
@@ -807,6 +956,67 @@
           "time"
         ],
         "title": "EpisodeIn",
+        "type": "object"
+      },
+      "EpisodeMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "average_duration_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Duration Minutes"
+          },
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "missing_count": {
+            "minimum": 0.0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "total_duration_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Duration Minutes"
+          }
+        },
+        "required": [
+          "definition",
+          "timezone",
+          "sample_count",
+          "missing_count",
+          "count",
+          "total_duration_minutes",
+          "average_duration_minutes"
+        ],
+        "title": "EpisodeMetric",
         "type": "object"
       },
       "EpisodeOut": {
@@ -2785,6 +2995,63 @@
         "title": "SymptomIn",
         "type": "object"
       },
+      "SymptomMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "average_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Severity"
+          },
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "frequency": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Frequency",
+            "type": "object"
+          },
+          "missing_count": {
+            "minimum": 0.0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "timezone",
+          "sample_count",
+          "missing_count",
+          "count",
+          "average_severity",
+          "frequency"
+        ],
+        "title": "SymptomMetric",
+        "type": "object"
+      },
       "SymptomOut": {
         "additionalProperties": false,
         "properties": {
@@ -2956,6 +3223,61 @@
         "title": "TimelinePage",
         "type": "object"
       },
+      "TimingMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "early": {
+            "minimum": 0.0,
+            "title": "Early",
+            "type": "integer"
+          },
+          "late": {
+            "minimum": 0.0,
+            "title": "Late",
+            "type": "integer"
+          },
+          "missing_count": {
+            "minimum": 0.0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "on_time": {
+            "minimum": 0.0,
+            "title": "On Time",
+            "type": "integer"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "unplanned": {
+            "minimum": 0.0,
+            "title": "Unplanned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "definition",
+          "timezone",
+          "sample_count",
+          "missing_count",
+          "on_time",
+          "early",
+          "late",
+          "unplanned"
+        ],
+        "title": "TimingMetric",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -3039,6 +3361,91 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/analytics/summary": {
+      "get": {
+        "operationId": "analytics_summary_api_v1_analytics_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analytics Summary",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/v1/auth/change-password": {
       "post": {
         "operationId": "change_password_api_v1_auth_change_password_post",

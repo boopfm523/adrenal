@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.orm import Session
 
+from healthcurve.events import service as event_service
 from healthcurve.medications.models import (
     DoseEvent,
     DoseUnit,
@@ -273,7 +274,7 @@ def compare_day(
         )
     )
     # Corrections supersede: only the head of each chain counts toward totals.
-    doses = _current_versions(doses)
+    doses = event_service.current_only(session, DoseEvent, doses)
 
     slots = sorted(version.slots, key=lambda s: s.scheduled_local_time) if version else []
 
@@ -363,12 +364,6 @@ def compare_day(
         "missed_slots": sum(1 for c in comparisons if c.status == "missing"),
         "metric_definition": TIMING_METRIC_DEFINITION,
     }
-
-
-def _current_versions(doses: list[DoseEvent]) -> list[DoseEvent]:
-    """Drop rows that a later correction supersedes (SAFE-08)."""
-    superseded = {d.supersedes_id for d in doses if d.supersedes_id is not None}
-    return [d for d in doses if d.id not in superseded]
 
 
 def _best_match(

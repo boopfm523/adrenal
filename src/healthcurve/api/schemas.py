@@ -515,3 +515,70 @@ class PlanComparisonDay(ApiModel):
     @field_serializer("planned_total", "actual_total")
     def _totals(self, value: Decimal | None) -> str | None:
         return None if value is None else str(value)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic analytics
+# ---------------------------------------------------------------------------
+
+
+class MetricBase(ApiModel):
+    definition: str
+    timezone: str
+    sample_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+
+
+class DailyDoseValue(ApiModel):
+    date: date
+    planned_total: Decimal | None
+    actual_total: Decimal | None
+    recorded_dose_count: int = Field(ge=0)
+    unit: str | None
+    incompatible_units: bool
+
+    @field_serializer("planned_total", "actual_total")
+    def _totals(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class DailyDoseMetric(MetricBase):
+    days_without_approved_plan: int = Field(ge=0)
+    values: list[DailyDoseValue]
+
+
+class TimingMetric(MetricBase):
+    on_time: int = Field(ge=0)
+    early: int = Field(ge=0)
+    late: int = Field(ge=0)
+    unplanned: int = Field(ge=0)
+
+
+class EpisodeMetric(MetricBase):
+    count: int = Field(ge=0)
+    total_duration_minutes: Decimal
+    average_duration_minutes: Decimal | None
+
+    @field_serializer("total_duration_minutes", "average_duration_minutes")
+    def _durations(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class SymptomMetric(MetricBase):
+    count: int = Field(ge=0)
+    average_severity: Decimal | None
+    frequency: dict[str, int]
+
+    @field_serializer("average_severity")
+    def _severity(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class AnalyticsSummaryOut(ApiModel):
+    date_from: date
+    date_to: date
+    timezone: str
+    daily_doses: DailyDoseMetric
+    timing: TimingMetric
+    episodes: EpisodeMetric
+    symptoms: SymptomMetric
