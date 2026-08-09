@@ -15,11 +15,22 @@ import ipaddress
 import socket
 from enum import StrEnum
 from functools import lru_cache
-from typing import Self
+from typing import Any, Self
 from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class TelegramMode(StrEnum):
+    """How Telegram updates reach us (ADR-0008).
+
+    ``POLLING`` needs no public endpoint and is the default. ``WEBHOOK`` requires a
+    publicly reachable HTTPS host and is only usable on a public deployment.
+    """
+
+    POLLING = "polling"
+    WEBHOOK = "webhook"
 
 
 class Environment(StrEnum):
@@ -91,6 +102,8 @@ class Settings(BaseSettings):
     telegram_webhook_secret: SecretStr | None = None
     #: Only this chat is processed. Everything else is dropped and counted.
     telegram_allowed_chat_id: int | None = None
+    #: Default polling: it works behind NAT and on a private tailnet (ADR-0008).
+    telegram_mode: TelegramMode = TelegramMode.POLLING
     #: Public HTTPS base for the webhook, e.g. https://health.example.com
     public_base_url: str | None = None
 
@@ -99,6 +112,20 @@ class Settings(BaseSettings):
 
     # --- Time ---
     default_timezone: str = "UTC"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _empty_string_means_unset(cls, data: Any) -> Any:
+        """Treat an empty environment variable as absent.
+
+        Docker Compose's ``${VAR:-}`` always sets the variable, so an unconfigured
+        integration arrives as ``""`` rather than being missing. Without this, an
+        optional int like the Telegram chat id fails to parse and the process
+        crash-loops at startup -- which is a confusing way to say "not configured".
+        """
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v != ""}
+        return data
 
     @model_validator(mode="after")
     def _validate_ollama_is_private(self) -> Self:
@@ -127,16 +154,17 @@ class Settings(BaseSettings):
 
     @property
     def telegram_configured(self) -> bool:
-        """True only when every part needed to run the bot safely is present.
+        """True only when everything the *selected transport* needs is present.
 
-        Deliberately all-or-nothing: a token without a webhook secret, or without an
-        allow-listed chat, is a bot anyone can write to (threat model T4).
+        The chat allow-list is required in both modes: a bot that answers anyone is a
+        bot anyone can put data into. The webhook secret is required only in webhook
+        mode, because polling has no inbound endpoint for it to protect (ADR-0008).
         """
-        return (
-            self.telegram_bot_token is not None
-            and self.telegram_webhook_secret is not None
-            and self.telegram_allowed_chat_id is not None
-        )
+        if self.telegram_bot_token is None or self.telegram_allowed_chat_id is None:
+            return False
+        if self.telegram_mode is TelegramMode.WEBHOOK:
+            return self.telegram_webhook_secret is not None
+        return True
 
 
 @lru_cache(maxsize=1)

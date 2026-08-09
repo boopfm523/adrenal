@@ -117,8 +117,14 @@ class TelegramClient:
             },
         )
 
-    def delete_webhook(self) -> dict[str, Any] | None:
-        return self._post("deleteWebhook", {"drop_pending_updates": True})
+    def delete_webhook(self, *, drop_pending_updates: bool = True) -> dict[str, Any] | None:
+        """Remove the webhook.
+
+        ``drop_pending_updates`` defaults to True for an explicit disconnect, but the
+        poller passes False: queued updates are real messages the owner sent, and the
+        offset plus the deduplication table make replaying them safe.
+        """
+        return self._post("deleteWebhook", {"drop_pending_updates": drop_pending_updates})
 
     def get_webhook_info(self) -> dict[str, Any] | None:
         return self._post("getWebhookInfo", {})

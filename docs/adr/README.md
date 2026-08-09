@@ -14,6 +14,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0004](0004-job-queue-behind-interface.md) | Database-backed job queue behind an interface | Accepted |
 | [0005](0005-react-spa-frontend.md) | React + TypeScript + Vite frontend | Accepted |
 | [0006](0006-python-runtime-version.md) | Python 3.13 as the pinned runtime | Accepted |
+| [0008](0008-telegram-long-polling.md) | Telegram long polling as the default transport | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

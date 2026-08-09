@@ -4,11 +4,23 @@ from __future__ import annotations
 
 import pytest
 
-from healthcurve.config import Environment, PublicOllamaError, Settings, is_private_host
+from healthcurve.config import (
+    Environment,
+    PublicOllamaError,
+    Settings,
+    TelegramMode,
+    is_private_host,
+)
 
 
 def _settings(**overrides: object) -> Settings:
-    base: dict[str, object] = {"ollama_base_url": "http://ollama:11434"}
+    """Settings built in isolation from the developer's .env.
+
+    Without `_env_file=None` these tests read whatever happens to be configured
+    locally, which silently invalidates them -- a real .env once made a
+    "not configured" assertion pass as configured.
+    """
+    base: dict[str, object] = {"_env_file": None, "ollama_base_url": "http://ollama:11434"}
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
 
@@ -81,3 +93,55 @@ def test_defaults_are_safe() -> None:
 )
 def test_is_private_host(host: str, expected: bool) -> None:
     assert is_private_host(host) is expected
+
+
+# ---------------------------------------------------------------------------
+# Empty environment variables
+# ---------------------------------------------------------------------------
+
+
+def test_empty_env_vars_are_treated_as_unset() -> None:
+    """Regression: docker compose's ${VAR:-} sets an empty string, not nothing.
+
+    The worker crash-looped at startup because an empty HC_TELEGRAM_ALLOWED_CHAT_ID
+    could not be parsed as an int -- a confusing way to express "not configured".
+    """
+    settings = _settings(
+        telegram_bot_token="",
+        telegram_allowed_chat_id="",
+        telegram_webhook_secret="",
+        public_base_url="",
+    )
+    assert settings.telegram_bot_token is None
+    assert settings.telegram_allowed_chat_id is None
+    assert settings.telegram_webhook_secret is None
+    assert settings.telegram_configured is False
+
+
+def test_empty_string_does_not_override_a_default() -> None:
+    """An empty variable must fall back to the default, not blank the setting."""
+    settings = _settings(default_timezone="")
+    assert settings.default_timezone == "UTC"
+
+
+def test_telegram_configuration_is_transport_aware() -> None:
+    """Polling needs no webhook secret; webhook mode does (ADR-0008)."""
+    common: dict[str, object] = {"telegram_bot_token": "1:A", "telegram_allowed_chat_id": 42}
+
+    assert _settings(**common).telegram_configured is True
+    assert _settings(**common, telegram_mode=TelegramMode.WEBHOOK).telegram_configured is False
+    assert (
+        _settings(
+            **common, telegram_mode=TelegramMode.WEBHOOK, telegram_webhook_secret="s"
+        ).telegram_configured
+        is True
+    )
+
+
+def test_the_chat_allow_list_is_required_in_both_modes() -> None:
+    """A bot that answers anyone is a bot anyone can put data into."""
+    for mode in (TelegramMode.POLLING, TelegramMode.WEBHOOK):
+        settings = _settings(
+            telegram_bot_token="1:A", telegram_webhook_secret="s", telegram_mode=mode
+        )
+        assert settings.telegram_configured is False

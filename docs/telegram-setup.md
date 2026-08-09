@@ -1,7 +1,9 @@
 # Connecting Telegram
 
-Follow these steps in order. The whole thing takes about 15 minutes, and step 5 is the
-only one that needs your server to be reachable from the internet.
+Follow these steps in order. About 10 minutes. **Your machine does not need to be
+reachable from the internet** -- HealthCurve polls Telegram outbound (ADR-0008), so
+this works behind NAT, on a home network, or on a machine reachable only over
+Tailscale.
 
 **Before you start, understand what this does.** Messages you send the bot are read by
 a language model running on **your own** infrastructure — nothing goes to a third-party
@@ -18,12 +20,18 @@ Nothing you send becomes a recorded fact until you press **Confirm**.
 | Thing | Where it goes | Looks like |
 |---|---|---|
 | Bot token | `HC_TELEGRAM_BOT_TOKEN` | `8123456789:AAF...` |
-| Webhook secret | `HC_TELEGRAM_WEBHOOK_SECRET` | random string you generate |
 | Your chat ID | `HC_TELEGRAM_ALLOWED_CHAT_ID` | `123456789` |
-| Your public URL | `HC_PUBLIC_BASE_URL` | `https://health.example.com` |
 
-All four are required. HealthCurve refuses to run the bot with any of them missing —
-a bot without a webhook secret and a chat allow-list is one anyone can write to.
+That is all you need for the default polling mode. No domain, no certificate, no
+port forwarding, no tunnel.
+
+The allow-list is not optional: the worker refuses to start without it, because a bot
+that answers anyone is a bot anyone can put data into.
+
+> **Webhook mode** (`HC_TELEGRAM_MODE=webhook`) also exists, for a publicly hosted
+> deployment. It additionally needs `HC_TELEGRAM_WEBHOOK_SECRET` and
+> `HC_PUBLIC_BASE_URL`, and Telegram must be able to reach you over HTTPS. See the
+> appendix at the end.
 
 ---
 
@@ -82,79 +90,43 @@ webhook is already registered. If a webhook is set, `getUpdates` stops working �
 `curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/deleteWebhook"` first, message the
 bot, then try again.
 
-## Step 3 — Generate a webhook secret
-
-This is what proves an incoming request really came from Telegram. Generate a fresh
-random one — do not reuse a password:
-
-```bash
-openssl rand -base64 32 | tr -d '/+=' | head -c 40
-```
-
-Copy the output.
-
-## Step 4 — Put the four values in `.env`
+## Step 3 — Put the two values in `.env`
 
 Edit `.env` in the project root (it is git-ignored — keep it that way):
 
 ```bash
 HC_TELEGRAM_BOT_TOKEN=8123456789:AAFxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-HC_TELEGRAM_WEBHOOK_SECRET=<the string from step 3>
 HC_TELEGRAM_ALLOWED_CHAT_ID=123456789
-HC_PUBLIC_BASE_URL=https://health.example.com
 ```
 
-Then restart so the app picks them up:
+## Step 4 — Start the worker
+
+The worker is what talks to Telegram. It holds an outbound connection open, waits for
+a message, handles it, and waits again.
 
 ```bash
-docker compose up -d --force-recreate api
+docker compose up -d --force-recreate worker
+docker compose logs -f worker
 ```
 
-Check it took:
+You are looking for:
 
-```bash
-docker compose run --rm api python -m healthcurve.cli telegram-status
+```
+telegram poller started   integration=telegram outcome=polling
 ```
 
-You should see `Connected as @your_bot_name`. If a value is missing it will say which.
+If it says `outcome=idle reason_code=telegram_not_configured`, one of the two values
+above is missing or the container did not pick up the new `.env`.
 
-## Step 5 — Register the webhook
-
-**Telegram requires a public HTTPS URL with a valid certificate.** Self-signed will not
-work, and neither will plain HTTP or `localhost`. Your server must be reachable from
-the internet at `HC_PUBLIC_BASE_URL`, with Caddy holding a real certificate.
-
-```bash
-docker compose run --rm api python -m healthcurve.cli telegram-register
-```
-
-This points Telegram at `https://your.domain/api/v1/integrations/telegram/webhook` and
-registers your secret with them.
-
-Verify:
+Check the token itself with:
 
 ```bash
 docker compose run --rm api python -m healthcurve.cli telegram-status
 ```
 
-`Webhook URL` should show your URL and `Pending updates` should be `0`.
+You should see `Connected as @your_bot_name`.
 
-### If you're not publicly hosted yet
-
-You can test locally with a tunnel. Only do this with **synthetic data** — a tunnel
-puts your API on the public internet.
-
-```bash
-# in one terminal
-cloudflared tunnel --url http://localhost:8080     # or: ngrok http 8080
-# then, with the https URL it prints:
-docker compose run --rm api python -m healthcurve.cli \
-    telegram-register --base-url https://something.trycloudflare.com
-```
-
-Tear it down afterwards with `telegram-disconnect`.
-
-## Step 6 — Test it
+## Step 5 — Test it
 
 Message your bot:
 
@@ -178,9 +150,19 @@ Then test that nothing is recorded without you:
 ## Troubleshooting
 
 **Bot doesn't reply at all.**
-Check `telegram-status`. If `last_error_message` mentions SSL or a connection problem,
-Telegram can't reach you — your domain, certificate, or firewall is the issue, not
-HealthCurve. Confirm from outside: `curl -I https://your.domain/health/live`.
+Check the worker is running and polling: `docker compose logs worker | tail`. If it is
+idle, the token or chat id is missing. If it logs `telegram poll failed` repeatedly,
+your machine cannot reach `api.telegram.org` — that is a network or DNS problem on your
+side, and the poller will keep retrying with backoff until it can.
+
+**Replies are a few seconds behind.**
+Expected. The poller holds a 25-second connection open; a message arriving mid-window
+is picked up immediately, but a reply can lag slightly. This is the trade for needing
+no public endpoint.
+
+**Nothing arrives while the machine is asleep.**
+Also expected, and the main practical cost of polling. Telegram holds updates for about
+24 hours, so messages sent while the laptop was closed arrive once the worker is back.
 
 **Bot replies to `/help` but ignores plain sentences.**
 That's the language model being unreachable, and it's the designed fallback. Check
@@ -192,13 +174,13 @@ That's the language model being unreachable, and it's the designed fallback. Che
 The name must match one you loaded. List them with `/today`, or add the medication in
 the web app. The bot deliberately will not guess at a medication it doesn't recognise.
 
-**Telegram says the webhook returns 403.**
-Your `HC_TELEGRAM_WEBHOOK_SECRET` in `.env` no longer matches what Telegram holds. Run
-`telegram-register` again.
+**"Conflict: terminated by other getUpdates request".**
+Two pollers are running against one bot token. Stop the duplicate — usually a second
+`docker compose up` or a stray local process.
 
-**Telegram says 404.**
-The app doesn't consider Telegram configured — one of the three settings is missing.
-Run `telegram-status`.
+**You previously set a webhook.**
+The poller deletes it automatically on startup, keeping any queued messages. Telegram
+refuses polling while a webhook is registered, so this has to happen.
 
 **Messages from someone else.**
 They're dropped and logged, never processed. If it keeps happening, your bot username
@@ -209,31 +191,58 @@ with BotFather's `/revoke` if you'd rather.
 
 ## Disconnecting
 
+Stop the worker and remove the `HC_TELEGRAM_*` values from `.env`:
+
+```bash
+docker compose stop worker
+```
+
+If you had ever used webhook mode, also clear it:
+
 ```bash
 docker compose run --rm api python -m healthcurve.cli telegram-disconnect
 ```
 
-Then remove the four `HC_TELEGRAM_*` / `HC_PUBLIC_BASE_URL` values from `.env` and
-restart. To retire the bot entirely, send BotFather `/deletebot`.
+To retire the bot entirely, send BotFather `/deletebot`.
 
 Facts you already confirmed stay in your record — they're yours, and they were recorded
 by you, not by the integration.
 
 ---
 
-## What the webhook actually enforces
+## What actually protects you
 
-For reference, in the order the checks run
-([telegram.py](../src/healthcurve/api/routers/telegram.py)):
+Both transports funnel into the same code
+([dispatch.py](../src/healthcurve/integrations/telegram/dispatch.py)), so the checks
+are identical either way:
 
-1. **Not configured → 404.** An unconfigured bot exposes no endpoint to probe.
-2. **Secret token compared in constant time → 403.** No detail in the response.
-3. **Chat ID must match the allow-list.** Anything else is counted and dropped.
-4. **Update ID must be new.** Telegram retries until it gets a 200, so replays are
-   no-ops rather than duplicate records.
-5. **Payload size capped**, and non-text messages rejected before any model call.
+1. **Chat ID must match the allow-list.** Anything else is counted and dropped without
+   being processed.
+2. **Update ID must be new.** A redelivery after a crash is a no-op rather than a
+   duplicate record.
+3. **Payload size capped**, and non-text messages rejected before any model call.
 
-And the backstop that matters most: even if all five were bypassed, the webhook can
-only ever create a **draft**. Turning a draft into a recorded fact needs you to press
-Confirm (`SAFE-11`, `SAFE-12`), and the AI database role has no write access to your
-facts or your plan at all (`SAFE-15`, `SAFE-16`).
+In polling mode there is no inbound endpoint at all, so the whole class of forged-
+webhook attacks (threat model T4) simply does not apply — there is nothing to forge a
+request *to*.
+
+And the backstop that matters most: an inbound message can only ever create a
+**draft**. Turning a draft into a recorded fact needs you to press Confirm
+(`SAFE-11`, `SAFE-12`), and the AI database role has no write access to your facts or
+your plan at all (`SAFE-15`, `SAFE-16`).
+
+---
+
+## Appendix: webhook mode
+
+Only for a publicly hosted deployment. Set `HC_TELEGRAM_MODE=webhook`, add
+`HC_TELEGRAM_WEBHOOK_SECRET` (`openssl rand -base64 32 | tr -d '/+=' | head -c 40`) and
+`HC_PUBLIC_BASE_URL`, then:
+
+```bash
+docker compose run --rm api python -m healthcurve.cli telegram-register
+```
+
+Telegram needs a valid certificate — self-signed, plain HTTP, and `localhost` all fail.
+The webhook additionally verifies the secret token in constant time and returns 404
+when Telegram is not configured, so an unconfigured bot exposes nothing to probe.

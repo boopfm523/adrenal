@@ -40,6 +40,14 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       HC_OLLAMA_BASE_URL: http://ollama:11434
       HC_REDIS_URL: redis://redis:6379/0
+      # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
+      # env_file so database credentials do not leak into every container's
+      # environment. Empty is fine -- the app treats unset as "not configured".
+      HC_TELEGRAM_MODE: ${HC_TELEGRAM_MODE:-polling}
+      HC_TELEGRAM_BOT_TOKEN: ${HC_TELEGRAM_BOT_TOKEN:-}
+      HC_TELEGRAM_ALLOWED_CHAT_ID: ${HC_TELEGRAM_ALLOWED_CHAT_ID:-}
+      HC_TELEGRAM_WEBHOOK_SECRET: ${HC_TELEGRAM_WEBHOOK_SECRET:-}
+      HC_PUBLIC_BASE_URL: ${HC_PUBLIC_BASE_URL:-}
     networks: [hc-internal]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health/live')"]
@@ -59,7 +67,7 @@ services:
       target: runtime
     <<: *restart
     user: "10001:10001"
-    command: ["python", "-m", "healthcurve.operations.worker"]
+    command: ["python", "-m", "healthcurve.worker"]
     environment:
       HC_ENVIRONMENT: dev
       # The worker runs AI jobs, so it connects as the restricted role that holds no
@@ -67,6 +75,14 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
       HC_OLLAMA_BASE_URL: http://ollama:11434
       HC_REDIS_URL: redis://redis:6379/0
+      # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
+      # env_file so database credentials do not leak into every container's
+      # environment. Empty is fine -- the app treats unset as "not configured".
+      HC_TELEGRAM_MODE: ${HC_TELEGRAM_MODE:-polling}
+      HC_TELEGRAM_BOT_TOKEN: ${HC_TELEGRAM_BOT_TOKEN:-}
+      HC_TELEGRAM_ALLOWED_CHAT_ID: ${HC_TELEGRAM_ALLOWED_CHAT_ID:-}
+      HC_TELEGRAM_WEBHOOK_SECRET: ${HC_TELEGRAM_WEBHOOK_SECRET:-}
+      HC_PUBLIC_BASE_URL: ${HC_PUBLIC_BASE_URL:-}
     networks: [hc-internal]
     depends_on:
       postgres:
