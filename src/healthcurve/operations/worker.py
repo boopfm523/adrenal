@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import socket
 import threading
-from collections.abc import Callable, Mapping
-from datetime import timedelta
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -22,6 +22,7 @@ from healthcurve.operations.jobs import (
 log = get_logger(__name__)
 
 type JobHandler = Callable[[Session, Mapping[str, Any]], None]
+type JobScheduler = Callable[[Session, datetime], object]
 
 
 def _failure_reason(exc: Exception) -> str:
@@ -39,7 +40,12 @@ def run_once(
 ) -> ClaimedJob | None:
     """Claim and execute at most one job; domain writes and completion are atomic."""
     with factory() as session, session.begin():
-        claimed = claim(session, worker_id=worker_id, lease_duration=lease_duration)
+        claimed = claim(
+            session,
+            worker_id=worker_id,
+            lease_duration=lease_duration,
+            tasks=handlers.keys(),
+        )
     if claimed is None:
         return None
 
@@ -92,11 +98,17 @@ def run_loop(
     stop_event: threading.Event,
     poll_interval_s: float,
     worker_id: str | None = None,
+    schedulers: Sequence[JobScheduler] = (),
 ) -> None:
     """Poll until stopped, containing transient database failures without busy-looping."""
     identifier = worker_id or f"{socket.gethostname()}-queue"
     while not stop_event.is_set():
         try:
+            if schedulers:
+                with factory() as session, session.begin():
+                    scheduled_at = datetime.now(UTC)
+                    for scheduler in schedulers:
+                        scheduler(session, scheduled_at)
             claimed = run_once(factory, handlers, worker_id=identifier)
         except Exception:
             # Database/driver text can contain URLs. The allow-listed code is enough

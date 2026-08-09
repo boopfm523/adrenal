@@ -18,6 +18,7 @@ server-rendered page you can open in a browser.
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |
+| Check encrypted backups | `python -m healthcurve.backup_status` in `backup-worker` |
 | Answer a question the API can't | SQL — see [Analytics](#analytics) |
 | Show someone what to do in a crisis | `http://localhost:8080/emergency` |
 
@@ -135,6 +136,18 @@ locked phone cannot open it, and nor can you if you are too unwell to type a pas
 which is the situation it exists for. Tracked as `hc-h0e`; the resolution is a product
 decision, not a bug fix.
 
+## Encrypted backups
+
+Nightly encrypted local backups, checksum verification, retention, and privacy-safe
+age/dead-letter status are implemented through a dedicated worker. Setup is deliberately
+not automatic because you must choose a separate backup medium and create recovery
+material away from this host. Follow [backup-runbook.md](backup-runbook.md) before
+putting data you care about into HealthCurve.
+
+The concrete offsite provider and first isolated restore drill are still outstanding.
+Until both are complete, the backup system does not satisfy the production three-copy
+or proven-recovery requirements.
+
 ---
 
 ## Analytics
@@ -227,13 +240,13 @@ So you don't go looking for it:
 
 - **No web interface.** Not started. See [web-frontend-guide.md](web-frontend-guide.md).
 - **No analytics or reports.** Empty packages.
-- **No backups are implemented.** The encrypted backup and isolated-restore design is
-  documented in [backup-restore-design.md](backup-restore-design.md), but until its
-  implementation and first passing restore drill, nothing protects this data from host
-  loss.
+- **No configured offsite backup or passing restore drill.** Encrypted local backup is
+  implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
+  not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
 - **No lab results.** PDF upload and lab storage are designed but not built.
 - **No Garmin or weather.** Not started.
-- **No deletion or retention.** Only the SQL above.
+- **No record/account deletion.** Backup retention exists; application-data deletion
+  and account closure are tracked separately.
 - **No rate limiting, MFA, or token encryption at rest.**
 
 `bd ready` lists what's actually next.

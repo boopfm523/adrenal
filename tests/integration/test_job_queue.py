@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, create_engine, select, text
@@ -12,6 +15,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from healthcurve.db import SCHEMAS, Base
+from healthcurve.operations.backup_jobs import BACKUP_TASK, backup_health, schedule_nightly
 from healthcurve.operations.jobs import (
     Job,
     JobStatus,
@@ -272,3 +276,82 @@ def test_worker_rolls_back_handler_writes_before_recording_failure(
         assert child is None
         assert parent is not None and parent.status is JobStatus.DEAD_LETTER
         assert parent.last_error_code == "handler_failed"
+
+
+def test_nightly_schedule_is_singleton_and_task_restricted(
+    factory: sessionmaker[Session],
+) -> None:
+    before_due = datetime(2026, 8, 9, 1, tzinfo=UTC)
+    after_due = datetime(2026, 8, 9, 3, tzinfo=UTC)
+    with factory() as session, session.begin():
+        first = schedule_nightly(session, before_due)
+        second = schedule_nightly(session, after_due)
+        assert first.id == second.id
+        assert first.run_at == datetime(2026, 8, 9, 2, tzinfo=UTC)
+    with factory() as session, session.begin():
+        assert claim(session, worker_id="general", now=after_due, tasks={"telegram.sync"}) is None
+    with factory() as session, session.begin():
+        claimed = claim(session, worker_id="backup", now=after_due, tasks={BACKUP_TASK})
+        assert claimed is not None and claimed.id == first.id
+
+
+def _write_valid_set(directory: Path, *, created_at: datetime) -> None:
+    set_id = "hc-20260808T120000Z-synthetic"
+    archive = directory / f"{set_id}.tar.age"
+    archive.write_bytes(b"synthetic encrypted backup")
+    envelope = {
+        "format_version": 1,
+        "set_id": set_id,
+        "created_at": created_at.isoformat(),
+        "archive": archive.name,
+        "size": archive.stat().st_size,
+        "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+        "verified": True,
+    }
+    (directory / f"{set_id}.json").write_text(json.dumps(envelope), encoding="utf-8")
+
+
+def test_backup_health_age_threshold_and_integrity_alert(
+    factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    measured_at = datetime(2026, 8, 9, 14, tzinfo=UTC)
+    _write_valid_set(tmp_path, created_at=measured_at - timedelta(hours=25))
+    with factory() as session:
+        healthy = backup_health(session, tmp_path, now=measured_at)
+        assert healthy.state == "healthy"
+        assert healthy.age_hours == 25
+        warning = backup_health(session, tmp_path, now=measured_at + timedelta(hours=1))
+        assert warning.state == "alert"
+        assert warning.reason_codes == ("backup_age_warning",)
+
+    (tmp_path / "hc-broken.json").write_text("not-json", encoding="utf-8")
+    with factory() as session:
+        broken = backup_health(session, tmp_path, now=measured_at)
+        assert "backup_integrity_failed" in broken.reason_codes
+        assert broken.protected_set_count == 1
+
+
+def test_backup_health_exposes_redacted_dead_letter_status(
+    factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    with factory() as session, session.begin():
+        enqueue(
+            session,
+            task=BACKUP_TASK,
+            payload={},
+            idempotency_key="nightly:failed",
+            run_at=NOW,
+            max_attempts=1,
+        )
+    with factory() as session, session.begin():
+        claimed = claim(session, worker_id="backup", now=NOW, tasks={BACKUP_TASK})
+        assert claimed is not None
+    with factory() as session, session.begin():
+        assert fail(session, claimed, reason_code="encryption_failed", now=NOW) is (
+            JobStatus.DEAD_LETTER
+        )
+    with factory() as session:
+        health = backup_health(session, tmp_path, now=NOW)
+    assert health.state == "alert"
+    assert set(health.reason_codes) == {"backup_missing", "backup_job_failed"}
+    assert health.latest_job_error_code == "encryption_failed"

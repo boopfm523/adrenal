@@ -11,13 +11,20 @@ now fails the suite instead of quietly widening what AI can write.
 
 from __future__ import annotations
 
+import os
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from unittest import mock
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import ProgrammingError
 from testcontainers.community.postgres import PostgresContainer
+
+from healthcurve.config import get_settings
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -46,6 +53,12 @@ def postgres() -> Iterator[PostgresContainer]:
         .with_volume_mapping(str(INIT_DIR), "/docker-entrypoint-initdb.d", "ro")
     )
     with container as running:
+        alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+        alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+        with mock.patch.dict(os.environ, {"HC_DATABASE_URL": running.get_connection_url()}):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
         yield running
 
 
@@ -150,6 +163,44 @@ def test_backup_role_can_read_but_not_write(owner_engine: Engine, backup_engine:
     with pytest.raises(ProgrammingError, match="permission denied"):
         with backup_engine.begin() as conn:
             conn.execute(text("INSERT INTO identity.backup_probe VALUES (2)"))
+
+
+def test_backup_role_can_manage_only_backup_queue_rows(backup_engine: Engine) -> None:
+    identifier = uuid.uuid4()
+    with backup_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO ops.job "
+                "(id, task, payload, idempotency_key, status, priority, attempt_count, "
+                "max_attempts, run_at) VALUES "
+                "(:id, 'backup.nightly', '{}'::jsonb, 'synthetic-role-test', 'queued', "
+                "100, 0, 4, now())"
+            ),
+            {"id": identifier},
+        )
+        conn.execute(
+            text("UPDATE ops.job SET status = 'completed' WHERE id = :id"), {"id": identifier}
+        )
+        assert (
+            conn.execute(
+                text("SELECT status FROM ops.job WHERE id = :id"), {"id": identifier}
+            ).scalar_one()
+            == "completed"
+        )
+
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with backup_engine.begin() as conn:
+            conn.execute(text("DELETE FROM ops.job WHERE id = :id"), {"id": identifier})
+
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with backup_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ops.audit_entry (id, actor, action) "
+                    "VALUES (:id, 'system', 'record_created')"
+                ),
+                {"id": uuid.uuid4()},
+            )
 
 
 # ---------------------------------------------------------------------------

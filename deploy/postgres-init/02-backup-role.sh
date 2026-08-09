@@ -38,6 +38,17 @@ psql -v ON_ERROR_STOP=1 \
         IN SCHEMA public, fact, plan, ai, ops, identity FROM healthcurve_backup;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public, fact, plan, ai, ops, identity
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLES FROM healthcurve_backup;
+
+    -- If migrations already created the queue, allow this dedicated worker to
+    -- schedule/claim/complete backup jobs and nothing else. On a new volume the job
+    -- migration performs the same conditional grant after creating ops.job.
+    DO $grant$
+    BEGIN
+        IF to_regclass('ops.job') IS NOT NULL THEN
+            GRANT SELECT, INSERT, UPDATE ON ops.job TO healthcurve_backup;
+        END IF;
+    END
+    $grant$;
 EOSQL
 
 echo "healthcurve: healthcurve_backup provisioned read-only across durable schemas"

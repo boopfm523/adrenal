@@ -1,7 +1,7 @@
 # Run together with the main stack:
 #
 #   docker compose -f docker-compose.yml -f deploy/backup.compose.yml \
-#     --profile backup run --rm backup
+#     --profile backup-manual run --rm backup
 #
 # HC_BACKUP_LOCAL_DIR must be a dedicated local/external backup medium in production.
 # The defaults for upload/report roots are development placeholders until those
@@ -9,11 +9,11 @@
 
 services:
   backup:
-    profiles: [backup]
+    profiles: [backup-manual]
     build:
       context: .
       dockerfile: deploy/backup.Dockerfile
-    user: "70:70" # postgres user in the pinned Alpine image
+    user: "10001:10001"
     environment:
       PGHOST: postgres
       PGPORT: "5432"
@@ -48,9 +48,60 @@ services:
     # Plaintext exists only while this process runs. Ownership matches the postgres
     # user declared above; mode 0700 excludes every other container user.
     tmpfs:
-      - /work:uid=70,gid=70,mode=0700
+      - /work:uid=10001,gid=10001,mode=0700
     networks: [hc-internal]
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
+
+  # Long-running, task-restricted scheduler/consumer. Only this service receives
+  # backup credentials and storage; the API and general worker receive neither.
+  backup-worker:
+    profiles: [backup-scheduled]
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
+    user: "10001:10001"
+    entrypoint: ["python", "-m", "healthcurve.backup_worker"]
+    environment:
+      HC_ENVIRONMENT: ${HC_ENVIRONMENT:-dev}
+      HC_DATABASE_URL: postgresql+psycopg://healthcurve_backup:${POSTGRES_BACKUP_PASSWORD:?set POSTGRES_BACKUP_PASSWORD}@postgres:5432/healthcurve
+      HC_OLLAMA_BASE_URL: http://ollama:11434
+      HC_JOB_POLL_INTERVAL_S: ${HC_JOB_POLL_INTERVAL_S:-2}
+      HC_BACKUP_LOCAL_DIR: /backup
+      HC_BACKUP_WORK_ROOT: /work
+      HC_BACKUP_PROJECT_DIR: /restore-config
+      HC_BACKUP_AGE_RECIPIENT: ${HC_BACKUP_AGE_RECIPIENT:?set HC_BACKUP_AGE_RECIPIENT}
+      HC_UPLOADS_DIR: /sources/uploads
+      HC_REPORT_ARTIFACTS_DIR: /sources/reports
+      HC_BACKUP_RETENTION_APPLY: ${HC_BACKUP_RETENTION_APPLY:-true}
+      HC_BACKUP_OFFSITE_ENABLED: ${HC_BACKUP_OFFSITE_ENABLED:-false}
+      HC_BACKUP_OFFSITE_PROVIDER: ${HC_BACKUP_OFFSITE_PROVIDER:-}
+      HC_BACKUP_OFFSITE_DESTINATION: ${HC_BACKUP_OFFSITE_DESTINATION:-}
+      HC_BACKUP_OFFSITE_CREDENTIAL_FILE: ${HC_BACKUP_OFFSITE_CREDENTIAL_FILE:-}
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: healthcurve
+      PGUSER: healthcurve_backup
+      PGPASSWORD: ${POSTGRES_BACKUP_PASSWORD:?set POSTGRES_BACKUP_PASSWORD}
+    volumes:
+      - ${HC_BACKUP_LOCAL_DIR:?set HC_BACKUP_LOCAL_DIR}:/backup
+      - ${HC_UPLOADS_DIR:-./var/uploads}:/sources/uploads:ro
+      - ${HC_REPORT_ARTIFACTS_DIR:-./var/reports}:/sources/reports:ro
+      - ./docker-compose.yml:/restore-config/docker-compose.yml:ro
+      - ./alembic.ini:/restore-config/alembic.ini:ro
+      - ./deploy/Caddyfile:/restore-config/deploy/Caddyfile:ro
+    tmpfs:
+      - /work:uid=10001,gid=10001,mode=0700
+    networks: [hc-internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "healthcurve.backup_status"]
+      interval: 15m
+      timeout: 30s
+      retries: 2
+      start_period: 2m
+    restart: unless-stopped

@@ -54,6 +54,21 @@ def upgrade() -> None:
         unique=False,
         schema="ops",
     )
+    # The role exists on Compose installations initialized by 02-backup-role.sh,
+    # but not in every developer/test database. Grant only this queue table.
+    op.execute(
+        sa.text(
+            """
+            DO $grant$
+            BEGIN
+                IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'healthcurve_backup') THEN
+                    GRANT SELECT, INSERT, UPDATE ON ops.job TO healthcurve_backup;
+                END IF;
+            END
+            $grant$;
+            """
+        )
+    )
 
 
 def downgrade() -> None:

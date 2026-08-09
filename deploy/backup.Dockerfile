@@ -1,17 +1,38 @@
-# Dedicated backup runner. It is intentionally separate from the API/worker image:
-# pg_dump and off-host backup credentials do not belong in an internet-facing process.
-# The base matches the database major version required by ADR-0001.
-FROM postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+# Dedicated Python 3.13 backup image. It carries the application queue adapter plus
+# PostgreSQL 16 client tools and age, but is never used for the API.
 
-RUN apk add --no-cache age python3 \
- && mkdir -p /opt/healthcurve/healthcurve/operations \
- && chown -R postgres:postgres /opt/healthcurve
+FROM postgres@sha256:64154d0babcb1741988719e703419af0382b19953706149f9872fbd0f438efa8 AS postgres-client
 
-COPY --chown=postgres:postgres src/healthcurve/__init__.py /opt/healthcurve/healthcurve/__init__.py
-COPY --chown=postgres:postgres src/healthcurve/operations/__init__.py /opt/healthcurve/healthcurve/operations/__init__.py
-COPY --chown=postgres:postgres src/healthcurve/operations/backup.py /opt/healthcurve/healthcurve/operations/backup.py
-COPY --chown=postgres:postgres src/healthcurve/operations/retention.py /opt/healthcurve/healthcurve/operations/retention.py
+FROM ghcr.io/astral-sh/uv:0.9.9-python3.13-bookworm-slim AS builder
 
-USER postgres
-ENV PYTHONPATH=/opt/healthcurve
-ENTRYPOINT ["python3", "-m", "healthcurve.operations.backup"]
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev
+COPY src ./src
+COPY README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
+
+FROM python:3.13-slim-bookworm AS runtime
+
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends age ca-certificates liblz4-1 libpq5 libzstd1 \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --gid 10001 healthcurve \
+ && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin healthcurve
+
+COPY --from=postgres-client /usr/lib/postgresql/16/bin/pg_dump /usr/local/bin/pg_dump
+COPY --from=postgres-client /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/pg_restore
+COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
+COPY --from=builder --chown=10001:10001 /app/src /app/src
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+WORKDIR /app
+USER 10001:10001
+RUN python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
+ENTRYPOINT ["python", "-m", "healthcurve.operations.backup"]

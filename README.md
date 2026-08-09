@@ -35,6 +35,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/roadmap.md](docs/roadmap.md) | What is left to build, and why it is ordered that way |
 | [docs/beads-workflow.md](docs/beads-workflow.md) | Verified Beads commands and the working loop |
 | [docs/telegram-setup.md](docs/telegram-setup.md) | Step-by-step guide to connecting the Telegram bot |
+| [docs/backup-runbook.md](docs/backup-runbook.md) | Encrypted backup setup, monitoring, retention, and recovery operations |
 
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work, and
 read [docs/roadmap.md](docs/roadmap.md) for what remains and in what order.

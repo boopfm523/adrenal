@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -189,16 +189,21 @@ def claim(
     worker_id: str,
     now: datetime | None = None,
     lease_duration: timedelta = timedelta(minutes=5),
+    tasks: Collection[str] | None = None,
 ) -> ClaimedJob | None:
     """Claim one due job without waiting on another worker's locked candidate."""
     if not worker_id or len(worker_id) > 120 or lease_duration <= timedelta(0):
         raise JobQueueError("job_worker_invalid")
+    if tasks is not None and not tasks:
+        return None
     claimed_at = _utc_now(now)
 
     available = or_(
         (Job.status == JobStatus.QUEUED) & (Job.run_at <= claimed_at),
         (Job.status == JobStatus.RUNNING) & (Job.lease_expires_at <= claimed_at),
     )
+    if tasks is not None:
+        available &= Job.task.in_(tuple(tasks))
 
     while True:
         job = session.scalar(
