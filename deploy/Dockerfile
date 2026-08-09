@@ -55,6 +55,18 @@ RUN python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
 
 CMD ["uvicorn", "healthcurve.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
+# --- local physician-report renderer ---------------------------------------
+# Playwright's matching Chromium is installed at build time. Report HTML blocks all
+# network requests at render time, so health content never leaves this container.
+FROM runtime AS report-runtime
+
+USER root
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install --with-deps chromium \
+ && chown -R 10001:10001 /ms-playwright \
+ && rm -rf /var/lib/apt/lists/*
+USER 10001:10001
+
 # --- hostile-document validator -------------------------------------------
 # Keep the native PDF parser out of the API and general worker images. This target is
 # launched with no network, read-only root, dropped capabilities, and bounded resources.

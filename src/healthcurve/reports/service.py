@@ -44,6 +44,26 @@ def _validate_partitions(value: dict[str, Any], *, field: str) -> None:
         raise SnapshotValidationError(f"{field} must contain exactly: {', '.join(PARTITIONS)}")
 
 
+def _validate_manifest(manifest: dict[str, Any]) -> None:
+    _validate_partitions(manifest, field="source manifest")
+    for partition, record_ids in manifest.items():
+        if not isinstance(record_ids, list) or not all(
+            isinstance(record_id, str) and record_id for record_id in record_ids
+        ):
+            raise SnapshotValidationError(
+                f"source manifest partition {partition} must contain non-empty string IDs"
+            )
+
+
+def _validate_content(content: dict[str, Any]) -> None:
+    _validate_partitions(content, field="snapshot content")
+    for partition, records in content.items():
+        if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+            raise SnapshotValidationError(
+                f"snapshot content partition {partition} must contain record objects"
+            )
+
+
 def _validate_metrics(metrics: dict[str, Any]) -> None:
     for name, metric in metrics.items():
         if not isinstance(metric, dict):
@@ -69,12 +89,18 @@ def canonical_payload(
     """Validate and normalize every byte that defines a reproducible report."""
     if date_to < date_from:
         raise SnapshotValidationError("report end date cannot precede start date")
-    if not timezone or not selected_sections or not render_version:
+    if (
+        not timezone
+        or not selected_sections
+        or not all(selected_sections)
+        or len(set(selected_sections)) != len(selected_sections)
+        or not render_version
+    ):
         raise SnapshotValidationError(
-            "timezone, selected sections, and render version are required"
+            "timezone, unique selected sections, and render version are required"
         )
-    _validate_partitions(source_manifest, field="source manifest")
-    _validate_partitions(snapshot_content, field="snapshot content")
+    _validate_manifest(source_manifest)
+    _validate_content(snapshot_content)
     _validate_metrics(metric_values)
     if not include_ai and (source_manifest["ai"] or snapshot_content["ai"]):
         raise SnapshotValidationError("AI content requires explicit opt-in")

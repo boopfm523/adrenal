@@ -32,7 +32,7 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile
-      target: runtime
+      target: report-runtime
     <<: *restart
     user: "10001:10001" # non-root (T6)
     environment:
