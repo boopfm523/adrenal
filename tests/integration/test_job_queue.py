@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,10 +15,18 @@ from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.db import SCHEMAS, Base
+from healthcurve.integrations.telegram.draft_jobs import (
+    DRAFT_EXPIRY_TASK,
+    draft_expiry_health,
+    make_draft_expiry_handler,
+    schedule_draft_expiry,
+)
 from healthcurve.operations.backup_jobs import BACKUP_TASK, backup_health, schedule_nightly
 from healthcurve.operations.jobs import (
     Job,
+    JobQueueError,
     JobStatus,
     claim,
     complete,
@@ -51,6 +60,7 @@ def engine() -> Iterator[Engine]:
 def factory(engine: Engine) -> Iterator[sessionmaker[Session]]:
     maker = sessionmaker(engine, expire_on_commit=False)
     with maker() as session, session.begin():
+        session.query(ExtractionDraft).delete()
         session.query(Job).delete()
     yield maker
 
@@ -293,6 +303,86 @@ def test_nightly_schedule_is_singleton_and_task_restricted(
     with factory() as session, session.begin():
         claimed = claim(session, worker_id="backup", now=after_due, tasks={BACKUP_TASK})
         assert claimed is not None and claimed.id == first.id
+
+
+def test_draft_expiry_schedule_is_idempotent_per_time_bucket(
+    factory: sessionmaker[Session],
+) -> None:
+    first_time = datetime(2026, 8, 9, 12, 2, tzinfo=UTC)
+    same_bucket = datetime(2026, 8, 9, 12, 14, 59, tzinfo=UTC)
+    next_bucket = datetime(2026, 8, 9, 12, 15, tzinfo=UTC)
+    with factory() as session, session.begin():
+        first = schedule_draft_expiry(session, first_time)
+        duplicate = schedule_draft_expiry(session, same_bucket)
+        following = schedule_draft_expiry(session, next_bucket)
+        assert duplicate.id == first.id
+        assert following.id != first.id
+        assert first.run_at == datetime(2026, 8, 9, 12, tzinfo=UTC)
+        assert first.payload == {"scheduled_at_utc": "2026-08-09T12:00:00Z"}
+
+
+def test_draft_expiry_schedule_rejects_naive_time(
+    factory: sessionmaker[Session],
+) -> None:
+    with (
+        factory() as session,
+        session.begin(),
+        pytest.raises(JobQueueError, match="draft_expiry_schedule_invalid"),
+    ):
+        schedule_draft_expiry(session, datetime(2026, 8, 9, 12))  # noqa: DTZ001
+
+
+def test_worker_expires_only_stale_drafts_and_purges_raw_text(
+    factory: sessionmaker[Session],
+) -> None:
+    measured_at = datetime.now(UTC)
+    owner_id = uuid.uuid4()
+    with factory() as session, session.begin():
+        stale = ExtractionDraft(
+            owner_id=owner_id,
+            source="telegram",
+            provider_message_id="synthetic-expiry-stale",
+            raw_text="SYNTHETIC_TEST_DATA stale draft",
+            candidates=[],
+            prompt_version="test-v1",
+            schema_version="test-v1",
+            created_at=measured_at - timedelta(hours=7),
+        )
+        fresh = ExtractionDraft(
+            owner_id=owner_id,
+            source="telegram",
+            provider_message_id="synthetic-expiry-fresh",
+            raw_text="SYNTHETIC_TEST_DATA fresh draft",
+            candidates=[],
+            prompt_version="test-v1",
+            schema_version="test-v1",
+            created_at=measured_at - timedelta(hours=5),
+        )
+        session.add_all((stale, fresh))
+        session.flush()
+        stale_id, fresh_id = stale.id, fresh.id
+        scheduled = schedule_draft_expiry(session, measured_at)
+
+    claimed = run_once(
+        factory,
+        {DRAFT_EXPIRY_TASK: make_draft_expiry_handler(clock=lambda: measured_at)},
+        worker_id="draft-expiry-test",
+    )
+    assert claimed is not None and claimed.id == scheduled.id
+
+    with factory() as session:
+        expired = session.get(ExtractionDraft, stale_id)
+        retained = session.get(ExtractionDraft, fresh_id)
+        health = draft_expiry_health(session)
+        assert expired is not None and expired.state is DraftState.EXPIRED
+        assert expired.raw_text is None
+        assert expired.resolved_at == measured_at
+        assert retained is not None and retained.state is DraftState.PENDING
+        assert retained.raw_text == "SYNTHETIC_TEST_DATA fresh draft"
+        assert health.latest_job_status is JobStatus.COMPLETED
+        assert health.started_at is not None
+        assert health.finished_at is not None
+        assert health.latest_job_error_code is None
 
 
 def _write_valid_set(directory: Path, *, created_at: datetime) -> None:

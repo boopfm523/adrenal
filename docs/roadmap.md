@@ -176,8 +176,9 @@ Grouped by why it matters rather than by phase.
   with per-field thresholds. `hc-h5r.6`.
 - **No draft edit.** A wrong amount can only be cancelled and retyped. The plan
   specifies confirm/**edit**/cancel. `hc-h5r.5`.
-- **Draft expiry never runs.** `expire_stale_drafts()` exists and nothing calls it, so
-  unanswered drafts keep raw message text indefinitely. `hc-h5r.7`.
+- **Draft expiry is scheduled.** The durable worker runs it every fifteen minutes;
+  unanswered drafts expire after six hours and their raw message text is purged.
+  Operators can inspect its last run with `healthcurve draft-expiry-status`.
 - **The job queue is a placeholder.** The worker idles and logs
   `reason_code=job_queue_not_implemented`. Every scheduled thing above needs it.
   `hc-7hu.1`.

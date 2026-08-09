@@ -153,6 +153,14 @@ docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm 
 
 You should see `Connected as @your_bot_name`.
 
+The same durable worker expires unanswered extraction drafts after six hours and
+purges their original message text. It schedules this cleanup every fifteen minutes.
+Check the privacy-safe last-run status without displaying any draft content:
+
+```bash
+docker compose run --rm api python -m healthcurve.cli draft-expiry-status
+```
+
 ## Step 6 — Test it
 
 Message your bot:

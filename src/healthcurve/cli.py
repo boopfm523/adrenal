@@ -462,6 +462,22 @@ def telegram_disconnect(args: argparse.Namespace) -> int:
     return 0
 
 
+def draft_expiry_status(args: argparse.Namespace) -> int:
+    """Show operational state only; never draft payloads or health text."""
+    from healthcurve.integrations.telegram.draft_jobs import draft_expiry_health
+
+    factory = get_session_factory()
+    with factory() as session:
+        health = draft_expiry_health(session)
+    status = health.latest_job_status.value if health.latest_job_status else "never_scheduled"
+    print(f"Latest status:      {status}")
+    print(f"Scheduled for:      {health.scheduled_at.isoformat() if health.scheduled_at else '-'}")
+    print(f"Started at:         {health.started_at.isoformat() if health.started_at else '-'}")
+    print(f"Finished at:        {health.finished_at.isoformat() if health.finished_at else '-'}")
+    print(f"Last error code:    {health.latest_job_error_code or '-'}")
+    return 1 if health.latest_job_status is None else 0
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -543,6 +559,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("telegram-disconnect", help="Remove the webhook")
     p.set_defaults(func=telegram_disconnect)
+
+    p = sub.add_parser("draft-expiry-status", help="Check automatic draft expiry")
+    p.set_defaults(func=draft_expiry_status)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

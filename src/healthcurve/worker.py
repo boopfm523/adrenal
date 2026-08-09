@@ -17,6 +17,11 @@ from types import FrameType
 from healthcurve.config import Environment, Settings, TelegramMode, get_settings
 from healthcurve.db import get_session_factory
 from healthcurve.integrations.telegram import polling
+from healthcurve.integrations.telegram.draft_jobs import (
+    DRAFT_EXPIRY_TASK,
+    make_draft_expiry_handler,
+    schedule_draft_expiry,
+)
 from healthcurve.integrations.telegram.secrets import TelegramSecrets, load_telegram_secrets
 from healthcurve.logging import configure_logging, get_logger
 from healthcurve.operations import worker as queue_worker
@@ -75,13 +80,12 @@ def main() -> int:
         )
         polling_thread.start()
 
-    # Individual phases register handlers here as they are implemented. An unknown
-    # task is retried and eventually becomes a visible dead letter; it is never lost.
     queue_worker.run_loop(
         get_session_factory(),
-        {},
+        {DRAFT_EXPIRY_TASK: make_draft_expiry_handler()},
         stop_event=_stop,
         poll_interval_s=settings.job_poll_interval_s,
+        schedulers=(schedule_draft_expiry,),
     )
     if polling_thread is not None:
         polling_thread.join(timeout=5)
