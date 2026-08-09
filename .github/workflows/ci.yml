@@ -113,13 +113,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # ADR-0002 and threat model T2: only caddy may publish ports. This is the
-      # single most important deployment invariant, so it is checked mechanically
-      # rather than trusted to review.
-      - name: Only caddy publishes ports
+      # ADR-0007: only caddy may publish, and an omitted/wildcard/LAN host binding
+      # is forbidden. Production uses its concrete 100.64.0.0/10 Tailscale address;
+      # development uses loopback.
+      - name: Only caddy publishes to loopback or Tailscale
         run: |
           python3 - <<'PY'
-          import sys, yaml
+          import ipaddress, sys, yaml
           compose = yaml.safe_load(open("docker-compose.yml"))
           offenders = [
               name for name, svc in compose["services"].items()
@@ -130,7 +130,26 @@ jobs:
               sys.exit(1)
           for required in ("postgres", "redis", "ollama"):
               assert not compose["services"][required].get("ports"), required
-          print("topology ok: only caddy publishes ports")
+
+          allowed_tailnet = ipaddress.ip_network("100.64.0.0/10")
+          for binding in compose["services"]["caddy"].get("ports", []):
+              if not isinstance(binding, str):
+                  print(f"::error::caddy port must use explicit host-IP string syntax: {binding!r}")
+                  sys.exit(1)
+              parts = binding.rsplit(":", 2)
+              if len(parts) != 3:
+                  print(f"::error::caddy port omits an explicit host IP: {binding!r}")
+                  sys.exit(1)
+              host = parts[0].strip("[]")
+              try:
+                  address = ipaddress.ip_address(host)
+              except ValueError:
+                  print(f"::error::caddy host binding is not a literal IP: {host!r}")
+                  sys.exit(1)
+              if not (address.is_loopback or address in allowed_tailnet):
+                  print(f"::error::caddy publishes outside loopback/tailnet: {address}")
+                  sys.exit(1)
+          print("topology ok: only caddy publishes to loopback or Tailscale")
           PY
 
       - name: Images are pinned by digest (threat model T6)
