@@ -37,17 +37,18 @@ class StrEnumType(TypeDecorator[Any]):
 
     def __init__(self, enum_class: type[StrEnum], length: int = 32) -> None:
         super().__init__(length)
-        self._enum = enum_class
+        #: Public: the column's enum is part of this adapter's contract.
+        self.enum_class = enum_class
 
     def process_bind_param(self, value: Any, dialect: Any) -> str | None:
         if value is None:
             return None
-        return self._enum(value).value
+        return self.enum_class(value).value
 
     def process_result_value(self, value: Any, dialect: Any) -> Any:
         if value is None:
             return None
-        return self._enum(value)
+        return self.enum_class(value)
 
 
 class Category(StrEnum):

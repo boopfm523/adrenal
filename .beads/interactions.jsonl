@@ -33,3 +33,4 @@
 {"id":"int-4022a11024f3c1ff111a74273ed266fc","kind":"field_change","created_at":"2026-08-09T00:14:37.263058Z","actor":"jeff","issue_id":"hc-h5r.2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-d0583bad6f51f37f1e8bdabf727e31eb","kind":"field_change","created_at":"2026-08-09T00:14:38.158997Z","actor":"jeff","issue_id":"hc-h5r.3","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-67cfe21688a581e4f2fd85d1f2e0417a","kind":"field_change","created_at":"2026-08-09T00:14:39.061928Z","actor":"jeff","issue_id":"hc-h5r.4","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-6d2d6ec2f727e8542c275703bbd603e5","kind":"field_change","created_at":"2026-08-09T00:23:05.640571Z","actor":"jeff","issue_id":"hc-34v.6","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}

@@ -289,7 +289,7 @@ class DoseEvent(EventMixin, FactBase):
         ForeignKey("plan.medication.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     amount: Mapped[Decimal] = mapped_column(AmountType, nullable=False)
-    unit: Mapped[DoseUnit] = mapped_column(String(16), nullable=False)
+    unit: Mapped[DoseUnit] = mapped_column(StrEnumType(DoseUnit, 16), nullable=False)
     route: Mapped[Route] = mapped_column(StrEnumType(Route, 24), nullable=False)
     category: Mapped[DoseCategory] = mapped_column(StrEnumType(DoseCategory, 24), nullable=False)
 

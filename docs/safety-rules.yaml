@@ -81,6 +81,7 @@ rules:
     title: Confirmation state is recorded, not inferred
     layer: storage
     test_required: true
+    status: enforced
 
   - id: SAFE-15
     title: AI cannot write facts
