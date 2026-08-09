@@ -372,9 +372,7 @@ class LifeEventOut(FactResource):
 class EpisodeIn(ApiModel):
     trigger: str = Field(min_length=1, max_length=200)
     severity: EpisodeSeverity | None = None
-    started_at: datetime
-    timezone: str
-    ended_at: datetime | None = None
+    time: EventTimeIn
     highest_temperature_c: Decimal | None = Field(default=None, ge=25, le=45)
     illness_description: str | None = Field(default=None, max_length=500)
     notes: str | None = None
@@ -383,7 +381,7 @@ class EpisodeIn(ApiModel):
 class EpisodeUpdate(ApiModel):
     severity: EpisodeSeverity | None = None
     status: EpisodeStatus | None = None
-    ended_at: datetime | None = None
+    ended_at: EventTimeIn | None = None
     highest_temperature_c: Decimal | None = Field(default=None, ge=25, le=45)
     illness_description: str | None = Field(default=None, max_length=500)
     recovery_notes: str | None = None

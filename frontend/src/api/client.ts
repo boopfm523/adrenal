@@ -6,6 +6,8 @@ type LoginResponse = components["schemas"]["LoginResponse"];
 type WhoAmI = components["schemas"]["WhoAmI"];
 export type PlanComparisonDay = components["schemas"]["PlanComparisonDay"];
 export type Episode = components["schemas"]["EpisodeOut"];
+export type EpisodeInput = components["schemas"]["EpisodeIn"];
+export type EpisodeUpdate = components["schemas"]["EpisodeUpdate"];
 export type Dose = components["schemas"]["DoseOut"];
 export type DoseInput = components["schemas"]["DoseIn"];
 export type DoseCorrectionInput = components["schemas"]["DoseCorrectionIn"];
@@ -113,6 +115,18 @@ export function getPlanComparison(day: string, timezone: string): Promise<PlanCo
 
 export function getOpenEpisodes(): Promise<Episode[]> {
   return apiRequest<Episode[]>("/stress-episodes?open_only=true");
+}
+
+export function getEpisodes(): Promise<Episode[]> {
+  return apiRequest<Episode[]>("/stress-episodes");
+}
+
+export function createEpisode(payload: EpisodeInput): Promise<Episode> {
+  return apiRequest<Episode>("/stress-episodes", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateEpisode(id: string, payload: EpisodeUpdate): Promise<Episode> {
+  return apiRequest<Episode>(`/stress-episodes/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
 export function recordDose(payload: DoseInput): Promise<Dose> {

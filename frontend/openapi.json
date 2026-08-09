@@ -742,18 +742,6 @@
       "EpisodeIn": {
         "additionalProperties": false,
         "properties": {
-          "ended_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ended At"
-          },
           "highest_temperature_c": {
             "anyOf": [
               {
@@ -804,14 +792,8 @@
               }
             ]
           },
-          "started_at": {
-            "format": "date-time",
-            "title": "Started At",
-            "type": "string"
-          },
-          "timezone": {
-            "title": "Timezone",
-            "type": "string"
+          "time": {
+            "$ref": "#/components/schemas/EventTimeIn"
           },
           "trigger": {
             "maxLength": 200,
@@ -822,8 +804,7 @@
         },
         "required": [
           "trigger",
-          "started_at",
-          "timezone"
+          "time"
         ],
         "title": "EpisodeIn",
         "type": "object"
@@ -988,14 +969,12 @@
           "ended_at": {
             "anyOf": [
               {
-                "format": "date-time",
-                "type": "string"
+                "$ref": "#/components/schemas/EventTimeIn"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Ended At"
+            ]
           },
           "highest_temperature_c": {
             "anyOf": [

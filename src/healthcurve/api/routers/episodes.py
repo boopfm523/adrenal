@@ -38,14 +38,15 @@ router = APIRouter(tags=["episodes"])
     dependencies=[Depends(require_csrf)],
 )
 def create_episode(payload: EpisodeIn, session: DbSession, owner: CurrentOwner):
+    started = resolve_time(payload.time)
     episode = StressEpisode(
         owner_id=owner.id,
         trigger=payload.trigger,
         severity=payload.severity,
         status=EpisodeStatus.OPEN,
-        started_at=payload.started_at,
-        ended_at=payload.ended_at,
-        timezone=payload.timezone,
+        started_at=started.occurred_at,
+        ended_at=None,
+        timezone=started.timezone,
         highest_temperature_c=payload.highest_temperature_c,
         illness_description=payload.illness_description,
         notes=payload.notes,
@@ -80,8 +81,13 @@ def update_episode(
     supersession.
     """
     episode = _owned_episode(session, owner.id, episode_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    ended_at = changes.pop("ended_at", None)
+    for field, value in changes.items():
         setattr(episode, field, value)
+
+    if "ended_at" in payload.model_fields_set:
+        episode.ended_at = None if ended_at is None else resolve_time(payload.ended_at).occurred_at
 
     if episode.status is EpisodeStatus.RESOLVED and episode.ended_at is None:
         raise HTTPException(

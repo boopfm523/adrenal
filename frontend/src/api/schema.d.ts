@@ -981,8 +981,6 @@ export interface components {
         DoseUnit: "mg" | "mcg" | "ml" | "tablet";
         /** EpisodeIn */
         EpisodeIn: {
-            /** Ended At */
-            ended_at?: string | null;
             /** Highest Temperature C */
             highest_temperature_c?: number | string | null;
             /** Illness Description */
@@ -990,13 +988,7 @@ export interface components {
             /** Notes */
             notes?: string | null;
             severity?: components["schemas"]["EpisodeSeverity"] | null;
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
-            /** Timezone */
-            timezone: string;
+            time: components["schemas"]["EventTimeIn"];
             /** Trigger */
             trigger: string;
         };
@@ -1059,8 +1051,7 @@ export interface components {
         EpisodeStatus: "open" | "resolved" | "escalated";
         /** EpisodeUpdate */
         EpisodeUpdate: {
-            /** Ended At */
-            ended_at?: string | null;
+            ended_at?: components["schemas"]["EventTimeIn"] | null;
             /** Highest Temperature C */
             highest_temperature_c?: number | string | null;
             /** Illness Description */

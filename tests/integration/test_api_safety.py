@@ -206,6 +206,56 @@ def test_reads_do_not_require_csrf(client: TestClient, logged_in: dict[str, str]
     assert client.get("/api/v1/medications").status_code == 200
 
 
+def test_episode_uses_validated_local_time_and_requires_end_when_closed(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    invalid = client.post(
+        "/api/v1/stress-episodes",
+        headers=logged_in,
+        json={
+            "trigger": "Synthetic invalid zone",
+            "time": {"local_time": "2026-08-09T10:00:00", "timezone": "Not/AZone"},
+        },
+    )
+    assert invalid.status_code == 422
+
+    created = client.post(
+        "/api/v1/stress-episodes",
+        headers=logged_in,
+        json={
+            "trigger": "Synthetic illness",
+            "severity": "moderate",
+            "time": {"local_time": "2026-08-09T10:00:00", "timezone": "Europe/London"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["started_at"] == "2026-08-09T09:00:00Z"
+    assert body["timezone"] == "Europe/London"
+
+    missing_end = client.patch(
+        f"/api/v1/stress-episodes/{body['id']}",
+        headers=logged_in,
+        json={"status": "resolved"},
+    )
+    assert missing_end.status_code == 422
+    closed = client.patch(
+        f"/api/v1/stress-episodes/{body['id']}",
+        headers=logged_in,
+        json={
+            "status": "resolved",
+            "ended_at": {
+                "local_time": "2026-08-09T13:00:00",
+                "timezone": "Europe/London",
+            },
+            "outcome": "Synthetic recovery",
+        },
+    )
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["ended_at"] == "2026-08-09T12:00:00Z"
+    assert closed.json()["outcome"] == "Synthetic recovery"
+
+
 def test_garmin_preview_then_confirm_is_idempotent_and_preserves_provenance(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
