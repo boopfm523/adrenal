@@ -48,6 +48,7 @@ services:
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_OLLAMA_VISION_MODEL: ${HC_OLLAMA_VISION_MODEL:-qwen3-vl:30b}
       HC_REDIS_URL: redis://redis:6379/0
+      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
       # environment. Empty is fine -- the app treats unset as "not configured".
@@ -123,6 +124,7 @@ services:
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_REDIS_URL: redis://redis:6379/0
+      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
       # environment. Empty is fine -- the app treats unset as "not configured".

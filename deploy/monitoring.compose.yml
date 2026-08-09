@@ -18,6 +18,7 @@ services:
       HC_CREDENTIAL_KEY_FILE: /run/secrets/credential-keys.json
       HC_TELEGRAM_ALLOWED_CHAT_ID: ${HC_TELEGRAM_ALLOWED_CHAT_ID:?set HC_TELEGRAM_ALLOWED_CHAT_ID}
       HC_BACKUP_LOCAL_DIR: /backups
+      HC_MFA_REQUIRED: "true"
       HC_REPORT_ARTIFACTS_DIR: /data/reports
       HC_MONITOR_GARMIN_AGE_LIMIT_H: ${HC_MONITOR_GARMIN_AGE_LIMIT_H:-}
     volumes:

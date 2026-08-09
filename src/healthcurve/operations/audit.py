@@ -28,6 +28,10 @@ class AuditAction(StrEnum):
     LOGOUT = "logout"
     SESSION_REVOKED = "session_revoked"
     PASSWORD_CHANGED = "password_changed"  # noqa: S105 -- an action name, not a secret
+    MFA_ENROLLED = "mfa_enrolled"
+    MFA_REMOVED = "mfa_removed"
+    MFA_RECOVERY_CODES_REGENERATED = "mfa_recovery_codes_regenerated"
+    MFA_RECOVERY_CODE_USED = "mfa_recovery_code_used"
 
     REGIMEN_DRAFTED = "regimen_drafted"
     REGIMEN_APPROVED = "regimen_approved"

@@ -19,6 +19,7 @@ def _client(environment: Environment = Environment.DEV) -> TestClient:
         ai_database_url="postgresql+psycopg://healthcurve_ai:pw@postgres:5432/healthcurve",
         # Production also requires a durable shared abuse limiter (hc-cbs.5).
         redis_url="redis://redis:6379/0",
+        mfa_required=environment is Environment.PROD,
     )
     return TestClient(create_app(settings))
 

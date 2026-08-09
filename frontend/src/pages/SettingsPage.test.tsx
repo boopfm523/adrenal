@@ -52,4 +52,32 @@ describe("Settings and privacy page", () => {
     fireEvent.click(deleteButton);
     await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/privacy/account") && (request.body as { confirmation?: string }).confirmation === "DELETE MY HEALTHCURVE ACCOUNT")).toBe(true); });
   });
+
+  it("enrolls MFA and shows recovery codes exactly in the confirmation response", async () => {
+    const secret = ["SYNTHETIC", "MFA", "SEED"].join("");
+    const recoveryCodes = ["AAAAA-BBBBB-CCCCC-DDDDD-E", "EEEEE-FFFFF-GGGGG-HHHHH-I"];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/auth/mfa") && (init?.method ?? "GET") === "GET") return Promise.resolve(new Response(JSON.stringify({ enabled: false, recovery_codes_remaining: 0 }), { headers: { "Content-Type": "application/json" } }));
+      if (url.endsWith("/auth/mfa/enrollment/confirm")) return Promise.resolve(new Response(JSON.stringify({ recovery_codes: recoveryCodes }), { headers: { "Content-Type": "application/json" } }));
+      if (url.endsWith("/auth/mfa/enrollment")) return Promise.resolve(new Response(JSON.stringify({ secret, provisioning_uri: `otpauth://totp/HealthCurve?secret=${secret}` }), { headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+
+    const startButton = await screen.findByRole("button", { name: "Start enrollment" });
+    const startForm = startButton.closest("form");
+    if (startForm === null) throw new Error("MFA enrollment form missing");
+    fireEvent.change(within(startForm).getByLabelText("Current password"), { target: { value: "synthetic-password" } });
+    fireEvent.click(startButton);
+    expect(await screen.findByText(secret)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Current 6-digit code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and enable MFA" }));
+
+    const firstRecoveryCode = recoveryCodes.at(0);
+    if (firstRecoveryCode === undefined) throw new Error("synthetic recovery code missing");
+    expect(await screen.findByText(firstRecoveryCode)).toBeVisible();
+    expect(screen.getByText(/will not be shown again/)).toBeVisible();
+    expect(screen.queryByText(secret)).not.toBeInTheDocument();
+  });
 });

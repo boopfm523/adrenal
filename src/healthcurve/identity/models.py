@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from healthcurve.db import IDENTITY_SCHEMA, IdentityBase
@@ -41,6 +41,32 @@ class Owner(IdentityBase):
 
     failed_login_count: Mapped[int] = mapped_column(nullable=False, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: TOTP is the supported second factor. The seed is encrypted outside this table;
+    #: these fields only enforce policy and prevent a code being replayed.
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mfa_last_totp_step: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class MfaRecoveryCode(IdentityBase):
+    """One high-entropy recovery code, stored only as a SHA-256 digest."""
+
+    __tablename__ = "mfa_recovery_code"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "code_hash", name="uq_mfa_recovery_owner_hash"),
+        IDENTITY_SCHEMA,
+    )
 
 
 class AuthSession(IdentityBase):

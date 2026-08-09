@@ -44,8 +44,8 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     return () => { active = false; };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string): Promise<void> => {
-    await login({ email, password });
+  const signIn = useCallback(async (email: string, password: string, secondFactorCode?: string): Promise<void> => {
+    await login({ email, password, ...(secondFactorCode === undefined ? {} : { second_factor_code: secondFactorCode }) });
   }, []);
 
   const signOut = useCallback(async (): Promise<void> => {

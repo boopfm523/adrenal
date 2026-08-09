@@ -2,6 +2,7 @@ export interface SessionUser {
   email: string;
   displayName: string | null;
   defaultTimezone: string;
+  mfaEnabled?: boolean;
 }
 
 export interface ActiveSession {

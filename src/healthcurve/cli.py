@@ -478,6 +478,39 @@ def draft_expiry_status(args: argparse.Namespace) -> int:
     return 1 if health.latest_job_status is None else 0
 
 
+def mfa_enroll(args: argparse.Namespace) -> int:
+    """Bootstrap MFA locally without permitting password-only web access in prod."""
+    from healthcurve import mfa
+
+    settings = get_settings()
+    if settings.credential_key_file is None:
+        sys.exit("Set HC_CREDENTIAL_KEY_FILE before enrolling MFA.")
+    password = getpass.getpass("Current password: ")
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        if not auth.verify_password(owner.password_hash, password):
+            sys.exit("Current password is incorrect.")
+        if owner.mfa_enabled:
+            sys.exit(
+                "MFA is already enabled. Use a saved recovery code if the authenticator is lost."
+            )
+        enrollment = mfa.start_enrollment(session, owner, settings)
+        print("\nAdd this account to your authenticator app.")
+        print(f"Manual secret: {enrollment.secret}")
+        print(f"Provisioning URI: {enrollment.provisioning_uri}")
+        code = input("\nEnter the current 6-digit code: ").strip()
+        try:
+            recovery_codes = mfa.confirm_enrollment(session, owner, settings, code)
+        except mfa.MfaError as exc:
+            sys.exit(str(exc))
+
+    print("\nMFA enabled. Save these one-time recovery codes now; they are not shown again:")
+    for recovery_code in recovery_codes:
+        print(recovery_code)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -559,6 +592,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("telegram-disconnect", help="Remove the webhook")
     p.set_defaults(func=telegram_disconnect)
+
+    p = sub.add_parser("mfa-enroll", help="Bootstrap TOTP MFA from the trusted local host")
+    p.set_defaults(func=mfa_enroll)
 
     p = sub.add_parser("draft-expiry-status", help="Check automatic draft expiry")
     p.set_defaults(func=draft_expiry_status)

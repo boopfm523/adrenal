@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 
+from healthcurve import mfa
 from healthcurve.api.deps import (
     AppRateLimiter,
     AppSettings,
@@ -18,6 +19,7 @@ from healthcurve.api.deps import (
 )
 from healthcurve.config import Environment, get_settings
 from healthcurve.identity import service as auth
+from healthcurve.integrations.credentials import CredentialError
 from healthcurve.operations import audit
 from healthcurve.operations.rate_limit import RateLimitPolicy
 from healthcurve.operations.telemetry import OperationalEvent
@@ -28,6 +30,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=512)
+    second_factor_code: str | None = Field(default=None, min_length=6, max_length=64)
 
 
 class LoginResponse(BaseModel):
@@ -36,6 +39,7 @@ class LoginResponse(BaseModel):
     email: str
     display_name: str | None
     default_timezone: str
+    mfa_enabled: bool
 
 
 class WhoAmI(BaseModel):
@@ -43,6 +47,7 @@ class WhoAmI(BaseModel):
     display_name: str | None
     default_timezone: str
     csrf_token: str
+    mfa_enabled: bool
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -104,6 +109,31 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials"
         ) from None
 
+    if owner.mfa_enabled:
+        if payload.second_factor_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="second factor required",
+            )
+        try:
+            mfa.verify_second_factor(session, owner, settings, payload.second_factor_code)
+        except mfa.InvalidSecondFactor:
+            request.app.state.telemetry.record(OperationalEvent.AUTH_FAILURE)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid second factor",
+            ) from None
+        except (mfa.MfaConfigurationError, CredentialError):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="second factor verification is unavailable",
+            ) from None
+    elif settings.mfa_required:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrollment is required; use the local mfa-enroll command",
+        )
+
     auth_session, token = auth.create_session(
         session, owner, user_agent=request.headers.get("user-agent")
     )
@@ -120,6 +150,7 @@ def login(
         email=owner.email,
         display_name=owner.display_name,
         default_timezone=owner.default_timezone,
+        mfa_enabled=owner.mfa_enabled,
     )
 
 
@@ -162,7 +193,137 @@ def me(owner: CurrentOwner, auth_session: CurrentSession) -> WhoAmI:
         display_name=owner.display_name,
         default_timezone=owner.default_timezone,
         csrf_token=auth_session.csrf_token,
+        mfa_enabled=owner.mfa_enabled,
     )
+
+
+class MfaStatus(BaseModel):
+    enabled: bool
+    recovery_codes_remaining: int
+
+
+class PasswordProof(BaseModel):
+    password: str = Field(min_length=1, max_length=512)
+
+
+class MfaEnrollmentOut(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class MfaCode(BaseModel):
+    code: str = Field(min_length=6, max_length=64)
+
+
+class MfaRecoveryCodesOut(BaseModel):
+    recovery_codes: list[str]
+
+
+class MfaChangeProof(PasswordProof, MfaCode):
+    pass
+
+
+def _require_password(owner: CurrentOwner, password: str) -> None:
+    if not auth.verify_password(owner.password_hash, password):
+        raise HTTPException(status_code=403, detail="current password is incorrect")
+
+
+@router.get("/mfa", response_model=MfaStatus)
+def mfa_status(session: DbSession, owner: CurrentOwner) -> MfaStatus:
+    return MfaStatus(
+        enabled=owner.mfa_enabled,
+        recovery_codes_remaining=mfa.recovery_codes_remaining(session, owner.id),
+    )
+
+
+@router.post(
+    "/mfa/enrollment",
+    response_model=MfaEnrollmentOut,
+    dependencies=[Depends(require_csrf)],
+)
+def start_mfa_enrollment(
+    payload: PasswordProof,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> MfaEnrollmentOut:
+    _require_password(owner, payload.password)
+    try:
+        enrollment = mfa.start_enrollment(session, owner, settings)
+    except mfa.MfaError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CredentialError as exc:
+        raise HTTPException(status_code=503, detail="MFA encryption is unavailable") from exc
+    return MfaEnrollmentOut(
+        secret=enrollment.secret,
+        provisioning_uri=enrollment.provisioning_uri,
+    )
+
+
+@router.post(
+    "/mfa/enrollment/confirm",
+    response_model=MfaRecoveryCodesOut,
+    dependencies=[Depends(require_csrf)],
+)
+def confirm_mfa_enrollment(
+    payload: MfaCode,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> MfaRecoveryCodesOut:
+    try:
+        codes = mfa.confirm_enrollment(session, owner, settings, payload.code)
+    except (mfa.InvalidSecondFactor, mfa.EnrollmentNotStarted) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (mfa.MfaConfigurationError, CredentialError) as exc:
+        raise HTTPException(status_code=503, detail="MFA encryption is unavailable") from exc
+    return MfaRecoveryCodesOut(recovery_codes=codes)
+
+
+@router.post(
+    "/mfa/recovery-codes",
+    response_model=MfaRecoveryCodesOut,
+    dependencies=[Depends(require_csrf)],
+)
+def regenerate_mfa_recovery_codes(
+    payload: MfaChangeProof,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> MfaRecoveryCodesOut:
+    _require_password(owner, payload.password)
+    try:
+        mfa.verify_second_factor(session, owner, settings, payload.code)
+    except (mfa.MfaError, CredentialError) as exc:
+        raise HTTPException(status_code=403, detail="second factor is incorrect") from exc
+    codes = mfa.regenerate_recovery_codes(
+        session,
+        owner,
+        action=audit.AuditAction.MFA_RECOVERY_CODES_REGENERATED,
+    )
+    return MfaRecoveryCodesOut(recovery_codes=codes)
+
+
+@router.delete(
+    "/mfa",
+    dependencies=[Depends(require_csrf)],
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_mfa(
+    payload: MfaChangeProof,
+    response: Response,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> None:
+    _require_password(owner, payload.password)
+    try:
+        mfa.verify_second_factor(session, owner, settings, payload.code)
+    except (mfa.MfaError, CredentialError) as exc:
+        raise HTTPException(status_code=403, detail="second factor is incorrect") from exc
+    mfa.remove(session, owner)
+    auth.revoke_all_sessions(session, owner.id)
+    response.delete_cookie(auth.SESSION_COOKIE_NAME, path="/")
 
 
 class PasswordChange(BaseModel):
