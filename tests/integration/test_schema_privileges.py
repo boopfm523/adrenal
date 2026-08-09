@@ -26,6 +26,7 @@ INIT_DIR = REPO_ROOT / "deploy" / "postgres-init"
 
 OWNER_PASSWORD = "owner-test-password"  # ephemeral container credential
 AI_PASSWORD = "ai-test-password"  # ephemeral container credential
+BACKUP_PASSWORD = "backup-test-password"  # ephemeral read-only dump credential
 
 SAFETY_SCHEMAS = ("fact", "plan")
 
@@ -41,6 +42,7 @@ def postgres() -> Iterator[PostgresContainer]:
             driver="psycopg",  # psycopg 3, matching the pinned application driver
         )
         .with_env("POSTGRES_AI_PASSWORD", AI_PASSWORD)
+        .with_env("POSTGRES_BACKUP_PASSWORD", BACKUP_PASSWORD)
         .with_volume_mapping(str(INIT_DIR), "/docker-entrypoint-initdb.d", "ro")
     )
     with container as running:
@@ -58,6 +60,16 @@ def owner_engine(postgres: PostgresContainer) -> Iterator[Engine]:
 def ai_engine(postgres: PostgresContainer) -> Iterator[Engine]:
     url = postgres.get_connection_url().replace(
         f"healthcurve:{OWNER_PASSWORD}@", f"healthcurve_ai:{AI_PASSWORD}@"
+    )
+    engine = create_engine(url)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def backup_engine(postgres: PostgresContainer) -> Iterator[Engine]:
+    url = postgres.get_connection_url().replace(
+        f"healthcurve:{OWNER_PASSWORD}@", f"healthcurve_backup:{BACKUP_PASSWORD}@"
     )
     engine = create_engine(url)
     yield engine
@@ -114,6 +126,30 @@ def test_ai_role_exists(owner_engine: Engine) -> None:
             ).scalar_one_or_none()
             == 1
         )
+
+
+def test_backup_role_exists_and_is_not_superuser(owner_engine: Engine) -> None:
+    with owner_engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT rolsuper, rolcreaterole, rolcreatedb "
+                "FROM pg_roles WHERE rolname = 'healthcurve_backup'"
+            )
+        ).one()
+    assert row == (False, False, False)
+
+
+def test_backup_role_can_read_but_not_write(owner_engine: Engine, backup_engine: Engine) -> None:
+    with owner_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS identity.backup_probe (id int primary key)"))
+        conn.execute(text("INSERT INTO identity.backup_probe VALUES (1) ON CONFLICT DO NOTHING"))
+
+    with backup_engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM identity.backup_probe")).scalar_one() == 1
+
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with backup_engine.begin() as conn:
+            conn.execute(text("INSERT INTO identity.backup_probe VALUES (2)"))
 
 
 # ---------------------------------------------------------------------------

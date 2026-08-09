@@ -116,6 +116,10 @@ services:
       # Consumed by deploy/postgres-init to create the restricted AI role that
       # cannot write facts or plans (ADR-0001, SAFE-15/16).
       POSTGRES_AI_PASSWORD: ${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}
+      # Optional until backups are configured. When set before first initialization,
+      # deploy/postgres-init creates a dedicated read-only dump role. Existing volumes
+      # use the same idempotent script manually; see the backup runbook.
+      POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:-}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro

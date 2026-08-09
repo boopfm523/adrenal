@@ -1,0 +1,56 @@
+# Run together with the main stack:
+#
+#   docker compose -f docker-compose.yml -f deploy/backup.compose.yml \
+#     --profile backup run --rm backup
+#
+# HC_BACKUP_LOCAL_DIR must be a dedicated local/external backup medium in production.
+# The defaults for upload/report roots are development placeholders until those
+# features create their configured storage paths.
+
+services:
+  backup:
+    profiles: [backup]
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
+    user: "70:70" # postgres user in the pinned Alpine image
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: healthcurve
+      PGUSER: healthcurve_backup
+      PGPASSWORD: ${POSTGRES_BACKUP_PASSWORD:?set POSTGRES_BACKUP_PASSWORD}
+    command:
+      - create
+      - --destination
+      - /backup
+      - --work-root
+      - /work
+      - --recipient
+      - ${HC_BACKUP_AGE_RECIPIENT:?set HC_BACKUP_AGE_RECIPIENT}
+      - --uploads
+      - /sources/uploads
+      - --reports
+      - /sources/reports
+      - --restore-file
+      - /restore-config/docker-compose.yml
+      - --restore-file
+      - /restore-config/alembic.ini
+      - --restore-file
+      - /restore-config/Caddyfile
+    volumes:
+      - ${HC_BACKUP_LOCAL_DIR:?set HC_BACKUP_LOCAL_DIR}:/backup
+      - ${HC_UPLOADS_DIR:-./var/uploads}:/sources/uploads:ro
+      - ${HC_REPORT_ARTIFACTS_DIR:-./var/reports}:/sources/reports:ro
+      - ./docker-compose.yml:/restore-config/docker-compose.yml:ro
+      - ./alembic.ini:/restore-config/alembic.ini:ro
+      - ./deploy/Caddyfile:/restore-config/Caddyfile:ro
+    # Plaintext exists only while this process runs. Ownership matches the postgres
+    # user declared above; mode 0700 excludes every other container user.
+    tmpfs:
+      - /work:uid=70,gid=70,mode=0700
+    networks: [hc-internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
