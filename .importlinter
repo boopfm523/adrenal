@@ -12,6 +12,11 @@ include_external_packages = False
 ; Layering: a module may import downwards, never upwards.
 ; Highest first. `operations` (jobs, audit) is infrastructure, so it sits lowest
 ; and must not reach up into any domain.
+;
+; `ai` sits *below* `integrations`: the Telegram bot drives the extraction pipeline,
+; so extraction must not depend on the integration that calls it. Entry points
+; (`app`, `cli`) are deliberately outside this stack -- they wire layers together,
+; which is their job.
 ; ---------------------------------------------------------------------------
 [importlinter:contract:layers]
 name = Domain modules form a one-way dependency stack
@@ -19,8 +24,8 @@ type = layers
 layers =
     healthcurve.reports
     healthcurve.analytics
-    healthcurve.ai
     healthcurve.integrations
+    healthcurve.ai
     healthcurve.episodes
     healthcurve.labs
     healthcurve.medications

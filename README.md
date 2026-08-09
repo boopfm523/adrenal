@@ -33,6 +33,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/threat-model.md](docs/threat-model.md) | Threats `T1`…`T7` and data classification `C0`…`C13` |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [docs/beads-workflow.md](docs/beads-workflow.md) | Verified Beads commands and the working loop |
+| [docs/telegram-setup.md](docs/telegram-setup.md) | Step-by-step guide to connecting the Telegram bot |
 
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work.
 
@@ -49,18 +50,48 @@ The host's system Python is not used. `uv` installs and pins 3.13.
 ```bash
 uv python install 3.13     # pinned runtime (ADR-0006)
 uv sync --dev              # install locked dependencies
-cp .env.example .env       # then edit; .env is git-ignored
+cp .env.example .env       # then set POSTGRES_PASSWORD and POSTGRES_AI_PASSWORD
 
 make check                 # lint, types, module boundaries, tests
 make up                    # start the local stack
+make migrate               # apply migrations (never automatic -- ADR-0002)
 ```
 
 `make help` lists every target.
+
+### Putting your own data in
+
+Everything below runs inside the `api` container, which is on the private network.
+
+```bash
+# 1. Your account. HealthCurve is single-owner; this can only be run once.
+docker compose run --rm api python -m healthcurve.cli create-owner \
+    --email you@example.com --timezone Europe/London
+
+# 2. A template for your medications and schedule.
+docker compose run --rm -v "$PWD:/out" api \
+    python -m healthcurve.cli init-medications-file /out/medications.yaml
+
+# 3. Fill medications.yaml in from your prescription and your physician's written
+#    instructions, then load it. This creates a DRAFT regimen.
+docker compose run --rm -v "$PWD/medications.yaml:/tmp/m.yaml:ro" api \
+    python -m healthcurve.cli load-medications /tmp/m.yaml
+
+# 4. Approve it. A draft is never treated as your plan, and approval requires
+#    naming who approved it and where it came from (SAFE-16).
+docker compose run --rm api python -m healthcurve.cli approve-regimen <id> \
+    --by "Dr Name, Endocrinology" --source "clinic letter 2026-01-01"
+```
+
+Then connect Telegram by following [docs/telegram-setup.md](docs/telegram-setup.md).
 
 ## Layout
 
 ```text
 src/healthcurve/
+  app.py         FastAPI application factory (entry point)
+  cli.py         operator commands: create-owner, load-medications, telegram-*
+  api/           routers, request/response schemas, shared dependencies
   identity/      owner account, sessions, authorization
   events/        canonical timeline, corrections, provenance
   medications/   medications, plan versions, dose slots, instructions

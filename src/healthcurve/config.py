@@ -84,6 +84,16 @@ class Settings(BaseSettings):
     ollama_read_timeout_s: float = Field(default=60.0, gt=0)
     ollama_max_retries: int = Field(default=2, ge=0)
 
+    # --- Telegram (docs/telegram-setup.md). All three are class C8 secrets. ---
+    telegram_bot_token: SecretStr | None = None
+    #: Verified on every webhook request, constant-time. Without it, anyone who learns
+    #: the URL can post updates (threat model T4).
+    telegram_webhook_secret: SecretStr | None = None
+    #: Only this chat is processed. Everything else is dropped and counted.
+    telegram_allowed_chat_id: int | None = None
+    #: Public HTTPS base for the webhook, e.g. https://health.example.com
+    public_base_url: str | None = None
+
     # --- Owner scoping (single-owner product; see docs/threat-model.md) ---
     owner_email: str | None = None
 
@@ -114,6 +124,19 @@ class Settings(BaseSettings):
                 "interactive tracebacks leak health data and internals.",
             )
         return self
+
+    @property
+    def telegram_configured(self) -> bool:
+        """True only when every part needed to run the bot safely is present.
+
+        Deliberately all-or-nothing: a token without a webhook secret, or without an
+        allow-listed chat, is a bot anyone can write to (threat model T4).
+        """
+        return (
+            self.telegram_bot_token is not None
+            and self.telegram_webhook_secret is not None
+            and self.telegram_allowed_chat_id is not None
+        )
 
 
 @lru_cache(maxsize=1)

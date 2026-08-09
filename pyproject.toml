@@ -8,7 +8,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "fastapi==0.141.1",
     "uvicorn[standard]==0.52.1",
-    "pydantic==2.13.4",
+    "pydantic[email]==2.13.4",
     "pydantic-settings==2.15.0",
     "sqlalchemy==2.0.51",
     "alembic==1.19.1",
@@ -19,6 +19,8 @@ dependencies = [
     "httpx==0.28.1",
     "jinja2==3.1.6",
     "pyyaml==6.0.3",
+    "argon2-cffi>=25.1.0",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]
@@ -75,6 +77,9 @@ ignore = [
 "tests/**" = ["S101", "S105", "S106", "S608", "ANN"]
 # Alembic writes these; the template is not ours to restyle.
 "migrations/versions/*.py" = ["ANN", "UP", "I", "E501"]
+# Route handlers state their contract with response_model, which is what generates
+# OpenAPI and types the client. A second Python return annotation checks nothing.
+"src/healthcurve/api/routers/*.py" = ["ANN201", "ANN202"]
 "src/healthcurve/**" = []
 
 [tool.ruff.lint.flake8-bugbear]

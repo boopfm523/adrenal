@@ -13,6 +13,16 @@ from typing import Any, Literal
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from healthcurve.api.routers import (
+    auth,
+    doses,
+    emergency,
+    episodes,
+    events,
+    exports,
+    medications,
+    telegram,
+)
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.logging import configure_logging
 
@@ -51,5 +61,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def health_ready() -> dict[Literal["status"], str]:
         """Dependencies are reachable. Returns nothing else, by design."""
         return {"status": "ok"}
+
+    for router in (
+        auth.router,
+        medications.router,
+        doses.router,
+        events.router,
+        episodes.router,
+        exports.router,
+        telegram.router,
+    ):
+        app.include_router(router, prefix=API_PREFIX)
+
+    # The emergency page is mounted at the top level, not under /api/v1: it is a page
+    # a person opens in a panic, and it must not depend on the API client or a bundle
+    # loading successfully (SAFE-21, ADR-0005).
+    app.include_router(emergency.router)
 
     return app

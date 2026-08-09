@@ -22,6 +22,7 @@ psql -v ON_ERROR_STOP=1 \
     CREATE SCHEMA IF NOT EXISTS plan;  -- physician-approved plan
     CREATE SCHEMA IF NOT EXISTS ai;    -- AI drafts and analyses
     CREATE SCHEMA IF NOT EXISTS ops;   -- jobs, audit, import batches (not a safety category)
+    CREATE SCHEMA IF NOT EXISTS identity;  -- owner account and sessions
 
     -- The restricted AI role.
     SELECT format('CREATE ROLE healthcurve_ai LOGIN PASSWORD %L', :'ai_password')
@@ -53,7 +54,10 @@ psql -v ON_ERROR_STOP=1 \
     ALTER DEFAULT PRIVILEGES IN SCHEMA ops
         GRANT SELECT, INSERT, UPDATE ON TABLES TO healthcurve_ai;
 
+    -- The AI role has no business reading credentials or sessions at all.
+    REVOKE ALL ON SCHEMA identity FROM healthcurve_ai;
+
     REVOKE ALL ON SCHEMA fact, plan FROM PUBLIC;
 EOSQL
 
-echo "healthcurve: schemas fact/plan/ai/ops created; healthcurve_ai restricted to read-only on fact and plan"
+echo "healthcurve: schemas fact/plan/ai/ops/identity created; healthcurve_ai restricted to read-only on fact and plan"

@@ -30,6 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, declarative_mixin, declared_attr, mapped_column
 
+from healthcurve.db import FACT_SCHEMA, StrEnumType
 from healthcurve.events.timekeeping import EventTime
 
 
@@ -68,6 +69,8 @@ def event_table_args(tablename: str) -> tuple[Any, ...]:
             postgresql_where=text("provider_id IS NOT NULL"),
         ),
         Index(f"ix_{tablename}_occurred_at", "occurred_at"),
+        # Every event table is a recorded fact (SAFE-01).
+        FACT_SCHEMA,
     )
 
 
@@ -107,6 +110,13 @@ class EventMixin:
         Uuid, primary_key=True, default=uuid.uuid4, doc="Stable identity across corrections."
     )
 
+    #: Plan section 6 lists owner among the shared event fields. Single-owner today,
+    #: but every query is owner-scoped so the boundary exists from the start rather
+    #: than being retrofitted across every table later.
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("identity.owner.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
     # --- Time (SAFE-09). See healthcurve.events.timekeeping for why all four. ---
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -134,7 +144,7 @@ class EventMixin:
         server_default=func.now(),
         doc="When HealthCurve learned of the event, which is not when it happened.",
     )
-    source_type: Mapped[SourceType] = mapped_column(String(32), nullable=False)
+    source_type: Mapped[SourceType] = mapped_column(StrEnumType(SourceType, 32), nullable=False)
     provider_id: Mapped[str | None] = mapped_column(
         String(255), doc="The provider's own identifier, for idempotent import."
     )
@@ -146,7 +156,9 @@ class EventMixin:
     )
 
     # --- Trust ---
-    confirmation_state: Mapped[ConfirmationState] = mapped_column(String(32), nullable=False)
+    confirmation_state: Mapped[ConfirmationState] = mapped_column(
+        StrEnumType(ConfirmationState, 32), nullable=False
+    )
 
     # --- Correction lineage (SAFE-08) ---
     @declared_attr

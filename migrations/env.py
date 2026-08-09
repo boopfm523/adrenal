@@ -18,25 +18,21 @@ from typing import Any
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+# Importing this registers every model on the shared MetaData. Without it,
+# autogenerate would see the missing tables as deletions and write a migration
+# that drops them.
+import healthcurve.models  # noqa: F401
 from healthcurve.config import get_settings
-from healthcurve.db import SCHEMAS, AIBase, FactBase, OpsBase, PlanBase
-
-# Importing the models registers them on their metadata; without this, autogenerate
-# would see an empty schema and helpfully propose dropping every table.
-from healthcurve.events import models as _event_models  # noqa: F401
+from healthcurve.db import SCHEMAS, Base
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Autogenerate compares against all four namespaces at once.
-target_metadata = [
-    FactBase.metadata,
-    PlanBase.metadata,
-    AIBase.metadata,
-    OpsBase.metadata,
-]
+# All bases share one MetaData (see healthcurve.db), so this is the whole schema --
+# fact, plan, ai, ops, and identity together.
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:

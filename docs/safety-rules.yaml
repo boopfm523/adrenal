@@ -18,6 +18,7 @@ rules:
     title: Category discriminator present on every API resource
     layer: api
     test_required: true
+    status: enforced
   - id: SAFE-03
     title: No cross-category writes
     layer: api
@@ -38,7 +39,7 @@ rules:
     title: Exports and reports preserve the partition; AI off by default
     layer: export
     test_required: true
-
+    status: enforced
   - id: SAFE-08
     title: Corrections supersede, never overwrite
     layer: storage
@@ -108,6 +109,7 @@ rules:
     layer: ai
     test_required: true
     prohibited_ai_action: true
+    status: enforced
   - id: SAFE-20
     title: Analysis is computed deterministically, not imagined
     layer: ai
@@ -118,10 +120,12 @@ rules:
     title: Emergency plan renders with AI and integrations unavailable
     layer: ui
     test_required: true
+    status: enforced
   - id: SAFE-22
     title: Emergency content is physician-authored only and shows its date
     layer: ui
     test_required: true
+    status: enforced
   - id: SAFE-23
     title: Emergency injection logging is fast, confirmed, and auditable
     layer: api
@@ -143,7 +147,7 @@ rules:
     title: Every metric states its definition and timezone
     layer: ui
     test_required: true
-
+    status: enforced
   - id: SAFE-28
     title: Safety-relevant actions are audited
     layer: ops
