@@ -216,16 +216,21 @@ ollama pull qwen3-vl:30b
 
 ## Analytics
 
-**Be clear about what exists.** `src/healthcurve/analytics/` and
-`src/healthcurve/reports/` are empty packages. There is no trend analysis, no charts,
-no weekly report, no adherence-over-time. Building it is phase P3 in the roadmap.
+HealthCurve now provides an authenticated `/analytics` page and
+`/api/v1/analytics/summary` endpoint. They compute deterministic daily plan-versus-
+actual totals, dose timing, stress-episode duration, symptom frequency/severity, and
+missingness for a selected local-date range and IANA timezone. Every result states its
+definition, timezone, sample count, and missing values. There are no inferential
+insights or causal claims; charts and physician report snapshots remain separate P3
+work.
 
 What you have today for answering questions:
 
-1. **`/doses/plan-comparison`** — adherence for a single day.
-2. **`/timeline`** — everything, newest first, paged.
-3. **`/exports`** — the whole record as JSON, for analysis in whatever you like.
-4. **SQL** — the honest answer for anything else.
+1. **`/analytics/summary`** — deterministic metrics for an inclusive date range.
+2. **`/doses/plan-comparison`** — plan comparison for a single day.
+3. **`/timeline`** — everything, newest first, paged.
+4. **`/exports`** — the whole record as JSON, for analysis in whatever you like.
+5. **SQL** — the honest answer for anything else.
 
 ### Querying directly
 
@@ -302,8 +307,8 @@ connected to first.
 
 So you don't go looking for it:
 
-- **No web interface.** Not started. See [web-frontend-guide.md](web-frontend-guide.md).
-- **No analytics or reports.** Empty packages.
+- **No physician report builder yet.** Deterministic analytics are available, but
+  immutable report snapshots and rendering remain phase P3 work.
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.

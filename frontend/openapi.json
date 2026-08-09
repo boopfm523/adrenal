@@ -996,15 +996,8 @@
             "type": "string"
           },
           "total_duration_minutes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Duration Minutes"
+            "title": "Total Duration Minutes",
+            "type": "string"
           }
         },
         "required": [

@@ -1076,7 +1076,7 @@ export interface components {
             /** Timezone */
             timezone: string;
             /** Total Duration Minutes */
-            total_duration_minutes: string | null;
+            total_duration_minutes: string;
         };
         /** EpisodeOut */
         EpisodeOut: {

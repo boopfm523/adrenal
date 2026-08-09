@@ -559,8 +559,12 @@ class EpisodeMetric(MetricBase):
     total_duration_minutes: Decimal
     average_duration_minutes: Decimal | None
 
-    @field_serializer("total_duration_minutes", "average_duration_minutes")
-    def _durations(self, value: Decimal | None) -> str | None:
+    @field_serializer("total_duration_minutes")
+    def _total_duration(self, value: Decimal) -> str:
+        return str(value)
+
+    @field_serializer("average_duration_minutes")
+    def _average_duration(self, value: Decimal | None) -> str | None:
         return None if value is None else str(value)
 
 

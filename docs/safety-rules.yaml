@@ -140,10 +140,12 @@ rules:
     title: No correlation presented as causation
     layer: ui
     test_required: true
+    status: enforced
   - id: SAFE-26
     title: Missingness is always visible and distinct from zero
     layer: ui
     test_required: true
+    status: enforced
   - id: SAFE-27
     title: Every metric states its definition and timezone
     layer: ui

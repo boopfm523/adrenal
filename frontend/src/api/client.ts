@@ -17,6 +17,7 @@ export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
+export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -193,4 +194,9 @@ export function getActiveRegimen(): Promise<RegimenVersion | null> {
 
 export function getRegimenDiff(olderId: string, newerId: string): Promise<Record<string, string[]>> {
   return apiRequest<Record<string, string[]>>(`/regimens/${olderId}/diff/${newerId}`);
+}
+
+export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: string): Promise<AnalyticsSummary> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
+  return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
 }
