@@ -277,8 +277,9 @@ emergency contacts, an emergency-services reminder, and fast confirmed injection
 **Runtime:** server-rendered HTML with plain CSS, no SPA bundle, no AI, no integration,
 no chart, and no third-party asset or network request. Content remains readable with
 JavaScript disabled, Ollama stopped, Redis stopped, jobs stopped, Garmin/weather down,
-and the SPA build absent. The database and owner access policy are separate concerns;
-`hc-h0e` must decide authentication/link behavior before production reliance.
+and the SPA build absent. Per ADR-0011, an anonymous request sees only generic emergency
+services/Medical-ID guidance; physician instructions, medications, contacts, and the
+injection form require an authenticated owner session.
 
 **Primary actions:** call local emergency services; contact named person; view dated
 physician instructions; start injection log; confirm medication/amount/route/time.

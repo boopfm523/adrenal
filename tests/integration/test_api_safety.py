@@ -151,9 +151,31 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/timeline",
         "/api/v1/medications",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
-        "/emergency",
     ):
         assert client.get(path).status_code == 401, path
+
+
+def test_anonymous_emergency_page_is_useful_without_disclosing_owner_data(
+    client: TestClient,
+) -> None:
+    client.cookies.clear()
+    response = client.get("/emergency")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    body = response.text
+    assert "call your local emergency services" in body.lower()
+    assert "medical id" in body.lower()
+    assert "Private emergency details are locked" in body
+    assert "physician-authored instructions</h2>" not in body
+    assert "Log an emergency injection" not in body
+    assert "<form" not in body
+    assert (
+        client.post(
+            "/emergency/injection",
+            data={"medication_id": str(uuid.uuid4()), "amount": "100"},
+        ).status_code
+        == 401
+    )
 
 
 def test_polling_mode_does_not_expose_the_telegram_webhook(client: TestClient) -> None:

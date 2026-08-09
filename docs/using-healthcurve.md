@@ -129,13 +129,16 @@ http://localhost:8080/emergency
 ```
 
 Server-rendered, no JavaScript, no database writes needed to display, and it keeps
-working when Ollama and Redis are down.
+working when Ollama and Redis are down. Without a valid session it shows only generic
+advice to call local emergency services and check the person's device Medical ID or
+physical emergency card. It does not reveal a diagnosis, medications, contacts, or
+instructions and does not show the injection form.
 
-**It currently requires you to be logged in**, which is worth thinking about before you
-rely on it. That protects the contents, but it also means a paramedic holding your
-locked phone cannot open it, and nor can you if you are too unwell to type a password —
-which is the situation it exists for. Tracked as `hc-h0e`; the resolution is a product
-decision, not a bug fix.
+When you are logged in, the page additionally shows dated physician-authored
+instructions and the fast injection form. HealthCurve is not the responder-facing copy
+of your emergency plan: keep Medical ID or a physical card current so it still works
+when your device is locked, this host is down, or Tailscale is unavailable. See
+[ADR-0011](adr/0011-tiered-emergency-page-access.md).
 
 ## Encrypted backups
 

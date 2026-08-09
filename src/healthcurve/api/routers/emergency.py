@@ -22,7 +22,7 @@ from fastapi import APIRouter, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 
-from healthcurve.api.deps import CurrentOwner, DbSession
+from healthcurve.api.deps import CurrentOwner, DbSession, OptionalCurrentOwner
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
@@ -85,9 +85,23 @@ _ADVICE = (
     "be in <strong>adrenal crisis</strong>.</p></div>"
 )
 
+_ANONYMOUS_ADVICE = (
+    "<div class='urgent'><h1>If this is an emergency, call your local emergency "
+    "services now.</h1><p>Do not wait for this page or for a reply from anyone. "
+    "Check the person's device Medical ID or physical emergency card and follow "
+    "instructions from emergency professionals.</p></div>"
+    "<section class='card'><h2>Private emergency details are locked</h2>"
+    "<p>Sign in on this device to view physician-authored instructions. HealthCurve "
+    "does not reveal a person's medical plan or allow injection logging without an "
+    "authenticated owner session.</p></section>"
+)
+
 
 @router.get("/emergency", response_class=HTMLResponse)
-def emergency_page(session: DbSession, owner: CurrentOwner) -> HTMLResponse:
+def emergency_page(session: DbSession, owner: OptionalCurrentOwner) -> HTMLResponse:
+    if owner is None:
+        return _page(_ANONYMOUS_ADVICE)
+
     parts = [_ADVICE]
 
     version = session.scalar(
