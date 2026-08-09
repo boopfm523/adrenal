@@ -28,6 +28,7 @@ from healthcurve.integrations.garmin.models import (
 )
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
+from healthcurve.reports.models import ReportArtifact, ReportSnapshot
 
 router = APIRouter(tags=["exports"])
 
@@ -53,6 +54,43 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
     return str(value)
+
+
+def _report_export(session: DbSession, owner_id: Any, *, include_ai: bool) -> dict[str, Any]:
+    statement = select(ReportSnapshot).where(ReportSnapshot.owner_id == owner_id)
+    if not include_ai:
+        statement = statement.where(ReportSnapshot.include_ai.is_(False))
+    snapshots = list(session.scalars(statement))
+    snapshot_ids = {snapshot.id for snapshot in snapshots}
+    artifacts = [
+        {
+            "id": str(artifact.id),
+            "snapshot_id": str(artifact.snapshot_id),
+            "format": artifact.format,
+            "media_type": artifact.media_type,
+            "sha256": artifact.sha256,
+            "byte_size": artifact.byte_size,
+            "created_at": _jsonable(artifact.created_at),
+        }
+        for artifact in session.scalars(
+            select(ReportArtifact).where(ReportArtifact.owner_id == owner_id)
+        )
+        if artifact.snapshot_id in snapshot_ids
+    ]
+    return {
+        "snapshots": [
+            {
+                column.name: _jsonable(getattr(snapshot, column.name))
+                for column in ReportSnapshot.__table__.columns
+            }
+            for snapshot in snapshots
+        ],
+        "artifacts": artifacts,
+        "notice": (
+            "AI-enabled report snapshots are excluded unless AI export was explicitly requested. "
+            "Artifact file bytes are downloaded separately from the Reports page."
+        ),
+    }
 
 
 @router.post("/exports")
@@ -96,6 +134,7 @@ def create_export(
             "garmin_activities": _rows(session, GarminActivityEvent, owner.id),
         },
         "ai": {} if not include_ai else {"note": "AI analysis included at your request"},
+        "reports": _report_export(session, owner.id, include_ai=include_ai),
     }
 
     audit.record(

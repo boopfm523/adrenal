@@ -57,8 +57,10 @@ services:
       HC_TELEGRAM_WEBHOOK_SECRET: ${HC_TELEGRAM_WEBHOOK_SECRET:-}
       HC_PUBLIC_BASE_URL: ${HC_PUBLIC_BASE_URL:-}
       HC_UPLOADS_DIR: /data/uploads
+      HC_REPORT_ARTIFACTS_DIR: /data/reports
     volumes:
       - ${HC_UPLOADS_DIR:-./var/uploads}:/data/uploads
+      - ${HC_REPORT_ARTIFACTS_DIR:-./var/reports}:/data/reports
     networks: [hc-internal]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health/live')"]

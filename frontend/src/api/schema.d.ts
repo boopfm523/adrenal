@@ -616,6 +616,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reports */
+        get: operations["list_reports_api_v1_reports_get"];
+        put?: never;
+        /** Create Report */
+        post: operations["create_report_api_v1_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report */
+        get: operations["get_report_api_v1_reports__snapshot_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{snapshot_id}/artifacts/{format_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Report */
+        get: operations["download_report_api_v1_reports__snapshot_id__artifacts__format_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stress-episodes": {
         parameters: {
             query?: never;
@@ -1801,6 +1853,130 @@ export interface components {
             status: components["schemas"]["RegimenStatus"];
             /** Version Label */
             version_label: string;
+        };
+        /** ReportArtifactOut */
+        ReportArtifactOut: {
+            /** Byte Size */
+            byte_size: number;
+            /** Download Url */
+            download_url: string;
+            /** Format */
+            format: string;
+            /** Media Type */
+            media_type: string;
+            /** Sha256 */
+            sha256: string;
+        };
+        /** ReportCreateRequest */
+        ReportCreateRequest: {
+            /** Companion Formats */
+            companion_formats?: ("csv" | "json")[];
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /**
+             * Include Ai
+             * @default false
+             */
+            include_ai: boolean;
+            /**
+             * Include Sensitive
+             * @default false
+             */
+            include_sensitive: boolean;
+            /** Selected Sections */
+            selected_sections: string[];
+            /** Timezone */
+            timezone?: string | null;
+        };
+        /** ReportOut */
+        ReportOut: {
+            /** Artifacts */
+            artifacts: components["schemas"]["ReportArtifactOut"][];
+            /** Canonical Sha256 */
+            canonical_sha256: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Include Ai */
+            include_ai: boolean;
+            /** Render Version */
+            render_version: string;
+            /** Selected Sections */
+            selected_sections: string[];
+            /** Timezone */
+            timezone: string;
+        };
+        /** ReportPreviewOut */
+        ReportPreviewOut: {
+            /** Artifacts */
+            artifacts: components["schemas"]["ReportArtifactOut"][];
+            /** Canonical Sha256 */
+            canonical_sha256: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Include Ai */
+            include_ai: boolean;
+            /** Metric Values */
+            metric_values: {
+                [key: string]: unknown;
+            };
+            /** Render Version */
+            render_version: string;
+            /** Selected Sections */
+            selected_sections: string[];
+            /** Snapshot Content */
+            snapshot_content: {
+                [key: string]: unknown;
+            };
+            /** Source Manifest */
+            source_manifest: {
+                [key: string]: string[];
+            };
+            /** Timezone */
+            timezone: string;
         };
         /**
          * Route
@@ -3385,6 +3561,141 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegimenVersionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reports_api_v1_reports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_api_v1_reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_api_v1_reports__snapshot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                snapshot_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_report_api_v1_reports__snapshot_id__artifacts__format_name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                snapshot_id: string;
+                format_name: "pdf" | "csv" | "json";
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

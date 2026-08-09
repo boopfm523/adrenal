@@ -39,6 +39,7 @@ class AuditAction(StrEnum):
 
     EXPORT_GENERATED = "export_generated"
     REPORT_GENERATED = "report_generated"
+    REPORT_DOWNLOADED = "report_downloaded"
 
     INTEGRATION_CONNECTED = "integration_connected"
     INTEGRATION_CREDENTIAL_UPDATED = "integration_credential_updated"

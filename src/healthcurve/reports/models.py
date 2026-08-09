@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
+    UniqueConstraint,
     func,
     text,
 )
@@ -60,5 +61,35 @@ class ReportSnapshot(OpsBase):
         CheckConstraint("date_to >= date_from", name="report_date_ordered"),
         CheckConstraint("char_length(canonical_sha256) = 64", name="report_checksum_length"),
         Index("ix_report_snapshot_owner_created", "owner_id", "created_at"),
+        OPS_SCHEMA,
+    )
+
+
+class ReportArtifact(OpsBase):
+    """A private, checksummed rendering derived from one immutable snapshot."""
+
+    __tablename__ = "report_artifact"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ops.report_snapshot.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    format: Mapped[str] = mapped_column(String(8), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    relative_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_size: Mapped[int] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "format", name="one_format_per_snapshot"),
+        CheckConstraint("format IN ('pdf', 'csv', 'json')", name="artifact_format_allowed"),
+        CheckConstraint("char_length(sha256) = 64", name="artifact_checksum_length"),
+        CheckConstraint("byte_size > 0", name="artifact_nonempty"),
         OPS_SCHEMA,
     )

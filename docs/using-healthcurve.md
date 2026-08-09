@@ -222,8 +222,30 @@ actual totals, dose timing, stress-episode duration, symptom frequency/severity,
 missingness for a selected local-date range and IANA timezone. Every result states its
 definition, timezone, sample count, and missing values. There are no inferential
 insights or causal claims. Daily plan-versus-actual totals also have a local SVG chart
-whose adjacent semantic table is authoritative and preserves gaps. Physician report
-snapshots remain separate P3 work.
+whose adjacent semantic table is authoritative and preserves gaps. The report API
+freezes those deterministic values for reproducible physician reports.
+
+### Physician-report API
+
+Authenticated clients can create an immutable physician-report snapshot with
+`POST /api/v1/reports`. A request selects an inclusive local-date range, IANA
+timezone, and sections such as deterministic metrics, doses, approved plan, episodes,
+symptoms, injections, patient notes, life events, labs, and wearables. The maximum
+range is 366 days. Sensitive notes are excluded unless explicitly requested. AI is
+off by default and requires a separate opt-in.
+
+Every snapshot freezes its source-record manifest, exact metric values and
+definitions, category-separated content, render version, and checksum. Later source
+corrections or deletion do not rewrite the historical snapshot. Playwright renders
+the PDF with a local network-blocked Chromium process; report content is not sent to
+an external service. PDF is always generated, with CSV and JSON companions on
+request. Files live under the private `HC_REPORT_ARTIFACTS_DIR` (default
+`./var/reports`), outside the Caddy web root, and are included in configured backups.
+
+`GET /api/v1/reports` lists snapshots, `GET /api/v1/reports/{id}` returns the frozen
+preview data, and `GET /api/v1/reports/{id}/artifacts/{pdf|csv|json}` verifies the
+artifact checksum before a no-store download. Generation and downloads produce only
+structural audit metadata—never report contents.
 
 ## Data quality
 
@@ -320,8 +342,8 @@ connected to first.
 
 So you don't go looking for it:
 
-- **No physician report builder yet.** Deterministic analytics are available, but
-  immutable report snapshots and rendering remain phase P3 work.
+- **No physician report builder page yet.** Immutable snapshots and local PDF/CSV/JSON
+  APIs are available, but the range/section selection and history UI remains P3 work.
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.

@@ -2976,6 +2976,261 @@
         "title": "RegimenVersionOut",
         "type": "object"
       },
+      "ReportArtifactOut": {
+        "properties": {
+          "byte_size": {
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "media_type",
+          "sha256",
+          "byte_size",
+          "download_url"
+        ],
+        "title": "ReportArtifactOut",
+        "type": "object"
+      },
+      "ReportCreateRequest": {
+        "properties": {
+          "companion_formats": {
+            "items": {
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "type": "string"
+            },
+            "title": "Companion Formats",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "include_ai": {
+            "default": false,
+            "title": "Include Ai",
+            "type": "boolean"
+          },
+          "include_sensitive": {
+            "default": false,
+            "title": "Include Sensitive",
+            "type": "boolean"
+          },
+          "selected_sections": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Selected Sections",
+            "type": "array"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "selected_sections"
+        ],
+        "title": "ReportCreateRequest",
+        "type": "object"
+      },
+      "ReportOut": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ReportArtifactOut"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "canonical_sha256": {
+            "title": "Canonical Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "include_ai": {
+            "title": "Include Ai",
+            "type": "boolean"
+          },
+          "render_version": {
+            "title": "Render Version",
+            "type": "string"
+          },
+          "selected_sections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Sections",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "date_from",
+          "date_to",
+          "timezone",
+          "selected_sections",
+          "include_ai",
+          "canonical_sha256",
+          "render_version",
+          "created_at",
+          "artifacts"
+        ],
+        "title": "ReportOut",
+        "type": "object"
+      },
+      "ReportPreviewOut": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ReportArtifactOut"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "canonical_sha256": {
+            "title": "Canonical Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "include_ai": {
+            "title": "Include Ai",
+            "type": "boolean"
+          },
+          "metric_values": {
+            "additionalProperties": true,
+            "title": "Metric Values",
+            "type": "object"
+          },
+          "render_version": {
+            "title": "Render Version",
+            "type": "string"
+          },
+          "selected_sections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Sections",
+            "type": "array"
+          },
+          "snapshot_content": {
+            "additionalProperties": true,
+            "title": "Snapshot Content",
+            "type": "object"
+          },
+          "source_manifest": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Source Manifest",
+            "type": "object"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "date_from",
+          "date_to",
+          "timezone",
+          "selected_sections",
+          "include_ai",
+          "canonical_sha256",
+          "render_version",
+          "created_at",
+          "artifacts",
+          "source_manifest",
+          "metric_values",
+          "snapshot_content"
+        ],
+        "title": "ReportPreviewOut",
+        "type": "object"
+      },
       "Route": {
         "enum": [
           "oral",
@@ -6334,6 +6589,262 @@
         "summary": "Retire Regimen",
         "tags": [
           "medications"
+        ]
+      }
+    },
+    "/api/v1/reports": {
+      "get": {
+        "operationId": "list_reports_api_v1_reports_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReportOut"
+                  },
+                  "title": "Response List Reports Api V1 Reports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reports",
+        "tags": [
+          "reports"
+        ]
+      },
+      "post": {
+        "operationId": "create_report_api_v1_reports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{snapshot_id}": {
+      "get": {
+        "operationId": "get_report_api_v1_reports__snapshot_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{snapshot_id}/artifacts/{format_name}": {
+      "get": {
+        "operationId": "download_report_api_v1_reports__snapshot_id__artifacts__format_name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "format_name",
+            "required": true,
+            "schema": {
+              "enum": [
+                "pdf",
+                "csv",
+                "json"
+              ],
+              "title": "Format Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report",
+        "tags": [
+          "reports"
         ]
       }
     },

@@ -22,6 +22,7 @@ from healthcurve.labs.models import LabDocument, LabPanel
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportSnapshot
+from healthcurve.reports.storage import delete_owner_artifacts
 
 
 class DeletionError(RuntimeError):
@@ -135,6 +136,7 @@ def delete_account(
     owner: Owner,
     uploads_dir: Path,
     telegram_chat_id: int | None,
+    report_artifacts_dir: Path | None = None,
 ) -> None:
     owner_id = owner.id
     document_ids = list(
@@ -142,6 +144,8 @@ def delete_account(
     )
     for document_id in document_ids:
         mark_deleted(DocumentLayout(uploads_dir), document_id)
+    if report_artifacts_dir is not None:
+        delete_owner_artifacts(report_artifacts_dir, owner_id)
 
     # Children and records that restrict owner deletion first. Database cascades remove
     # lab results, regimen children, and Garmin facts from their owning parent rows.

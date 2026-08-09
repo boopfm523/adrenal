@@ -144,6 +144,8 @@ class Settings(BaseSettings):
     #: Exact source documents live outside the web root. In Compose this path is a
     #: bind mount shared only with the network-isolated document worker and backup.
     uploads_dir: Path = Path("var/uploads")
+    #: Generated report artifacts are private files, never part of the Caddy web root.
+    report_artifacts_dir: Path = Path("var/reports")
 
     @model_validator(mode="before")
     @classmethod

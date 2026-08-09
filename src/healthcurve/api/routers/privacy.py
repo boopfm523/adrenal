@@ -131,5 +131,6 @@ def delete_account(
         owner=owner,
         uploads_dir=settings.uploads_dir,
         telegram_chat_id=settings.telegram_allowed_chat_id,
+        report_artifacts_dir=settings.report_artifacts_dir,
     )
     response.delete_cookie(auth.SESSION_COOKIE_NAME, path="/")

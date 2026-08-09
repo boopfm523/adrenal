@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
 from healthcurve import privacy
-from healthcurve.ai.models import DraftState, ExtractionDraft
+from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
 from healthcurve.config import Settings, get_settings
 from healthcurve.document_worker import process_available, validate_one
 from healthcurve.identity import service as auth
@@ -39,6 +39,7 @@ from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, La
 from healthcurve.medications.models import DoseUnit, Medication, Route
 from healthcurve.operations.audit import AuditAction, AuditEntry
 from healthcurve.operations.jobs import Job, JobStatus
+from healthcurve.reports.models import ReportArtifact, ReportSnapshot
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 from tests.fixtures.pdf import (
     OcrToolRunner,
@@ -76,6 +77,7 @@ def settings(postgres: PostgresContainer, tmp_path_factory: pytest.TempPathFacto
         database_url=postgres.get_connection_url(),
         ollama_base_url="http://ollama:11434",
         uploads_dir=tmp_path_factory.mktemp("api-uploads"),
+        report_artifacts_dir=tmp_path_factory.mktemp("api-reports"),
     )
 
 
@@ -155,6 +157,7 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/timeline",
         "/api/v1/medications",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
+        "/api/v1/reports",
     ):
         assert client.get(path).status_code == 401, path
 
@@ -1112,6 +1115,232 @@ def test_export_separates_categories_and_excludes_ai_by_default(
     assert set(payload) >= {"plan", "facts", "ai"}
     assert payload["ai"] == {}, "AI content must be excluded unless asked for"
     assert "credentials" in payload["notice"]
+
+
+@pytest.mark.safety("SAFE-07")
+def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    note_text = "Synthetic physician question for immutable report"
+    medication_id = _a_medication(client, logged_in)
+    regimen = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            "version_label": "Synthetic report plan",
+            "effective_from": "2025-08-09T00:00:00",
+            "effective_to": "2025-08-10T00:00:00",
+            "slots": [
+                {
+                    "medication_id": medication_id,
+                    "scheduled_local_time": "07:00:00",
+                    "amount": "10",
+                    "unit": "mg",
+                    "route": "oral",
+                }
+            ],
+            "instructions": [],
+        },
+    )
+    assert regimen.status_code == 201, regimen.text
+    approved = client.post(
+        f"/api/v1/regimens/{regimen.json()['id']}/approve",
+        headers=logged_in,
+        json={"approved_by": "Dr Synthetic", "approval_source": "Synthetic fixture"},
+    )
+    assert approved.status_code == 200, approved.text
+    dose = client.post(
+        "/api/v1/doses",
+        headers=logged_in,
+        json={
+            "medication_id": medication_id,
+            "amount": "10",
+            "unit": "mg",
+            "route": "oral",
+            "category": "scheduled",
+            "time": {"local_time": "2025-08-09T07:05:00", "timezone": "Europe/London"},
+        },
+    )
+    assert dose.status_code == 201, dose.text
+    note = client.post(
+        "/api/v1/diary-events",
+        headers=logged_in,
+        json={
+            "text": note_text,
+            "time": {"local_time": "2025-08-09T12:00:00", "timezone": "Europe/London"},
+        },
+    )
+    assert note.status_code == 201, note.text
+    note_id = note.json()["id"]
+    request = {
+        "date_from": "2025-08-09",
+        "date_to": "2025-08-09",
+        "timezone": "Europe/London",
+        "selected_sections": ["metrics", "doses", "approved_plan", "patient_notes"],
+        "companion_formats": ["csv", "json"],
+    }
+    assert client.post("/api/v1/reports", json=request).status_code == 403
+    generated = client.post("/api/v1/reports", headers=logged_in, json=request)
+    assert generated.status_code == 201, generated.text
+    body = generated.json()
+    assert body["include_ai"] is False
+    assert {artifact["format"] for artifact in body["artifacts"]} == {"pdf", "csv", "json"}
+    report_id = body["id"]
+
+    preview = client.get(f"/api/v1/reports/{report_id}")
+    assert preview.status_code == 200
+    frozen = preview.json()
+    assert frozen["canonical_sha256"] == body["canonical_sha256"]
+    assert frozen["snapshot_content"]["ai"] == []
+    assert frozen["source_manifest"]["ai"] == []
+    assert frozen["snapshot_content"]["patient_note"][0]["text"] == note_text
+    assert frozen["snapshot_content"]["fact"][0]["record_type"] == "dose"
+    assert frozen["snapshot_content"]["plan"][0]["record_type"] == "approved_regimen"
+    assert dose.json()["id"] in frozen["source_manifest"]["fact"]
+    assert regimen.json()["id"] in frozen["source_manifest"]["plan"]
+    assert all(
+        metric["definition"] and metric["timezone"] for metric in frozen["metric_values"].values()
+    )
+
+    for format_name, content_type in (
+        ("pdf", "application/pdf"),
+        ("csv", "text/csv"),
+        ("json", "application/json"),
+    ):
+        downloaded = client.get(f"/api/v1/reports/{report_id}/artifacts/{format_name}")
+        assert downloaded.status_code == 200
+        assert downloaded.headers["content-type"].startswith(content_type)
+        assert "attachment" in downloaded.headers["content-disposition"]
+        assert downloaded.headers["cache-control"] == "no-store"
+    assert client.get(f"/api/v1/reports/{report_id}/artifacts/pdf").content.startswith(b"%PDF-")
+
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        session.add(
+            AIAnalysis(
+                owner_id=owner_id,
+                analysis_type=AnalysisType.REPORT_NARRATIVE,
+                body="Synthetic optional AI narrative",
+                source_record_ids=[dose.json()["id"]],
+                range_start=datetime(2025, 8, 9, tzinfo=UTC),
+                range_end=datetime(2025, 8, 10, tzinfo=UTC),
+                computed_inputs={"dose_total": "10.0000"},
+                model_name="synthetic-model",
+                model_digest="a" * 64,
+                prompt_version="synthetic-v1",
+            )
+        )
+    opted_in = client.post(
+        "/api/v1/reports",
+        headers=logged_in,
+        json={**request, "include_ai": True, "companion_formats": []},
+    )
+    assert opted_in.status_code == 201, opted_in.text
+    opted_preview = client.get(f"/api/v1/reports/{opted_in.json()['id']}").json()
+    assert opted_preview["include_ai"] is True
+    assert opted_preview["snapshot_content"]["ai"][0]["body"] == "Synthetic optional AI narrative"
+
+    deleted = client.request(
+        "DELETE",
+        f"/api/v1/privacy/records/diary/{note_id}",
+        headers=logged_in,
+        json={"password": PASSWORD},
+    )
+    assert deleted.status_code == 204, deleted.text
+    assert (
+        client.get(f"/api/v1/reports/{report_id}").json()["snapshot_content"]["patient_note"][0][
+            "text"
+        ]
+        == note_text
+    )
+
+    with Session(engine) as session:
+        report_uuid = uuid.UUID(report_id)
+        assert session.scalar(select(ReportSnapshot).where(ReportSnapshot.id == report_uuid))
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(ReportArtifact).where(ReportArtifact.snapshot_id == report_uuid)
+                    )
+                )
+            )
+            == 3
+        )
+        entries = list(
+            session.scalars(
+                select(AuditEntry).where(
+                    AuditEntry.target_id == report_uuid,
+                    AuditEntry.action.in_(
+                        (AuditAction.REPORT_GENERATED, AuditAction.REPORT_DOWNLOADED)
+                    ),
+                )
+            )
+        )
+        assert {entry.action for entry in entries} == {
+            AuditAction.REPORT_GENERATED,
+            AuditAction.REPORT_DOWNLOADED,
+        }
+        assert all(note_text not in (entry.change_summary or "") for entry in entries)
+    assert any(settings.report_artifacts_dir.rglob(f"{report_id}/report.pdf"))
+
+
+def test_report_validation_and_owner_boundary(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    base = {
+        "date_from": "2026-08-09",
+        "date_to": "2026-08-09",
+        "selected_sections": ["metrics"],
+    }
+    duplicate = client.post(
+        "/api/v1/reports",
+        headers=logged_in,
+        json={**base, "selected_sections": ["metrics", "metrics"]},
+    )
+    assert duplicate.status_code == 422
+    unsupported = client.post(
+        "/api/v1/reports",
+        headers=logged_in,
+        json={**base, "selected_sections": ["medical_recommendations"]},
+    )
+    assert unsupported.status_code == 422
+    too_long = client.post(
+        "/api/v1/reports",
+        headers=logged_in,
+        json={**base, "date_to": "2028-08-09"},
+    )
+    assert too_long.status_code == 422
+
+    with Session(engine) as session, session.begin():
+        other = Owner(
+            email="report-boundary@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        hidden = ReportSnapshot(
+            owner_id=other.id,
+            date_from=datetime(2026, 8, 9, tzinfo=UTC).date(),
+            date_to=datetime(2026, 8, 9, tzinfo=UTC).date(),
+            timezone="UTC",
+            selected_sections=["metrics"],
+            include_ai=False,
+            source_manifest={"fact": [], "plan": [], "patient_note": [], "ai": []},
+            metric_values={},
+            snapshot_content={"fact": [], "plan": [], "patient_note": [], "ai": []},
+            render_version="report-v1",
+            canonical_sha256="0" * 64,
+        )
+        session.add(hidden)
+        session.flush()
+        hidden_id = hidden.id
+    assert client.get(f"/api/v1/reports/{hidden_id}").status_code == 404
 
 
 # ---------------------------------------------------------------------------
