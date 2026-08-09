@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from healthcurve.api.routers import (
@@ -32,6 +32,7 @@ from healthcurve.api.routers import (
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.logging import configure_logging
 from healthcurve.operations.rate_limit import RateLimiter
+from healthcurve.operations.telemetry import OperationalEvent, OperationalTelemetry
 
 API_PREFIX = "/api/v1"
 
@@ -60,6 +61,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.rate_limiter = RateLimiter(settings.redis_url)
+    app.state.telemetry = OperationalTelemetry(settings.redis_url)
+
+    @app.middleware("http")
+    async def record_request_errors(request: Request, call_next: Any) -> Any:
+        try:
+            response = await call_next(request)
+        except Exception:
+            app.state.telemetry.record(OperationalEvent.REQUEST_ERROR)
+            raise
+        if response.status_code >= 500:
+            app.state.telemetry.record(OperationalEvent.REQUEST_ERROR)
+        return response
 
     @app.get("/health/live", tags=["health"])
     async def health_live() -> dict[Literal["status"], str]:

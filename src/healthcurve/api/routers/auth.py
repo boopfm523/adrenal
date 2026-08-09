@@ -20,6 +20,7 @@ from healthcurve.config import Environment, get_settings
 from healthcurve.identity import service as auth
 from healthcurve.operations import audit
 from healthcurve.operations.rate_limit import RateLimitPolicy
+from healthcurve.operations.telemetry import OperationalEvent
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -80,6 +81,7 @@ def login(
     try:
         owner = auth.authenticate(session, payload.email, payload.password)
     except auth.AccountLockedError:
+        request.app.state.telemetry.record(OperationalEvent.AUTH_FAILURE)
         audit.record(
             session,
             actor=f"email:{payload.email}",
@@ -91,6 +93,7 @@ def login(
             detail="too many failed attempts; try again later",
         ) from None
     except auth.AuthenticationError:
+        request.app.state.telemetry.record(OperationalEvent.AUTH_FAILURE)
         audit.record(
             session,
             actor=f"email:{payload.email}",

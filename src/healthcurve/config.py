@@ -151,6 +151,17 @@ class Settings(BaseSettings):
     report_rate_limit: int = Field(default=6, ge=1, le=100)
     report_rate_window_s: int = Field(default=3_600, ge=1, le=86_400)
 
+    # --- Monitoring (hc-cbs.9) ---
+    monitor_interval_s: int = Field(default=60, ge=10, le=3_600)
+    monitor_request_error_limit: int = Field(default=5, ge=1, le=10_000)
+    monitor_auth_failure_limit: int = Field(default=5, ge=1, le=10_000)
+    monitor_model_failure_limit: int = Field(default=3, ge=1, le=10_000)
+    monitor_queue_age_limit_s: int = Field(default=300, ge=10, le=86_400)
+    monitor_backup_age_limit_h: float = Field(default=26.0, gt=0, le=720)
+    monitor_garmin_age_limit_h: float | None = Field(default=None, gt=0, le=8_760)
+    monitor_disk_free_percent: float = Field(default=10.0, gt=0, lt=100)
+    backup_local_dir: Path | None = None
+
     # --- Sensitive local artifacts (ADR-0010) ---
     #: Exact source documents live outside the web root. In Compose this path is a
     #: bind mount shared only with the network-isolated document worker and backup.

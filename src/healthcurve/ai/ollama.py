@@ -22,6 +22,7 @@ import httpx
 
 from healthcurve.config import Settings, get_settings
 from healthcurve.logging import get_logger
+from healthcurve.operations.telemetry import OperationalEvent, OperationalTelemetry
 
 log = get_logger(__name__)
 
@@ -98,6 +99,7 @@ class OllamaClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._breaker = CircuitBreaker()
+        self._telemetry = OperationalTelemetry(self._settings.redis_url)
 
     @property
     def model_name(self) -> str:
@@ -140,6 +142,7 @@ class OllamaClient:
         """
         selected_model = model_name or self._settings.ollama_model
         if self._breaker.is_open:
+            self._telemetry.record(OperationalEvent.MODEL_FAILURE)
             return ModelResult(
                 outcome=ModelOutcome.UNAVAILABLE,
                 model_name=selected_model,
@@ -252,6 +255,7 @@ class OllamaClient:
         self, outcome: ModelOutcome, started: float, detail: str, model_name: str
     ) -> ModelResult:
         latency_ms = int((time.monotonic() - started) * 1000)
+        self._telemetry.record(OperationalEvent.MODEL_FAILURE)
         # Outcome and timing only -- never the prompt or any partial completion (C9).
         log.warning(
             "model call failed",

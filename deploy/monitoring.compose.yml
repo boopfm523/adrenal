@@ -1,0 +1,35 @@
+# Add to the production stack with:
+# docker compose -f docker-compose.yml -f deploy/monitoring.compose.yml up -d monitor
+services:
+  monitor:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["python", "-m", "healthcurve.monitor"]
+    environment:
+      HC_ENVIRONMENT: prod
+      HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
+      HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
+      HC_REDIS_URL: redis://redis:6379/0
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
+      HC_CREDENTIAL_KEY_FILE: /run/secrets/credential-keys.json
+      HC_TELEGRAM_ALLOWED_CHAT_ID: ${HC_TELEGRAM_ALLOWED_CHAT_ID:?set HC_TELEGRAM_ALLOWED_CHAT_ID}
+      HC_BACKUP_LOCAL_DIR: /backups
+      HC_REPORT_ARTIFACTS_DIR: /data/reports
+      HC_MONITOR_GARMIN_AGE_LIMIT_H: ${HC_MONITOR_GARMIN_AGE_LIMIT_H:-}
+    volumes:
+      - ${HC_CREDENTIAL_KEY_FILE_HOST:?set HC_CREDENTIAL_KEY_FILE_HOST}:/run/secrets/credential-keys.json:ro
+      - ${HC_BACKUP_LOCAL_DIR:?set HC_BACKUP_LOCAL_DIR}:/backups:ro
+      - ${HC_REPORT_ARTIFACTS_DIR:-./var/reports}:/data/reports:ro
+    networks: [hc-internal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

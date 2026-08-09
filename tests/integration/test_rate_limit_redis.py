@@ -5,6 +5,7 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from healthcurve.operations.rate_limit import RateLimiter, RateLimitExceeded, RateLimitPolicy
+from healthcurve.operations.telemetry import OperationalEvent, OperationalTelemetry
 
 pytestmark = [pytest.mark.slow]
 
@@ -34,3 +35,12 @@ def test_limit_is_shared_and_survives_application_restart(redis_url: str) -> Non
     another_process = RateLimiter(redis_url)
     with pytest.raises(RateLimitExceeded):
         another_process.check("report", "owner-restart-proof", policy)
+
+
+def test_operational_events_are_shared_across_processes(redis_url: str) -> None:
+    writer = OperationalTelemetry(redis_url)
+    writer.record(OperationalEvent.REQUEST_ERROR)
+    writer.record(OperationalEvent.REQUEST_ERROR)
+
+    reader_after_restart = OperationalTelemetry(redis_url)
+    assert reader_after_restart.count(OperationalEvent.REQUEST_ERROR, window_seconds=300) == 2
