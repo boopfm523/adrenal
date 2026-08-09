@@ -131,6 +131,9 @@ class Settings(BaseSettings):
     # --- Time ---
     default_timezone: str = "UTC"
 
+    # --- Durable worker queue (ADR-0004) ---
+    job_poll_interval_s: float = Field(default=2.0, gt=0, le=60)
+
     @model_validator(mode="before")
     @classmethod
     def _empty_string_means_unset(cls, data: Any) -> Any:
