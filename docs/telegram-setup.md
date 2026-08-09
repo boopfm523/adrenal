@@ -66,6 +66,7 @@ While you're still in BotFather, harden the bot:
   injection - Log an emergency injection
   episode - /episode start <trigger> or /episode end
   today - What's recorded today vs your plan
+  edit - Correct a pending draft field
   undo - Cancel the pending draft
   privacy - What this bot stores
   help - Show help
@@ -173,6 +174,12 @@ Message your bot:
 | `Took 15mg hydrocortisone at 7:08, slept badly` | A draft listing a dose *and* a symptom |
 
 Press **Confirm** and check the dose appears in the web app's timeline.
+
+To correct a dose draft, press **Edit** for instructions or send, for example,
+`/edit 1 amount 15`. The supported fields are `amount`, `unit`, `time`, and
+`medication`. The edited values remain a draft until you press **Confirm**; the
+original structured proposal is retained as AI evaluation provenance, while the raw
+message text is still purged when the draft is resolved.
 
 Then test that nothing is recorded without you:
 

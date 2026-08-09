@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.extraction import (
+    BLOCKING_FLAGS,
     CandidateType,
     FlagCode,
     ValidatedCandidate,
@@ -31,10 +32,15 @@ from healthcurve.episodes.models import EmergencyInjectionEvent, EpisodeStatus, 
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import DiaryEvent, SymptomEvent
-from healthcurve.events.timekeeping import from_instant, resolve_event_time
+from healthcurve.events.timekeeping import (
+    AmbiguousLocalTimeError,
+    NonExistentLocalTimeError,
+    from_instant,
+    resolve_event_time,
+)
 from healthcurve.identity.models import Owner
 from healthcurve.medications import service as meds
-from healthcurve.medications.models import DoseCategory, DoseEvent, Medication, Route
+from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 
 #: A draft the owner never answers is purged rather than left to be confirmed days
 #: later against a time nobody remembers.
@@ -55,6 +61,7 @@ Commands (these always work, even if the language model is offline):
 /episode start <trigger> - open a stress episode
 /episode end - close the open episode
 /today - what's recorded today vs your plan
+/edit <number> <field> <value> - correct amount, unit, time, or medication
 /undo - cancel the pending draft
 /privacy - what this bot stores
 /help - this message
@@ -137,6 +144,8 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
             return _cmd_episode(session, owner, args, now=now)
         case "today":
             return _cmd_today(session, owner, now=now)
+        case "edit":
+            return _cmd_edit(session, owner, args, now=now)
         case "undo":
             return _cmd_undo(session, owner)
         case _:
@@ -356,6 +365,92 @@ def _cmd_undo(session: Session, owner: Owner) -> Reply:
     return Reply("Cancelled. Nothing was recorded.")
 
 
+def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = "Usage: /edit <number> <amount|unit|time|medication> <value>"
+    if len(args) < 3 or not args[0].isdigit():
+        return Reply(usage)
+    draft = _pending_draft(session, owner.id)
+    if draft is None:
+        return Reply("There is no pending draft to edit.")
+    candidates = [ValidatedCandidate.model_validate(item) for item in draft.candidates]
+    index = int(args[0]) - 1
+    if index < 0 or index >= len(candidates):
+        return Reply(f"That draft has {len(candidates)} item(s). {usage}")
+    candidate = candidates[index]
+    if candidate.type is not CandidateType.DOSE:
+        return Reply("Only dose amount, unit, time, and medication can be edited here.")
+
+    field = args[1].lower()
+    value = " ".join(args[2:]).strip()
+    flags = list(candidate.flags)
+    changes: dict[str, object] = {}
+    if field == "amount":
+        try:
+            amount = Decimal(value)
+        except InvalidOperation:
+            return Reply("I couldn't read that amount. Example: /edit 1 amount 15")
+        if amount <= 0 or amount > 500:
+            return Reply("That amount is outside the accepted range (greater than 0, at most 500).")
+        changes["amount"] = amount
+        _remove_flags(
+            flags,
+            FlagCode.MISSING_AMOUNT,
+            FlagCode.UNPARSEABLE_AMOUNT,
+            FlagCode.IMPLAUSIBLE_AMOUNT,
+        )
+    elif field == "unit":
+        try:
+            changes["unit"] = DoseUnit(value.lower()).value
+        except ValueError:
+            return Reply("Unit must be one of: mg, mcg, ml, tablet.")
+        _remove_flags(flags, FlagCode.MISSING_UNIT)
+    elif field == "medication":
+        medication = meds.find_medication_by_name(session, owner.id, value)
+        if medication is None:
+            return Reply(f"I don't know '{value}'. Choose a medication already in your record.")
+        changes.update(medication_id=medication.id, medication_name=medication.name)
+        _remove_flags(flags, FlagCode.UNKNOWN_MEDICATION)
+    elif field == "time":
+        local = _parse_time_token(value, _local_now(owner, now))
+        if local is None:
+            return Reply("I couldn't read that time. Use 24-hour HH:MM, e.g. /edit 1 time 07:05")
+        try:
+            resolved = resolve_event_time(local, owner.default_timezone)
+        except AmbiguousLocalTimeError:
+            return Reply("That time happened twice when the clocks changed; use the web editor.")
+        except NonExistentLocalTimeError:
+            return Reply("That time did not exist when the clocks changed; choose another time.")
+        if resolved.occurred_at > now + timedelta(minutes=10):
+            return Reply("That time resolves into the future; choose the time the event happened.")
+        changes["local_time"] = local
+        _remove_flags(
+            flags,
+            FlagCode.MISSING_TIME,
+            FlagCode.ASSUMED_TIME,
+            FlagCode.UNPARSEABLE_TIME,
+            FlagCode.AMBIGUOUS_TIME,
+            FlagCode.NONEXISTENT_TIME,
+            FlagCode.FUTURE_TIME,
+        )
+    else:
+        return Reply(usage)
+
+    changes["flags"] = flags
+    changes["is_actionable"] = not bool(BLOCKING_FLAGS & set(flags))
+    edited = ValidatedCandidate.model_validate({**candidate.model_dump(mode="python"), **changes})
+    if draft.original_candidates is None:
+        draft.original_candidates = [dict(item) for item in draft.candidates]
+    candidates[index] = edited
+    draft.candidates = [item.model_dump(mode="json") for item in candidates]
+    draft.state = DraftState.EDITED
+    return _draft_reply(draft, candidates, edited=True)
+
+
+def _remove_flags(flags: list[FlagCode], *removed: FlagCode) -> None:
+    blocked = set(removed)
+    flags[:] = [flag for flag in flags if flag not in blocked]
+
+
 # ---------------------------------------------------------------------------
 # Free text -> draft
 # ---------------------------------------------------------------------------
@@ -471,8 +566,10 @@ _FLAG_EXPLANATIONS: Final[dict[FlagCode, str]] = {
 }
 
 
-def _draft_reply(draft: ExtractionDraft, candidates: list[ValidatedCandidate]) -> Reply:
-    lines = ["I read this as:", ""]
+def _draft_reply(
+    draft: ExtractionDraft, candidates: list[ValidatedCandidate], *, edited: bool = False
+) -> Reply:
+    lines = ["Edited draft:" if edited else "I read this as:", ""]
     for index, candidate in enumerate(candidates, start=1):
         lines.append(f"{index}. {_describe(candidate)}")
         for flag in candidate.flags:
@@ -483,7 +580,7 @@ def _draft_reply(draft: ExtractionDraft, candidates: list[ValidatedCandidate]) -
     if blocked:
         lines.append(
             "Some of these need fixing before I can record them. "
-            "Reply with a correction, or /undo to cancel."
+            "Use /edit <number> <field> <value>, or /undo to cancel."
         )
     else:
         lines.append("Nothing is recorded yet. Confirm to save it.")
@@ -492,16 +589,36 @@ def _draft_reply(draft: ExtractionDraft, candidates: list[ValidatedCandidate]) -
         "inline_keyboard": [
             [
                 {"text": "Confirm", "callback_data": f"confirm:{draft.id}"},
+                {"text": "Edit", "callback_data": f"edit:{draft.id}"},
                 {"text": "Cancel", "callback_data": f"cancel:{draft.id}"},
             ]
         ]
     }
     if blocked:
         keyboard = {
-            "inline_keyboard": [[{"text": "Cancel", "callback_data": f"cancel:{draft.id}"}]]
+            "inline_keyboard": [
+                [
+                    {"text": "Edit", "callback_data": f"edit:{draft.id}"},
+                    {"text": "Cancel", "callback_data": f"cancel:{draft.id}"},
+                ]
+            ]
         }
 
     return Reply("\n".join(lines), reply_markup=keyboard, draft_id=draft.id)
+
+
+def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
+    draft = session.get(ExtractionDraft, draft_id)
+    if draft is None or draft.owner_id != owner.id or not draft.is_pending:
+        return Reply("I can't find an editable pending draft.")
+    candidates = [ValidatedCandidate.model_validate(item) for item in draft.candidates]
+    reply = _draft_reply(draft, candidates, edited=draft.state is DraftState.EDITED)
+    reply.text += (
+        "\n\nCorrect one field with:\n"
+        "/edit <number> <amount|unit|time|medication> <value>\n"
+        "Example: /edit 1 amount 15"
+    )
+    return reply
 
 
 def _describe(candidate: ValidatedCandidate) -> str:
@@ -551,7 +668,9 @@ def confirm_draft(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
         created.append(str(event.id))
         summaries.append(_describe(candidate))
 
-    draft.state = DraftState.CONFIRMED
+    draft.state = (
+        DraftState.EDITED if draft.original_candidates is not None else DraftState.CONFIRMED
+    )
     draft.resolved_at = datetime.now(UTC)
     draft.created_event_ids = created
     # The structured fact now exists, so the verbatim message is no longer needed (C9).
@@ -645,7 +764,9 @@ def expire_stale_drafts(session: Session, *, now: datetime | None = None) -> int
     cutoff = now - DRAFT_TTL
     stale = session.scalars(
         select(ExtractionDraft).where(
-            ExtractionDraft.state == DraftState.PENDING, ExtractionDraft.created_at < cutoff
+            ExtractionDraft.state.in_((DraftState.PENDING, DraftState.EDITED)),
+            ExtractionDraft.resolved_at.is_(None),
+            ExtractionDraft.created_at < cutoff,
         )
     ).all()
     for draft in stale:
@@ -663,7 +784,11 @@ def expire_stale_drafts(session: Session, *, now: datetime | None = None) -> int
 def _pending_draft(session: Session, owner_id: uuid.UUID) -> ExtractionDraft | None:
     return session.scalar(
         select(ExtractionDraft)
-        .where(ExtractionDraft.owner_id == owner_id, ExtractionDraft.state == DraftState.PENDING)
+        .where(
+            ExtractionDraft.owner_id == owner_id,
+            ExtractionDraft.state.in_((DraftState.PENDING, DraftState.EDITED)),
+            ExtractionDraft.resolved_at.is_(None),
+        )
         .order_by(ExtractionDraft.created_at.desc())
         .limit(1)
     )

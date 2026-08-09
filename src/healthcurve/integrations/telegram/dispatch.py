@@ -111,7 +111,7 @@ def _handle_callback(
     callback: dict[str, Any],
     client: TelegramClient,
 ) -> None:
-    """A Confirm or Cancel button press."""
+    """A Confirm, Edit, or Cancel button press."""
     data = callback.get("data") or ""
     query_id = callback.get("id")
     chat_id = ((callback.get("message") or {}).get("chat") or {}).get("id")
@@ -130,6 +130,8 @@ def _handle_callback(
             reply = handlers.confirm_draft(session, owner, draft_id)
         case "cancel":
             reply = handlers.cancel_draft(session, owner, draft_id)
+        case "edit":
+            reply = handlers.draft_edit_help(session, owner, draft_id)
         case _:
             if query_id:
                 client.answer_callback_query(query_id, "Unknown action.")
@@ -139,7 +141,7 @@ def _handle_callback(
         client.answer_callback_query(query_id)
     if chat_id and message_id:
         # Replace the buttons so a draft cannot be confirmed twice by tapping again.
-        client.edit_message_text(chat_id, message_id, reply.text)
+        client.edit_message_text(chat_id, message_id, reply.text, reply_markup=reply.reply_markup)
     elif chat_id:
         client.send_message(chat_id, reply.text)
 

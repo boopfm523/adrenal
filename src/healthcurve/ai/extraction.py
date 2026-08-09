@@ -188,6 +188,20 @@ class FlagCode(StrEnum):
     PROMPT_INJECTION_SUSPECTED = "prompt_injection_suspected"
 
 
+BLOCKING_FLAGS: Final[frozenset[FlagCode]] = frozenset(
+    {
+        FlagCode.NEGATED,
+        FlagCode.HYPOTHETICAL,
+        FlagCode.UNKNOWN_MEDICATION,
+        FlagCode.UNPARSEABLE_AMOUNT,
+        FlagCode.IMPLAUSIBLE_AMOUNT,
+        FlagCode.UNPARSEABLE_TIME,
+        FlagCode.NONEXISTENT_TIME,
+        FlagCode.FUTURE_TIME,
+    }
+)
+
+
 class ValidatedCandidate(BaseModel):
     """A candidate after deterministic checks. Still not a fact."""
 
@@ -388,17 +402,6 @@ def _validate_candidate(
     ):
         flags.append(FlagCode.POSSIBLE_DUPLICATE)
 
-    blocking = {
-        FlagCode.NEGATED,
-        FlagCode.HYPOTHETICAL,
-        FlagCode.UNKNOWN_MEDICATION,
-        FlagCode.UNPARSEABLE_AMOUNT,
-        FlagCode.IMPLAUSIBLE_AMOUNT,
-        FlagCode.UNPARSEABLE_TIME,
-        FlagCode.NONEXISTENT_TIME,
-        FlagCode.FUTURE_TIME,
-    }
-
     return ValidatedCandidate(
         type=candidate.type,
         medication_id=medication.id if medication else None,
@@ -413,7 +416,7 @@ def _validate_candidate(
         timezone=timezone,
         confidence=candidate.confidence,
         flags=flags,
-        is_actionable=not (blocking & set(flags)),
+        is_actionable=not (BLOCKING_FLAGS & set(flags)),
     )
 
 

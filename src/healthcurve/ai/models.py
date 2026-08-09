@@ -50,6 +50,9 @@ class ExtractionDraft(AIBase):
     raw_text: Mapped[str | None] = mapped_column(Text)
 
     candidates: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    #: First model/command proposal, captured before the owner's first edit. This is
+    #: evaluation provenance, never a fact and never used for confirmation.
+    original_candidates: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB)
     state: Mapped[DraftState] = mapped_column(
         StrEnumType(DraftState, 16), nullable=False, default=DraftState.PENDING
     )
@@ -76,7 +79,7 @@ class ExtractionDraft(AIBase):
 
     @property
     def is_pending(self) -> bool:
-        return self.state is DraftState.PENDING
+        return self.state in {DraftState.PENDING, DraftState.EDITED} and self.resolved_at is None
 
     def purge_raw_text(self) -> None:
         """Drop the verbatim message once the structured fact exists (C9 retention)."""
