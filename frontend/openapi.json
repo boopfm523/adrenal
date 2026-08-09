@@ -5782,6 +5782,40 @@
           },
           {
             "in": "query",
+            "name": "local_date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Local Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Local Date To"
+            }
+          },
+          {
+            "in": "query",
             "name": "include_sensitive",
             "required": false,
             "schema": {

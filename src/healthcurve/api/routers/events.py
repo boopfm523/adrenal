@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -255,6 +256,8 @@ def timeline(
     date_to: datetime | None = None,
     types: str | None = Query(default=None, description="Comma-separated event types"),
     timezone: str | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
     include_sensitive: bool = False,
     limit: int = Query(default=200, ge=1, le=1000),
 ):
@@ -264,6 +267,17 @@ def timeline(
     reader can tell a confirmed manual entry from a provider import at a glance
     (SAFE-02, plan section 10).
     """
+    zone_name = timezone or owner.default_timezone
+    try:
+        zone = ZoneInfo(zone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(status_code=422, detail="invalid timezone") from exc
+    if local_date_from is not None:
+        date_from = datetime.combine(local_date_from, time.min, tzinfo=zone)
+    if local_date_to is not None:
+        date_to = datetime.combine(local_date_to + timedelta(days=1), time.min, tzinfo=zone)
+    date_to_is_exclusive = local_date_to is not None
+
     wanted = {t.strip() for t in types.split(",")} if types else None
     items: list[TimelineItem] = []
 
@@ -275,7 +289,11 @@ def timeline(
         if date_from:
             query = query.where(model.occurred_at >= date_from)
         if date_to:
-            query = query.where(model.occurred_at <= date_to)
+            query = query.where(
+                model.occurred_at < date_to
+                if date_to_is_exclusive
+                else model.occurred_at <= date_to
+            )
 
         rows = list(session.scalars(query.order_by(model.occurred_at.desc()).limit(limit)))
         for row in events.current_only(session, model, rows):
@@ -297,7 +315,7 @@ def timeline(
     items.sort(key=lambda i: i.time.occurred_at, reverse=True)
     return TimelinePage(
         items=items[:limit],
-        timezone=timezone or owner.default_timezone,
+        timezone=zone_name,
         next_cursor=None,
     )
 

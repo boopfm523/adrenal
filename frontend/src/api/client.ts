@@ -8,6 +8,7 @@ export type PlanComparisonDay = components["schemas"]["PlanComparisonDay"];
 export type Episode = components["schemas"]["EpisodeOut"];
 export type Dose = components["schemas"]["DoseOut"];
 export type DoseInput = components["schemas"]["DoseIn"];
+export type Timeline = components["schemas"]["TimelinePage"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -113,4 +114,21 @@ export function recordDose(payload: DoseInput): Promise<Dose> {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export interface TimelineFilters {
+  type: string;
+  dateFrom: string;
+  dateTo: string;
+  timezone: string;
+  includeSensitive: boolean;
+}
+
+export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
+  const params = new URLSearchParams({ timezone: filters.timezone });
+  if (filters.type !== "") params.set("types", filters.type);
+  if (filters.dateFrom !== "") params.set("local_date_from", filters.dateFrom);
+  if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
+  if (filters.includeSensitive) params.set("include_sensitive", "true");
+  return apiRequest<Timeline>(`/timeline?${params.toString()}`);
 }

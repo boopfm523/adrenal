@@ -648,6 +648,30 @@ def test_timeline_carries_a_category_per_item(
     assert all(item["category"] in {"fact", "plan", "ai"} for item in items)
 
 
+def test_timeline_local_date_filter_uses_the_requested_timezone(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    _a_dose(client, logged_in)
+    included = client.get(
+        "/api/v1/timeline",
+        params={
+            "local_date_from": "2026-05-01",
+            "local_date_to": "2026-05-01",
+            "timezone": "Europe/London",
+        },
+    ).json()
+    excluded = client.get(
+        "/api/v1/timeline",
+        params={
+            "local_date_from": "2026-05-02",
+            "local_date_to": "2026-05-02",
+            "timezone": "Europe/London",
+        },
+    ).json()
+    assert included["items"]
+    assert excluded["items"] == []
+
+
 # ---------------------------------------------------------------------------
 # SAFE-16: approval is a human act with provenance
 # ---------------------------------------------------------------------------

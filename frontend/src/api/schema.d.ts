@@ -3102,6 +3102,8 @@ export interface operations {
                 /** @description Comma-separated event types */
                 types?: string | null;
                 timezone?: string | null;
+                local_date_from?: string | null;
+                local_date_to?: string | null;
                 include_sensitive?: boolean;
                 limit?: number;
             };

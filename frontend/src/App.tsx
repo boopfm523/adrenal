@@ -5,9 +5,9 @@ import { AppLayout } from "./components/AppLayout";
 import { PlaceholderPage, NotFoundPage } from "./pages/FoundationPages";
 import { LoginPage } from "./pages/LoginPage";
 import { TodayPage } from "./pages/TodayPage";
+import { TimelinePage } from "./pages/TimelinePage";
 
 const placeholders = [
-  ["/timeline", "Timeline", "Review the chronological record with provenance and correction history."],
   ["/plan", "Plan & doses", "Review physician-approved plans separately from actual recorded doses."],
   ["/episodes", "Episodes", "Review stress, up-dose, and emergency-injection episodes without causal claims."],
   ["/symptoms-diary", "Symptoms & diary", "Review subjective symptoms and private life events."],
@@ -26,6 +26,7 @@ export function App(): React.JSX.Element {
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/today" replace />} />
           <Route path="/today" element={<TodayPage />} />
+          <Route path="/timeline" element={<TimelinePage />} />
           {placeholders.map(([path, title, description]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} description={description} />} />
           ))}
