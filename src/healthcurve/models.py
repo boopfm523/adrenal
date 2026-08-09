@@ -38,6 +38,7 @@ from healthcurve.medications.models import (
 )
 from healthcurve.operations.audit import AuditEntry
 from healthcurve.operations.jobs import Job
+from healthcurve.reports.models import ReportSnapshot
 
 __all__ = [
     "AIAnalysis",
@@ -63,6 +64,7 @@ __all__ = [
     "Owner",
     "RegimenDoseSlot",
     "RegimenVersion",
+    "ReportSnapshot",
     "StressEpisode",
     "SymptomEvent",
     "TelegramUpdate",
@@ -70,4 +72,4 @@ __all__ = [
 
 #: Every table the application owns. Asserted in tests so a new model that is not
 #: imported here fails the build rather than silently vanishing from migrations.
-EXPECTED_TABLE_COUNT = 25
+EXPECTED_TABLE_COUNT = 26

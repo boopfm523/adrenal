@@ -21,6 +21,7 @@ from healthcurve.labs.documents import DocumentLayout, mark_deleted
 from healthcurve.labs.models import LabDocument, LabPanel
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
+from healthcurve.reports.models import ReportSnapshot
 
 
 class DeletionError(RuntimeError):
@@ -144,7 +145,7 @@ def delete_account(
 
     # Children and records that restrict owner deletion first. Database cascades remove
     # lab results, regimen children, and Garmin facts from their owning parent rows.
-    for model in (AIAnalysis, ExtractionDraft, LabPanel, LabDocument):
+    for model in (AIAnalysis, ExtractionDraft, LabPanel, LabDocument, ReportSnapshot):
         session.execute(delete(model).where(model.owner_id == owner_id))
     session.execute(delete(GarminImportBatch).where(GarminImportBatch.owner_id == owner_id))
     for model in (EmergencyInjectionEvent, DoseEvent, SymptomEvent, DiaryEvent, LifeEvent):
