@@ -1,8 +1,8 @@
 # HealthCurve UI Information Architecture
 
-**Status:** Phase 0 implementation guide  
+**Status:** Phase 0 implementation guide
 **Scope:** navigation, page purpose, primary actions, state treatment, category labeling,
-and accessibility baseline.  
+and accessibility baseline.
 **Excludes:** visual design system, component implementation, and the unresolved access
 policy for the emergency page (`hc-h0e`).
 
