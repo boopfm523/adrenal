@@ -80,6 +80,7 @@ class SourceType(StrEnum):
     WEB = "web"  # typed into the web application by the owner
     TELEGRAM = "telegram"  # confirmed from a Telegram capture draft
     CSV_IMPORT = "csv_import"  # reviewed spreadsheet import
+    FILE_IMPORT = "file_import"  # confirmed local FIT/archive import
     PROVIDER = "provider"  # pulled from an integration (Garmin, weather)
     MIGRATION = "migration"  # created by a data migration, with provenance
 

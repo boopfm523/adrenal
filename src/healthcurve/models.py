@@ -21,6 +21,12 @@ from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.integrations.credentials import IntegrationCredential
+from healthcurve.integrations.garmin.models import (
+    GarminActivityEvent,
+    GarminImportBatch,
+    GarminMetricEvent,
+    GarminSleepEvent,
+)
 from healthcurve.integrations.telegram.models import TelegramUpdate
 from healthcurve.medications.models import (
     ApprovedInstruction,
@@ -42,6 +48,10 @@ __all__ = [
     "DoseEvent",
     "EmergencyInjectionEvent",
     "ExtractionDraft",
+    "GarminActivityEvent",
+    "GarminImportBatch",
+    "GarminMetricEvent",
+    "GarminSleepEvent",
     "IntegrationCredential",
     "Job",
     "LifeEvent",
@@ -56,4 +66,4 @@ __all__ = [
 
 #: Every table the application owns. Asserted in tests so a new model that is not
 #: imported here fails the build rather than silently vanishing from migrations.
-EXPECTED_TABLE_COUNT = 18
+EXPECTED_TABLE_COUNT = 22

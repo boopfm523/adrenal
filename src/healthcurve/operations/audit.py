@@ -44,6 +44,7 @@ class AuditAction(StrEnum):
     INTEGRATION_CREDENTIAL_UPDATED = "integration_credential_updated"
     INTEGRATION_CREDENTIAL_ROTATED = "integration_credential_rotated"
     INTEGRATION_DISCONNECTED = "integration_disconnected"
+    INTEGRATION_IMPORT_CONFIRMED = "integration_import_confirmed"
 
     AI_ANALYSIS_GENERATED = "ai_analysis_generated"
     AI_ANALYSIS_DELETED = "ai_analysis_deleted"

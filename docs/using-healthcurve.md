@@ -18,6 +18,7 @@ server-rendered page you can open in a browser.
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |
+| Import an exported Garmin FIT/CSV/ZIP | Preview then confirm through the API; see [Garmin import](garmin-import.md) |
 | Check encrypted backups | `python -m healthcurve.backup_status` in `backup-worker` |
 | Answer a question the API can't | SQL — see [Analytics](#analytics) |
 | Show someone what to do in a crisis | `http://localhost:8080/emergency` |
@@ -244,7 +245,8 @@ So you don't go looking for it:
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
 - **No lab results.** PDF upload and lab storage are designed but not built.
-- **No Garmin or weather.** Not started.
+- **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
+  implemented; direct Garmin API access remains gated by vendor approval.
 - **No record/account deletion.** Backup retention exists; application-data deletion
   and account closure are tracked separately.
 - **No rate limiting or MFA.** Integration token encryption and rotation are

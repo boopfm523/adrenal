@@ -22,6 +22,7 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "python-multipart>=0.0.32",
     "cryptography==50.0.0",
+    "garmin-fit-sdk==21.208.0",
 ]
 
 [dependency-groups]

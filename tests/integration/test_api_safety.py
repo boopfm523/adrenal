@@ -17,12 +17,20 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
 from healthcurve.config import Settings, get_settings
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
+from healthcurve.integrations.garmin.models import (
+    GarminActivityEvent,
+    GarminImportBatch,
+    GarminMetricEvent,
+    GarminSleepEvent,
+)
+from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -156,6 +164,119 @@ def test_state_changing_requests_require_csrf(
 
 def test_reads_do_not_require_csrf(client: TestClient, logged_in: dict[str, str]) -> None:
     assert client.get("/api/v1/medications").status_code == 200
+
+
+def test_garmin_preview_then_confirm_is_idempotent_and_preserves_provenance(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    fit = synthetic_fit()
+    upload = {"file": ("synthetic.fit", fit, "application/vnd.ant.fit")}
+
+    with Session(engine) as session:
+        before = session.scalar(select(func.count()).select_from(GarminImportBatch))
+
+    preview = client.post(
+        "/api/v1/integrations/garmin/imports/preview",
+        files=upload,
+        data={"timezone": "Europe/London"},
+        headers=logged_in,
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["creates_facts"] is False
+    assert {"activity", "heart_rate", "sleep", "sleep_score"} <= set(body["observed_metrics"])
+    assert "stress" in body["missing_metrics"]
+
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == before
+        assert session.scalar(select(func.count()).select_from(GarminMetricEvent)) == 0
+
+    mismatch = client.post(
+        "/api/v1/integrations/garmin/imports/confirm",
+        files=upload,
+        data={"timezone": "Europe/London", "expected_sha256": "0" * 64},
+        headers=logged_in,
+    )
+    assert mismatch.status_code == 409
+    assert mismatch.json()["detail"]["code"] == "preview_checksum_mismatch"
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == before
+
+    confirm_data = {
+        "timezone": "Europe/London",
+        "expected_sha256": body["source_sha256"],
+    }
+    first = client.post(
+        "/api/v1/integrations/garmin/imports/confirm",
+        files=upload,
+        data=confirm_data,
+        headers=logged_in,
+    )
+    assert first.status_code == 200, first.text
+    assert first.json() == {
+        "batch_id": first.json()["batch_id"],
+        "source_sha256": body["source_sha256"],
+        "created": True,
+        "metric_count": 4,
+        "sleep_count": 1,
+        "activity_count": 1,
+    }
+
+    second = client.post(
+        "/api/v1/integrations/garmin/imports/confirm",
+        files=upload,
+        data=confirm_data,
+        headers=logged_in,
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["created"] is False
+    assert second.json()["batch_id"] == first.json()["batch_id"]
+
+    with Session(engine) as session:
+        batch = session.scalar(
+            select(GarminImportBatch).where(
+                GarminImportBatch.source_sha256 == body["source_sha256"]
+            )
+        )
+        assert batch is not None
+        assert batch.source_payload == fit
+        assert batch.source_sha256 == body["source_sha256"]
+        assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == 1
+        assert session.scalar(select(func.count()).select_from(GarminMetricEvent)) == 4
+        assert session.scalar(select(func.count()).select_from(GarminSleepEvent)) == 1
+        assert session.scalar(select(func.count()).select_from(GarminActivityEvent)) == 1
+        metric = session.scalar(select(GarminMetricEvent))
+        assert metric is not None
+        assert metric.garmin_manufacturer == "garmin"
+        assert metric.garmin_device_serial_hash
+        assert metric.source_revision
+
+    csv = synthetic_activity_csv()
+    csv_upload = {"file": ("activities.csv", csv, "text/csv")}
+    csv_preview = client.post(
+        "/api/v1/integrations/garmin/imports/preview",
+        files=csv_upload,
+        data={"timezone": "Europe/London"},
+        headers=logged_in,
+    )
+    assert csv_preview.status_code == 200, csv_preview.text
+    assert csv_preview.json()["observed_metrics"] == ["activity"]
+    csv_confirm = client.post(
+        "/api/v1/integrations/garmin/imports/confirm",
+        files=csv_upload,
+        data={
+            "timezone": "Europe/London",
+            "expected_sha256": csv_preview.json()["source_sha256"],
+        },
+        headers=logged_in,
+    )
+    assert csv_confirm.status_code == 200, csv_confirm.text
+    assert csv_confirm.json()["created"] is True
+    assert csv_confirm.json()["activity_count"] == 1
+
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == 2
+        assert session.scalar(select(func.count()).select_from(GarminActivityEvent)) == 2
 
 
 # ---------------------------------------------------------------------------

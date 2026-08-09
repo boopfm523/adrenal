@@ -20,6 +20,7 @@ from healthcurve.api.routers import (
     episodes,
     events,
     exports,
+    garmin,
     medications,
     telegram,
 )
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         events.router,
         episodes.router,
         exports.router,
+        garmin.router,
         telegram.router,
     ):
         app.include_router(router, prefix=API_PREFIX)

@@ -9,6 +9,7 @@ rule 4).
 from __future__ import annotations
 
 import json
+from base64 import b64encode
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,6 +20,12 @@ from sqlalchemy import select
 from healthcurve.api.deps import CurrentOwner, DbSession
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.integrations.garmin.models import (
+    GarminActivityEvent,
+    GarminImportBatch,
+    GarminMetricEvent,
+    GarminSleepEvent,
+)
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 
@@ -39,6 +46,12 @@ def _rows(session: DbSession, model: type, owner_id: Any) -> list[dict[str, Any]
 def _jsonable(value: Any) -> Any:
     if value is None or isinstance(value, str | int | float | bool):
         return value
+    if isinstance(value, bytes):
+        return {"encoding": "base64", "data": b64encode(value).decode("ascii")}
+    if isinstance(value, list | tuple):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
     return str(value)
 
 
@@ -77,6 +90,10 @@ def create_export(
             "life_events": _rows(session, LifeEvent, owner.id),
             "stress_episodes": _rows(session, StressEpisode, owner.id),
             "emergency_injections": _rows(session, EmergencyInjectionEvent, owner.id),
+            "garmin_import_batches": _rows(session, GarminImportBatch, owner.id),
+            "garmin_metrics": _rows(session, GarminMetricEvent, owner.id),
+            "garmin_sleep": _rows(session, GarminSleepEvent, owner.id),
+            "garmin_activities": _rows(session, GarminActivityEvent, owner.id),
         },
         "ai": {} if not include_ai else {"note": "AI analysis included at your request"},
     }
