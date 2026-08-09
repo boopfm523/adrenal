@@ -17,6 +17,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0007](0007-tailscale-only-hosting.md) | Tailscale-only hosting with no public edge | Accepted |
 | [0008](0008-telegram-long-polling.md) | Telegram long polling as the default transport | Accepted |
 | [0009](0009-two-database-roles-per-operation.md) | Two database roles, chosen per operation | Accepted |
+| [0010](0010-local-document-ingestion-and-models.md) | Deterministic-first local document ingestion and task-specific models | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

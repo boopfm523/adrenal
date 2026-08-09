@@ -73,15 +73,17 @@ hosting ADR should specify instead of ACME over port 80.
 Issues: **ADR: Tailscale-only hosting** and **ADR: Telegram long polling**, then the
 long-polling worker.
 
-### 2. PDF lab results need models you do not have
+### 2. PDF lab results need a deterministic-first pipeline
 
-See the next section — this is the largest of the three decisions.
+ADR-0010 resolves the extractor, OCR, vision fallback, retention, and hardening
+decisions. See the next section for the build order.
 
-### 3. The extraction model is probably wrong
+### 3. The extraction model has been replaced by decision
 
 `HC_OLLAMA_MODEL` defaults to `qwen3-coder`. That is a **code** model, and it is
 **text-only**. It cannot read a PDF page image at all, and a general instruct model
-will extract natural language better. Both belong in the same ADR as the PDF decision.
+fits the runtime task. ADR-0010 selects `qwen3:30b` for text and `qwen3-vl:30b` for the
+vision fallback; `hc-lfr` tracks applying and proving that runtime change.
 
 ---
 
@@ -106,24 +108,20 @@ on clean lab printouts is good; on a phone photo of a crumpled page it is not.
 across a page, or footnoted reference ranges defeat both of the above. A
 vision-language model reads the page image and returns structured rows.
 
-### Models to pull
+### Models selected by ADR-0010
 
 ```bash
-# Text extraction and analysis -- replaces qwen3-coder for this job
-docker compose exec ollama ollama pull qwen3:8b
+# General text extraction -- replaces qwen3-coder for the runtime
+ollama pull qwen3:30b
 
 # Vision, for tier 3
-docker compose exec ollama ollama pull qwen2.5vl:7b
+ollama pull qwen3-vl:30b
 ```
 
-Rough disk cost: 5–6 GB each at these sizes, more for larger variants. **Verify the
-exact tags before relying on them** — model names on Ollama change, and my knowledge
-of the library has a cutoff:
-
-```bash
-docker compose exec ollama ollama list          # what you already have
-# and check https://ollama.com/library for current vision-capable tags
-```
+Current official package sizes are approximately 19 GB and 20 GB respectively: budget
+39 GB if Ollama cannot reuse blobs. Record resolved digests because tags can move. The
+models run sequentially, not concurrently. See the ADR for the evidence, evaluation
+gate, parser sandbox, source-retention policy, and exact safety boundary.
 
 On a Mac, note that Ollama in Docker has no GPU access — it runs on CPU and will be
 slow. Running Ollama natively on the host and pointing the app at it over the Tailscale
