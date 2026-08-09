@@ -9,7 +9,7 @@ help: ## Show this help
 
 setup: ## Install the pinned runtime and dependencies (ADR-0006)
 	uv python install 3.13
-	uv sync --dev
+	uv sync --dev --extra documents
 	cd frontend && npm ci --ignore-scripts
 	uv run pre-commit install
 
@@ -43,6 +43,7 @@ audit: ## Dependency vulnerability scan (threat model T6)
 	@# Audit the lockfile, not the installed environment: pip-audit cannot resolve
 	@# the editable local package, and the lock is what CI and production install.
 	uv export --format requirements-txt --no-emit-project --no-hashes --all-groups \
+		--all-extras \
 		-o .audit-requirements.txt
 	uv run pip-audit --strict -r .audit-requirements.txt
 	@rm -f .audit-requirements.txt

@@ -19,9 +19,12 @@ from typing import BinaryIO, Final
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from healthcurve.labs.pdf_schemas import EmbeddedExtractionResult
+
 MAX_PDF_BYTES: Final = 25 * 1024 * 1024
 MAX_PDF_PAGES: Final = 100
 MAX_VALIDATION_JSON_BYTES: Final = 10 * 1024 * 1024
+MAX_EXTRACTION_JSON_BYTES: Final = 8 * 1024 * 1024
 PDF_MEDIA_TYPE: Final = "application/pdf"
 _COPY_CHUNK: Final = 64 * 1024
 _SAFE_NAME = re.compile(r"[^\w .()\[\]-]+", re.UNICODE)
@@ -80,6 +83,10 @@ class DocumentLayout:
     def tombstones(self) -> Path:
         return self.root / "tombstones"
 
+    @property
+    def extractions(self) -> Path:
+        return self.root / "extractions"
+
     def prepare(self) -> None:
         for directory in (
             self.root,
@@ -88,12 +95,20 @@ class DocumentLayout:
             self.stored,
             self.results,
             self.tombstones,
+            self.extractions,
         ):
             directory.mkdir(mode=0o700, parents=True, exist_ok=True)
             directory.chmod(0o700)
 
     def path(self, area: str, document_id: uuid.UUID, suffix: str = ".pdf") -> Path:
-        if area not in {"quarantine", "work", "stored", "results", "tombstones"}:
+        if area not in {
+            "quarantine",
+            "work",
+            "stored",
+            "results",
+            "tombstones",
+            "extractions",
+        }:
             raise DocumentStorageError("document_storage_area_invalid")
         return getattr(self, area) / f"{document_id}{suffix}"
 
@@ -192,6 +207,41 @@ def write_validation_result(layout: DocumentLayout, result: ValidationResult) ->
         partial.unlink(missing_ok=True)
 
 
+def load_extraction_result(
+    layout: DocumentLayout, document_id: uuid.UUID
+) -> EmbeddedExtractionResult | None:
+    path = layout.path("extractions", document_id, ".json")
+    if not path.exists():
+        return None
+    try:
+        if path.stat().st_size > MAX_EXTRACTION_JSON_BYTES:
+            raise DocumentStorageError("document_extraction_result_invalid")
+        result = EmbeddedExtractionResult.model_validate_json(path.read_bytes())
+    except (OSError, ValidationError, ValueError) as exc:
+        raise DocumentStorageError("document_extraction_result_invalid") from exc
+    if result.document_id != document_id:
+        raise DocumentStorageError("document_extraction_result_invalid")
+    return result
+
+
+def write_extraction_result(layout: DocumentLayout, result: EmbeddedExtractionResult) -> None:
+    layout.prepare()
+    target = layout.path("extractions", result.document_id, ".json")
+    partial = layout.extractions / f".{result.document_id}.{uuid.uuid4()}.part"
+    payload = result.model_dump_json().encode()
+    if len(payload) > MAX_EXTRACTION_JSON_BYTES:
+        raise DocumentStorageError("document_extraction_result_too_large")
+    descriptor = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as destination:
+            destination.write(payload)
+            destination.flush()
+            os.fsync(destination.fileno())
+        os.replace(partial, target)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
 def mark_deleted(layout: DocumentLayout, document_id: uuid.UUID) -> None:
     """Tombstone before unlinking so an in-flight worker cannot republish the PDF."""
     layout.prepare()
@@ -202,7 +252,10 @@ def mark_deleted(layout: DocumentLayout, document_id: uuid.UUID) -> None:
         layout.path(area, document_id).unlink(missing_ok=True)
     layout.path("quarantine", document_id, ".part").unlink(missing_ok=True)
     layout.path("results", document_id, ".json").unlink(missing_ok=True)
+    layout.path("extractions", document_id, ".json").unlink(missing_ok=True)
     for partial in layout.results.glob(f".{document_id}.*.part"):
+        partial.unlink(missing_ok=True)
+    for partial in layout.extractions.glob(f".{document_id}.*.part"):
         partial.unlink(missing_ok=True)
 
 

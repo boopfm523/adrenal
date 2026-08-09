@@ -4238,6 +4238,67 @@
         ]
       }
     },
+    "/api/v1/labs/documents/{document_id}/extraction": {
+      "get": {
+        "operationId": "get_lab_document_extraction_api_v1_labs_documents__document_id__extraction_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Lab Document Extraction Api V1 Labs Documents  Document Id  Extraction Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lab Document Extraction",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
     "/api/v1/labs/imports/csv/confirm": {
       "post": {
         "operationId": "confirm_csv_route_api_v1_labs_imports_csv_confirm_post",

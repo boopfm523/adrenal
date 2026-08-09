@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hmac
 import uuid
 from datetime import UTC, datetime
@@ -10,9 +11,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, text
 from starlette.concurrency import run_in_threadpool
 
+from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import ApiModel, EventTimeIn
@@ -20,6 +22,7 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.labs.documents import (
     DocumentLayout,
     DocumentStorageError,
+    load_extraction_result,
     load_validation_result,
     mark_deleted,
     store_pdf_upload,
@@ -88,6 +91,79 @@ def _document_payload(document: LabDocument) -> dict[str, Any]:
     }
 
 
+def _reconcile_extraction(
+    session: DbSession,
+    owner: CurrentOwner,
+    document: LabDocument,
+    layout: DocumentLayout,
+) -> ExtractionDraft | None:
+    if document.status is not LabDocumentStatus.STORED:
+        return None
+    try:
+        result = load_extraction_result(layout, document.id)
+    except DocumentStorageError as exc:
+        raise HTTPException(status_code=500, detail={"code": str(exc)}) from exc
+    if result is None:
+        return None
+    if not hmac.compare_digest(result.sha256, document.sha256):
+        raise HTTPException(status_code=500, detail={"code": "extraction_checksum_mismatch"})
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"lab-extraction:{owner.id}:{document.id}"},
+        )
+    existing = session.scalar(
+        select(ExtractionDraft).where(
+            ExtractionDraft.owner_id == owner.id,
+            ExtractionDraft.source == "lab_pdf",
+            ExtractionDraft.provider_message_id == str(document.id),
+        )
+    )
+    if existing is not None:
+        return existing
+    candidates = []
+    for candidate in result.candidates:
+        payload = candidate.model_dump(mode="json")
+        payload.update(
+            {
+                "document_id": str(document.id),
+                "document_sha256": document.sha256,
+                "extractor_name": result.extractor_name,
+                "extractor_version": result.extractor_version,
+                "schema_version": result.schema_version,
+                "adequate": result.adequate,
+            }
+        )
+        candidates.append(payload)
+    draft = ExtractionDraft(
+        owner_id=owner.id,
+        source="lab_pdf",
+        provider_message_id=str(document.id),
+        raw_text=None,
+        candidates=candidates,
+        original_candidates=copy.deepcopy(candidates),
+        state=DraftState.PENDING,
+        model_name=None,
+        model_digest=None,
+        prompt_version="deterministic-no-prompt-v1",
+        schema_version=result.schema_version,
+    )
+    session.add(draft)
+    session.flush([draft])
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=audit.AuditAction.RECORD_CREATED,
+        target_type="lab_extraction_draft",
+        target_id=draft.id,
+        change_summary=(
+            f"tier={result.extraction_tier};parsed={result.parsed_count};"
+            f"unparsed={result.unparsed_count}"
+        ),
+    )
+    return draft
+
+
 @router.post(
     "/documents",
     status_code=status.HTTP_202_ACCEPTED,
@@ -151,8 +227,38 @@ def get_lab_document(
     settings: AppSettings,
 ) -> dict[str, Any]:
     document = _owned_document(session, owner, document_id)
-    _reconcile_document(document, DocumentLayout(settings.uploads_dir))
-    return _document_payload(document)
+    layout = DocumentLayout(settings.uploads_dir)
+    _reconcile_document(document, layout)
+    draft = _reconcile_extraction(session, owner, document, layout)
+    payload = _document_payload(document)
+    payload["extraction_status"] = "draft_ready" if draft is not None else "pending"
+    payload["extraction_draft_id"] = str(draft.id) if draft is not None else None
+    return payload
+
+
+@router.get("/documents/{document_id}/extraction")
+def get_lab_document_extraction(
+    document_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> dict[str, Any]:
+    document = _owned_document(session, owner, document_id)
+    layout = DocumentLayout(settings.uploads_dir)
+    _reconcile_document(document, layout)
+    draft = _reconcile_extraction(session, owner, document, layout)
+    if draft is None:
+        raise HTTPException(status_code=409, detail={"code": "lab_extraction_not_ready"})
+    return {
+        "category": "ai_draft",
+        "draft_id": str(draft.id),
+        "document_id": str(document.id),
+        "state": draft.state.value,
+        "schema_version": draft.schema_version,
+        "prompt_version": draft.prompt_version,
+        "model_name": draft.model_name,
+        "candidates": draft.candidates,
+    }
 
 
 @router.get("/documents/{document_id}/download", response_class=FileResponse)
@@ -197,6 +303,13 @@ def delete_lab_document(
     document = _owned_document(session, owner, document_id)
     if document.status is LabDocumentStatus.DELETED:
         return
+    draft = session.scalar(
+        select(ExtractionDraft).where(
+            ExtractionDraft.owner_id == owner.id,
+            ExtractionDraft.source == "lab_pdf",
+            ExtractionDraft.provider_message_id == str(document.id),
+        )
+    )
     try:
         mark_deleted(DocumentLayout(settings.uploads_dir), document.id)
     except OSError as exc:
@@ -210,6 +323,8 @@ def delete_lab_document(
     document.byte_size = 1
     document.page_count = None
     document.rejection_reason = None
+    if draft is not None:
+        session.delete(draft)
     audit.record(
         session,
         actor=audit.actor_for_owner(owner.id),

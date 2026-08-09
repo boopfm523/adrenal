@@ -24,8 +24,12 @@ from healthcurve.labs.documents import (
     DocumentLayout,
     ValidationResult,
     is_deleted,
+    load_validation_result,
+    write_extraction_result,
     write_validation_result,
 )
+from healthcurve.labs.pdf_extraction import EMBEDDED_EXTRACTOR_VERSION, extract_embedded_text
+from healthcurve.labs.pdf_schemas import EmbeddedExtractionResult, PdfDraftCandidate
 
 QPDF_TIMEOUT_SECONDS: Final = 20.0
 _UNSAFE_PDF_KEYS: Final = frozenset(
@@ -229,13 +233,58 @@ def process_available(
         if layout.path("results", document_id, ".json").exists():
             layout.path("quarantine", document_id).unlink(missing_ok=True)
             layout.path("work", document_id).unlink(missing_ok=True)
+            validation = load_validation_result(layout, document_id)
+            if validation is not None and validation.status == "stored":
+                _extract_if_needed(layout, validation)
             continue
         try:
-            validate_one(layout, document_id, runner=runner)
+            validation = validate_one(layout, document_id, runner=runner)
         except FileNotFoundError:
             continue
+        if validation.status == "stored":
+            _extract_if_needed(layout, validation)
         processed += 1
     return processed
+
+
+def _extract_if_needed(layout: DocumentLayout, validation: ValidationResult) -> None:
+    target = layout.path("extractions", validation.document_id, ".json")
+    if target.exists() or is_deleted(layout, validation.document_id):
+        return
+    source = layout.path("stored", validation.document_id)
+    try:
+        extraction = extract_embedded_text(
+            source,
+            document_id=validation.document_id,
+            sha256=validation.sha256,
+        )
+    except Exception:  # A hostile parser failure becomes visible unparsed evidence.
+        extraction = EmbeddedExtractionResult(
+            document_id=validation.document_id,
+            sha256=validation.sha256,
+            extractor_version=EMBEDDED_EXTRACTOR_VERSION,
+            page_count=validation.page_count or 1,
+            parsed_count=0,
+            unparsed_count=1,
+            adequate=False,
+            candidates=[
+                PdfDraftCandidate(
+                    page_number=1,
+                    row_index=1,
+                    parsed=False,
+                    source_text="",
+                    x0=0,
+                    top=0,
+                    x1=0,
+                    bottom=0,
+                    confidence=0,
+                    flags=["embedded_text_failed"],
+                )
+            ],
+        )
+    if is_deleted(layout, validation.document_id):
+        return
+    write_extraction_result(layout, extraction)
 
 
 def main() -> None:

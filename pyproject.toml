@@ -25,6 +25,11 @@ dependencies = [
     "garmin-fit-sdk==21.208.0",
 ]
 
+[project.optional-dependencies]
+documents = [
+    "pdfplumber==0.11.9",
+]
+
 [dependency-groups]
 dev = [
     "pytest==9.1.1",

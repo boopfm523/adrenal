@@ -24,6 +24,11 @@ COPY migrations ./migrations
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Parser dependencies are installed only into the no-network document image.
+FROM builder AS document-builder
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra documents
+
 # --- runtime ---------------------------------------------------------------
 FROM python:3.13-slim-bookworm AS runtime
 
@@ -55,6 +60,7 @@ CMD ["uvicorn", "healthcurve.app:create_app", "--factory", "--host", "0.0.0.0", 
 # launched with no network, read-only root, dropped capabilities, and bounded resources.
 FROM runtime AS document-runtime
 
+COPY --from=document-builder --chown=10001:10001 /app/.venv /app/.venv
 USER root
 RUN apt-get update \
  && apt-get install -y --no-install-recommends qpdf=11.3.0-1+deb12u1 \

@@ -22,8 +22,9 @@ from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
+from healthcurve.ai.models import ExtractionDraft
 from healthcurve.config import Settings, get_settings
-from healthcurve.document_worker import validate_one
+from healthcurve.document_worker import process_available, validate_one
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.models import (
@@ -35,7 +36,7 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
-from tests.fixtures.pdf import QpdfRunner
+from tests.fixtures.pdf import QpdfRunner, synthetic_text_lab_pdf
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -490,6 +491,49 @@ def test_pdf_upload_rejects_spoofed_content_type_and_signature(
     rejected = client.get(f"/api/v1/labs/documents/{document_id}")
     assert rejected.json()["status"] == "rejected"
     assert rejected.json()["rejection_reason"] == "pdf_structure_invalid"
+
+
+def test_digital_pdf_extraction_creates_only_review_draft_and_keeps_unparsed_rows(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    payload = synthetic_text_lab_pdf()
+    with Session(engine) as session:
+        facts_before = session.scalar(select(func.count()).select_from(LabResult))
+        drafts_before = session.scalar(select(func.count()).select_from(ExtractionDraft))
+        assert facts_before is not None
+        assert drafts_before is not None
+    uploaded = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("synthetic-digital.pdf", payload, "application/pdf")},
+    )
+    assert uploaded.status_code == 202
+    document_id = uuid.UUID(uploaded.json()["document_id"])
+    process_available(DocumentLayout(settings.uploads_dir), runner=QpdfRunner())
+
+    extraction = client.get(f"/api/v1/labs/documents/{document_id}/extraction")
+    assert extraction.status_code == 200, extraction.text
+    body = extraction.json()
+    assert body["category"] == "ai_draft"
+    assert body["model_name"] is None
+    parsed = [candidate for candidate in body["candidates"] if candidate["parsed"]]
+    unparsed = [candidate for candidate in body["candidates"] if not candidate["parsed"]]
+    assert parsed[0]["extraction_tier"] == "embedded_text"
+    assert parsed[0]["extractor_name"] == "pdfplumber"
+    assert parsed[0]["requires_confirmation"] is True
+    assert parsed[0]["analyte_name"] == "Synthetic sodium"
+    assert {candidate["source_text"] for candidate in unparsed} == {
+        "Synthetic laboratory panel",
+        "Synthetic unparsed note",
+    }
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(LabResult)) == facts_before
+        assert (
+            session.scalar(select(func.count()).select_from(ExtractionDraft)) == drafts_before + 1
+        )
 
 
 # ---------------------------------------------------------------------------

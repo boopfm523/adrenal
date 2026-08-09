@@ -786,6 +786,7 @@ def _pending_draft(session: Session, owner_id: uuid.UUID) -> ExtractionDraft | N
         select(ExtractionDraft)
         .where(
             ExtractionDraft.owner_id == owner_id,
+            ExtractionDraft.source.in_(("telegram", "telegram_command")),
             ExtractionDraft.state.in_((DraftState.PENDING, DraftState.EDITED)),
             ExtractionDraft.resolved_at.is_(None),
         )

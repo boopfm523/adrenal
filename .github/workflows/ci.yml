@@ -30,7 +30,7 @@ jobs:
           enable-cache: true
 
       - name: Install pinned dependencies
-        run: uv sync --frozen --dev
+        run: uv sync --frozen --dev --extra documents
 
       - name: Assert the pinned runtime (ADR-0006)
         run: |
@@ -63,7 +63,7 @@ jobs:
           version: "0.9.9"
           enable-cache: true
 
-      - run: uv sync --frozen --dev
+      - run: uv sync --frozen --dev --extra documents
 
       # Runs the safety-rule coverage gate along with everything else: a rule marked
       # `enforced` in docs/safety-rules.yaml that has lost its test fails here.
@@ -129,14 +129,14 @@ jobs:
           version: "0.9.9"
           enable-cache: true
 
-      - run: uv sync --frozen --dev
+      - run: uv sync --frozen --dev --extra documents
 
       - name: Dependency vulnerabilities (threat model T6)
         # Audit the lockfile rather than the environment: pip-audit cannot resolve
         # the editable local package, and the lock is what CI and production install.
         run: |
           uv export --format requirements-txt --no-emit-project --no-hashes \
-            --all-groups -o .audit-requirements.txt
+            --all-groups --all-extras -o .audit-requirements.txt
           uv run pip-audit --strict -r .audit-requirements.txt
 
       - name: Secret scan (SAFE-29)
@@ -175,6 +175,13 @@ jobs:
               sys.exit(1)
           for required in ("postgres", "redis", "ollama"):
               assert not compose["services"][required].get("ports"), required
+
+          documents = compose["services"]["document-worker"]
+          assert documents.get("network_mode") == "none"
+          assert documents.get("read_only") is True
+          assert "ALL" in documents.get("cap_drop", [])
+          assert "no-new-privileges:true" in documents.get("security_opt", [])
+          assert not documents.get("ports")
 
           allowed_tailnet = ipaddress.ip_network("100.64.0.0/10")
           for binding in compose["services"]["caddy"].get("ports", []):

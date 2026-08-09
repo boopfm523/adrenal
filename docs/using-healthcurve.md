@@ -170,6 +170,15 @@ For local Compose, create `var/uploads` as an owner-private directory before sta
 or set `HC_UPLOADS_DIR` to another private absolute host path. Never put source medical
 PDFs in Git or under the frontend/web root.
 
+For a validated digital PDF, the same networkless worker uses pinned pdfplumber to
+group explicit text by page and geometry. It only recognizes a row after finding
+explicit analyte/test and value/result column headings. Parsed rows and every other
+non-empty line are written as review candidates; unmatched lines are labeled
+`unparsed_row`, never discarded or guessed. `GET /api/v1/labs/documents/{id}/extraction`
+imports that mailbox result into the AI draft namespace and returns its page boxes,
+extractor/schema versions, and `requires_confirmation: true`. This creates no lab fact
+and makes no model call.
+
 ---
 
 ## Analytics
@@ -265,9 +274,10 @@ So you don't go looking for it:
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
-- **No PDF extraction/review UI yet.** Manual/CSV lab facts and private PDF source
-  upload/storage exist. Embedded-text extraction, OCR/vision fallback, and per-result
-  review are the next lab slices (`hc-xo6.5` and `hc-xo6.6`).
+- **No OCR/vision fallback or PDF review UI yet.** Manual/CSV lab facts, private PDF
+  source storage, and deterministic embedded-text drafts exist. Scanned-page OCR,
+  vision fallback, and per-result review remain `hc-xo6.5.2`, `hc-xo6.5.3`, and
+  `hc-xo6.6`.
 - **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
   implemented; direct Garmin API access remains gated by vendor approval.
 - **No record/account deletion.** Backup retention exists; application-data deletion
