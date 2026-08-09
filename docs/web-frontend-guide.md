@@ -5,7 +5,10 @@ assets. This is the guide for starting it, written so you can pick it up cold.
 
 The decisions are already made in [ADR-0005](adr/0005-react-spa-frontend.md) and
 [ADR-0002](adr/0002-modular-monolith-topology.md). This document is how to execute
-them, and what will bite you.
+them, and what will bite you. The low-fidelity navigation, page-state, category-label,
+and accessibility contract is in
+[ui-information-architecture.md](ui-information-architecture.md); page implementation
+must satisfy both documents.
 
 ---
 
