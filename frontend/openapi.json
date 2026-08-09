@@ -1,6 +1,26 @@
 {
   "components": {
     "schemas": {
+      "AccountDeletionRequest": {
+        "properties": {
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "confirmation"
+        ],
+        "title": "AccountDeletionRequest",
+        "type": "object"
+      },
       "AnalyticsSummaryOut": {
         "additionalProperties": false,
         "properties": {
@@ -1723,6 +1743,44 @@
         "title": "InstructionOut",
         "type": "object"
       },
+      "IntegrationDeletionRequest": {
+        "properties": {
+          "delete_data": {
+            "default": true,
+            "title": "Delete Data",
+            "type": "boolean"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "IntegrationDeletionRequest",
+        "type": "object"
+      },
+      "IntegrationDeletionResponse": {
+        "properties": {
+          "credentials_deleted": {
+            "title": "Credentials Deleted",
+            "type": "integer"
+          },
+          "data_rows_deleted": {
+            "title": "Data Rows Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "credentials_deleted",
+          "data_rows_deleted"
+        ],
+        "title": "IntegrationDeletionResponse",
+        "type": "object"
+      },
       "LifeEventCategory": {
         "description": "Context that helps explain a pattern without asserting it caused anything.",
         "enum": [
@@ -2551,6 +2609,21 @@
           "confirmation_state"
         ],
         "title": "ProvenanceOut",
+        "type": "object"
+      },
+      "ReauthenticatedRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "ReauthenticatedRequest",
         "type": "object"
       },
       "RegimenApprovalIn": {
@@ -5356,6 +5429,245 @@
         "summary": "Create Medication",
         "tags": [
           "medications"
+        ]
+      }
+    },
+    "/api/v1/privacy/account": {
+      "delete": {
+        "operationId": "delete_account_api_v1_privacy_account_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountDeletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Account",
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/integrations/{provider}": {
+      "delete": {
+        "operationId": "delete_integration_api_v1_privacy_integrations__provider__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationDeletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Integration",
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/records/{record_type}/{record_id}": {
+      "delete": {
+        "operationId": "delete_record_api_v1_privacy_records__record_type___record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_type",
+            "required": true,
+            "schema": {
+              "title": "Record Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthenticatedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Record",
+        "tags": [
+          "privacy"
         ]
       }
     },

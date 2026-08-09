@@ -22,6 +22,7 @@ from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
+from healthcurve import privacy
 from healthcurve.ai.models import ExtractionDraft
 from healthcurve.config import Settings, get_settings
 from healthcurve.document_worker import process_available, validate_one
@@ -35,6 +36,8 @@ from healthcurve.integrations.garmin.models import (
 )
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
+from healthcurve.medications.models import DoseUnit, Medication, Route
+from healthcurve.operations.audit import AuditAction, AuditEntry
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 from tests.fixtures.pdf import (
     OcrToolRunner,
@@ -204,6 +207,163 @@ def test_state_changing_requests_require_csrf(
 
 def test_reads_do_not_require_csrf(client: TestClient, logged_in: dict[str, str]) -> None:
     assert client.get("/api/v1/medications").status_code == 200
+
+
+def test_individual_deletion_requires_password_and_preserves_audit(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    created = client.post(
+        "/api/v1/diary-events",
+        headers=logged_in,
+        json={
+            "text": "Synthetic deletion fixture",
+            "time": {"local_time": "2026-08-09T11:00:00", "timezone": "Europe/London"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    record_id = created.json()["id"]
+    path = f"/api/v1/privacy/records/diary/{record_id}"
+    wrong = client.request("DELETE", path, headers=logged_in, json={"password": "wrong"})
+    assert wrong.status_code == 403
+    assert any(row["id"] == record_id for row in client.get("/api/v1/diary-events").json())
+
+    deleted = client.request("DELETE", path, headers=logged_in, json={"password": PASSWORD})
+    assert deleted.status_code == 204, deleted.text
+    assert all(row["id"] != record_id for row in client.get("/api/v1/diary-events").json())
+    with Session(engine) as session:
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.RECORD_DELETED,
+                AuditEntry.target_id == uuid.UUID(record_id),
+            )
+        )
+        assert entry is not None
+        assert entry.change_summary == "physical deletion"
+
+    symptom = client.post(
+        "/api/v1/symptoms",
+        headers=logged_in,
+        json={
+            "name": "Synthetic correction history",
+            "time": {"local_time": "2026-08-09T11:05:00", "timezone": "Europe/London"},
+        },
+    ).json()
+    corrected = client.post(
+        f"/api/v1/symptoms/{symptom['id']}/correct",
+        headers=logged_in,
+        json={"reason": "Synthetic correction", "changes": {"notes": "Synthetic note"}},
+    )
+    assert corrected.status_code == 201, corrected.text
+    protected = client.request(
+        "DELETE",
+        f"/api/v1/privacy/records/symptom/{corrected.json()['id']}",
+        headers=logged_in,
+        json={"password": PASSWORD},
+    )
+    assert protected.status_code == 409
+
+    bad_confirmation = client.request(
+        "DELETE",
+        "/api/v1/privacy/account",
+        headers=logged_in,
+        json={"password": PASSWORD, "confirmation": "delete"},
+    )
+    assert bad_confirmation.status_code == 422
+    assert client.get("/api/v1/auth/me").status_code == 200
+
+
+def test_integration_deletion_removes_provider_data_and_audits(
+    engine: Engine,
+) -> None:
+    with Session(engine) as session, session.begin():
+        secondary = Owner(
+            email="integration-delete@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(secondary)
+        session.flush()
+        owner_id = secondary.id
+        session.add(
+            GarminImportBatch(
+                owner_id=owner_id,
+                source_name="synthetic.fit",
+                source_media_type="application/octet-stream",
+                source_sha256="a" * 64,
+                source_byte_size=1,
+                source_payload=b"x",
+                source_members=[],
+                sdk_profile_version="synthetic",
+                observed_metrics=[],
+                missing_metrics=[],
+                device_attributions=[],
+            )
+        )
+        session.flush()
+        result = privacy.delete_integration(
+            session,
+            owner_id=owner_id,
+            provider="garmin",
+            delete_data=True,
+            telegram_chat_id=None,
+        )
+        assert result.data_rows == 1
+
+    with Session(engine) as session:
+        assert (
+            session.scalar(select(GarminImportBatch).where(GarminImportBatch.owner_id == owner_id))
+            is None
+        )
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.INTEGRATION_DISCONNECTED,
+                AuditEntry.actor == f"owner:{owner_id}",
+            )
+        )
+        assert entry is not None
+
+
+def test_account_deletion_service_removes_data_but_retains_structural_audit(
+    engine: Engine, tmp_path: Path
+) -> None:
+    owner_id: uuid.UUID
+    with Session(engine) as session, session.begin():
+        secondary = Owner(
+            email="delete-owner@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(secondary)
+        session.flush()
+        owner_id = secondary.id
+        session.add(
+            Medication(
+                owner_id=owner_id,
+                name="Synthetic deletion medicine",
+                normalized_name="synthetic deletion medicine",
+                default_unit=DoseUnit.MG,
+                default_route=Route.ORAL,
+            )
+        )
+        privacy.delete_account(
+            session,
+            owner=secondary,
+            uploads_dir=tmp_path,
+            telegram_chat_id=None,
+        )
+
+    with Session(engine) as session:
+        assert session.get(Owner, owner_id) is None
+        assert session.scalar(select(Medication).where(Medication.owner_id == owner_id)) is None
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.DATA_DELETED,
+                AuditEntry.target_id == owner_id,
+            )
+        )
+        assert entry is not None
+        assert entry.actor == f"owner:{owner_id}"
+        assert "medicine" not in (entry.change_summary or "")
 
 
 def test_episode_uses_validated_local_time_and_requires_end_when_closed(

@@ -24,6 +24,7 @@ from healthcurve.api.routers import (
     garmin,
     labs,
     medications,
+    privacy,
     telegram,
 )
 from healthcurve.config import Environment, Settings, get_settings
@@ -70,6 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth.router,
         analytics.router,
         medications.router,
+        privacy.router,
         doses.router,
         events.router,
         episodes.router,

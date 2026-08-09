@@ -429,6 +429,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/privacy/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Account */
+        delete: operations["delete_account_api_v1_privacy_account_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/privacy/integrations/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Integration */
+        delete: operations["delete_integration_api_v1_privacy_integrations__provider__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/privacy/records/{record_type}/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Record */
+        delete: operations["delete_record_api_v1_privacy_records__record_type___record_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/regimens": {
         parameters: {
             query?: never;
@@ -716,6 +767,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountDeletionRequest */
+        AccountDeletionRequest: {
+            /** Confirmation */
+            confirmation: string;
+            /** Password */
+            password: string;
+        };
         /** AnalyticsSummaryOut */
         AnalyticsSummaryOut: {
             daily_doses: components["schemas"]["DailyDoseMetric"];
@@ -1323,6 +1381,23 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** IntegrationDeletionRequest */
+        IntegrationDeletionRequest: {
+            /**
+             * Delete Data
+             * @default true
+             */
+            delete_data: boolean;
+            /** Password */
+            password: string;
+        };
+        /** IntegrationDeletionResponse */
+        IntegrationDeletionResponse: {
+            /** Credentials Deleted */
+            credentials_deleted: number;
+            /** Data Rows Deleted */
+            data_rows_deleted: number;
+        };
         /**
          * LifeEventCategory
          * @description Context that helps explain a pattern without asserting it caused anything.
@@ -1559,6 +1634,11 @@ export interface components {
             source_type: components["schemas"]["SourceType"];
             /** Supersedes Id */
             supersedes_id?: string | null;
+        };
+        /** ReauthenticatedRequest */
+        ReauthenticatedRequest: {
+            /** Password */
+            password: string;
         };
         /**
          * RegimenApprovalIn
@@ -2835,6 +2915,118 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MedicationOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_account_api_v1_privacy_account_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_integration_api_v1_privacy_integrations__provider__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                provider: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationDeletionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_record_api_v1_privacy_records__record_type___record_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                record_type: string;
+                record_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReauthenticatedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
