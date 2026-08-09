@@ -12,13 +12,13 @@ from sqlalchemy import select
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import (
-    CorrectionIn,
     DiaryIn,
     DiaryOut,
     EventTimeOut,
     LifeEventIn,
     LifeEventOut,
     ProvenanceOut,
+    SymptomCorrectionIn,
     SymptomIn,
     SymptomOut,
     TimelineItem,
@@ -88,6 +88,7 @@ def list_symptoms(
     owner: CurrentOwner,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    include_superseded: bool = False,
 ):
     query = select(SymptomEvent).where(SymptomEvent.owner_id == owner.id)
     if date_from:
@@ -95,7 +96,9 @@ def list_symptoms(
     if date_to:
         query = query.where(SymptomEvent.occurred_at <= date_to)
     rows = list(session.scalars(query.order_by(SymptomEvent.occurred_at.desc())))
-    return [_symptom_out(e) for e in events.current_only(session, SymptomEvent, rows)]
+    if not include_superseded:
+        rows = events.current_only(session, SymptomEvent, rows)
+    return [_symptom_out(e) for e in rows]
 
 
 @router.post(
@@ -105,12 +108,22 @@ def list_symptoms(
     dependencies=[Depends(require_csrf)],
 )
 def correct_symptom(
-    event_id: uuid.UUID, payload: CorrectionIn, session: DbSession, owner: CurrentOwner
+    event_id: uuid.UUID, payload: SymptomCorrectionIn, session: DbSession, owner: CurrentOwner
 ):
     original = _owned_symptom(session, owner.id, event_id)
+    changes = payload.changes.model_dump(exclude_unset=True, exclude={"time"})
+    submitted_time = payload.changes.time if "time" in payload.changes.model_fields_set else None
+    event_time = resolve_time(submitted_time) if submitted_time is not None else None
+    if not changes and event_time is None:
+        raise HTTPException(status_code=422, detail="a correction must change at least one field")
     try:
         correction = events.correct_event(
-            session, SymptomEvent, original, reason=payload.reason, changes=payload.changes
+            session,
+            SymptomEvent,
+            original,
+            reason=payload.reason,
+            changes=changes,
+            event_time=event_time,
         )
     except events.CorrectionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -211,14 +224,11 @@ def create_life_event(payload: LifeEventIn, session: DbSession, owner: CurrentOw
 
 
 @router.get("/life-events", response_model=list[LifeEventOut])
-def list_life_events(session: DbSession, owner: CurrentOwner):
-    rows = list(
-        session.scalars(
-            select(LifeEvent)
-            .where(LifeEvent.owner_id == owner.id)
-            .order_by(LifeEvent.occurred_at.desc())
-        )
-    )
+def list_life_events(session: DbSession, owner: CurrentOwner, include_sensitive: bool = False):
+    query = select(LifeEvent).where(LifeEvent.owner_id == owner.id)
+    if not include_sensitive:
+        query = query.where(LifeEvent.is_sensitive.is_(False))
+    rows = list(session.scalars(query.order_by(LifeEvent.occurred_at.desc())))
     return [_life_out(e) for e in events.current_only(session, LifeEvent, rows)]
 
 
@@ -228,6 +238,7 @@ def _life_out(e: LifeEvent) -> LifeEventOut:
         title=e.title,
         life_category=e.category,
         description=e.description,
+        is_sensitive=e.is_sensitive,
         time=time_out(e),
         provenance=provenance_out(e),
     )

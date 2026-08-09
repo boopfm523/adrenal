@@ -103,6 +103,8 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .revision-history { margin-top: 1rem; border-top: 1px solid #ccd4ce; padding-top: 0.8rem; }
 .revision-history summary { cursor: pointer; font-weight: 700; }
 .revision-history article { margin-top: 0.75rem; padding: 0.75rem; background: #f2f0e9; }
+.privacy-toggle { display: flex; align-items: center; gap: 0.65rem; width: fit-content; margin-top: 1.5rem; padding: 0.8rem 1rem; border: 1px solid #684a76; border-radius: 0.5rem; background: white; font-weight: 700; }
+.privacy-toggle input { width: 1.2rem; height: 1.2rem; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }

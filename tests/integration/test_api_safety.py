@@ -688,6 +688,77 @@ def test_dose_correction_rejects_unknown_or_empty_changes(
     assert empty.status_code == 422
 
 
+def test_symptom_correction_preserves_typed_history(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    original = client.post(
+        "/api/v1/symptoms",
+        json={
+            "name": "Synthetic fatigue",
+            "severity": 4,
+            "time": {"local_time": "2026-05-03T09:00:00", "timezone": "Europe/London"},
+        },
+        headers=logged_in,
+    ).json()
+    response = client.post(
+        f"/api/v1/symptoms/{original['id']}/correct",
+        json={
+            "reason": "Synthetic severity correction",
+            "changes": {"severity": 6},
+        },
+        headers=logged_in,
+    )
+    assert response.status_code == 201, response.text
+    corrected = response.json()
+    assert corrected["severity"] == 6
+    assert corrected["provenance"]["supersedes_id"] == original["id"]
+    current_ids = {row["id"] for row in client.get("/api/v1/symptoms").json()}
+    history_ids = {
+        row["id"]
+        for row in client.get("/api/v1/symptoms", params={"include_superseded": True}).json()
+    }
+    assert corrected["id"] in current_ids
+    assert original["id"] not in current_ids
+    assert {original["id"], corrected["id"]} <= history_ids
+
+
+def test_sensitive_diary_and_life_events_require_explicit_reveal(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    time_payload = {"local_time": "2026-05-04T10:00:00", "timezone": "Europe/London"}
+    private_diary = client.post(
+        "/api/v1/diary-events",
+        json={"text": "Synthetic private note", "is_sensitive": True, "time": time_payload},
+        headers=logged_in,
+    ).json()
+    private_life = client.post(
+        "/api/v1/life-events",
+        json={
+            "title": "Synthetic private event",
+            "category": "other",
+            "is_sensitive": True,
+            "time": time_payload,
+        },
+        headers=logged_in,
+    ).json()
+    assert private_life["is_sensitive"] is True
+
+    default_diary_ids = {row["id"] for row in client.get("/api/v1/diary-events").json()}
+    default_life_ids = {row["id"] for row in client.get("/api/v1/life-events").json()}
+    revealed_diary_ids = {
+        row["id"]
+        for row in client.get("/api/v1/diary-events", params={"include_sensitive": True}).json()
+    }
+    revealed_life_ids = {
+        row["id"]
+        for row in client.get("/api/v1/life-events", params={"include_sensitive": True}).json()
+    }
+    assert private_diary["id"] not in default_diary_ids
+    assert private_life["id"] not in default_life_ids
+    assert private_diary["id"] in revealed_diary_ids
+    assert private_life["id"] in revealed_life_ids
+
+
 @pytest.mark.safety("SAFE-02")
 def test_timeline_carries_a_category_per_item(
     client: TestClient, logged_in: dict[str, str]

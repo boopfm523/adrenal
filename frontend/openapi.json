@@ -211,28 +211,6 @@
         "title": "ConfirmationState",
         "type": "string"
       },
-      "CorrectionIn": {
-        "additionalProperties": false,
-        "description": "A correction supersedes; it never overwrites (SAFE-08).",
-        "properties": {
-          "changes": {
-            "additionalProperties": true,
-            "title": "Changes",
-            "type": "object"
-          },
-          "reason": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "title": "CorrectionIn",
-        "type": "object"
-      },
       "DiaryIn": {
         "additionalProperties": false,
         "properties": {
@@ -1655,6 +1633,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_sensitive": {
+            "title": "Is Sensitive",
+            "type": "boolean"
+          },
           "life_category": {
             "$ref": "#/components/schemas/LifeEventCategory"
           },
@@ -1674,6 +1656,7 @@
           "title",
           "life_category",
           "description",
+          "is_sensitive",
           "time",
           "provenance"
         ],
@@ -2654,6 +2637,93 @@
         ],
         "title": "SourceType",
         "type": "string"
+      },
+      "SymptomCorrectionChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "body_area": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Area"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventTimeIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "SymptomCorrectionChanges",
+        "type": "object"
+      },
+      "SymptomCorrectionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/SymptomCorrectionChanges"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "changes"
+        ],
+        "title": "SymptomCorrectionIn",
+        "type": "object"
       },
       "SymptomIn": {
         "additionalProperties": false,
@@ -4643,6 +4713,16 @@
         "operationId": "list_life_events_api_v1_life_events_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "include_sensitive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Sensitive",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -5599,6 +5679,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_superseded",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Superseded",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -5771,7 +5861,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CorrectionIn"
+                "$ref": "#/components/schemas/SymptomCorrectionIn"
               }
             }
           },

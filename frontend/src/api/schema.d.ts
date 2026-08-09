@@ -793,18 +793,6 @@ export interface components {
          * @enum {string}
          */
         ConfirmationState: "direct" | "confirmed_from_draft" | "provider_imported";
-        /**
-         * CorrectionIn
-         * @description A correction supersedes; it never overwrites (SAFE-08).
-         */
-        CorrectionIn: {
-            /** Changes */
-            changes?: {
-                [key: string]: unknown;
-            };
-            /** Reason */
-            reason: string;
-        };
         /** DiaryIn */
         DiaryIn: {
             /**
@@ -1295,6 +1283,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Sensitive */
+            is_sensitive: boolean;
             life_category: components["schemas"]["LifeEventCategory"];
             provenance: components["schemas"]["ProvenanceOut"];
             time: components["schemas"]["EventTimeOut"];
@@ -1586,6 +1576,24 @@ export interface components {
          * @enum {string}
          */
         SourceType: "web" | "telegram" | "csv_import" | "file_import" | "provider" | "migration";
+        /** SymptomCorrectionChanges */
+        SymptomCorrectionChanges: {
+            /** Body Area */
+            body_area?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Severity */
+            severity?: number | null;
+            time?: components["schemas"]["EventTimeIn"] | null;
+        };
+        /** SymptomCorrectionIn */
+        SymptomCorrectionIn: {
+            changes: components["schemas"]["SymptomCorrectionChanges"];
+            /** Reason */
+            reason: string;
+        };
         /** SymptomIn */
         SymptomIn: {
             /** Body Area */
@@ -2551,7 +2559,9 @@ export interface operations {
     };
     list_life_events_api_v1_life_events_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_sensitive?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -3012,6 +3022,7 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
+                include_superseded?: boolean;
             };
             header?: never;
             path?: never;
@@ -3093,7 +3104,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CorrectionIn"];
+                "application/json": components["schemas"]["SymptomCorrectionIn"];
             };
         };
         responses: {

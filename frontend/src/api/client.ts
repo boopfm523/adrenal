@@ -10,6 +10,10 @@ export type Dose = components["schemas"]["DoseOut"];
 export type DoseInput = components["schemas"]["DoseIn"];
 export type DoseCorrectionInput = components["schemas"]["DoseCorrectionIn"];
 export type Timeline = components["schemas"]["TimelinePage"];
+export type Symptom = components["schemas"]["SymptomOut"];
+export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
+export type DiaryEntry = components["schemas"]["DiaryOut"];
+export type LifeEvent = components["schemas"]["LifeEventOut"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -146,4 +150,20 @@ export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
   if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
   if (filters.includeSensitive) params.set("include_sensitive", "true");
   return apiRequest<Timeline>(`/timeline?${params.toString()}`);
+}
+
+export function getSymptoms(includeSuperseded = false): Promise<Symptom[]> {
+  return apiRequest<Symptom[]>(`/symptoms${includeSuperseded ? "?include_superseded=true" : ""}`);
+}
+
+export function correctSymptom(id: string, payload: SymptomCorrectionInput): Promise<Symptom> {
+  return apiRequest<Symptom>(`/symptoms/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getDiaryEntries(includeSensitive = false): Promise<DiaryEntry[]> {
+  return apiRequest<DiaryEntry[]>(`/diary-events${includeSensitive ? "?include_sensitive=true" : ""}`);
+}
+
+export function getLifeEvents(includeSensitive = false): Promise<LifeEvent[]> {
+  return apiRequest<LifeEvent[]>(`/life-events${includeSensitive ? "?include_sensitive=true" : ""}`);
 }

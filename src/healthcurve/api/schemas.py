@@ -252,14 +252,6 @@ class DoseOut(FactResource):
         return str(value)
 
 
-class CorrectionIn(ApiModel):
-    """A correction supersedes; it never overwrites (SAFE-08)."""
-
-    reason: str = Field(min_length=1, max_length=500)
-    #: Only the fields being changed. Anything omitted is copied from the original.
-    changes: dict[str, object] = Field(default_factory=dict)
-
-
 class DoseCorrectionChanges(ApiModel):
     """Fields an owner may correct on a recorded dose."""
 
@@ -314,6 +306,29 @@ class SymptomOut(FactResource):
     notes: str | None
 
 
+class SymptomCorrectionChanges(ApiModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    severity: int | None = Field(default=None, ge=0, le=10)
+    body_area: str | None = Field(default=None, max_length=120)
+    time: EventTimeIn | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _required_values_cannot_be_null(self) -> SymptomCorrectionChanges:
+        nullable_fields = {"severity", "body_area", "notes"}
+        null_fields = {
+            name for name in self.model_fields_set - nullable_fields if getattr(self, name) is None
+        }
+        if null_fields:
+            raise ValueError(f"correction field(s) cannot be null: {sorted(null_fields)}")
+        return self
+
+
+class SymptomCorrectionIn(ApiModel):
+    reason: str = Field(min_length=1, max_length=500)
+    changes: SymptomCorrectionChanges
+
+
 class DiaryIn(ApiModel):
     text: str = Field(min_length=1, max_length=10_000)
     is_sensitive: bool = False
@@ -344,6 +359,7 @@ class LifeEventOut(FactResource):
     title: str
     life_category: LifeEventCategory
     description: str | None
+    is_sensitive: bool
     time: EventTimeOut
     provenance: ProvenanceOut
 
