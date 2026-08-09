@@ -8,6 +8,7 @@ export type PlanComparisonDay = components["schemas"]["PlanComparisonDay"];
 export type Episode = components["schemas"]["EpisodeOut"];
 export type Dose = components["schemas"]["DoseOut"];
 export type DoseInput = components["schemas"]["DoseIn"];
+export type DoseCorrectionInput = components["schemas"]["DoseCorrectionIn"];
 export type Timeline = components["schemas"]["TimelinePage"];
 
 interface ApiErrorBody {
@@ -111,6 +112,20 @@ export function getOpenEpisodes(): Promise<Episode[]> {
 
 export function recordDose(payload: DoseInput): Promise<Dose> {
   return apiRequest<Dose>("/doses", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDoses(includeSuperseded = false): Promise<Dose[]> {
+  const params = new URLSearchParams();
+  if (includeSuperseded) params.set("include_superseded", "true");
+  const query = params.size === 0 ? "" : `?${params.toString()}`;
+  return apiRequest<Dose[]>(`/doses${query}`);
+}
+
+export function correctDose(doseId: string, payload: DoseCorrectionInput): Promise<Dose> {
+  return apiRequest<Dose>(`/doses/${doseId}/correct`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -334,6 +334,104 @@
         "title": "DoseCategory",
         "type": "string"
       },
+      "DoseCorrectionChanges": {
+        "additionalProperties": false,
+        "description": "Fields an owner may correct on a recorded dose.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,6}|(?=[\\d.]{1,11}0*$)\\d{0,6}\\.\\d{0,4}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DoseCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Route"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventTimeIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DoseUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "DoseCorrectionChanges",
+        "type": "object"
+      },
+      "DoseCorrectionIn": {
+        "additionalProperties": false,
+        "description": "A typed dose correction; omitted fields are copied from the prior fact.",
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/DoseCorrectionChanges"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "changes"
+        ],
+        "title": "DoseCorrectionIn",
+        "type": "object"
+      },
       "DoseIn": {
         "additionalProperties": false,
         "properties": {
@@ -3609,7 +3707,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CorrectionIn"
+                "$ref": "#/components/schemas/DoseCorrectionIn"
               }
             }
           },

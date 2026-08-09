@@ -6,6 +6,7 @@ import { PlaceholderPage, NotFoundPage } from "./pages/FoundationPages";
 import { LoginPage } from "./pages/LoginPage";
 import { TodayPage } from "./pages/TodayPage";
 import { TimelinePage } from "./pages/TimelinePage";
+import { DosesPage } from "./pages/DosesPage";
 
 const placeholders = [
   ["/plan", "Plan & doses", "Review physician-approved plans separately from actual recorded doses."],
@@ -27,6 +28,7 @@ export function App(): React.JSX.Element {
           <Route index element={<Navigate to="/today" replace />} />
           <Route path="/today" element={<TodayPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
+          <Route path="/doses" element={<DosesPage />} />
           {placeholders.map(([path, title, description]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} description={description} />} />
           ))}

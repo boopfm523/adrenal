@@ -16,6 +16,7 @@ emergency page remains server-rendered so it does not depend on JavaScript.
 | Record a planned dose taken now | Today in the web interface |
 | Record a dose, symptom, or note | Telegram bot |
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
+| Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |

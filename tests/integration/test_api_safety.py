@@ -638,6 +638,56 @@ def test_fact_resources_declare_the_fact_category(
     assert dose.json()["category"] == "fact"
 
 
+def test_dose_correction_is_typed_and_preserves_superseded_fact(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    original = _a_dose(client, logged_in)
+    corrected = client.post(
+        f"/api/v1/doses/{original['id']}/correct",
+        json={
+            "reason": "Synthetic transcription correction",
+            "changes": {
+                "amount": "10.1250",
+                "time": {"local_time": "2026-05-01T07:15:00", "timezone": "Europe/London"},
+            },
+        },
+        headers=logged_in,
+    )
+    assert corrected.status_code == 201, corrected.text
+    body = corrected.json()
+    assert body["amount"] == "10.1250"
+    assert body["time"]["local_time"] == "2026-05-01T07:15:00"
+    assert body["time"]["timezone"] == "Europe/London"
+    assert body["provenance"]["supersedes_id"] == original["id"]
+    assert body["provenance"]["correction_reason"] == "Synthetic transcription correction"
+
+    current = client.get("/api/v1/doses").json()
+    history = client.get("/api/v1/doses", params={"include_superseded": True}).json()
+    current_ids = {row["id"] for row in current}
+    history_ids = {row["id"] for row in history}
+    assert body["id"] in current_ids
+    assert original["id"] not in current_ids
+    assert {original["id"], body["id"]} <= history_ids
+
+
+def test_dose_correction_rejects_unknown_or_empty_changes(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    original = _a_dose(client, logged_in)
+    unknown = client.post(
+        f"/api/v1/doses/{original['id']}/correct",
+        json={"reason": "Synthetic correction", "changes": {"medication_id": str(uuid.uuid4())}},
+        headers=logged_in,
+    )
+    empty = client.post(
+        f"/api/v1/doses/{original['id']}/correct",
+        json={"reason": "Synthetic correction", "changes": {}},
+        headers=logged_in,
+    )
+    assert unknown.status_code == 422
+    assert empty.status_code == 422
+
+
 @pytest.mark.safety("SAFE-02")
 def test_timeline_carries_a_category_per_item(
     client: TestClient, logged_in: dict[str, str]

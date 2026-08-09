@@ -15,7 +15,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from healthcurve.episodes.models import EpisodeSeverity, EpisodeStatus
 from healthcurve.events.base import ConfirmationState, SourceType
@@ -258,6 +258,34 @@ class CorrectionIn(ApiModel):
     reason: str = Field(min_length=1, max_length=500)
     #: Only the fields being changed. Anything omitted is copied from the original.
     changes: dict[str, object] = Field(default_factory=dict)
+
+
+class DoseCorrectionChanges(ApiModel):
+    """Fields an owner may correct on a recorded dose."""
+
+    amount: Amount | None = None
+    unit: DoseUnit | None = None
+    route: Route | None = None
+    category: DoseCategory | None = None
+    time: EventTimeIn | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _required_values_cannot_be_null(self) -> DoseCorrectionChanges:
+        nullable_only = {"notes"}
+        null_fields = {
+            name for name in self.model_fields_set - nullable_only if getattr(self, name) is None
+        }
+        if null_fields:
+            raise ValueError(f"correction field(s) cannot be null: {sorted(null_fields)}")
+        return self
+
+
+class DoseCorrectionIn(ApiModel):
+    """A typed dose correction; omitted fields are copied from the prior fact."""
+
+    reason: str = Field(min_length=1, max_length=500)
+    changes: DoseCorrectionChanges
 
 
 # ---------------------------------------------------------------------------

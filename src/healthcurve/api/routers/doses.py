@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
-    CorrectionIn,
+    DoseCorrectionIn,
     DoseIn,
     DoseOut,
     EventTimeOut,
@@ -98,16 +98,30 @@ def list_doses(
     dependencies=[Depends(require_csrf)],
 )
 def correct_dose(
-    dose_id: uuid.UUID, payload: CorrectionIn, session: DbSession, owner: CurrentOwner
+    dose_id: uuid.UUID, payload: DoseCorrectionIn, session: DbSession, owner: CurrentOwner
 ):
     """Correct a dose. The original stays queryable with its original values (SAFE-08)."""
     original = session.get(DoseEvent, dose_id)
     if original is None or original.owner_id != owner.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="dose not found")
 
+    changes = payload.changes.model_dump(exclude_unset=True, exclude={"time"})
+    submitted_time = payload.changes.time if "time" in payload.changes.model_fields_set else None
+    event_time = resolve_time(submitted_time) if submitted_time is not None else None
+    if not changes and event_time is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="a correction must change at least one field",
+        )
+
     try:
         correction = events.correct_event(
-            session, DoseEvent, original, reason=payload.reason, changes=payload.changes
+            session,
+            DoseEvent,
+            original,
+            reason=payload.reason,
+            changes=changes,
+            event_time=event_time,
         )
     except events.CorrectionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

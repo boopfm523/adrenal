@@ -5,7 +5,8 @@ import { useAuth } from "../auth/context";
 const navigation = [
   ["Today", "/today"],
   ["Timeline", "/timeline"],
-  ["Plan & doses", "/plan"],
+  ["Doses", "/doses"],
+  ["Plan", "/plan"],
   ["Episodes", "/episodes"],
   ["Symptoms & diary", "/symptoms-diary"],
   ["Health data", "/health-data"],

@@ -846,6 +846,29 @@ export interface components {
          * @enum {string}
          */
         DoseCategory: "scheduled" | "late" | "replacement" | "stress" | "taper" | "emergency";
+        /**
+         * DoseCorrectionChanges
+         * @description Fields an owner may correct on a recorded dose.
+         */
+        DoseCorrectionChanges: {
+            /** Amount */
+            amount?: number | string | null;
+            category?: components["schemas"]["DoseCategory"] | null;
+            /** Notes */
+            notes?: string | null;
+            route?: components["schemas"]["Route"] | null;
+            time?: components["schemas"]["EventTimeIn"] | null;
+            unit?: components["schemas"]["DoseUnit"] | null;
+        };
+        /**
+         * DoseCorrectionIn
+         * @description A typed dose correction; omitted fields are copied from the prior fact.
+         */
+        DoseCorrectionIn: {
+            changes: components["schemas"]["DoseCorrectionChanges"];
+            /** Reason */
+            reason: string;
+        };
         /** DoseIn */
         DoseIn: {
             /** Amount */
@@ -2033,7 +2056,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CorrectionIn"];
+                "application/json": components["schemas"]["DoseCorrectionIn"];
             };
         };
         responses: {

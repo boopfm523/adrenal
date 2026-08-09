@@ -94,6 +94,15 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .provenance-grid div { border-top: 1px solid #dce2dd; padding-top: 0.5rem; }
 .provenance-grid dt { color: #48554f; font-size: 0.85rem; font-weight: 700; }
 .provenance-grid dd { margin: 0.2rem 0 0; }
+.correction-form { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 0.8rem; margin-top: 1rem; padding: 1rem; border: 1px solid #a86712; border-radius: 0.6rem; background: #fffbf3; }
+.correction-form label { display: grid; gap: 0.35rem; font-weight: 700; }
+.correction-form input, .correction-form select, .correction-form textarea { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.correction-form textarea { min-height: 5rem; resize: vertical; }
+.correction-warning, .form-wide { grid-column: 1 / -1; }
+.correction-warning { margin: 0; font-weight: 700; }
+.revision-history { margin-top: 1rem; border-top: 1px solid #ccd4ce; padding-top: 0.8rem; }
+.revision-history summary { cursor: pointer; font-weight: 700; }
+.revision-history article { margin-top: 0.75rem; padding: 0.75rem; background: #f2f0e9; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
@@ -101,5 +110,5 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
   .session-menu span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .dose-slot { align-items: stretch; flex-direction: column; }
   .dose-slot button { width: 100%; }
-  .filter-panel, .provenance-grid { grid-template-columns: 1fr; }
+  .filter-panel, .provenance-grid, .correction-form { grid-template-columns: 1fr; }
 }

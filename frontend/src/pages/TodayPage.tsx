@@ -96,6 +96,7 @@ export function TodayPage(): React.JSX.Element {
       <p className="today-date"><strong>{day}</strong> · {timezone}</p>
       <div className="quick-actions" aria-label="Quick actions">
         <Link className="button-link" to="/timeline">Open timeline</Link>
+        <Link className="button-link" to="/doses">Review doses</Link>
         <a className="button-link button-link--urgent" href="/emergency">Open emergency plan</a>
       </div>
 
