@@ -11,6 +11,7 @@ from healthcurve.ai.evaluation import (
     EvaluationReport,
     load_gold_set,
     load_report,
+    stability_score,
     verify_report,
 )
 from healthcurve.ai.extraction import PROMPT_VERSION
@@ -39,6 +40,25 @@ def test_a_field_regression_fails_the_gate() -> None:
                 candidate["amount"] = "wrong"
     degraded = EvaluationReport.model_validate(raw)
     summary = verify_report(gold, degraded)
+    assert not summary.passed
+    assert any(failure.startswith("amount=") for failure in summary.failures)
+
+
+def test_repeated_identical_runs_meet_stability_thresholds() -> None:
+    gold = load_gold_set(GOLD_PATH)
+    predictions = load_report(BASELINE_PATH).predictions
+    summary = stability_score(gold, [predictions, predictions, predictions])
+    assert summary.passed
+    assert all(value == 1.0 for value in summary.scores.values())
+
+
+def test_one_nondeterministic_field_fails_its_stability_threshold() -> None:
+    gold = load_gold_set(GOLD_PATH)
+    stable = load_report(BASELINE_PATH).predictions
+    raw = [prediction.model_dump(mode="json") for prediction in stable]
+    raw[0]["candidates"][0]["amount"] = "dropped"
+    changed = [type(stable[0]).model_validate(item) for item in raw]
+    summary = stability_score(gold, [stable, changed])
     assert not summary.passed
     assert any(failure.startswith("amount=") for failure in summary.failures)
 

@@ -15,6 +15,18 @@
     "type": 1.0,
     "unit": 0.9
   },
+  "stability_thresholds": {
+    "amount": 0.98,
+    "candidate_count": 0.98,
+    "hypothetical": 1.0,
+    "local_time": 0.95,
+    "medication_name": 0.98,
+    "negated": 1.0,
+    "severity": 1.0,
+    "symptom_name": 1.0,
+    "type": 1.0,
+    "unit": 0.98
+  },
   "cases": [
     {
       "id": "relative-time",

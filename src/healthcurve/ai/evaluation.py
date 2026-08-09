@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +44,7 @@ class GoldSet(BaseModel):
     synthetic_marker: str
     known_medications: list[str]
     thresholds: dict[str, float]
+    stability_thresholds: dict[str, float]
     cases: list[GoldCase]
 
 
@@ -109,6 +111,58 @@ def score(gold: GoldSet, predictions: Sequence[CasePrediction]) -> EvaluationSum
         if scores[field] < threshold
     ]
     return EvaluationSummary(scores=scores, thresholds=gold.thresholds, failures=failures)
+
+
+def stability_score(gold: GoldSet, runs: Sequence[Sequence[CasePrediction]]) -> EvaluationSummary:
+    """Measure repeatability as the modal-value share for each case and field."""
+    if len(runs) < 2:
+        raise EvaluationError("stability_runs_insufficient")
+    indexed_runs: list[dict[str, CasePrediction]] = []
+    expected_ids = {case.id for case in gold.cases}
+    for run in runs:
+        indexed = {prediction.id: prediction for prediction in run}
+        if len(indexed) != len(run) or set(indexed) != expected_ids:
+            raise EvaluationError("prediction_case_set_mismatch")
+        indexed_runs.append(indexed)
+
+    modal_hits: dict[str, int] = {}
+    totals: dict[str, int] = {}
+    for case in gold.cases:
+        counts = [len(run[case.id].candidates) for run in indexed_runs]
+        modal_hits["candidate_count"] = modal_hits.get("candidate_count", 0) + _mode_count(counts)
+        totals["candidate_count"] = totals.get("candidate_count", 0) + len(counts)
+        for index, expected_candidate in enumerate(case.expected):
+            for field in expected_candidate.fields:
+                values = [
+                    _stable_value(run[case.id].candidates, index, field) for run in indexed_runs
+                ]
+                modal_hits[field] = modal_hits.get(field, 0) + _mode_count(values)
+                totals[field] = totals.get(field, 0) + len(values)
+
+    scores = {field: modal_hits[field] / count for field, count in sorted(totals.items())}
+    unknown = set(gold.stability_thresholds) - set(scores)
+    if unknown:
+        raise EvaluationError("threshold_without_observations")
+    failures = [
+        f"{field}={scores[field]:.3f} below {threshold:.3f}"
+        for field, threshold in sorted(gold.stability_thresholds.items())
+        if scores[field] < threshold
+    ]
+    return EvaluationSummary(
+        scores=scores,
+        thresholds=gold.stability_thresholds,
+        failures=failures,
+    )
+
+
+def _stable_value(candidates: list[dict[str, Any]], index: int, field: str) -> str:
+    if index >= len(candidates):
+        return "<missing-candidate>"
+    return json.dumps(candidates[index].get(field), sort_keys=True)
+
+
+def _mode_count(values: Sequence[object]) -> int:
+    return Counter(values).most_common(1)[0][1]
 
 
 def verify_report(gold: GoldSet, report: EvaluationReport) -> EvaluationSummary:

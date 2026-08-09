@@ -34,3 +34,12 @@ A recording command exits nonzero when any threshold fails. Do not lower a thres
 to bless a regression; fix the parser/prompt or document and review a deliberate
 product change. Never add real Telegram messages, records, or medical documents to
 the gold set.
+
+To measure nondeterminism, run every case repeatedly. The gold set defines separate
+high stability thresholds (95–100% by field); the command reports the modal-value
+share for each field and exits nonzero below threshold:
+
+```bash
+HC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+  uv run python scripts/evaluate_extraction.py --stability-runs 5
+```
