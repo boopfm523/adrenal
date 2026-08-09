@@ -50,6 +50,7 @@ audit: ## Dependency vulnerability scan (threat model T6)
 
 secrets: ## Secret scan (SAFE-29)
 	uv run detect-secrets scan --baseline .secrets.baseline
+	uv run python scripts/check_secret_baseline.py
 
 frontend-generate: ## Regenerate the committed OpenAPI contract and TypeScript client types
 	uv run python scripts/export_openapi.py

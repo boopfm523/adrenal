@@ -143,7 +143,7 @@ jobs:
         run: |
           uv run detect-secrets scan --baseline .secrets.baseline \
             --exclude-files 'uv\.lock|\.beads/'
-          uv run detect-secrets audit --report --fail-on-unaudited .secrets.baseline
+          uv run python scripts/check_secret_baseline.py
 
       - name: Refuse a committed .env (threat model T3)
         run: |
