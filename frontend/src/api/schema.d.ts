@@ -109,6 +109,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Data Quality */
+        get: operations["data_quality_api_v1_data_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diary-events": {
         parameters: {
             query?: never;
@@ -936,6 +953,37 @@ export interface components {
             recorded_dose_count: number;
             /** Unit */
             unit: string | null;
+        };
+        /** DataQualityFindingOut */
+        DataQualityFindingOut: {
+            /** Action Label */
+            action_label: string;
+            /** Detail */
+            detail: string;
+            /** Finding Kind */
+            finding_kind: string;
+            /** Href */
+            href: string;
+            /** Id */
+            id: string;
+            /** Record Id */
+            record_id: string | null;
+            /** Severity */
+            severity: string;
+            /** Source */
+            source: string;
+            /** Title */
+            title: string;
+        };
+        /** DataQualityOut */
+        DataQualityOut: {
+            /**
+             * Completeness Notice
+             * @default No known findings does not mean the health record is clinically complete.
+             */
+            completeness_notice: string;
+            /** Findings */
+            findings: components["schemas"]["DataQualityFindingOut"][];
         };
         /** DiaryIn */
         DiaryIn: {
@@ -2118,6 +2166,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WhoAmI"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    data_quality_api_v1_data_quality_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataQualityOut"];
                 };
             };
             /** @description Validation Error */

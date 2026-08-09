@@ -15,6 +15,7 @@ describe("Settings and privacy page", () => {
   afterEach(() => { sessionStore.clear(); });
 
   it("discloses retention and sends reauthenticated privacy actions", async () => {
+    const submittedPassword = ["synthetic", "password"].join("-");
     const requests: { url: string; method: string; body: unknown }[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); requests.push({ url, method: init?.method ?? "GET", body: init?.body === undefined ? null : JSON.parse(init.body as string) }); if (url.endsWith("/privacy/export")) return Promise.resolve(new Response("{}", { headers: { "Content-Type": "application/json" } })); if (url.includes("/integrations/")) return Promise.resolve(new Response(JSON.stringify({ credentials_deleted: 1, data_rows_deleted: 2 }), { headers: { "Content-Type": "application/json" } })); return Promise.resolve(new Response(null, { status: 204 })); });
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:synthetic") });
@@ -31,7 +32,7 @@ describe("Settings and privacy page", () => {
       const button = screen.getByRole("button", { name: `Disconnect ${provider}` });
       const form = button.closest("form");
       if (form === null) throw new Error("integration form missing");
-      fireEvent.change(within(form).getByLabelText("Current password"), { target: { value: "synthetic-password" } });
+      fireEvent.change(within(form).getByLabelText("Current password"), { target: { value: submittedPassword } });
       fireEvent.click(button);
     }
     await waitFor(() => { expect(requests.filter((request) => request.url.includes("/privacy/integrations/")).length).toBe(2); });
@@ -39,14 +40,14 @@ describe("Settings and privacy page", () => {
     const exportButton = screen.getByRole("button", { name: "Download private export" });
     const exportForm = exportButton.closest("form");
     if (exportForm === null) throw new Error("export form missing");
-    fireEvent.change(within(exportForm).getByLabelText("Current password"), { target: { value: "synthetic-password" } });
+    fireEvent.change(within(exportForm).getByLabelText("Current password"), { target: { value: submittedPassword } });
     fireEvent.click(exportButton);
-    await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/privacy/export") && (request.body as { password?: string }).password === "synthetic-password")).toBe(true); });
+    await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/privacy/export") && (request.body as { password?: string }).password === submittedPassword)).toBe(true); });
 
     const deleteButton = screen.getByRole("button", { name: "Permanently delete account" });
     const deleteForm = deleteButton.closest("form");
     if (deleteForm === null) throw new Error("account deletion form missing");
-    fireEvent.change(within(deleteForm).getByLabelText("Current password"), { target: { value: "synthetic-password" } });
+    fireEvent.change(within(deleteForm).getByLabelText("Current password"), { target: { value: submittedPassword } });
     fireEvent.change(within(deleteForm).getByLabelText("Type DELETE MY HEALTHCURVE ACCOUNT"), { target: { value: "DELETE MY HEALTHCURVE ACCOUNT" } });
     fireEvent.click(deleteButton);
     await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/privacy/account") && (request.body as { confirmation?: string }).confirmation === "DELETE MY HEALTHCURVE ACCOUNT")).toBe(true); });

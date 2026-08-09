@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
 from healthcurve import privacy
-from healthcurve.ai.models import ExtractionDraft
+from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.config import Settings, get_settings
 from healthcurve.document_worker import process_available, validate_one
 from healthcurve.identity import service as auth
@@ -38,6 +38,7 @@ from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from healthcurve.medications.models import DoseUnit, Medication, Route
 from healthcurve.operations.audit import AuditAction, AuditEntry
+from healthcurve.operations.jobs import Job, JobStatus
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 from tests.fixtures.pdf import (
     OcrToolRunner,
@@ -1175,6 +1176,79 @@ def test_analytics_states_definitions_timezone_and_missingness(
         params={"date_from": "2030-01-02", "date_to": "2030-01-01", "timezone": "UTC"},
     )
     assert invalid.status_code == 422
+
+
+def test_data_quality_distinguishes_problems_from_provider_absence(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        session.add(
+            ExtractionDraft(
+                owner_id=owner_id,
+                source="telegram",
+                provider_message_id="synthetic-quality-draft",
+                raw_text="SYNTHETIC_TEST_DATA",
+                candidates=[{"type": "dose", "flags": ["possible_duplicate"]}],
+                state=DraftState.PENDING,
+                prompt_version="synthetic",
+                schema_version="synthetic",
+            )
+        )
+        session.add(
+            LabDocument(
+                owner_id=owner_id,
+                display_name="synthetic-rejected.pdf",
+                media_type="application/pdf",
+                sha256="b" * 64,
+                byte_size=1,
+                status=LabDocumentStatus.REJECTED,
+                rejection_reason="synthetic_validation_failure",
+            )
+        )
+        session.add(
+            GarminImportBatch(
+                owner_id=owner_id,
+                source_name="synthetic-quality.fit",
+                source_media_type="application/octet-stream",
+                source_sha256="c" * 64,
+                source_byte_size=1,
+                source_payload=b"q",
+                source_members=[],
+                sdk_profile_version="synthetic",
+                observed_metrics=[],
+                missing_metrics=["hrv"],
+                device_attributions=[],
+            )
+        )
+        session.add(
+            Job(
+                task="synthetic.quality",
+                payload={},
+                idempotency_key="synthetic-quality-dead-letter",
+                status=JobStatus.DEAD_LETTER,
+                attempt_count=3,
+                max_attempts=3,
+                last_error_code="synthetic_failure",
+            )
+        )
+
+    response = client.get("/api/v1/data-quality")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    titles = {finding["title"] for finding in body["findings"]}
+    assert "Possible duplicate draft" in titles
+    assert "Lab document import failed" in titles
+    assert "Hrv not supplied" in titles
+    assert "Background task exhausted retries" in titles
+    absence = next(f for f in body["findings"] if f["title"] == "Hrv not supplied")
+    assert absence["finding_kind"] == "genuine_absence"
+    assert "no zero is inferred" in absence["detail"]
+    for finding in body["findings"]:
+        assert finding["href"].startswith("/")
+        assert finding["action_label"]
+    assert "does not mean" in body["completeness_notice"]
 
 
 def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(

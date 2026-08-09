@@ -380,6 +380,87 @@
         "title": "DailyDoseValue",
         "type": "object"
       },
+      "DataQualityFindingOut": {
+        "properties": {
+          "action_label": {
+            "title": "Action Label",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "finding_kind": {
+            "title": "Finding Kind",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "finding_kind",
+          "severity",
+          "source",
+          "title",
+          "detail",
+          "record_id",
+          "href",
+          "action_label"
+        ],
+        "title": "DataQualityFindingOut",
+        "type": "object"
+      },
+      "DataQualityOut": {
+        "properties": {
+          "completeness_notice": {
+            "default": "No known findings does not mean the health record is clinically complete.",
+            "title": "Completeness Notice",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DataQualityFindingOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "title": "DataQualityOut",
+        "type": "object"
+      },
       "DiaryIn": {
         "additionalProperties": false,
         "properties": {
@@ -3809,6 +3890,55 @@
         "summary": "Me",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/v1/data-quality": {
+      "get": {
+        "operationId": "data_quality_api_v1_data_quality_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataQualityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Data Quality",
+        "tags": [
+          "data-quality"
         ]
       }
     },
