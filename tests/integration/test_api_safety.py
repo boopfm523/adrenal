@@ -36,7 +36,12 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
-from tests.fixtures.pdf import QpdfRunner, synthetic_text_lab_pdf
+from tests.fixtures.pdf import (
+    OcrToolRunner,
+    QpdfRunner,
+    synthetic_scanned_lab_pdf,
+    synthetic_text_lab_pdf,
+)
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -534,6 +539,42 @@ def test_digital_pdf_extraction_creates_only_review_draft_and_keeps_unparsed_row
         assert (
             session.scalar(select(func.count()).select_from(ExtractionDraft)) == drafts_before + 1
         )
+
+
+def test_scanned_pdf_ocr_path_remains_a_confirmation_required_draft(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    with Session(engine) as session:
+        facts_before = session.scalar(select(func.count()).select_from(LabResult))
+    uploaded = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={
+            "file": (
+                "synthetic-scan.pdf",
+                synthetic_scanned_lab_pdf(),
+                "application/pdf",
+            )
+        },
+    )
+    assert uploaded.status_code == 202
+    document_id = uuid.UUID(uploaded.json()["document_id"])
+    process_available(DocumentLayout(settings.uploads_dir), runner=OcrToolRunner())
+
+    extraction = client.get(f"/api/v1/labs/documents/{document_id}/extraction")
+    assert extraction.status_code == 200, extraction.text
+    candidates = extraction.json()["candidates"]
+    parsed = [candidate for candidate in candidates if candidate["parsed"]]
+    unparsed = [candidate for candidate in candidates if not candidate["parsed"]]
+    assert parsed[0]["extraction_tier"] == "ocr"
+    assert parsed[0]["coordinate_space"] == "rendered_pixels"
+    assert parsed[0]["requires_confirmation"] is True
+    assert "low_confidence" in unparsed[0]["flags"]
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(LabResult)) == facts_before
 
 
 # ---------------------------------------------------------------------------

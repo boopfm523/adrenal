@@ -7,7 +7,7 @@ from typing import Final, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-EXTRACTION_SCHEMA_VERSION: Final = "lab-pdf-v1"
+EXTRACTION_SCHEMA_VERSION: Final = "lab-pdf-v2"
 MAX_EXTRACTED_ROWS: Final = 2_000
 MAX_SOURCE_LINE_CHARS: Final = 2_000
 
@@ -15,7 +15,8 @@ MAX_SOURCE_LINE_CHARS: Final = 2_000
 class PdfDraftCandidate(BaseModel):
     page_number: int = Field(ge=1, le=100)
     row_index: int = Field(ge=1)
-    extraction_tier: Literal["embedded_text"] = "embedded_text"
+    extraction_tier: Literal["embedded_text", "ocr"] = "embedded_text"
+    coordinate_space: Literal["pdf_points", "rendered_pixels"] = "pdf_points"
     parsed: bool
     analyte_name: str | None = None
     original_value: str | None = None
@@ -52,10 +53,12 @@ class PdfDraftCandidate(BaseModel):
 class EmbeddedExtractionResult(BaseModel):
     document_id: uuid.UUID
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    schema_version: Literal["lab-pdf-v1"] = EXTRACTION_SCHEMA_VERSION
-    extractor_name: Literal["pdfplumber"] = "pdfplumber"
+    schema_version: Literal["lab-pdf-v1", "lab-pdf-v2"] = EXTRACTION_SCHEMA_VERSION
+    extractor_name: str = Field(default="pdfplumber", min_length=1, max_length=64)
     extractor_version: str = Field(min_length=1, max_length=64)
-    extraction_tier: Literal["embedded_text"] = "embedded_text"
+    extraction_tier: Literal["embedded_text", "ocr", "mixed"] = "embedded_text"
+    textless_pages: list[int] = Field(default_factory=list, max_length=100)
+    ocr_pages: list[int] = Field(default_factory=list, max_length=100)
     page_count: int = Field(ge=1, le=100)
     parsed_count: int = Field(ge=0)
     unparsed_count: int = Field(ge=0)
@@ -68,6 +71,10 @@ class EmbeddedExtractionResult(BaseModel):
         unparsed = len(self.candidates) - parsed
         if (self.parsed_count, self.unparsed_count) != (parsed, unparsed):
             raise ValueError("extraction counts do not match candidates")
-        if self.adequate != (parsed > 0):
-            raise ValueError("embedded extraction adequacy does not match parsed rows")
+        if self.adequate and parsed == 0:
+            raise ValueError("adequate extraction requires at least one parsed row")
+        if any(
+            page < 1 or page > self.page_count for page in (*self.textless_pages, *self.ocr_pages)
+        ):
+            raise ValueError("extraction page list is outside document bounds")
         return self

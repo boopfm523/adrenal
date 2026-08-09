@@ -179,6 +179,16 @@ imports that mailbox result into the AI draft namespace and returns its page box
 extractor/schema versions, and `requires_confirmation: true`. This creates no lab fact
 and makes no model call.
 
+If a page has no embedded words, the worker renders only that page with pinned Poppler
+and runs pinned English Tesseract OCR. Rendering is capped at 2,400 pixels per
+dimension, 5.76 million pixels per page, 100 million pixels per document, 30 seconds
+per command, 120 seconds per document, and 4 MiB of TSV output. OCR candidates retain
+rendered-pixel boxes and word confidence; values below 0.8 and rows that cannot be
+parsed remain visible as `low_confidence`/`unparsed_row`. Page PNG and TSV scratch data
+live in a temporary directory and are purged on success or failure. The extraction
+records whether it used `embedded_text`, `ocr`, or `mixed`; OCR still creates only a
+confirmation-required draft.
+
 ---
 
 ## Analytics
@@ -274,10 +284,9 @@ So you don't go looking for it:
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
-- **No OCR/vision fallback or PDF review UI yet.** Manual/CSV lab facts, private PDF
-  source storage, and deterministic embedded-text drafts exist. Scanned-page OCR,
-  vision fallback, and per-result review remain `hc-xo6.5.2`, `hc-xo6.5.3`, and
-  `hc-xo6.6`.
+- **No vision fallback or PDF review UI yet.** Manual/CSV lab facts, private PDF source
+  storage, deterministic embedded-text drafts, and bounded scanned-page OCR exist.
+  Vision fallback and per-result review remain `hc-xo6.5.3` and `hc-xo6.6`.
 - **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
   implemented; direct Garmin API access remains gated by vendor approval.
 - **No record/account deletion.** Backup retention exists; application-data deletion

@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 import pdfplumber
 
@@ -37,6 +37,7 @@ def extract_embedded_text(
     with pdfplumber.open(path) as pdf:
         if not 1 <= len(pdf.pages) <= 100:
             raise ValueError("pdf_page_limit_exceeded")
+        textless_pages: list[int] = []
         for page_number, page in enumerate(pdf.pages, start=1):
             words = page.extract_words(
                 keep_blank_chars=False,
@@ -44,7 +45,9 @@ def extract_embedded_text(
                 x_tolerance=2,
                 y_tolerance=3,
             )
-            candidates.extend(_page_candidates(words, page_number=page_number))
+            if not words:
+                textless_pages.append(page_number)
+            candidates.extend(candidates_from_words(words, page_number=page_number))
             if len(candidates) > MAX_EXTRACTED_ROWS:
                 raise ValueError("pdf_extracted_row_limit_exceeded")
 
@@ -55,6 +58,7 @@ def extract_embedded_text(
             sha256=sha256,
             extractor_version=EMBEDDED_EXTRACTOR_VERSION,
             page_count=len(pdf.pages),
+            textless_pages=textless_pages,
             parsed_count=parsed_count,
             unparsed_count=unparsed_count,
             # A deterministic table header plus at least one explicit row is enough
@@ -64,10 +68,16 @@ def extract_embedded_text(
         )
 
 
-def _page_candidates(
-    words: list[dict[str, object]], *, page_number: int
+def candidates_from_words(
+    words: list[dict[str, object]],
+    *,
+    page_number: int,
+    extraction_tier: Literal["embedded_text", "ocr"] = "embedded_text",
 ) -> list[PdfDraftCandidate]:
-    lines = _group_lines(words)
+    # OCR word boxes for one visual row commonly differ by several pixels because
+    # glyph ascenders and descenders change each token's top edge. PDF text boxes are
+    # much tighter, so keep the deterministic source-specific tolerance explicit.
+    lines = _group_lines(words, top_tolerance=12 if extraction_tier == "ocr" else 3)
     header_index: int | None = None
     columns: dict[str, float] = {}
     for index, line in enumerate(lines):
@@ -80,6 +90,7 @@ def _page_candidates(
     for row_index, line in enumerate(lines, start=1):
         source_text = " ".join(str(word["text"]) for word in line)[:MAX_SOURCE_LINE_CHARS]
         bounds = _bounds(line)
+        confidence = min(_confidence(word) for word in line)
         if header_index is not None and row_index - 1 == header_index:
             continue
         cells = _partition(line, columns) if header_index is not None else {}
@@ -87,10 +98,16 @@ def _page_candidates(
         value = cells.get("value")
         parsed = bool(analyte and value)
         flags = [] if parsed else ["unparsed_row"]
+        if confidence < 0.8:
+            flags.append("low_confidence")
         candidates.append(
             PdfDraftCandidate(
                 page_number=page_number,
                 row_index=row_index,
+                extraction_tier=extraction_tier,
+                coordinate_space=(
+                    "pdf_points" if extraction_tier == "embedded_text" else "rendered_pixels"
+                ),
                 parsed=parsed,
                 analyte_name=analyte if parsed else None,
                 original_value=value if parsed else None,
@@ -101,18 +118,23 @@ def _page_candidates(
                 top=bounds[1],
                 x1=bounds[2],
                 bottom=bounds[3],
-                confidence=1.0 if parsed else 0.0,
+                confidence=confidence,
                 flags=flags,
             )
         )
     return candidates
 
 
-def _group_lines(words: Iterable[dict[str, object]]) -> list[list[dict[str, object]]]:
+def _group_lines(
+    words: Iterable[dict[str, object]], *, top_tolerance: float
+) -> list[list[dict[str, object]]]:
     ordered = sorted(words, key=lambda word: (_coordinate(word["top"]), _coordinate(word["x0"])))
     lines: list[list[dict[str, object]]] = []
     for word in ordered:
-        if not lines or abs(_coordinate(word["top"]) - _coordinate(lines[-1][0]["top"])) > 3:
+        if (
+            not lines
+            or abs(_coordinate(word["top"]) - _coordinate(lines[-1][0]["top"])) > top_tolerance
+        ):
             lines.append([word])
         else:
             lines[-1].append(word)
@@ -167,3 +189,10 @@ def _coordinate(value: object) -> float:
     if isinstance(value, (int, float, str)):
         return float(value)
     raise ValueError("pdf_coordinate_invalid")
+
+
+def _confidence(word: dict[str, object]) -> float:
+    value = word.get("confidence", 1.0)
+    if isinstance(value, (int, float, str)):
+        return max(0.0, min(1.0, float(value)))
+    raise ValueError("pdf_confidence_invalid")

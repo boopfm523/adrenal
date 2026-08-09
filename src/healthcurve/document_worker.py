@@ -28,6 +28,7 @@ from healthcurve.labs.documents import (
     write_extraction_result,
     write_validation_result,
 )
+from healthcurve.labs.ocr_extraction import OcrError, extract_textless_pages, failed_ocr_result
 from healthcurve.labs.pdf_extraction import EMBEDDED_EXTRACTOR_VERSION, extract_embedded_text
 from healthcurve.labs.pdf_schemas import EmbeddedExtractionResult, PdfDraftCandidate
 
@@ -235,19 +236,21 @@ def process_available(
             layout.path("work", document_id).unlink(missing_ok=True)
             validation = load_validation_result(layout, document_id)
             if validation is not None and validation.status == "stored":
-                _extract_if_needed(layout, validation)
+                _extract_if_needed(layout, validation, runner=runner)
             continue
         try:
             validation = validate_one(layout, document_id, runner=runner)
         except FileNotFoundError:
             continue
         if validation.status == "stored":
-            _extract_if_needed(layout, validation)
+            _extract_if_needed(layout, validation, runner=runner)
         processed += 1
     return processed
 
 
-def _extract_if_needed(layout: DocumentLayout, validation: ValidationResult) -> None:
+def _extract_if_needed(
+    layout: DocumentLayout, validation: ValidationResult, *, runner: CommandRunner
+) -> None:
     target = layout.path("extractions", validation.document_id, ".json")
     if target.exists() or is_deleted(layout, validation.document_id):
         return
@@ -258,6 +261,11 @@ def _extract_if_needed(layout: DocumentLayout, validation: ValidationResult) -> 
             document_id=validation.document_id,
             sha256=validation.sha256,
         )
+        if extraction.textless_pages:
+            try:
+                extraction = extract_textless_pages(source, embedded=extraction, runner=runner)
+            except OcrError as exc:
+                extraction = failed_ocr_result(extraction, reason_code=str(exc))
     except Exception:  # A hostile parser failure becomes visible unparsed evidence.
         extraction = EmbeddedExtractionResult(
             document_id=validation.document_id,

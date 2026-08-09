@@ -63,7 +63,11 @@ FROM runtime AS document-runtime
 COPY --from=document-builder --chown=10001:10001 /app/.venv /app/.venv
 USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends qpdf=11.3.0-1+deb12u1 \
+ && apt-get install -y --no-install-recommends \
+      poppler-utils=22.12.0-2+deb12u3 \
+      qpdf=11.3.0-1+deb12u1 \
+      tesseract-ocr=5.3.0-2 \
+      tesseract-ocr-eng=1:4.1.0-2 \
  && rm -rf /var/lib/apt/lists/*
 USER 10001:10001
 
