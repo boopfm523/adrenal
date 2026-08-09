@@ -96,6 +96,7 @@ def test_defaults_are_safe() -> None:
     settings = _settings()
     assert settings.debug is False
     assert settings.environment is Environment.DEV
+    assert settings.ollama_model == "qwen3:30b"
 
 
 @pytest.mark.parametrize(

@@ -193,11 +193,13 @@ Also expected, and the main practical cost of polling. Telegram holds updates fo
 
 **Bot replies to `/help` but says "the language model is unavailable" for plain
 sentences.**
-Expected on a fresh install: no model is pulled yet, and this is the designed
-fallback rather than a guess. Check with `docker compose exec ollama ollama list`.
-Pull one with `docker compose exec ollama ollama pull <model>` and set
-`HC_OLLAMA_MODEL` to match. The commands (`/dose`, `/symptom`, `/today`) are
-deterministic and keep working without any model at all.
+The safe fallback means the configured model cannot be reached. HealthCurve defaults
+to ADR-0010's `qwen3:30b`. With native Ollama on macOS, run `ollama list` and
+`ollama pull qwen3:30b`; with the bundled CPU-only service, use
+`docker compose exec ollama ollama list` and
+`docker compose exec ollama ollama pull qwen3:30b`. Confirm `HC_OLLAMA_MODEL` names the
+installed tag. The commands (`/dose`, `/symptom`, `/today`) remain deterministic and
+keep working without any model at all.
 
 **`telegram update failed` with a `reason_code`.**
 The `reason_code` is the exception type. `ProgrammingError` is usually a database

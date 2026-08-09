@@ -80,10 +80,10 @@ decisions. See the next section for the build order.
 
 ### 3. The extraction model has been replaced by decision
 
-`HC_OLLAMA_MODEL` defaults to `qwen3-coder`. That is a **code** model, and it is
-**text-only**. It cannot read a PDF page image at all, and a general instruct model
-fits the runtime task. ADR-0010 selects `qwen3:30b` for text and `qwen3-vl:30b` for the
-vision fallback; `hc-lfr` tracks applying and proving that runtime change.
+`HC_OLLAMA_MODEL` now defaults to ADR-0010's `qwen3:30b` general instruction model for
+Telegram and structured text extraction. `qwen3-vl:30b` remains the selected future
+vision fallback for document pages. The code-oriented `qwen3-coder` is not a runtime
+dependency.
 
 ---
 

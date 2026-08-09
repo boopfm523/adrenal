@@ -45,7 +45,7 @@ services:
       # in this container is CPU-only. Must still resolve to a private address
       # (ADR-0003); the app refuses to start otherwise.
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
-      HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3-coder}
+      HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
@@ -90,7 +90,7 @@ services:
       # in this container is CPU-only. Must still resolve to a private address
       # (ADR-0003); the app refuses to start otherwise.
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
-      HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3-coder}
+      HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
