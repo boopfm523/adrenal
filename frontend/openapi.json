@@ -1,6 +1,60 @@
 {
   "components": {
     "schemas": {
+      "Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post": {
+        "properties": {
+          "analyte_map_json": {
+            "default": "{}",
+            "title": "Analyte Map Json",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Sha256",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "mapping_json": {
+            "title": "Mapping Json",
+            "type": "string"
+          },
+          "report_local": {
+            "format": "date-time",
+            "title": "Report Local",
+            "type": "string"
+          },
+          "specimen_local": {
+            "format": "date-time",
+            "title": "Specimen Local",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "file",
+          "expected_sha256",
+          "mapping_json",
+          "specimen_local",
+          "report_local"
+        ],
+        "title": "Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post",
+        "type": "object"
+      },
       "Body_confirm_import_route_api_v1_integrations_garmin_imports_confirm_post": {
         "properties": {
           "expected_sha256": {
@@ -59,6 +113,53 @@
           "amount"
         ],
         "title": "Body_log_injection_form_emergency_injection_post",
+        "type": "object"
+      },
+      "Body_preview_csv_api_v1_labs_imports_csv_preview_post": {
+        "properties": {
+          "analyte_map_json": {
+            "default": "{}",
+            "title": "Analyte Map Json",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "mapping_json": {
+            "title": "Mapping Json",
+            "type": "string"
+          },
+          "report_local": {
+            "format": "date-time",
+            "title": "Report Local",
+            "type": "string"
+          },
+          "specimen_local": {
+            "format": "date-time",
+            "title": "Specimen Local",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "file",
+          "mapping_json",
+          "specimen_local",
+          "report_local"
+        ],
+        "title": "Body_preview_csv_api_v1_labs_imports_csv_preview_post",
         "type": "object"
       },
       "Body_preview_import_api_v1_integrations_garmin_imports_preview_post": {
@@ -1521,6 +1622,162 @@
           "default_timezone"
         ],
         "title": "LoginResponse",
+        "type": "object"
+      },
+      "ManualLabPanelIn": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Id"
+          },
+          "laboratory_name": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Laboratory Name"
+          },
+          "report_status": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Status"
+          },
+          "report_time": {
+            "$ref": "#/components/schemas/EventTimeIn"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ManualLabResultIn"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Results",
+            "type": "array"
+          },
+          "specimen_time": {
+            "$ref": "#/components/schemas/EventTimeIn"
+          },
+          "specimen_type": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Type"
+          }
+        },
+        "required": [
+          "specimen_time",
+          "report_time",
+          "results"
+        ],
+        "title": "ManualLabPanelIn",
+        "type": "object"
+      },
+      "ManualLabResultIn": {
+        "additionalProperties": false,
+        "properties": {
+          "abnormal_flag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abnormal Flag"
+          },
+          "analyte_name": {
+            "minLength": 1,
+            "title": "Analyte Name",
+            "type": "string"
+          },
+          "normalized_analyte_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Analyte Code"
+          },
+          "original_reference_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Reference Range"
+          },
+          "original_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Unit"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Value"
+          },
+          "qualitative_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualitative Result"
+          }
+        },
+        "required": [
+          "analyte_name"
+        ],
+        "title": "ManualLabResultIn",
         "type": "object"
       },
       "MedicationIn": {
@@ -3707,6 +3964,233 @@
         "summary": "Preview Import",
         "tags": [
           "garmin"
+        ]
+      }
+    },
+    "/api/v1/labs/imports/csv/confirm": {
+      "post": {
+        "operationId": "confirm_csv_route_api_v1_labs_imports_csv_confirm_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Confirm Csv Route Api V1 Labs Imports Csv Confirm Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Csv Route",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/imports/csv/preview": {
+      "post": {
+        "operationId": "preview_csv_api_v1_labs_imports_csv_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_csv_api_v1_labs_imports_csv_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Csv Api V1 Labs Imports Csv Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Csv",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/manual": {
+      "post": {
+        "operationId": "create_manual_lab_api_v1_labs_manual_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualLabPanelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Manual Lab",
+        "tags": [
+          "labs"
         ]
       }
     },

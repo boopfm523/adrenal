@@ -7,6 +7,7 @@ here is only true if the database constraints exist.
 from __future__ import annotations
 
 import os
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminSleepEvent,
 )
+from healthcurve.labs.models import LabPanel, LabResult
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
@@ -277,6 +279,127 @@ def test_garmin_preview_then_confirm_is_idempotent_and_preserves_provenance(
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == 2
         assert session.scalar(select(func.count()).select_from(GarminActivityEvent)) == 2
+
+
+def test_lab_csv_preview_flags_unknowns_then_confirm_is_idempotent(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    csv_payload = (
+        b"Analyte,Value,Qualitative,Unit,Range,Flag\n"
+        b"Known synthetic analyte,12.3,,nmol/L,5-10,H\n"
+        b"Mystery synthetic analyte,,Not detected,,,\n"
+        b"SYNTHETIC TEST,7,,units,1-9,\n"
+    )
+    upload = {"file": ("synthetic-labs.csv", csv_payload, "text/csv")}
+    data = {
+        "mapping_json": (
+            '{"analyte":"Analyte","value":"Value","qualitative":"Qualitative",'
+            '"unit":"Unit","reference_range":"Range","abnormal_flag":"Flag"}'
+        ),
+        "analyte_map_json": (
+            '{"Known synthetic analyte":"known-code",'
+            '"Synthetic Test":"first-code","synthetic test":"second-code"}'
+        ),
+        "specimen_local": "2026-08-09T07:30:00",
+        "report_local": "2026-08-09T09:00:00",
+        "timezone": "Europe/London",
+    }
+    with Session(engine) as session:
+        before_panels = session.scalar(select(func.count()).select_from(LabPanel))
+        before_results = session.scalar(select(func.count()).select_from(LabResult))
+        assert before_panels is not None
+        assert before_results is not None
+
+    preview = client.post(
+        "/api/v1/labs/imports/csv/preview",
+        files=upload,
+        data=data,
+        headers=logged_in,
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["creates_facts"] is False
+    assert body["candidates"][0]["normalized_analyte_code"] == "known-code"
+    assert body["candidates"][1]["flags"] == ["unrecognized_analyte"]
+    assert body["candidates"][2]["flags"] == ["ambiguous_analyte"]
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(LabPanel)) == before_panels
+        assert session.scalar(select(func.count()).select_from(LabResult)) == before_results
+
+    mismatch = client.post(
+        "/api/v1/labs/imports/csv/confirm",
+        files=upload,
+        data={**data, "expected_sha256": "0" * 64},
+        headers=logged_in,
+    )
+    assert mismatch.status_code == 409
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(LabPanel)) == before_panels
+
+    confirm_data = {**data, "expected_sha256": body["source_sha256"]}
+    first = client.post(
+        "/api/v1/labs/imports/csv/confirm",
+        files=upload,
+        data=confirm_data,
+        headers=logged_in,
+    )
+    second = client.post(
+        "/api/v1/labs/imports/csv/confirm",
+        files=upload,
+        data=confirm_data,
+        headers=logged_in,
+    )
+    assert first.status_code == second.status_code == 200
+    assert first.json()["created"] is True
+    assert second.json()["created"] is False
+    assert second.json()["panel_id"] == first.json()["panel_id"]
+    assert first.json()["result_count"] == 3
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(LabPanel)) == before_panels + 1
+        assert session.scalar(select(func.count()).select_from(LabResult)) == before_results + 3
+        imported = session.scalar(
+            select(LabPanel).where(LabPanel.id == uuid.UUID(first.json()["panel_id"]))
+        )
+        assert imported is not None
+        assert imported.confirmation_state.value == "confirmed_from_draft"
+        assert imported.results[1].qualitative_result == "Not detected"
+        assert imported.results[1].normalized_analyte_code is None
+
+
+def test_manual_qualitative_lab_entry_is_a_direct_fact(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    response = client.post(
+        "/api/v1/labs/manual",
+        headers=logged_in,
+        json={
+            "specimen_time": {
+                "local_time": "2026-08-08T10:15:00",
+                "timezone": "Europe/London",
+            },
+            "report_time": {
+                "local_time": "2026-08-08T12:30:00",
+                "timezone": "Europe/London",
+            },
+            "laboratory_name": "Synthetic laboratory",
+            "results": [
+                {
+                    "analyte_name": "Synthetic qualitative result",
+                    "qualitative_result": "Not detected (verbatim)",
+                    "abnormal_flag": "Lab supplied flag",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["category"] == "fact"
+    with Session(engine) as session:
+        panel = session.get(LabPanel, uuid.UUID(response.json()["panel_id"]))
+        assert panel is not None
+        assert panel.source_type.value == "web"
+        assert panel.confirmation_state.value == "direct"
+        assert panel.results[0].qualitative_result == "Not detected (verbatim)"
+        assert panel.results[0].abnormal_flag == "Lab supplied flag"
 
 
 # ---------------------------------------------------------------------------

@@ -253,6 +253,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/labs/imports/csv/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Csv Route */
+        post: operations["confirm_csv_route_api_v1_labs_imports_csv_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labs/imports/csv/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Csv */
+        post: operations["preview_csv_api_v1_labs_imports_csv_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labs/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Manual Lab */
+        post: operations["create_manual_lab_api_v1_labs_manual_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/life-events": {
         parameters: {
             query?: never;
@@ -576,6 +627,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post */
+        Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post: {
+            /**
+             * Analyte Map Json
+             * @default {}
+             */
+            analyte_map_json: string;
+            /** Expected Sha256 */
+            expected_sha256: string;
+            /** File */
+            file: string;
+            /** Mapping Json */
+            mapping_json: string;
+            /**
+             * Report Local
+             * Format: date-time
+             */
+            report_local: string;
+            /**
+             * Specimen Local
+             * Format: date-time
+             */
+            specimen_local: string;
+            /** Timezone */
+            timezone?: string | null;
+        };
         /** Body_confirm_import_route_api_v1_integrations_garmin_imports_confirm_post */
         Body_confirm_import_route_api_v1_integrations_garmin_imports_confirm_post: {
             /** Expected Sha256 */
@@ -601,6 +678,30 @@ export interface components {
             injection_site: string;
             /** Medication Id */
             medication_id: string;
+        };
+        /** Body_preview_csv_api_v1_labs_imports_csv_preview_post */
+        Body_preview_csv_api_v1_labs_imports_csv_preview_post: {
+            /**
+             * Analyte Map Json
+             * @default {}
+             */
+            analyte_map_json: string;
+            /** File */
+            file: string;
+            /** Mapping Json */
+            mapping_json: string;
+            /**
+             * Report Local
+             * Format: date-time
+             */
+            report_local: string;
+            /**
+             * Specimen Local
+             * Format: date-time
+             */
+            specimen_local: string;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** Body_preview_import_api_v1_integrations_garmin_imports_preview_post */
         Body_preview_import_api_v1_integrations_garmin_imports_preview_post: {
@@ -1120,6 +1221,38 @@ export interface components {
             display_name: string | null;
             /** Email */
             email: string;
+        };
+        /** ManualLabPanelIn */
+        ManualLabPanelIn: {
+            /** Accession Id */
+            accession_id?: string | null;
+            /** Laboratory Name */
+            laboratory_name?: string | null;
+            /** Report Status */
+            report_status?: string | null;
+            report_time: components["schemas"]["EventTimeIn"];
+            /** Results */
+            results: components["schemas"]["ManualLabResultIn"][];
+            specimen_time: components["schemas"]["EventTimeIn"];
+            /** Specimen Type */
+            specimen_type?: string | null;
+        };
+        /** ManualLabResultIn */
+        ManualLabResultIn: {
+            /** Abnormal Flag */
+            abnormal_flag?: string | null;
+            /** Analyte Name */
+            analyte_name: string;
+            /** Normalized Analyte Code */
+            normalized_analyte_code?: string | null;
+            /** Original Reference Range */
+            original_reference_range?: string | null;
+            /** Original Unit */
+            original_unit?: string | null;
+            /** Original Value */
+            original_value?: string | null;
+            /** Qualitative Result */
+            qualitative_result?: string | null;
         };
         /** MedicationIn */
         MedicationIn: {
@@ -2008,6 +2141,121 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_csv_route_api_v1_labs_imports_csv_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_csv_api_v1_labs_imports_csv_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_csv_api_v1_labs_imports_csv_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_manual_lab_api_v1_labs_manual_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualLabPanelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
