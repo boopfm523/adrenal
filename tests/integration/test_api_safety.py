@@ -130,6 +130,12 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         assert client.get(path).status_code == 401, path
 
 
+def test_polling_mode_does_not_expose_the_telegram_webhook(client: TestClient) -> None:
+    """ADR-0008: the default outbound transport has no inbound integration route."""
+    client.cookies.clear()
+    assert client.post("/api/v1/integrations/telegram/webhook", json={}).status_code == 404
+
+
 def test_login_does_not_reveal_whether_an_account_exists(client: TestClient) -> None:
     client.cookies.clear()
     unknown = client.post(

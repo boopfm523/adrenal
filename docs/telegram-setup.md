@@ -19,7 +19,8 @@ Nothing you send becomes a recorded fact until you press **Confirm**.
 
 | Thing | Where it goes | Looks like |
 |---|---|---|
-| Bot token | `HC_TELEGRAM_BOT_TOKEN` | `8123456789:AAF...` |
+| Bot token | Encrypted `identity.integration_credential` row | never printed |
+| Encryption keys | Owner-only file outside the repo/database | JSON key ring |
 | Your chat ID | `HC_TELEGRAM_ALLOWED_CHAT_ID` | `123456789` |
 
 That is all you need for the default polling mode. No domain, no certificate, no
@@ -90,23 +91,48 @@ webhook is already registered. If a webhook is set, `getUpdates` stops working �
 `curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/deleteWebhook"` first, message the
 bot, then try again.
 
-## Step 3 — Put the two values in `.env`
+## Step 3 — Create the external encryption key
+
+Create this once at a path outside the repository:
+
+```bash
+mkdir -p "$HOME/.config/healthcurve"
+uv run python -m healthcurve.cli credential-key-init \
+  "$HOME/.config/healthcurve/credential-keys.json" --key-id key_2026_08
+```
+
+Keep a separate encrypted copy in your password manager or vault. A database backup
+cannot recover provider credentials without this file.
+
+## Step 4 — Configure the mount and store the token
 
 Edit `.env` in the project root (it is git-ignored — keep it that way):
 
-```bash
-HC_TELEGRAM_BOT_TOKEN=8123456789:AAFxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```dotenv
+HC_CREDENTIAL_KEY_FILE_HOST=/Users/you/.config/healthcurve/credential-keys.json
 HC_TELEGRAM_ALLOWED_CHAT_ID=123456789
 ```
 
-## Step 4 — Start the worker
+Now store the token through a hidden prompt. Do not put it on the command line:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
+  python -m healthcurve.cli credential-set telegram bot_token
+```
+
+The token is AES-256-GCM encrypted before PostgreSQL sees it. The key is supplied by
+the read-only mount and never stored in the database. See
+[credential-encryption.md](credential-encryption.md) for rotation and recovery.
+
+## Step 5 — Start the worker
 
 The worker is what talks to Telegram. It holds an outbound connection open, waits for
 a message, handles it, and waits again.
 
 ```bash
-docker compose up -d --force-recreate worker
-docker compose logs -f worker
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml \
+  up -d --force-recreate worker
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml logs -f worker
 ```
 
 You are looking for:
@@ -121,12 +147,13 @@ above is missing or the container did not pick up the new `.env`.
 Check the token itself with:
 
 ```bash
-docker compose run --rm api python -m healthcurve.cli telegram-status
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
+  python -m healthcurve.cli telegram-status
 ```
 
 You should see `Connected as @your_bot_name`.
 
-## Step 5 — Test it
+## Step 6 — Test it
 
 Message your bot:
 
@@ -199,16 +226,18 @@ with BotFather's `/revoke` if you'd rather.
 
 ## Disconnecting
 
-Stop the worker and remove the `HC_TELEGRAM_*` values from `.env`:
+Stop the worker. If webhook mode was ever used, clear the remote webhook while the bot
+token still exists. Then destroy the encrypted secrets and remove the chat ID from
+`.env`:
 
 ```bash
 docker compose stop worker
-```
-
-If you had ever used webhook mode, also clear it:
-
-```bash
-docker compose run --rm api python -m healthcurve.cli telegram-disconnect
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
+  python -m healthcurve.cli telegram-disconnect
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
+  python -m healthcurve.cli credential-delete telegram bot_token
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
+  python -m healthcurve.cli credential-delete telegram webhook_secret
 ```
 
 To retire the bot entirely, send BotFather `/deletebot`.
@@ -243,12 +272,13 @@ your plan at all (`SAFE-15`, `SAFE-16`).
 
 ## Appendix: webhook mode
 
-Only for a publicly hosted deployment. Set `HC_TELEGRAM_MODE=webhook`, add
-`HC_TELEGRAM_WEBHOOK_SECRET` (`openssl rand -base64 32 | tr -d '/+=' | head -c 40`) and
-`HC_PUBLIC_BASE_URL`, then:
+Only for a publicly hosted deployment. Tailscale-only production does not use this.
+Set `HC_TELEGRAM_MODE=webhook` and `HC_PUBLIC_BASE_URL`, then store a generated secret
+through `credential-set telegram webhook_secret` rather than `.env`:
 
 ```bash
-docker compose run --rm api python -m healthcurve.cli telegram-register
+docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
+  python -m healthcurve.cli telegram-register
 ```
 
 Telegram needs a valid certificate — self-signed, plain HTTP, and `localhost` all fail.

@@ -15,6 +15,7 @@ import ipaddress
 import socket
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Final, Self
 from urllib.parse import urlparse
 
@@ -114,6 +115,10 @@ class Settings(BaseSettings):
     ollama_thinking: bool = False
 
     # --- Telegram (docs/telegram-setup.md). All three are class C8 secrets. ---
+    #: Mounted JSON key ring for encrypted credentials (threat model C8). The file,
+    #: not its contents, is configured here. Production rejects plaintext provider
+    #: secrets in environment variables.
+    credential_key_file: Path | None = None
     telegram_bot_token: SecretStr | None = None
     #: Verified on every webhook request, constant-time. Without it, anyone who learns
     #: the URL can post updates (threat model T4).
@@ -191,6 +196,25 @@ class Settings(BaseSettings):
             raise ValueError(
                 "HC_AI_DATABASE_URL must not equal HC_DATABASE_URL: pointing both at "
                 "the same role defeats SAFE-15/16 while appearing to satisfy them.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_production_credentials_are_encrypted(self) -> Self:
+        if self.environment is Environment.PROD and (
+            self.telegram_bot_token is not None or self.telegram_webhook_secret is not None
+        ):
+            raise ValueError(
+                "plaintext Telegram secrets are forbidden in production; store them with "
+                "healthcurve credential-set and mount HC_CREDENTIAL_KEY_FILE (class C8)"
+            )
+        if (
+            self.environment is Environment.PROD
+            and self.telegram_allowed_chat_id is not None
+            and self.credential_key_file is None
+        ):
+            raise ValueError(
+                "HC_CREDENTIAL_KEY_FILE is required when Telegram is enabled in production"
             )
         return self
 

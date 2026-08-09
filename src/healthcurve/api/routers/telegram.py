@@ -21,9 +21,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from healthcurve.api.deps import DbSession
-from healthcurve.config import get_settings
+from healthcurve.config import TelegramMode, get_settings
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.dispatch import process_update
+from healthcurve.integrations.telegram.secrets import load_telegram_secrets
 from healthcurve.logging import get_logger
 
 router = APIRouter(prefix="/integrations/telegram", tags=["telegram"])
@@ -42,13 +43,18 @@ async def webhook(
     x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
 ) -> dict[str, bool]:
     settings = get_settings()
+    telegram_secrets = load_telegram_secrets(session, settings)
 
-    if not settings.telegram_configured:
+    if (
+        settings.telegram_mode is not TelegramMode.WEBHOOK
+        or not telegram_secrets.configured_for(settings)
+        or telegram_secrets.webhook_secret is None
+    ):
         # Not "misconfigured" -- simply not a route that exists here.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    secret = settings.telegram_webhook_secret
-    assert secret is not None  # guaranteed by telegram_configured
+    secret = telegram_secrets.webhook_secret
+    assert secret is not None  # guaranteed by the runtime credential check above
     if not x_telegram_bot_api_secret_token or not hmac.compare_digest(
         x_telegram_bot_api_secret_token, secret.get_secret_value()
     ):
@@ -68,7 +74,7 @@ async def webhook(
         return _ACK
 
     allowed_chat_id = settings.telegram_allowed_chat_id
-    assert allowed_chat_id is not None  # guaranteed by telegram_configured
+    assert allowed_chat_id is not None  # guaranteed by the runtime credential check above
 
     # Everything past this point is shared with the poller, so both transports run
     # identical allow-list, deduplication and draft logic (ADR-0008).
@@ -76,6 +82,6 @@ async def webhook(
         session,
         update,
         allowed_chat_id=allowed_chat_id,
-        client=TelegramClient(settings),
+        client=TelegramClient(settings, token=telegram_secrets.bot_token),
     )
     return _ACK

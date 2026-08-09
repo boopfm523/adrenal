@@ -17,6 +17,7 @@ from types import FrameType
 from healthcurve.config import Environment, Settings, TelegramMode, get_settings
 from healthcurve.db import get_session_factory
 from healthcurve.integrations.telegram import polling
+from healthcurve.integrations.telegram.secrets import TelegramSecrets, load_telegram_secrets
 from healthcurve.logging import configure_logging, get_logger
 from healthcurve.operations import worker as queue_worker
 
@@ -30,9 +31,9 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
     _stop.set()
 
 
-def _run_telegram(settings: Settings) -> None:
+def _run_telegram(settings: Settings, telegram_secrets: TelegramSecrets) -> None:
     try:
-        polling.run(settings, stop_event=_stop)
+        polling.run(settings, telegram_secrets=telegram_secrets, stop_event=_stop)
     except Exception:
         log.error(
             "telegram poller crashed",
@@ -50,8 +51,10 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    polling_enabled = (
-        settings.telegram_mode is TelegramMode.POLLING and settings.telegram_configured
+    with get_session_factory()() as session:
+        telegram_secrets = load_telegram_secrets(session, settings)
+    polling_enabled = settings.telegram_mode is TelegramMode.POLLING and (
+        telegram_secrets.configured_for(settings)
     )
 
     log.info(
@@ -66,7 +69,7 @@ def main() -> int:
     if polling_enabled:
         polling_thread = threading.Thread(
             target=_run_telegram,
-            args=(settings,),
+            args=(settings, telegram_secrets),
             name="telegram-poller",
             daemon=True,
         )

@@ -20,6 +20,7 @@ from healthcurve.db import Base
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.identity.models import AuthSession, Owner
+from healthcurve.integrations.credentials import IntegrationCredential
 from healthcurve.integrations.telegram.models import TelegramUpdate
 from healthcurve.medications.models import (
     ApprovedInstruction,
@@ -41,6 +42,7 @@ __all__ = [
     "DoseEvent",
     "EmergencyInjectionEvent",
     "ExtractionDraft",
+    "IntegrationCredential",
     "Job",
     "LifeEvent",
     "Medication",
@@ -54,4 +56,4 @@ __all__ = [
 
 #: Every table the application owns. Asserted in tests so a new model that is not
 #: imported here fails the build rather than silently vanishing from migrations.
-EXPECTED_TABLE_COUNT = 17
+EXPECTED_TABLE_COUNT = 18

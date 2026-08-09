@@ -23,7 +23,7 @@ from typing import Any
 import yaml
 from sqlalchemy import select
 
-from healthcurve.config import get_settings
+from healthcurve.config import TelegramMode, get_settings
 from healthcurve.db import get_session_factory
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
@@ -262,24 +262,139 @@ def approve_regimen(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# encrypted integration credentials
+# ---------------------------------------------------------------------------
+
+
+def credential_key_init(args: argparse.Namespace) -> int:
+    from healthcurve.integrations.credentials import create_key_file
+
+    create_key_file(Path(args.path), args.key_id)
+    print(f"Created credential key ring at {args.path} with active key {args.key_id}.")
+    print("Keep this file outside the repository and backup it separately from the database.")
+    return 0
+
+
+def credential_key_add(args: argparse.Namespace) -> int:
+    from healthcurve.integrations.credentials import add_active_key
+
+    add_active_key(Path(args.path), args.key_id)
+    print(f"Added active credential key {args.key_id}. Run credential-rotate next.")
+    return 0
+
+
+def credential_key_retire(args: argparse.Namespace) -> int:
+    from sqlalchemy import func
+
+    from healthcurve.integrations.credentials import IntegrationCredential, retire_key
+
+    factory = get_session_factory()
+    with factory() as session:
+        rows = session.scalar(
+            select(func.count())
+            .select_from(IntegrationCredential)
+            .where(IntegrationCredential.key_id == args.key_id)
+        )
+    if rows:
+        sys.exit(
+            f"Cannot retire {args.key_id}: {rows} credential row(s) still use it. "
+            "Run credential-rotate first."
+        )
+    retire_key(Path(args.path), args.key_id)
+    print(f"Retired unused credential key {args.key_id}.")
+    return 0
+
+
+def _credential_key_file() -> Path:
+    path = get_settings().credential_key_file
+    if path is None:
+        sys.exit("Set HC_CREDENTIAL_KEY_FILE to the mounted owner-only key ring.")
+    return path
+
+
+def credential_set(args: argparse.Namespace) -> int:
+    from pydantic import SecretStr
+
+    from healthcurve.integrations.credentials import (
+        CredentialKeyRing,
+        read_private_secret_file,
+        set_credential,
+    )
+
+    path = _credential_key_file()
+    value = (
+        read_private_secret_file(Path(args.value_file))
+        if args.value_file
+        else SecretStr(getpass.getpass(f"{args.provider}/{args.name} value: "))
+    )
+    if not value.get_secret_value():
+        sys.exit("Credential value must not be empty.")
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        set_credential(
+            session,
+            owner_id=owner.id,
+            provider=args.provider,
+            name=args.name,
+            value=value,
+            key_ring=CredentialKeyRing.from_file(path),
+        )
+    print(f"Stored encrypted credential {args.provider}/{args.name}; restart its worker.")
+    return 0
+
+
+def credential_delete(args: argparse.Namespace) -> int:
+    from healthcurve.integrations.credentials import delete_credential
+
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        deleted = delete_credential(
+            session, owner_id=owner.id, provider=args.provider, name=args.name
+        )
+    print("Credential destroyed." if deleted else "Credential was not present.")
+    return 0
+
+
+def credential_rotate(args: argparse.Namespace) -> int:
+    from healthcurve.integrations.credentials import CredentialKeyRing, rotate_credentials
+
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        count = rotate_credentials(
+            session,
+            owner_id=owner.id,
+            key_ring=CredentialKeyRing.from_file(_credential_key_file()),
+        )
+    print(f"Re-encrypted {count} credential(s) with the active key.")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # telegram
 # ---------------------------------------------------------------------------
 
 
 def telegram_status(args: argparse.Namespace) -> int:
     from healthcurve.integrations.telegram.client import TelegramClient
+    from healthcurve.integrations.telegram.secrets import load_telegram_secrets
 
     settings = get_settings()
-    print(f"Bot token set:      {'yes' if settings.telegram_bot_token else 'NO'}")
-    print(f"Webhook secret set: {'yes' if settings.telegram_webhook_secret else 'NO'}")
+    factory = get_session_factory()
+    with factory() as session:
+        telegram_secrets = load_telegram_secrets(session, settings)
+    print(f"Bot token set:      {'yes' if telegram_secrets.bot_token else 'NO'}")
+    print(f"Webhook secret set: {'yes' if telegram_secrets.webhook_secret else 'NO'}")
     print(f"Allowed chat id:    {settings.telegram_allowed_chat_id or 'NOT SET'}")
     print(f"Public base URL:    {settings.public_base_url or 'NOT SET'}")
 
-    if not settings.telegram_bot_token:
-        print("\nSet HC_TELEGRAM_BOT_TOKEN and re-run. See docs/telegram-setup.md")
+    if not telegram_secrets.bot_token:
+        print("\nStore telegram/bot_token with credential-set. See docs/telegram-setup.md")
         return 1
 
-    client = TelegramClient(settings)
+    client = TelegramClient(settings, token=telegram_secrets.bot_token)
     me = client.get_me()
     if me and me.get("ok"):
         bot = me["result"]
@@ -300,12 +415,18 @@ def telegram_status(args: argparse.Namespace) -> int:
 
 def telegram_register(args: argparse.Namespace) -> int:
     from healthcurve.integrations.telegram.client import TelegramClient
+    from healthcurve.integrations.telegram.secrets import load_telegram_secrets
 
     settings = get_settings()
-    if not settings.telegram_configured:
+    if settings.telegram_mode is not TelegramMode.WEBHOOK:
+        sys.exit("Set HC_TELEGRAM_MODE=webhook before registering a webhook.")
+    factory = get_session_factory()
+    with factory() as session:
+        telegram_secrets = load_telegram_secrets(session, settings)
+    if not telegram_secrets.configured_for(settings):
         sys.exit(
-            "Telegram is not fully configured. All three of HC_TELEGRAM_BOT_TOKEN, "
-            "HC_TELEGRAM_WEBHOOK_SECRET, and HC_TELEGRAM_ALLOWED_CHAT_ID are required. "
+            "Telegram is not fully configured. Store telegram/bot_token and "
+            "telegram/webhook_secret, and set HC_TELEGRAM_ALLOWED_CHAT_ID. "
             "See docs/telegram-setup.md"
         )
     base = args.base_url or settings.public_base_url
@@ -315,10 +436,12 @@ def telegram_register(args: argparse.Namespace) -> int:
         sys.exit("Telegram requires HTTPS for webhooks.")
 
     url = f"{base.rstrip('/')}/api/v1/integrations/telegram/webhook"
-    secret = settings.telegram_webhook_secret
+    secret = telegram_secrets.webhook_secret
     assert secret is not None
 
-    result = TelegramClient(settings).set_webhook(url, secret.get_secret_value())
+    result = TelegramClient(settings, token=telegram_secrets.bot_token).set_webhook(
+        url, secret.get_secret_value()
+    )
     if result and result.get("ok"):
         print(f"Webhook registered: {url}")
         return 0
@@ -328,8 +451,13 @@ def telegram_register(args: argparse.Namespace) -> int:
 
 def telegram_disconnect(args: argparse.Namespace) -> int:
     from healthcurve.integrations.telegram.client import TelegramClient
+    from healthcurve.integrations.telegram.secrets import load_telegram_secrets
 
-    result = TelegramClient().delete_webhook()
+    settings = get_settings()
+    factory = get_session_factory()
+    with factory() as session:
+        telegram_secrets = load_telegram_secrets(session, settings)
+    result = TelegramClient(settings, token=telegram_secrets.bot_token).delete_webhook()
     print("Webhook deleted." if result and result.get("ok") else f"Failed: {result}")
     return 0
 
@@ -376,6 +504,35 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--by", required=True, help="Clinician name or role")
     p.add_argument("--source", required=True, help="Letter, consultation, portal message")
     p.set_defaults(func=approve_regimen)
+
+    p = sub.add_parser("credential-key-init", help="Create an external credential key ring")
+    p.add_argument("path")
+    p.add_argument("--key-id", required=True, help="Lowercase version label, e.g. key_2026_08")
+    p.set_defaults(func=credential_key_init)
+
+    p = sub.add_parser("credential-key-add", help="Add and activate a credential key")
+    p.add_argument("path")
+    p.add_argument("--key-id", required=True)
+    p.set_defaults(func=credential_key_add)
+
+    p = sub.add_parser("credential-key-retire", help="Remove an unused inactive key")
+    p.add_argument("path")
+    p.add_argument("--key-id", required=True)
+    p.set_defaults(func=credential_key_retire)
+
+    p = sub.add_parser("credential-set", help="Store one encrypted integration credential")
+    p.add_argument("provider", help="Lowercase provider, e.g. telegram")
+    p.add_argument("name", help="Lowercase credential name, e.g. bot_token")
+    p.add_argument("--value-file", help="Read from a private file instead of a hidden prompt")
+    p.set_defaults(func=credential_set)
+
+    p = sub.add_parser("credential-delete", help="Destroy one integration credential")
+    p.add_argument("provider")
+    p.add_argument("name")
+    p.set_defaults(func=credential_delete)
+
+    p = sub.add_parser("credential-rotate", help="Re-encrypt credentials with active key")
+    p.set_defaults(func=credential_rotate)
 
     p = sub.add_parser("telegram-status", help="Check the Telegram configuration")
     p.set_defaults(func=telegram_status)

@@ -247,6 +247,7 @@ So you don't go looking for it:
 - **No Garmin or weather.** Not started.
 - **No record/account deletion.** Backup retention exists; application-data deletion
   and account closure are tracked separately.
-- **No rate limiting, MFA, or token encryption at rest.**
+- **No rate limiting or MFA.** Integration token encryption and rotation are
+  implemented; provider connections beyond Telegram are not.
 
 `bd ready` lists what's actually next.

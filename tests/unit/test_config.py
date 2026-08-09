@@ -64,6 +64,24 @@ def test_public_ollama_error_is_a_value_error() -> None:
     assert issubclass(PublicOllamaError, ValueError)
 
 
+def test_production_rejects_plaintext_integration_secrets() -> None:
+    with pytest.raises(ValueError, match="plaintext Telegram secrets are forbidden"):
+        _settings(
+            environment="prod",
+            ai_database_url="postgresql+psycopg://healthcurve_ai@postgres/healthcurve",
+            telegram_bot_token="synthetic-token",
+        )
+
+
+def test_production_telegram_metadata_requires_external_key_file() -> None:
+    with pytest.raises(ValueError, match="HC_CREDENTIAL_KEY_FILE is required"):
+        _settings(
+            environment="prod",
+            ai_database_url="postgresql+psycopg://healthcurve_ai@postgres/healthcurve",
+            telegram_allowed_chat_id=123,
+        )
+
+
 def test_debug_is_rejected_in_production() -> None:
     """Threat model T2: interactive tracebacks leak health data and internals."""
     with pytest.raises(ValueError, match="debug must be disabled in production"):

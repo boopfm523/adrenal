@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from pydantic import SecretStr
 
 from healthcurve.config import Settings, get_settings
 from healthcurve.logging import get_logger
@@ -23,15 +24,16 @@ TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
 
 
 class TelegramClient:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, token: SecretStr | None = None) -> None:
         self._settings = settings or get_settings()
+        self._token = token or self._settings.telegram_bot_token
 
     @property
     def configured(self) -> bool:
-        return bool(self._settings.telegram_bot_token)
+        return self._token is not None
 
     def _url(self, method: str) -> str:
-        token = self._settings.telegram_bot_token
+        token = self._token
         assert token is not None  # guarded by `configured`
         return f"{API_BASE}/bot{token.get_secret_value()}/{method}"
 

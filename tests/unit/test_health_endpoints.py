@@ -11,6 +11,8 @@ from healthcurve.config import Environment, Settings
 
 def _client(environment: Environment = Environment.DEV) -> TestClient:
     settings = Settings(
+        # Unit tests must not inherit the developer's real integration configuration.
+        _env_file=None,  # type: ignore[call-arg]
         environment=environment,
         ollama_base_url="http://ollama:11434",
         # Production refuses to start without a separate AI role (SAFE-15/16).

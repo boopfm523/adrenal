@@ -18,11 +18,13 @@ from dataclasses import dataclass, field
 from typing import Any, Final
 
 import httpx
+from pydantic import SecretStr
 
 from healthcurve.config import Settings, get_settings
 from healthcurve.db import get_session_factory
 from healthcurve.integrations.telegram.client import API_BASE, TelegramClient
 from healthcurve.integrations.telegram.dispatch import UpdateOutcome, process_update
+from healthcurve.integrations.telegram.secrets import TelegramSecrets
 from healthcurve.logging import get_logger
 
 log = get_logger(__name__)
@@ -64,11 +66,13 @@ class TelegramPoller:
         self,
         settings: Settings | None = None,
         *,
+        token: SecretStr | None = None,
         client: TelegramClient | None = None,
         stop_event: threading.Event | None = None,
     ) -> None:
         self._settings = settings or get_settings()
-        self._client = client or TelegramClient(self._settings)
+        self._token_value = token or self._settings.telegram_bot_token
+        self._client = client or TelegramClient(self._settings, token=self._token_value)
         self._stop = stop_event or threading.Event()
         self._offset: int | None = None
         self.stats = PollerStats()
@@ -83,7 +87,7 @@ class TelegramPoller:
         return self._offset
 
     def _token(self) -> str:
-        token = self._settings.telegram_bot_token
+        token = self._token_value
         if token is None:
             raise TelegramNotConfiguredError("HC_TELEGRAM_BOT_TOKEN is not set")
         return token.get_secret_value()
@@ -235,10 +239,19 @@ class TelegramPoller:
         return outcome
 
 
-def run(settings: Settings | None = None, *, stop_event: threading.Event | None = None) -> None:
+def run(
+    settings: Settings | None = None,
+    *,
+    telegram_secrets: TelegramSecrets | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     """Entry point used by the worker."""
     settings = settings or get_settings()
-    if not settings.telegram_configured:
+    telegram_secrets = telegram_secrets or TelegramSecrets(
+        bot_token=settings.telegram_bot_token,
+        webhook_secret=settings.telegram_webhook_secret,
+    )
+    if not telegram_secrets.configured_for(settings):
         log.info(
             "telegram not configured; poller idle",
             integration="telegram",
@@ -247,7 +260,7 @@ def run(settings: Settings | None = None, *, stop_event: threading.Event | None 
         (stop_event or threading.Event()).wait()
         return
 
-    poller = TelegramPoller(settings, stop_event=stop_event)
+    poller = TelegramPoller(settings, token=telegram_secrets.bot_token, stop_event=stop_event)
     poller.run_forever()
 
 

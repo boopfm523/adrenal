@@ -35,6 +35,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/roadmap.md](docs/roadmap.md) | What is left to build, and why it is ordered that way |
 | [docs/beads-workflow.md](docs/beads-workflow.md) | Verified Beads commands and the working loop |
 | [docs/telegram-setup.md](docs/telegram-setup.md) | Step-by-step guide to connecting the Telegram bot |
+| [docs/credential-encryption.md](docs/credential-encryption.md) | Store, rotate, and recover integration encryption keys |
 | [docs/backup-runbook.md](docs/backup-runbook.md) | Encrypted backup setup, monitoring, retention, and recovery operations |
 
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work, and
@@ -93,7 +94,7 @@ Then connect Telegram by following [docs/telegram-setup.md](docs/telegram-setup.
 ```text
 src/healthcurve/
   app.py         FastAPI application factory (entry point)
-  cli.py         operator commands: create-owner, load-medications, telegram-*
+  cli.py         operator commands: owner, medications, credentials, Telegram
   api/           routers, request/response schemas, shared dependencies
   identity/      owner account, sessions, authorization
   events/        canonical timeline, corrections, provenance
