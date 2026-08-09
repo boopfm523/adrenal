@@ -25,23 +25,23 @@ Before closing anything: `make check` must exit 0.
 
 | Phase | State |
 |---|---|
-| **P0 Foundation** | Done except four spikes (Garmin, backup design, UI IA, Telegram PoC) |
+| **P0 Foundation** | **Done.** Safety, threat model, architecture, CI, schemas, UI IA, and feasibility spikes are complete |
 | **P1 Trusted record** | **Done.** Auth, plans, doses, events, episodes, corrections, audit, timeline, export, emergency page |
-| **P2 Telegram + AI** | Mostly done. Missing: long polling, draft *edit*, evaluation harness |
-| **P3 Dashboard, labs, reports** | **Not started.** 16 issues. This is the bulk of the remaining work |
-| **P4 Integrations** | Not started, gated on the Garmin spike |
-| **P5 Production** | Not started. 12 issues |
+| **P2 Telegram + AI** | In progress. Capture, long polling, safe fallback, and live local extraction work; draft editing, expiry, and evaluation remain |
+| **P3 Dashboard, labs, reports** | In progress. The web foundation is live; feature pages, labs, analytics, and reports remain |
+| **P4 Integrations** | Garmin export ingestion is complete; direct provider API work remains conditional |
+| **P5 Production** | In progress. Hosting, credential, and local backup foundations exist; launch controls remain |
 | **P6 Hardening** | Not started |
 
-46 open issues. The API works and holds real data today; there is **no web interface**,
-so everything currently goes through the API, the CLI, or Telegram.
+The API, Telegram capture, and authenticated web shell are operational. Beads is the
+authority for exact open counts and dependencies; run `bd ready` rather than copying a
+number from this narrative.
 
 ---
 
-## Three decisions to make first
+## Decisions already made
 
-These are `type: decision` issues at priority 0 because they change what gets built.
-Each is small — an ADR, not an implementation.
+The following decisions shape the remaining work and are preserved here for context.
 
 ### 1. Tailscale hosting breaks the Telegram webhook
 
