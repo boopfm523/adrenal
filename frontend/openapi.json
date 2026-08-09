@@ -2559,6 +2559,31 @@
         "title": "PlanComparisonSlot",
         "type": "object"
       },
+      "PrivateExportRequest": {
+        "properties": {
+          "include_ai": {
+            "default": false,
+            "title": "Include Ai",
+            "type": "boolean"
+          },
+          "include_sensitive": {
+            "default": true,
+            "title": "Include Sensitive",
+            "type": "boolean"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "PrivateExportRequest",
+        "type": "object"
+      },
       "ProvenanceOut": {
         "additionalProperties": false,
         "description": "How this record came to exist, and whether it has been corrected.",
@@ -5495,6 +5520,79 @@
           }
         },
         "summary": "Delete Account",
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/export": {
+      "post": {
+        "operationId": "private_export_api_v1_privacy_export_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrivateExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Private Export",
         "tags": [
           "privacy"
         ]

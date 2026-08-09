@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from healthcurve import privacy
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
+from healthcurve.api.routers.exports import create_export
 from healthcurve.identity import service as auth
 
 router = APIRouter(prefix="/privacy", tags=["privacy"])
@@ -31,9 +32,25 @@ class IntegrationDeletionResponse(BaseModel):
     data_rows_deleted: int
 
 
+class PrivateExportRequest(ReauthenticatedRequest):
+    include_ai: bool = False
+    include_sensitive: bool = True
+
+
 def _reauthenticate(owner: CurrentOwner, password: str) -> None:
     if not auth.verify_password(owner.password_hash, password):
         raise HTTPException(status_code=403, detail="password is incorrect")
+
+
+@router.post("/export", dependencies=[Depends(require_csrf)])
+def private_export(payload: PrivateExportRequest, session: DbSession, owner: CurrentOwner):
+    _reauthenticate(owner, payload.password)
+    return create_export(
+        session=session,
+        owner=owner,
+        include_ai=payload.include_ai,
+        include_sensitive=payload.include_sensitive,
+    )
 
 
 @router.delete(

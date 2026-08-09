@@ -151,6 +151,13 @@ th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; v
 circle.chart-series { fill: white; }
 .chart-table { margin-top: 1rem; }
 .chart-table summary { cursor: pointer; font-weight: 750; }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(16rem, 1fr)); gap: 1rem; }
+.settings-card { border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
+.privacy-action { display: grid; gap: 0.8rem; }
+.privacy-action label:not(.checkbox-label) { display: grid; gap: 0.35rem; font-weight: 700; }
+.privacy-action input:not([type="checkbox"]) { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.danger-zone { border: 2px solid #8a260f; }
+.danger-zone button { background: #8a260f; border-color: #8a260f; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
@@ -160,4 +167,5 @@ circle.chart-series { fill: white; }
   .dose-slot button { width: 100%; }
   .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values { grid-template-columns: 1fr; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
+  .settings-grid { grid-template-columns: 1fr; }
 }

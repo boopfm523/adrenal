@@ -318,8 +318,11 @@ So you don't go looking for it:
   vision fallback exist. Per-result review remains `hc-xo6.6`.
 - **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
   implemented; direct Garmin API access remains gated by vendor approval.
-- **No record/account deletion.** Backup retention exists; application-data deletion
-  and account closure are tracked separately.
+- **Deletion is available from Settings & privacy.** Eligible individual records,
+  integration data, and the complete account use password-confirmed physical deletion;
+  correction-linked facts require account deletion so history cannot be made partial.
+  Structural audit entries survive, and encrypted backup copies retain deleted data
+  until their configured expiry.
 - **No rate limiting or MFA.** Integration token encryption and rotation are
   implemented; provider connections beyond Telegram are not.
 

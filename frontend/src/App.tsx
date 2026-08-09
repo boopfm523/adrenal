@@ -11,12 +11,12 @@ import { SymptomsDiaryPage } from "./pages/SymptomsDiaryPage";
 import { PlanPage } from "./pages/PlanPage";
 import { EpisodesPage } from "./pages/EpisodesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 const placeholders = [
   ["/health-data", "Health data", "Review sleep, vitals, activity, and laboratory records with missingness shown."],
   ["/reports", "Reports", "Build snapshots for physician conversations."],
   ["/data-quality", "Data quality", "Review drafts, ambiguities, gaps, duplicates, and import health."],
-  ["/settings", "Settings & privacy", "Manage access, integrations, retention, exports, and deletion."],
 ] as const;
 
 export function App(): React.JSX.Element {
@@ -33,6 +33,7 @@ export function App(): React.JSX.Element {
           <Route path="/plan" element={<PlanPage />} />
           <Route path="/episodes" element={<EpisodesPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           {placeholders.map(([path, title, description]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} description={description} />} />
           ))}

@@ -200,3 +200,26 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
 }
+
+export interface IntegrationDeletionResult { credentials_deleted: number; data_rows_deleted: number; }
+
+export function disconnectIntegration(provider: "garmin" | "telegram", password: string, deleteData: boolean): Promise<IntegrationDeletionResult> {
+  return apiRequest<IntegrationDeletionResult>(`/privacy/integrations/${provider}`, { method: "DELETE", body: JSON.stringify({ password, delete_data: deleteData }) });
+}
+
+export async function revokeAllSessions(): Promise<void> {
+  await apiRequest<unknown>("/auth/logout-everywhere", { method: "POST" });
+}
+
+export async function deleteAccount(password: string, confirmation: string): Promise<void> {
+  await apiRequest<unknown>("/privacy/account", { method: "DELETE", body: JSON.stringify({ password, confirmation }) });
+}
+
+export async function downloadPrivateExport(password: string, includeAi: boolean): Promise<Blob> {
+  const headers = new Headers({ "Content-Type": "application/json", Accept: "application/json" });
+  const csrfToken = sessionStore.get()?.csrfToken;
+  if (csrfToken !== undefined) headers.set("X-CSRF-Token", csrfToken);
+  const response = await fetch("/api/v1/privacy/export", { method: "POST", headers, credentials: "include", body: JSON.stringify({ password, include_ai: includeAi, include_sensitive: true }) });
+  if (!response.ok) throw await parseError(response);
+  return response.blob();
+}

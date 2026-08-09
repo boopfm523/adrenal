@@ -271,6 +271,17 @@ def test_individual_deletion_requires_password_and_preserves_audit(
     assert bad_confirmation.status_code == 422
     assert client.get("/api/v1/auth/me").status_code == 200
 
+    wrong_export = client.post(
+        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD + "-wrong"}
+    )
+    assert wrong_export.status_code == 403
+    private_export = client.post(
+        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD}
+    )
+    assert private_export.status_code == 200
+    assert "attachment" in private_export.headers["content-disposition"]
+    assert private_export.json()["ai"] == {}
+
 
 def test_integration_deletion_removes_provider_data_and_audits(
     engine: Engine,

@@ -446,6 +446,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/privacy/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Private Export */
+        post: operations["private_export_api_v1_privacy_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/privacy/integrations/{provider}": {
         parameters: {
             query?: never;
@@ -1612,6 +1629,21 @@ export interface components {
             /** Status */
             status: string;
             unit: components["schemas"]["DoseUnit"];
+        };
+        /** PrivateExportRequest */
+        PrivateExportRequest: {
+            /**
+             * Include Ai
+             * @default false
+             */
+            include_ai: boolean;
+            /**
+             * Include Sensitive
+             * @default true
+             */
+            include_sensitive: boolean;
+            /** Password */
+            password: string;
         };
         /**
          * ProvenanceOut
@@ -2950,6 +2982,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    private_export_api_v1_privacy_export_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
