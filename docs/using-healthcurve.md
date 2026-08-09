@@ -18,6 +18,7 @@ emergency page remains server-rendered so it does not depend on JavaScript.
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
 | Review symptoms, diary, and life events | Web Symptoms & diary; sensitive entries are hidden until explicitly revealed |
+| Review the approved plan and version changes | Web Plan; approval remains a separate CLI-only human action |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |

@@ -14,6 +14,7 @@ export type Symptom = components["schemas"]["SymptomOut"];
 export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
+export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -166,4 +167,16 @@ export function getDiaryEntries(includeSensitive = false): Promise<DiaryEntry[]>
 
 export function getLifeEvents(includeSensitive = false): Promise<LifeEvent[]> {
   return apiRequest<LifeEvent[]>(`/life-events${includeSensitive ? "?include_sensitive=true" : ""}`);
+}
+
+export function getRegimens(): Promise<RegimenVersion[]> {
+  return apiRequest<RegimenVersion[]>("/regimens");
+}
+
+export function getActiveRegimen(): Promise<RegimenVersion | null> {
+  return apiRequest<RegimenVersion | null>("/regimens/active");
+}
+
+export function getRegimenDiff(olderId: string, newerId: string): Promise<Record<string, string[]>> {
+  return apiRequest<Record<string, string[]>>(`/regimens/${olderId}/diff/${newerId}`);
 }
