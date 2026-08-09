@@ -19,6 +19,9 @@ export type LifeEvent = components["schemas"]["LifeEventOut"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
 export type DataQuality = components["schemas"]["DataQualityOut"];
+export type ReportSummary = components["schemas"]["ReportOut"];
+export type ReportPreview = components["schemas"]["ReportPreviewOut"];
+export type ReportCreate = components["schemas"]["ReportCreateRequest"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -204,6 +207,18 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
 
 export function getDataQuality(): Promise<DataQuality> {
   return apiRequest<DataQuality>("/data-quality");
+}
+
+export function getReports(): Promise<ReportSummary[]> {
+  return apiRequest<ReportSummary[]>("/reports");
+}
+
+export function getReport(id: string): Promise<ReportPreview> {
+  return apiRequest<ReportPreview>(`/reports/${id}`);
+}
+
+export function createReport(payload: ReportCreate): Promise<ReportSummary> {
+  return apiRequest<ReportSummary>("/reports", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export interface IntegrationDeletionResult { credentials_deleted: number; data_rows_deleted: number; }

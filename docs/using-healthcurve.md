@@ -247,6 +247,12 @@ preview data, and `GET /api/v1/reports/{id}/artifacts/{pdf|csv|json}` verifies t
 artifact checksum before a no-store download. Generation and downloads produce only
 structural audit metadata—never report contents.
 
+The authenticated `/reports` page provides the same workflow without API calls:
+choose the range and sections, optionally request CSV/JSON, generate locally, preview
+the four category boundaries, and download any retained artifact from snapshot
+history. AI and sensitive notes are both off by default and display an explicit
+warning when selected.
+
 ## Data quality
 
 The authenticated `/data-quality` page collects items that need attention from AI
@@ -342,8 +348,6 @@ connected to first.
 
 So you don't go looking for it:
 
-- **No physician report builder page yet.** Immutable snapshots and local PDF/CSV/JSON
-  APIs are available, but the range/section selection and history UI remains P3 work.
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
