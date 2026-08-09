@@ -433,6 +433,7 @@ class TimelinePage(ApiModel):
 
 class PlanComparisonSlot(ApiModel):
     slot_id: uuid.UUID | None
+    medication_id: uuid.UUID
     medication_name: str
     scheduled_local_time: time | None
     planned_amount: Decimal | None
@@ -442,6 +443,8 @@ class PlanComparisonSlot(ApiModel):
     #: on_time | late | early | missing | unplanned | extra
     status: str
     minutes_from_scheduled: int | None
+    unit: DoseUnit
+    route: Route
 
     @field_serializer("planned_amount", "actual_amount")
     def _amounts(self, value: Decimal | None) -> str | None:

@@ -779,6 +779,48 @@ def test_comparison_states_its_metric_definition_and_timezone(
     assert "never stored as a zero dose" in body["metric_definition"]
 
 
+def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    medication_id = _a_medication(client, logged_in)
+    version = client.post(
+        "/api/v1/regimens",
+        json={
+            "version_label": "synthetic comparison plan",
+            "effective_from": "2026-01-01T00:00:00",
+            "effective_to": "2026-12-31T00:00:00",
+            "slots": [
+                {
+                    "medication_id": medication_id,
+                    "scheduled_local_time": "07:00:00",
+                    "amount": "10",
+                    "unit": "mg",
+                    "route": "oral",
+                }
+            ],
+            "instructions": [],
+        },
+        headers=logged_in,
+    )
+    assert version.status_code == 201, version.text
+    approved = client.post(
+        f"/api/v1/regimens/{version.json()['id']}/approve",
+        json={"approved_by": "Dr Synthetic", "approval_source": "synthetic fixture"},
+        headers=logged_in,
+    )
+    assert approved.status_code == 200, approved.text
+
+    body = client.get(
+        "/api/v1/doses/plan-comparison",
+        params={"day": "2026-05-02", "timezone": "Europe/London"},
+    ).json()
+
+    planned_slot = next(slot for slot in body["slots"] if slot["slot_id"] is not None)
+    assert set(planned_slot) >= {"medication_id", "unit", "route"}
+    assert planned_slot["unit"] == "mg"
+    assert planned_slot["route"] == "oral"
+
+
 # ---------------------------------------------------------------------------
 # SAFE-21: the emergency page survives everything else being down
 # ---------------------------------------------------------------------------

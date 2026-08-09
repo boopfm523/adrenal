@@ -4,6 +4,10 @@ import { sessionStore, type ActiveSession } from "./session";
 type LoginRequest = components["schemas"]["LoginRequest"];
 type LoginResponse = components["schemas"]["LoginResponse"];
 type WhoAmI = components["schemas"]["WhoAmI"];
+export type PlanComparisonDay = components["schemas"]["PlanComparisonDay"];
+export type Episode = components["schemas"]["EpisodeOut"];
+export type Dose = components["schemas"]["DoseOut"];
+export type DoseInput = components["schemas"]["DoseIn"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -93,4 +97,20 @@ export async function logout(): Promise<void> {
   } finally {
     sessionStore.clear();
   }
+}
+
+export function getPlanComparison(day: string, timezone: string): Promise<PlanComparisonDay> {
+  const params = new URLSearchParams({ day, timezone });
+  return apiRequest<PlanComparisonDay>(`/doses/plan-comparison?${params.toString()}`);
+}
+
+export function getOpenEpisodes(): Promise<Episode[]> {
+  return apiRequest<Episode[]>("/stress-episodes?open_only=true");
+}
+
+export function recordDose(payload: DoseInput): Promise<Dose> {
+  return apiRequest<Dose>("/doses", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

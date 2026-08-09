@@ -2,8 +2,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
-import { PlaceholderPage, NotFoundPage, TodayPage } from "./pages/FoundationPages";
+import { PlaceholderPage, NotFoundPage } from "./pages/FoundationPages";
 import { LoginPage } from "./pages/LoginPage";
+import { TodayPage } from "./pages/TodayPage";
 
 const placeholders = [
   ["/timeline", "Timeline", "Review the chronological record with provenance and correction history."],

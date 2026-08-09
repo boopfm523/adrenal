@@ -3,9 +3,9 @@
 What works right now, and how to get at your data. Written against the running stack,
 not the plan — where something doesn't exist yet, this says so.
 
-**There is no web interface yet.** Today there are three ways in: the Telegram bot, the
-HTTP API, and the command line. The emergency page is the one exception — it's a
-server-rendered page you can open in a browser.
+The authenticated web interface now has login and Today views. Other navigation items
+are safe placeholders while their dedicated Beads issues are implemented. The
+emergency page remains server-rendered so it does not depend on JavaScript.
 
 ---
 
@@ -13,8 +13,9 @@ server-rendered page you can open in a browser.
 
 | I want to… | How |
 |---|---|
+| Record a planned dose taken now | Today in the web interface |
 | Record a dose, symptom, or note | Telegram bot |
-| See today against your plan | `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
+| See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |

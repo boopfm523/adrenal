@@ -143,6 +143,7 @@ def plan_comparison(
         slots=[
             PlanComparisonSlot(
                 slot_id=c.slot_id,
+                medication_id=c.medication_id,
                 medication_name=c.medication_name,
                 scheduled_local_time=c.scheduled_local_time,  # type: ignore[arg-type]
                 planned_amount=c.planned_amount,
@@ -151,6 +152,8 @@ def plan_comparison(
                 dose_id=c.dose_id,
                 status=c.status,
                 minutes_from_scheduled=c.minutes_from_scheduled,
+                unit=c.unit,
+                route=c.route,
             )
             for c in result["slots"]  # type: ignore[union-attr]
         ],

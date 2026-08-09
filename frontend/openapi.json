@@ -2155,6 +2155,11 @@
             ],
             "title": "Dose Id"
           },
+          "medication_id": {
+            "format": "uuid",
+            "title": "Medication Id",
+            "type": "string"
+          },
           "medication_name": {
             "title": "Medication Name",
             "type": "string"
@@ -2180,6 +2185,9 @@
               }
             ],
             "title": "Planned Amount"
+          },
+          "route": {
+            "$ref": "#/components/schemas/Route"
           },
           "scheduled_local_time": {
             "anyOf": [
@@ -2208,10 +2216,14 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/DoseUnit"
           }
         },
         "required": [
           "slot_id",
+          "medication_id",
           "medication_name",
           "scheduled_local_time",
           "planned_amount",
@@ -2219,7 +2231,9 @@
           "actual_local_time",
           "dose_id",
           "status",
-          "minutes_from_scheduled"
+          "minutes_from_scheduled",
+          "unit",
+          "route"
         ],
         "title": "PlanComparisonSlot",
         "type": "object"

@@ -1428,18 +1428,25 @@ export interface components {
             actual_local_time: string | null;
             /** Dose Id */
             dose_id: string | null;
+            /**
+             * Medication Id
+             * Format: uuid
+             */
+            medication_id: string;
             /** Medication Name */
             medication_name: string;
             /** Minutes From Scheduled */
             minutes_from_scheduled: number | null;
             /** Planned Amount */
             planned_amount: string | null;
+            route: components["schemas"]["Route"];
             /** Scheduled Local Time */
             scheduled_local_time: string | null;
             /** Slot Id */
             slot_id: string | null;
             /** Status */
             status: string;
+            unit: components["schemas"]["DoseUnit"];
         };
         /**
          * ProvenanceOut

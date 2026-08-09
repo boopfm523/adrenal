@@ -22,10 +22,12 @@ from sqlalchemy.orm import Session
 
 from healthcurve.medications.models import (
     DoseEvent,
+    DoseUnit,
     Medication,
     RegimenDoseSlot,
     RegimenStatus,
     RegimenVersion,
+    Route,
 )
 
 #: How far from its scheduled time a dose still counts as "on time". Documented rather
@@ -198,18 +200,22 @@ class SlotComparison:
         "actual_amount",
         "actual_local_time",
         "dose_id",
+        "medication_id",
         "medication_name",
         "minutes_from_scheduled",
         "planned_amount",
+        "route",
         "scheduled_local_time",
         "slot_id",
         "status",
+        "unit",
     )
 
     def __init__(
         self,
         *,
         slot_id: uuid.UUID | None,
+        medication_id: uuid.UUID,
         medication_name: str,
         scheduled_local_time: object | None,
         planned_amount: Decimal | None,
@@ -218,8 +224,11 @@ class SlotComparison:
         dose_id: uuid.UUID | None,
         status: str,
         minutes_from_scheduled: int | None,
+        unit: DoseUnit,
+        route: Route,
     ) -> None:
         self.slot_id = slot_id
+        self.medication_id = medication_id
         self.medication_name = medication_name
         self.scheduled_local_time = scheduled_local_time
         self.planned_amount = planned_amount
@@ -228,6 +237,8 @@ class SlotComparison:
         self.dose_id = dose_id
         self.status = status
         self.minutes_from_scheduled = minutes_from_scheduled
+        self.unit = unit
+        self.route = route
 
 
 def compare_day(
@@ -277,6 +288,7 @@ def compare_day(
             comparisons.append(
                 SlotComparison(
                     slot_id=slot.id,
+                    medication_id=slot.medication_id,
                     medication_name=slot.medication.name,
                     scheduled_local_time=slot.scheduled_local_time,
                     planned_amount=slot.amount,
@@ -285,6 +297,8 @@ def compare_day(
                     dose_id=None,
                     status="missing",  # derived, never stored
                     minutes_from_scheduled=None,
+                    unit=slot.unit,
+                    route=slot.route,
                 )
             )
             continue
@@ -302,6 +316,7 @@ def compare_day(
         comparisons.append(
             SlotComparison(
                 slot_id=slot.id,
+                medication_id=slot.medication_id,
                 medication_name=slot.medication.name,
                 scheduled_local_time=slot.scheduled_local_time,
                 planned_amount=slot.amount,
@@ -310,6 +325,8 @@ def compare_day(
                 dose_id=match.id,
                 status=status,
                 minutes_from_scheduled=minutes,
+                unit=match.unit,
+                route=match.route,
             )
         )
 
@@ -317,6 +334,7 @@ def compare_day(
         comparisons.append(
             SlotComparison(
                 slot_id=None,
+                medication_id=dose.medication_id,
                 medication_name=dose.medication.name,
                 scheduled_local_time=None,
                 planned_amount=None,
@@ -325,6 +343,8 @@ def compare_day(
                 dose_id=dose.id,
                 status="unplanned",
                 minutes_from_scheduled=None,
+                unit=dose.unit,
+                route=dose.route,
             )
         )
 
