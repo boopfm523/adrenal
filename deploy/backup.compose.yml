@@ -4,8 +4,8 @@
 #     --profile backup-manual run --rm backup
 #
 # HC_BACKUP_LOCAL_DIR must be a dedicated local/external backup medium in production.
-# The defaults for upload/report roots are development placeholders until those
-# features create their configured storage paths.
+# The upload root is the exact private source-document store from ADR-0010. The report
+# root remains a development placeholder until report artifacts are implemented.
 
 services:
   backup:

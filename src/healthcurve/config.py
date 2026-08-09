@@ -139,6 +139,11 @@ class Settings(BaseSettings):
     # --- Durable worker queue (ADR-0004) ---
     job_poll_interval_s: float = Field(default=2.0, gt=0, le=60)
 
+    # --- Sensitive local artifacts (ADR-0010) ---
+    #: Exact source documents live outside the web root. In Compose this path is a
+    #: bind mount shared only with the network-isolated document worker and backup.
+    uploads_dir: Path = Path("var/uploads")
+
     @model_validator(mode="before")
     @classmethod
     def _empty_string_means_unset(cls, data: Any) -> Any:

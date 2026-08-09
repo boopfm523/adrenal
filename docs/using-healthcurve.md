@@ -149,6 +149,27 @@ The concrete offsite provider and first isolated restore drill are still outstan
 Until both are complete, the backup system does not satisfy the production three-copy
 or proven-recovery requirements.
 
+## Lab PDF source documents
+
+`POST /api/v1/labs/documents` accepts an authenticated PDF upload into a private
+quarantine. The API checks the declared media type, PDF signature, and 25 MiB byte cap
+while streaming to an opaque generated path outside the web root. A separate non-root
+`document-worker` with no network access runs pinned qpdf structural, encryption,
+interactive-content, and 100-page checks. Until that completes, the document status is
+`pending`; malformed, encrypted, over-limit, or interactive PDFs become `rejected` with
+a stable reason code and their bytes are removed.
+
+Accepted sources can only be retrieved through the owner-authenticated explicit
+download endpoint, which always uses `Content-Disposition: attachment`, CSP sandbox,
+`nosniff`, and `no-store`. `DELETE /api/v1/labs/documents/{id}` tombstones the opaque ID
+before removing source and validation artifacts so an in-flight worker cannot recreate
+them. Backup configuration already includes the same `HC_UPLOADS_DIR`; deleted copies
+remain in encrypted backups only until the documented backup retention window expires.
+
+For local Compose, create `var/uploads` as an owner-private directory before startup,
+or set `HC_UPLOADS_DIR` to another private absolute host path. Never put source medical
+PDFs in Git or under the frontend/web root.
+
 ---
 
 ## Analytics
@@ -244,7 +265,9 @@ So you don't go looking for it:
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
-- **No lab results.** PDF upload and lab storage are designed but not built.
+- **No PDF extraction/review UI yet.** Manual/CSV lab facts and private PDF source
+  upload/storage exist. Embedded-text extraction, OCR/vision fallback, and per-result
+  review are the next lab slices (`hc-xo6.5` and `hc-xo6.6`).
 - **No automatic Garmin sync or weather.** Reviewed Garmin FIT/CSV/ZIP import is
   implemented; direct Garmin API access remains gated by vendor approval.
 - **No record/account deletion.** Backup retention exists; application-data deletion

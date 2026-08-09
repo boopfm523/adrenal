@@ -53,6 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if is_prod else f"{API_PREFIX}/openapi.json",
         default_response_class=NoStoreJSONResponse,
     )
+    app.state.settings = settings
 
     @app.get("/health/live", tags=["health"])
     async def health_live() -> dict[Literal["status"], str]:

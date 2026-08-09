@@ -49,3 +49,16 @@ EXPOSE 8000
 RUN python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
 
 CMD ["uvicorn", "healthcurve.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+
+# --- hostile-document validator -------------------------------------------
+# Keep the native PDF parser out of the API and general worker images. This target is
+# launched with no network, read-only root, dropped capabilities, and bounded resources.
+FROM runtime AS document-runtime
+
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends qpdf=11.3.0-1+deb12u1 \
+ && rm -rf /var/lib/apt/lists/*
+USER 10001:10001
+
+CMD ["python", "-m", "healthcurve.document_worker"]

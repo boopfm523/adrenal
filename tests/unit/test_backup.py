@@ -64,9 +64,11 @@ def _config(tmp_path: Path) -> BackupConfig:
     reports = tmp_path / "reports"
     destination = tmp_path / "destination"
     work = tmp_path / "work"
-    uploads.mkdir()
+    (uploads / "stored").mkdir(parents=True)
     reports.mkdir()
-    (uploads / "document.bin").write_bytes(b"synthetic document")
+    (uploads / "stored" / "11111111-2222-4333-8444-555555555555.pdf").write_bytes(
+        b"synthetic document"
+    )
     (reports / "report.pdf").write_bytes(b"synthetic report")
     restore = tmp_path / "compose.yaml"
     restore.write_text("services: {}\n", encoding="utf-8")
@@ -174,7 +176,7 @@ def test_internal_tar_contains_database_artifacts_config_and_manifest(tmp_path: 
             assert hashlib.sha256(content).hexdigest() == component["sha256"]
     assert "payload/database.dump" in names
     assert "payload/database.inventory" in names
-    assert "payload/artifacts/uploads/document.bin" in names
+    assert "payload/artifacts/uploads/stored/11111111-2222-4333-8444-555555555555.pdf" in names
     assert "payload/artifacts/reports/report.pdf" in names
     assert "payload/restore-config/compose-yaml" in names
     assert "payload/manifest.json" in names

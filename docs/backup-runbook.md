@@ -55,6 +55,11 @@ report-artifact source. On Linux the bind-mounted directories must be accessible
 UID/GID `10001:10001`; keep the destination owner-only. On macOS Docker Desktop handles
 the UID mapping, but the host directory should still be private to the owner.
 
+`HC_UPLOADS_DIR` is also mounted read/write into the API and the no-network document
+worker. It contains retained source medical PDFs plus opaque validation state, so it
+must not be placed under the web root or inside Git. The backup worker mounts that same
+host directory read-only and includes it in every encrypted backup set.
+
 Do not use the repository, PostgreSQL data volume, `/tmp`, or an unencrypted shared
 folder as the production destination.
 

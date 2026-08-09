@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 
 from sqlalchemy import (
     CheckConstraint,
@@ -17,11 +18,66 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from healthcurve.db import FACT_SCHEMA, FactBase
+from healthcurve.db import FACT_SCHEMA, FactBase, StrEnumType
 from healthcurve.events.base import EventMixin, event_table_args
+
+
+class LabDocumentStatus(StrEnum):
+    PENDING = "pending"
+    STORED = "stored"
+    REJECTED = "rejected"
+    DELETED = "deleted"
+
+
+class LabDocument(FactBase):
+    """Metadata for an owner-scoped hostile PDF stored outside the web root."""
+
+    __tablename__ = "lab_document"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_size: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[LabDocumentStatus] = mapped_column(
+        StrEnumType(LabDocumentStatus, 16), nullable=False, default=LabDocumentStatus.PENDING
+    )
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    rejection_reason: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        ForeignKeyConstraint(["owner_id"], ["identity.owner.id"], ondelete="RESTRICT"),
+        CheckConstraint("byte_size > 0 AND byte_size <= 26214400", name="document_size_bounded"),
+        CheckConstraint("char_length(sha256) = 64", name="document_sha256_length"),
+        CheckConstraint(
+            "page_count IS NULL OR (page_count >= 1 AND page_count <= 100)",
+            name="document_page_count_bounded",
+        ),
+        CheckConstraint(
+            "status <> 'stored' OR (page_count IS NOT NULL AND validated_at IS NOT NULL)",
+            name="stored_document_validated",
+        ),
+        CheckConstraint(
+            "status <> 'rejected' OR rejection_reason IS NOT NULL",
+            name="rejected_document_has_reason",
+        ),
+        CheckConstraint(
+            "status <> 'deleted' OR deleted_at IS NOT NULL",
+            name="deleted_document_timestamped",
+        ),
+        Index("ix_lab_document_owner_created", "owner_id", "created_at"),
+        FACT_SCHEMA,
+    )
 
 
 class LabPanel(EventMixin, FactBase):

@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from healthcurve.config import Settings
 from healthcurve.db import session_scope
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import AuthSession, Owner
@@ -66,3 +67,10 @@ def require_csrf(
 
 
 CsrfProtected = Depends(require_csrf)
+
+
+def app_settings(request: Request) -> Settings:
+    return request.app.state.settings
+
+
+AppSettings = Annotated[Settings, Depends(app_settings)]

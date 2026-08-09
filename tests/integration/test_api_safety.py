@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
 from healthcurve.config import Settings, get_settings
+from healthcurve.document_worker import validate_one
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.models import (
@@ -31,8 +32,10 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminSleepEvent,
 )
-from healthcurve.labs.models import LabPanel, LabResult
+from healthcurve.labs.documents import DocumentLayout
+from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
+from tests.fixtures.pdf import QpdfRunner
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -55,13 +58,14 @@ def postgres() -> Iterator[PostgresContainer]:
 
 
 @pytest.fixture(scope="module")
-def settings(postgres: PostgresContainer) -> Settings:
+def settings(postgres: PostgresContainer, tmp_path_factory: pytest.TempPathFactory) -> Settings:
     return Settings(
         # Never read the developer's .env: a real HC_OLLAMA_BASE_URL once made this
         # fixture fail startup validation for reasons unrelated to the test.
         _env_file=None,  # type: ignore[call-arg]
         database_url=postgres.get_connection_url(),
         ollama_base_url="http://ollama:11434",
+        uploads_dir=tmp_path_factory.mktemp("api-uploads"),
     )
 
 
@@ -136,7 +140,13 @@ def logged_in(client: TestClient) -> dict[str, str]:
 
 def test_health_data_requires_authentication(client: TestClient) -> None:
     client.cookies.clear()
-    for path in ("/api/v1/doses", "/api/v1/timeline", "/api/v1/medications", "/emergency"):
+    for path in (
+        "/api/v1/doses",
+        "/api/v1/timeline",
+        "/api/v1/medications",
+        "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
+        "/emergency",
+    ):
         assert client.get(path).status_code == 401, path
 
 
@@ -400,6 +410,86 @@ def test_manual_qualitative_lab_entry_is_a_direct_fact(
         assert panel.confirmation_state.value == "direct"
         assert panel.results[0].qualitative_result == "Not detected (verbatim)"
         assert panel.results[0].abnormal_flag == "Lab supplied flag"
+
+
+def test_pdf_upload_is_quarantined_validated_downloaded_as_attachment_and_deleted(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    source = b"%PDF-1.7\nsynthetic fixture only\n"
+    uploaded = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("../Synthetic report.pdf", source, "application/pdf")},
+    )
+    assert uploaded.status_code == 202, uploaded.text
+    body = uploaded.json()
+    assert body["status"] == "pending"
+    assert body["display_name"] == "Synthetic report.pdf"
+    document_id = uuid.UUID(body["document_id"])
+    layout = DocumentLayout(settings.uploads_dir)
+    assert layout.path("quarantine", document_id).read_bytes() == source
+
+    validation = validate_one(layout, document_id, runner=QpdfRunner(pages=2))
+    assert validation.status == "stored"
+    status_response = client.get(f"/api/v1/labs/documents/{document_id}")
+    assert status_response.status_code == 200
+    assert status_response.json()["status"] == "stored"
+    assert status_response.json()["page_count"] == 2
+
+    downloaded = client.get(f"/api/v1/labs/documents/{document_id}/download")
+    assert downloaded.status_code == 200
+    assert downloaded.content == source
+    assert downloaded.headers["content-disposition"].startswith("attachment;")
+    assert downloaded.headers["x-content-type-options"] == "nosniff"
+    assert downloaded.headers["cache-control"] == "no-store"
+
+    deleted = client.delete(f"/api/v1/labs/documents/{document_id}", headers=logged_in)
+    assert deleted.status_code == 204
+    assert not layout.path("stored", document_id).exists()
+    assert layout.path("tombstones", document_id, ".deleted").exists()
+    with Session(engine) as session:
+        document = session.get(LabDocument, document_id)
+        assert document is not None
+        assert document.status is LabDocumentStatus.DELETED
+        assert document.display_name == "deleted.pdf"
+        assert document.sha256 == "0" * 64
+
+
+def test_pdf_upload_rejects_spoofed_content_type_and_signature(
+    client: TestClient, logged_in: dict[str, str], settings: Settings
+) -> None:
+    wrong_type = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("synthetic.pdf", b"%PDF-1.7\n", "text/plain")},
+    )
+    wrong_signature = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("synthetic.pdf", b"not a PDF", "application/pdf")},
+    )
+    assert wrong_type.status_code == 415
+    assert wrong_type.json()["detail"]["code"] == "pdf_media_type_invalid"
+    assert wrong_signature.status_code == 422
+    assert wrong_signature.json()["detail"]["code"] == "pdf_signature_invalid"
+
+    structurally_bad = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("synthetic.pdf", b"%PDF-1.7\nmalformed", "application/pdf")},
+    )
+    assert structurally_bad.status_code == 202
+    document_id = uuid.UUID(structurally_bad.json()["document_id"])
+    result = validate_one(
+        DocumentLayout(settings.uploads_dir), document_id, runner=QpdfRunner(check_code=2)
+    )
+    assert result.reason_code == "pdf_structure_invalid"
+    rejected = client.get(f"/api/v1/labs/documents/{document_id}")
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["rejection_reason"] == "pdf_structure_invalid"
 
 
 # ---------------------------------------------------------------------------

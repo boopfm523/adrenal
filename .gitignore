@@ -17,6 +17,8 @@ restores/
 reports_out/
 *.pdf
 !docs/**/*.pdf
+# Exact uploaded medical sources (class C4); shared with backup by host bind mount.
+var/uploads/
 
 # --- Python ---
 __pycache__/

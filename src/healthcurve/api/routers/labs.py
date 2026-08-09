@@ -3,25 +3,221 @@
 from __future__ import annotations
 
 import hmac
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import Field, model_validator
+from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
-from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import ApiModel, EventTimeIn
 from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.labs.documents import (
+    DocumentLayout,
+    DocumentStorageError,
+    load_validation_result,
+    mark_deleted,
+    store_pdf_upload,
+)
 from healthcurve.labs.imports import MAX_CSV_BYTES, LabImportError, parse_csv_import
+from healthcurve.labs.models import LabDocument, LabDocumentStatus
 from healthcurve.labs.service import (
     LabConfirmationError,
     confirm_csv,
     create_panel,
     manual_candidate,
 )
+from healthcurve.operations import audit
 
 router = APIRouter(prefix="/labs", tags=["labs"])
+
+
+def _owned_document(session: DbSession, owner: CurrentOwner, document_id: uuid.UUID) -> LabDocument:
+    document = session.scalar(
+        select(LabDocument).where(
+            LabDocument.id == document_id,
+            LabDocument.owner_id == owner.id,
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail={"code": "lab_document_not_found"})
+    return document
+
+
+def _reconcile_document(document: LabDocument, layout: DocumentLayout) -> None:
+    if document.status is not LabDocumentStatus.PENDING:
+        return
+    try:
+        result = load_validation_result(layout, document.id)
+    except DocumentStorageError as exc:
+        raise HTTPException(status_code=500, detail={"code": str(exc)}) from exc
+    if result is None:
+        return
+    if not hmac.compare_digest(result.sha256, document.sha256):
+        raise HTTPException(
+            status_code=500, detail={"code": "document_validation_checksum_mismatch"}
+        )
+    document.validated_at = datetime.now(UTC)
+    if result.status == "stored":
+        if not layout.path("stored", document.id).is_file():
+            raise HTTPException(status_code=500, detail={"code": "document_storage_missing"})
+        document.status = LabDocumentStatus.STORED
+        document.page_count = result.page_count
+    else:
+        document.status = LabDocumentStatus.REJECTED
+        document.rejection_reason = result.reason_code or "pdf_validation_failed"
+
+
+def _document_payload(document: LabDocument) -> dict[str, Any]:
+    return {
+        "document_id": str(document.id),
+        "display_name": document.display_name,
+        "media_type": document.media_type,
+        "sha256": document.sha256,
+        "byte_size": document.byte_size,
+        "status": document.status.value,
+        "page_count": document.page_count,
+        "rejection_reason": document.rejection_reason,
+        "created_at": document.created_at,
+        "validated_at": document.validated_at,
+    }
+
+
+@router.post(
+    "/documents",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_csrf)],
+)
+async def upload_lab_document(
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+    file: Annotated[UploadFile, File()],
+) -> dict[str, Any]:
+    """Quarantine a bounded PDF for the no-network structural validation worker."""
+    layout = DocumentLayout(settings.uploads_dir)
+    try:
+        upload = await run_in_threadpool(
+            store_pdf_upload,
+            file.file,
+            layout=layout,
+            submitted_name=file.filename,
+            media_type=file.content_type,
+        )
+    except DocumentStorageError as exc:
+        code = str(exc)
+        response_status = 413 if code == "pdf_size_invalid" else 422
+        if code == "pdf_media_type_invalid":
+            response_status = 415
+        raise HTTPException(status_code=response_status, detail={"code": code}) from exc
+    finally:
+        await file.close()
+    document = LabDocument(
+        id=upload.document_id,
+        owner_id=owner.id,
+        display_name=upload.display_name,
+        media_type=upload.media_type,
+        sha256=upload.sha256,
+        byte_size=upload.byte_size,
+        status=LabDocumentStatus.PENDING,
+    )
+    try:
+        session.add(document)
+        session.flush([document])
+    except Exception:
+        mark_deleted(layout, upload.document_id)
+        raise
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=audit.AuditAction.RECORD_CREATED,
+        target_type="lab_document",
+        target_id=document.id,
+        change_summary="source=pdf;status=pending",
+    )
+    return _document_payload(document)
+
+
+@router.get("/documents/{document_id}")
+def get_lab_document(
+    document_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> dict[str, Any]:
+    document = _owned_document(session, owner, document_id)
+    _reconcile_document(document, DocumentLayout(settings.uploads_dir))
+    return _document_payload(document)
+
+
+@router.get("/documents/{document_id}/download", response_class=FileResponse)
+def download_lab_document(
+    document_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> FileResponse:
+    document = _owned_document(session, owner, document_id)
+    layout = DocumentLayout(settings.uploads_dir)
+    _reconcile_document(document, layout)
+    if document.status is not LabDocumentStatus.STORED:
+        raise HTTPException(status_code=409, detail={"code": "lab_document_not_available"})
+    path = layout.path("stored", document.id)
+    if not path.is_file():
+        raise HTTPException(status_code=500, detail={"code": "document_storage_missing"})
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"lab-document-{document.id}.pdf",
+        content_disposition_type="attachment",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": "sandbox",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.delete(
+    "/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+def delete_lab_document(
+    document_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> None:
+    document = _owned_document(session, owner, document_id)
+    if document.status is LabDocumentStatus.DELETED:
+        return
+    try:
+        mark_deleted(DocumentLayout(settings.uploads_dir), document.id)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail={"code": "document_deletion_failed"}) from exc
+    document.status = LabDocumentStatus.DELETED
+    document.deleted_at = datetime.now(UTC)
+    # Keep only an opaque tombstone row for audit/race safety. The submitted name,
+    # checksum, and size are source-document metadata and are scrubbed on deletion.
+    document.display_name = "deleted.pdf"
+    document.sha256 = "0" * 64
+    document.byte_size = 1
+    document.page_count = None
+    document.rejection_reason = None
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=audit.AuditAction.RECORD_DELETED,
+        target_type="lab_document",
+        target_id=document.id,
+        change_summary="source_and_derivatives_deleted",
+    )
 
 
 class ManualLabResultIn(ApiModel):
