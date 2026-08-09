@@ -225,6 +225,18 @@ insights or causal claims. Daily plan-versus-actual totals also have a local SVG
 whose adjacent semantic table is authoritative and preserves gaps. Physician report
 snapshots remain separate P3 work.
 
+## Data quality
+
+The authenticated `/data-quality` page collects items that need attention from AI
+extraction drafts, rejected lab imports, and background jobs. Each finding links to
+the relevant review or correction destination. It also shows metrics that the latest
+Garmin source genuinely did not supply in a separate section. A provider-reported
+absence is not stored or displayed as zero.
+
+The page is a review queue, not a clinical completeness check. “No known data-quality
+findings” only means that the implemented deterministic checks found nothing current;
+it does not establish that every health event or measurement was recorded.
+
 What you have today for answering questions:
 
 1. **`/analytics/summary`** — deterministic metrics for an inclusive date range.

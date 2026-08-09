@@ -158,6 +158,15 @@ circle.chart-series { fill: white; }
 .privacy-action input:not([type="checkbox"]) { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
 .danger-zone { border: 2px solid #8a260f; }
 .danger-zone button { background: #8a260f; border-color: #8a260f; }
+.quality-section { margin-top: 2rem; }
+.anchor-target { display: block; scroll-margin-top: 1rem; }
+.quality-grid { display: grid; grid-template-columns: repeat(2, minmax(16rem, 1fr)); gap: 1rem; }
+.quality-card { border-radius: 0.75rem; padding: 1.25rem; background: white; }
+.quality-card--problem { border: 1px solid #a86712; border-left: 0.45rem solid #a86712; }
+.quality-card--absence { border: 1px solid #55708a; border-left: 0.45rem solid #55708a; background: #f5f9fc; }
+.quality-card__label { font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.quality-card__reference { overflow-wrap: anywhere; color: #48554f; font-size: 0.9rem; }
+.quality-card .button-link { margin-top: 0.5rem; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
@@ -168,4 +177,5 @@ circle.chart-series { fill: white; }
   .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values { grid-template-columns: 1fr; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
   .settings-grid { grid-template-columns: 1fr; }
+  .quality-grid { grid-template-columns: 1fr; }
 }

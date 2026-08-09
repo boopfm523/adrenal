@@ -18,6 +18,7 @@ export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
+export type DataQuality = components["schemas"]["DataQualityOut"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -199,6 +200,10 @@ export function getRegimenDiff(olderId: string, newerId: string): Promise<Record
 export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: string): Promise<AnalyticsSummary> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
+}
+
+export function getDataQuality(): Promise<DataQuality> {
+  return apiRequest<DataQuality>("/data-quality");
 }
 
 export interface IntegrationDeletionResult { credentials_deleted: number; data_rows_deleted: number; }
