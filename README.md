@@ -35,6 +35,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/roadmap.md](docs/roadmap.md) | What is left to build, and why it is ordered that way |
 | [docs/beads-workflow.md](docs/beads-workflow.md) | Verified Beads commands and the working loop |
 | [docs/telegram-setup.md](docs/telegram-setup.md) | Step-by-step guide to connecting the Telegram bot |
+| [docs/tailscale-hosting.md](docs/tailscale-hosting.md) | Actual localhost/Tailscale Serve runtime, restart, and safe verification |
 | [docs/credential-encryption.md](docs/credential-encryption.md) | Store, rotate, and recover integration encryption keys |
 | [docs/garmin-import.md](docs/garmin-import.md) | Review and import owner-exported Garmin FIT/CSV data |
 | [docs/garmin-connect.md](docs/garmin-connect.md) | Configure isolated read-only automatic Garmin sync |

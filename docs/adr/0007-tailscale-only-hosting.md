@@ -1,6 +1,6 @@
 # ADR-0007: Tailscale-only hosting with no public edge
 
-**Status:** Accepted — 2026-08-09
+**Status:** Accepted — 2026-08-09; host-Serve topology amended — 2026-08-10
 
 ## Context
 
@@ -21,36 +21,37 @@ host secrets.
 **Production is reachable only from the owner's tailnet. There is no public edge,
 Tailscale Funnel, public reverse proxy, or router port-forward.**
 
-The production path is:
+The owner's Mac uses Tailscale Serve as the private HTTPS terminator. The operating
+path is:
 
 ```text
 owner's approved device
         |
         | encrypted, authenticated tailnet
         v
-host Tailscale address:443
+host Tailscale Serve:443 (`tailnet only`)
         |
+        | proxy to `127.0.0.1:8080`
         v
-      Caddy  --->  API/web  --->  PostgreSQL / Redis / worker
+loopback Caddy  --->  API/web  --->  PostgreSQL / Redis / worker
                                       |
-                                      +---- private Ollama path (ADR-0003)
+                                      +---- loopback Ollama path (ADR-0003)
 ```
 
-1. **Listener boundary.** Caddy is the only Compose service allowed to publish a
-   port. In production its HTTPS listener binds to the host's specific Tailscale IPv4
-   address, not `0.0.0.0`, `::`, a LAN address, or an unqualified port. Development
-   may bind Caddy to loopback. PostgreSQL, Redis, API, workers, and Ollama never publish
-   host ports.
-2. **TLS.** The preferred certificate is issued with `tailscale cert` for the host's
-   MagicDNS `*.ts.net` name and mounted read-only into Caddy. Renewal is an explicit,
-   monitored host operation. An owner-operated internal CA is the fallback when
-   Tailscale HTTPS certificates are unavailable; its root is installed only on
-   approved devices. Public ACME HTTP-01, public DNS validation credentials, and port
-   80 are not used.
-3. **Access policy.** Tailnet policy grants TCP 443 only to the owner's named user or
-   dedicated device group and only for this host. Tailnet membership is necessary but
-   not sufficient when an ACL/grant can narrow access. Device approval, tailnet MFA,
-   key expiry, and prompt removal of lost devices are part of the production runbook.
+1. **Listener boundary.** Docker publishes only Caddy and binds it to
+   `127.0.0.1:8080`. Tailscale Serve is the only tailnet listener and proxies private
+   HTTPS to that loopback endpoint. PostgreSQL, Redis, API, workers, and container
+   Ollama publish no host ports. Host-native Ollama binds only to loopback. No service
+   binds `0.0.0.0`, `::`, or a LAN address.
+2. **TLS.** Tailscale Serve manages the eligible MagicDNS `*.ts.net` certificate and
+   terminates HTTPS. HealthCurve does not copy or mount its private key. Public ACME,
+   public DNS validation credentials, and port 80 are not used. The repository's
+   direct-certificate Compose overlay remains a tested alternative, not the normal Mac
+   operating path.
+3. **Access policy.** Serve is configured `tailnet only`; Funnel remains disabled.
+   Tailnet policy and device approval restrict reachability to the owner's approved
+   devices. Prompt removal of lost devices and HealthCurve's **Sign out every
+   session** control are part of the runbook.
 4. **Application authentication remains required.** The owner explicitly selected a
    password-only HealthCurve login for this single-user, Tailscale-only deployment.
    Secure sessions, CSRF protection, login throttling, audit events, password
@@ -62,13 +63,11 @@ host Tailscale address:443
    outbound, create-only interface. HealthCurve must not enable Funnel merely to make
    an integration easier.
 6. **Verification replaces the old public-port check.** CI rejects any Compose port
-   published by a service other than Caddy and rejects Caddy bindings that omit a host
-   IP or use anything except loopback or `100.64.0.0/10`. Before release, verify from:
-   (a) a device outside the tailnet, where no HealthCurve port responds; (b) an
-   unauthorized tailnet identity, where policy denies 443; and (c) an authorized
-   device, where HTTPS succeeds with the expected name and certificate. Also inspect
-   the host socket table and router configuration. Evidence must contain no secrets or
-   health data.
+   published by a service other than Caddy and rejects wildcard or LAN bindings. The
+   live check must show Serve as `tailnet only`, Caddy on loopback, internal services
+   unpublished, successful HTTPS from an approved tailnet device, and failure from the
+   same device with Tailscale disconnected. Evidence must contain no secrets, tailnet
+   configuration export, or health data.
 
 This decision supersedes ADR-0002 only where it described an internet edge, public
 80/443, ACME HTTP challenges, or an external test expecting public 443. Its modular
@@ -96,8 +95,9 @@ Weaker or newly important:
   devices become part of the trusted computing base.
 - A stolen, unlocked, or compromised approved device has a direct network path to the
   application, making application authentication and session revocation essential.
-- Certificate issuance and renewal are no longer automatic inside Caddy. Expiry
-  monitoring and careful private-key permissions become operational requirements.
+- Tailscale Serve and its managed HTTPS lifecycle become part of the trusted host
+  configuration; an accidental Funnel or Serve reset must be detected by the
+  privacy-safe status check.
 - Availability now depends on the host and Tailscale control/data paths. This is an
   acceptable trade for a personal tracker; emergency instructions must not depend on
   HealthCurve availability.
@@ -107,11 +107,16 @@ Weaker or newly important:
 
 ## Consequences
 
-The production implementation needs a host Tailscale installation, a narrowly scoped
-tailnet policy, a fixed way to inject the host's Tailscale address, certificate renewal
-and expiry monitoring, and three-vantage release checks. Those controls are delivered
-by the production hosting and monitoring issues; this ADR does not claim they are
-already deployed.
+The private implementation needs the host Tailscale application, a tailnet-only Serve
+mapping to loopback Caddy, approved owner devices, no router forwarding, and simple
+listener/status checks. The repository-root `.env`, kept out of Git and mode `0600`,
+is a proportionate secret boundary for this one-owner, same-Mac deployment. Separate
+database-backed token encryption remains optional defense in depth rather than a
+private-runtime gate.
+
+The owner-development runtime may retain development OpenAPI documentation on the
+trusted tailnet. This does not authorize LAN, public, Funnel, or multi-user exposure;
+any such boundary change requires a new threat model and authentication review.
 
 The personal domain can remain useful for documentation or a redirect, but it is not
 a HealthCurve ingress path. The application URL is the private MagicDNS name.

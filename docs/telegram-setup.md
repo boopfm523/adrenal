@@ -19,8 +19,8 @@ Nothing you send becomes a recorded fact until you press **Confirm**.
 
 | Thing | Where it goes | Looks like |
 |---|---|---|
-| Bot token | Encrypted `identity.integration_credential` row | never printed |
-| Encryption keys | Owner-only file outside the repo/database | JSON key ring |
+| Bot token | Owner-only ignored `.env`, or optional encrypted credential row | never printed |
+| Optional encryption keys | Owner-only file outside the repo/database | JSON key ring |
 | Your chat ID | `HC_TELEGRAM_ALLOWED_CHAT_ID` | `123456789` |
 
 That is all you need for the default polling mode. No domain, no certificate, no
@@ -93,7 +93,31 @@ webhook is already registered. If a webhook is set, `getUpdates` stops working �
 `curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/deleteWebhook"` first, message the
 bot, then try again.
 
-## Step 3 — Create the external encryption key
+## Step 3 — Store the token for the private Mac runtime
+
+For the single-owner localhost/Tailscale deployment, edit the repository-root `.env`
+in a private local editor and add:
+
+```dotenv
+HC_TELEGRAM_BOT_TOKEN=<token entered only in the private editor>
+HC_TELEGRAM_ALLOWED_CHAT_ID=123456789
+```
+
+Do not type the token into a shell command, Codex/ChatGPT, Git, Beads, logs, or a
+screenshot. Keep the file ignored and owner-only:
+
+```bash
+chmod 600 .env
+git check-ignore -q .env
+```
+
+This is the normal, proportionate boundary for an owner-only Mac. If the Mac becomes
+shared with untrusted local users, review this choice.
+
+### Optional defense in depth: encrypted credential row
+
+Database-backed AES-256-GCM storage is available but is not required for the private
+runtime. To use it, create an external key once at a path outside the repository:
 
 Create this once at a path outside the repository:
 
@@ -106,7 +130,7 @@ uv run python -m healthcurve.cli credential-key-init \
 Keep a separate encrypted copy in your password manager or vault. A database backup
 cannot recover provider credentials without this file.
 
-## Step 4 — Configure the mount and store the token
+Configure the key mount in `.env` alongside the chat allow-list:
 
 Edit `.env` in the project root (it is git-ignored — keep it that way):
 
@@ -126,15 +150,33 @@ The token is AES-256-GCM encrypted before PostgreSQL sees it. The key is supplie
 the read-only mount and never stored in the database. See
 [credential-encryption.md](credential-encryption.md) for rotation and recovery.
 
-## Step 5 — Start the worker
+## Step 4 — Start the worker
 
 The worker is what talks to Telegram. It holds an outbound connection open, waits for
 a message, handles it, and waits again.
 
+For the normal private `.env` setup:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/backup.compose.yml \
+  -f deploy/google-drive-backup.compose.yml \
+  up -d --force-recreate api worker
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/backup.compose.yml \
+  -f deploy/google-drive-backup.compose.yml \
+  ps
+```
+
+If you deliberately selected the optional encrypted credential setup, include its
+overlay:
+
 ```bash
 docker compose -f docker-compose.yml -f deploy/credentials.compose.yml \
-  up -d --force-recreate worker
-docker compose -f docker-compose.yml -f deploy/credentials.compose.yml logs -f worker
+  up -d --force-recreate api worker
+docker compose ps
 ```
 
 You are looking for:
@@ -146,14 +188,19 @@ telegram poller started   integration=telegram outcome=polling
 If it says `outcome=idle reason_code=telegram_not_configured`, one of the two values
 above is missing or the container did not pick up the new `.env`.
 
-Check the token itself with:
+Check connectivity without printing the token:
 
 ```bash
-docker compose -f docker-compose.yml -f deploy/credentials.compose.yml run --rm api \
-  python -m healthcurve.cli telegram-status
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/backup.compose.yml \
+  -f deploy/google-drive-backup.compose.yml \
+  run --rm api python -m healthcurve.cli telegram-status
 ```
 
-You should see `Connected as @your_bot_name`.
+You should see `Telegram API connection: verified`. The diagnostic reports only
+configured/not-configured state and counts; it does not print the chat ID, bot name,
+webhook URL, token, or provider error text.
 
 The same durable worker expires unanswered extraction drafts after six hours and
 purges their original message text. It schedules this cleanup every fifteen minutes.
@@ -163,7 +210,7 @@ Check the privacy-safe last-run status without displaying any draft content:
 docker compose run --rm api python -m healthcurve.cli draft-expiry-status
 ```
 
-## Step 6 — Test it
+## Step 5 — Test it
 
 Message your bot:
 

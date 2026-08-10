@@ -517,18 +517,17 @@ def telegram_status(args: argparse.Namespace) -> int:
         telegram_secrets = load_telegram_secrets(session, settings)
     print(f"Bot token set:      {'yes' if telegram_secrets.bot_token else 'NO'}")
     print(f"Webhook secret set: {'yes' if telegram_secrets.webhook_secret else 'NO'}")
-    print(f"Allowed chat id:    {settings.telegram_allowed_chat_id or 'NOT SET'}")
-    print(f"Public base URL:    {settings.public_base_url or 'NOT SET'}")
+    print(f"Allowed chat set:   {'yes' if settings.telegram_allowed_chat_id else 'NO'}")
+    print(f"Public URL set:     {'yes' if settings.public_base_url else 'NO'}")
 
     if not telegram_secrets.bot_token:
-        print("\nStore telegram/bot_token with credential-set. See docs/telegram-setup.md")
+        print("\nConfigure the bot token using docs/telegram-setup.md.")
         return 1
 
     client = TelegramClient(settings, token=telegram_secrets.bot_token)
     me = client.get_me()
     if me and me.get("ok"):
-        bot = me["result"]
-        print(f"\nConnected as @{bot.get('username')} ({bot.get('first_name')})")
+        print("\nTelegram API connection: verified")
     else:
         print("\nCould not reach the Telegram API with this token.")
         return 1
@@ -536,10 +535,10 @@ def telegram_status(args: argparse.Namespace) -> int:
     info = client.get_webhook_info()
     if info and info.get("ok"):
         result = info["result"]
-        print(f"Webhook URL:        {result.get('url') or '(not set)'}")
+        print(f"Webhook configured: {'yes' if result.get('url') else 'no'}")
         print(f"Pending updates:    {result.get('pending_update_count', 0)}")
         if result.get("last_error_message"):
-            print(f"Last error:         {result['last_error_message']}")
+            print("Last webhook error: present (details redacted)")
     return 0
 
 
