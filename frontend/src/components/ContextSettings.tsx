@@ -114,7 +114,7 @@ export function ContextSettings(): React.JSX.Element {
     <section aria-labelledby="context-heading">
       <h2 id="context-heading">Location, timezone, and weather context</h2>
       <div className="settings-card context-privacy-summary">
-        <p><strong>Default: coarse location.</strong> A city, region, or your own label is usually enough for pattern review. It stores no coordinates.</p>
+        <p><strong>Default: coarse location.</strong> A city, region, or your own label is usually enough for pattern review. Telegram phone locations, when deliberately shared, are rounded to 0.1° before storage; exact phone coordinates never enter HealthCurve.</p>
         <p><strong>Exact location is opt-in per record.</strong> Coordinate fields remain unavailable until you explicitly consent. HealthCurve never derives coordinates from a coarse label.</p>
         <p><strong>Retention:</strong> Context remains until you delete it or the account. Deleting a context record removes its correction chain but leaves doses, symptoms, diary entries, and other health facts intact. Encrypted backups may retain a deleted copy until expiry.</p>
         <p><strong>No external sharing:</strong> Weather entry is manual. No location is sent to a weather or geocoding provider.</p>

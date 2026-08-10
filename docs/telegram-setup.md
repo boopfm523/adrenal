@@ -66,6 +66,7 @@ While you're still in BotFather, harden the bot:
   injection - Log an emergency injection
   episode - /episode start <trigger> or /episode end
   today - What's recorded today vs your plan
+  location - Explain how to add location to a pending draft
   edit - Correct a pending draft field
   undo - Cancel the pending draft
   privacy - What this bot stores
@@ -174,6 +175,25 @@ Message your bot:
 | `Took 15mg hydrocortisone at 7:08, slept badly` | A draft listing a dose *and* a symptom |
 
 Press **Confirm** and check the dose appears in the web app's timeline.
+
+### Optional phone location
+
+Every draft offers **Add location (optional)**. It works only in the allow-listed
+private chat. Choosing it opens three deliberate choices:
+
+- **Share current location** asks Telegram on the phone for permission. Telegram
+  transports the exact coordinate, but HealthCurve validates and rounds it to `0.1°`
+  in memory before constructing a database row. Exact GPS never enters PostgreSQL,
+  logs, analytics, or HealthCurve backups.
+- **Use saved Home area** explicitly reuses the rounded Home coordinate. HealthCurve
+  never silently carries a previous location into a new draft.
+- **No location** cancels the request and clears any rounded request state.
+
+The request expires after ten minutes and is bound to that pending draft. Confirming
+the draft records a separately labeled coarse context fact; cancelling or expiry
+clears the request. After sharing a current location, **Save as Home area** stores only
+the rounded coordinate. Telegram retains the original location message under the
+owner's Telegram settings, so delete it in Telegram if that history is unwanted.
 
 To correct a dose draft, press **Edit** for instructions or send, for example,
 `/edit 1 amount 15`. The supported fields are `amount`, `unit`, `time`, and

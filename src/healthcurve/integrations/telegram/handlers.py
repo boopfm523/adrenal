@@ -39,6 +39,7 @@ from healthcurve.events.timekeeping import (
     resolve_event_time,
 )
 from healthcurve.identity.models import Owner
+from healthcurve.integrations.telegram import location
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 from healthcurve.operations.rate_limit import (
@@ -67,6 +68,7 @@ Commands (these always work, even if the language model is offline):
 /episode start <trigger> - open a stress episode
 /episode end - close the open episode
 /today - what's recorded today vs your plan
+/location - add optional coarse location to the pending draft
 /edit <number> <field> <value> - correct amount, unit, time, or medication
 /undo - cancel the pending draft
 /privacy - what this bot stores
@@ -82,6 +84,9 @@ What this bot stores
   Clear the chat there if that matters to you.
 - Message text is sent to a language model running on private infrastructure. It is
   not sent to any third-party AI service.
+- Phone location is optional and requires pressing Telegram's share button. Exact
+  coordinates are rounded to 0.1 degrees before storage; exact coordinates are never
+  written to HealthCurve's database or backups.
 - The bot only responds to this chat. Messages from anywhere else are dropped.
 - Nothing the model produces is recorded until you confirm it.
 """
@@ -161,6 +166,8 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
             return _cmd_episode(session, owner, args, now=now)
         case "today":
             return _cmd_today(session, owner, now=now)
+        case "location":
+            return Reply("Use the Add location button on your pending draft.")
         case "edit":
             return _cmd_edit(session, owner, args, now=now)
         case "undo":
@@ -379,6 +386,7 @@ def _cmd_undo(session: Session, owner: Owner) -> Reply:
     draft.state = DraftState.CANCELLED
     draft.resolved_at = datetime.now(UTC)
     draft.purge_raw_text()
+    location.cancel_for_draft(session, owner.id, draft.id)
     return Reply("Cancelled. Nothing was recorded.")
 
 
@@ -624,7 +632,8 @@ def _draft_reply(
                 {"text": "Confirm", "callback_data": f"confirm:{draft.id}"},
                 {"text": "Edit", "callback_data": f"edit:{draft.id}"},
                 {"text": "Cancel", "callback_data": f"cancel:{draft.id}"},
-            ]
+            ],
+            [{"text": "Add location (optional)", "callback_data": f"location:{draft.id}"}],
         ]
     }
     if blocked:
@@ -633,11 +642,95 @@ def _draft_reply(
                 [
                     {"text": "Edit", "callback_data": f"edit:{draft.id}"},
                     {"text": "Cancel", "callback_data": f"cancel:{draft.id}"},
-                ]
+                ],
+                [
+                    {
+                        "text": "Add location (optional)",
+                        "callback_data": f"location:{draft.id}",
+                    }
+                ],
             ]
         }
 
     return Reply("\n".join(lines), reply_markup=keyboard, draft_id=draft.id)
+
+
+def start_location_request(
+    session: Session, owner: Owner, draft_id: uuid.UUID, *, chat_id: int
+) -> Reply:
+    request = location.begin_request(session, owner, chat_id=chat_id, draft_id=draft_id)
+    if request is None:
+        return Reply("That draft is no longer waiting for a location.")
+    return Reply(
+        "Location is optional. Choose one within 10 minutes. Telegram will ask before "
+        "sharing your phone location; HealthCurve rounds it before storage.",
+        reply_markup={
+            "keyboard": [
+                [{"text": "Share current location", "request_location": True}],
+                [{"text": "Use saved Home area"}, {"text": "No location"}],
+            ],
+            "resize_keyboard": True,
+            "one_time_keyboard": True,
+            "input_field_placeholder": "Choose a location option",
+        },
+        draft_id=draft_id,
+    )
+
+
+def handle_phone_location(
+    session: Session,
+    owner: Owner,
+    *,
+    chat_id: int,
+    latitude: object,
+    longitude: object,
+) -> Reply:
+    result = location.attach_phone_location(
+        session, owner, chat_id=chat_id, latitude=latitude, longitude=longitude
+    )
+    if result is location.LocationResult.ATTACHED:
+        draft = _pending_draft(session, owner.id)
+        keyboard = None
+        if draft is not None:
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "Save as Home area", "callback_data": f"save_home:{draft.id}"}]
+                ]
+            }
+        return Reply(
+            "Coarse location added to the pending draft. Exact coordinates were not stored. "
+            "Confirm the original draft to record it.",
+            reply_markup=keyboard,
+            draft_id=draft.id if draft is not None else None,
+        )
+    if result is location.LocationResult.INVALID:
+        return Reply("Telegram sent an invalid location. Nothing was stored; try again.")
+    return Reply("That location request expired or was cancelled. Nothing was stored.")
+
+
+def use_saved_home(session: Session, owner: Owner, *, chat_id: int) -> Reply:
+    result = location.attach_saved_home(session, owner, chat_id=chat_id)
+    if result is location.LocationResult.ATTACHED:
+        return Reply(
+            "Saved Home area added to the pending draft. Confirm the original draft to record it.",
+            reply_markup={"remove_keyboard": True},
+        )
+    if result is location.LocationResult.NO_HOME:
+        return Reply(
+            "No Home area is saved yet. Share a current location, then choose Save as Home area."
+        )
+    return Reply("That location request expired or was cancelled. Nothing was stored.")
+
+
+def decline_location(session: Session, owner: Owner, *, chat_id: int) -> Reply:
+    location.cancel_request(session, owner, chat_id=chat_id)
+    return Reply("No location will be attached.", reply_markup={"remove_keyboard": True})
+
+
+def save_location_as_home(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
+    if location.save_attached_as_home(session, owner, draft_id=draft_id):
+        return Reply("Saved as your coarse Home area. Exact coordinates were never stored.")
+    return Reply("That location is no longer available to save.")
 
 
 def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
@@ -700,6 +793,11 @@ def confirm_draft(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
             continue
         created.append(str(event.id))
         summaries.append(_describe(candidate))
+
+    context = location.consume_for_confirm(session, owner, draft_id=draft.id)
+    if context is not None:
+        created.append(str(context.id))
+        summaries.append("Coarse location context (rounded to 0.1 degrees)")
 
     draft.state = (
         DraftState.EDITED if draft.original_candidates is not None else DraftState.CONFIRMED
@@ -788,6 +886,7 @@ def cancel_draft(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
         draft.state = DraftState.CANCELLED
         draft.resolved_at = datetime.now(UTC)
         draft.purge_raw_text()
+        location.cancel_for_draft(session, owner.id, draft.id)
     return Reply("Cancelled. Nothing was recorded.")
 
 
@@ -806,6 +905,8 @@ def expire_stale_drafts(session: Session, *, now: datetime | None = None) -> int
         draft.state = DraftState.EXPIRED
         draft.resolved_at = now
         draft.purge_raw_text()
+        location.cancel_for_draft(session, draft.owner_id, draft.id, now=now)
+    location.expire_requests(session, now=now)
     return len(stale)
 
 

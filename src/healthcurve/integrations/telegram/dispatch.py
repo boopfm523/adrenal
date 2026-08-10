@@ -93,6 +93,21 @@ def process_update(
         return UpdateOutcome.PROCESSED
 
     message = update.get("message") or {}
+    telegram_location = message.get("location")
+    if isinstance(telegram_location, dict):
+        if (message.get("chat") or {}).get("type") != "private":
+            client.send_message(chat_id, "Location sharing is available only in a private chat.")
+            return UpdateOutcome.IGNORED
+        reply = handlers.handle_phone_location(
+            session,
+            owner,
+            chat_id=chat_id,
+            latitude=telegram_location.get("latitude"),
+            longitude=telegram_location.get("longitude"),
+        )
+        client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
+        return UpdateOutcome.PROCESSED
+
     text = message.get("text")
     if not isinstance(text, str):
         client.send_message(chat_id, "I can only read text messages.")
@@ -100,6 +115,15 @@ def process_update(
     if len(text) > MAX_MESSAGE_LENGTH:
         client.send_message(chat_id, "That message is too long for me to read.")
         return UpdateOutcome.IGNORED
+
+    if text == "Use saved Home area":
+        reply = handlers.use_saved_home(session, owner, chat_id=chat_id)
+        client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
+        return UpdateOutcome.PROCESSED
+    if text == "No location":
+        reply = handlers.decline_location(session, owner, chat_id=chat_id)
+        client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
+        return UpdateOutcome.PROCESSED
 
     reply = handlers.handle_message(
         session,
@@ -140,6 +164,21 @@ def _handle_callback(
             reply = handlers.cancel_draft(session, owner, draft_id)
         case "edit":
             reply = handlers.draft_edit_help(session, owner, draft_id)
+        case "location":
+            chat_type = ((callback.get("message") or {}).get("chat") or {}).get("type")
+            if chat_type != "private" or not isinstance(chat_id, int):
+                if query_id:
+                    client.answer_callback_query(
+                        query_id, "Location sharing requires a private chat."
+                    )
+                return
+            reply = handlers.start_location_request(session, owner, draft_id, chat_id=chat_id)
+            if query_id:
+                client.answer_callback_query(query_id)
+            client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
+            return
+        case "save_home":
+            reply = handlers.save_location_as_home(session, owner, draft_id)
         case _:
             if query_id:
                 client.answer_callback_query(query_id, "Unknown action.")

@@ -10,6 +10,7 @@ import os
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 from unittest import mock
@@ -304,6 +305,8 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
         "time": {"local_time": "2026-03-29T08:15:00", "timezone": "Europe/London"},
         "location_precision": "coarse",
         "coarse_location_label": "Central London",
+        "latitude": "51.5",
+        "longitude": "-0.1",
         "weather_provider": "manual",
         "weather_observed_at": "2026-03-29T07:15:00Z",
         "temperature": "12.50",
@@ -335,6 +338,13 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
     )
     assert naive_weather_time.status_code == 422
 
+    overly_precise_coarse = client.post(
+        "/api/v1/context-events",
+        headers=logged_in,
+        json={**coarse_payload, "latitude": "51.5074", "longitude": "-0.1278"},
+    )
+    assert overly_precise_coarse.status_code == 422
+
     created = client.post("/api/v1/context-events", headers=logged_in, json=coarse_payload)
     assert created.status_code == 201, created.text
     original = created.json()
@@ -345,7 +355,7 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
         "utc_offset_minutes": 60,
     }
     assert original["coarse_location_label"] == "Central London"
-    assert original["latitude"] is None
+    assert original["latitude"] == "51.5"
     assert original["weather_provider"] == "manual"
     assert original["temperature"] == "12.50"
 
@@ -404,7 +414,7 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
         original_row = session.get(ContextEvent, uuid.UUID(original["id"]))
         assert original_row is not None
         assert original_row.coarse_location_label == "Central London"
-        assert original_row.latitude is None
+        assert original_row.latitude == Decimal("51.500000")
 
     path = f"/api/v1/context-events/{replacement['id']}"
     wrong = client.request("DELETE", path, headers=logged_in, json={"password": "wrong-password"})

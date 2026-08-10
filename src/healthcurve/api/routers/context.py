@@ -62,10 +62,18 @@ class ContextFields(ApiModel):
             self.coarse_location_label is not None or coordinates or self.exact_location_consent
         ):
             raise ValueError("location fields require coarse or exact precision")
-        if self.location_precision is LocationPrecision.COARSE and (
-            self.coarse_location_label is None or coordinates or self.exact_location_consent
-        ):
-            raise ValueError("coarse location requires a label and forbids coordinates")
+        if self.location_precision is LocationPrecision.COARSE:
+            if self.coarse_location_label is None or self.exact_location_consent:
+                raise ValueError("coarse location requires a label and forbids exact consent")
+            if (
+                self.latitude is not None
+                and self.longitude is not None
+                and (
+                    self.latitude != self.latitude.quantize(Decimal("0.1"))
+                    or self.longitude != self.longitude.quantize(Decimal("0.1"))
+                )
+            ):
+                raise ValueError("coarse coordinates must be rounded to 0.1 degrees")
         if self.location_precision is LocationPrecision.EXACT and (
             not coordinates or not self.exact_location_consent
         ):

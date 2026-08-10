@@ -10,14 +10,14 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.models import AIAnalysis, ExtractionDraft
-from healthcurve.context.models import ContextEvent
+from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.base import EventMixin
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.integrations.credentials import IntegrationCredential
 from healthcurve.integrations.garmin.models import GarminImportBatch
-from healthcurve.integrations.telegram.models import TelegramUpdate
+from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
 from healthcurve.labs.documents import DocumentLayout, mark_deleted
 from healthcurve.labs.models import LabDocument, LabPanel
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
@@ -111,6 +111,21 @@ def delete_integration(
             session, delete(GarminImportBatch).where(GarminImportBatch.owner_id == owner_id)
         )
     if delete_data and provider == "telegram":
+        data_rows += _delete_count(
+            session,
+            delete(ContextEvent).where(
+                ContextEvent.owner_id == owner_id,
+                ContextEvent.provider_id.like("telegram-location:%"),
+            ),
+        )
+        data_rows += _delete_count(
+            session,
+            delete(TelegramLocationRequest).where(TelegramLocationRequest.owner_id == owner_id),
+        )
+        data_rows += _delete_count(
+            session,
+            delete(SavedCoarseLocation).where(SavedCoarseLocation.owner_id == owner_id),
+        )
         data_rows += _delete_count(
             session,
             delete(ExtractionDraft).where(

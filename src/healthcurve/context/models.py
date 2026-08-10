@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Numeric, String
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
-from healthcurve.db import FactBase, StrEnumType
+from healthcurve.db import IDENTITY_SCHEMA, FactBase, IdentityBase, StrEnumType
 from healthcurve.events.base import EventMixin, event_table_args
 
 
@@ -79,10 +89,15 @@ class ContextEvent(EventMixin, FactBase):
             "(location_precision = 'none' AND coarse_location_label IS NULL "
             "AND latitude IS NULL AND exact_location_consent = false) OR "
             "(location_precision = 'coarse' AND coarse_location_label IS NOT NULL "
-            "AND latitude IS NULL AND exact_location_consent = false) OR "
+            "AND exact_location_consent = false) OR "
             "(location_precision = 'exact' AND latitude IS NOT NULL "
             "AND exact_location_consent = true)",
             name="location_precision_consent",
+        ),
+        CheckConstraint(
+            "location_precision <> 'coarse' OR latitude IS NULL OR "
+            "(latitude = round(latitude, 1) AND longitude = round(longitude, 1))",
+            name="coarse_coordinates_rounded",
         ),
         CheckConstraint(
             "(temperature IS NULL) = (temperature_unit IS NULL)",
@@ -113,4 +128,34 @@ class ContextEvent(EventMixin, FactBase):
             name="weather_has_provenance",
         ),
         *event_table_args("context_event"),
+    )
+
+
+class SavedCoarseLocation(IdentityBase):
+    """An explicitly saved rounded place, currently the optional Home area."""
+
+    __tablename__ = "saved_coarse_location"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(4, 1), nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(4, 1), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_saved_coarse_location_owner_name"),
+        CheckConstraint("latitude BETWEEN -90 AND 90", name="latitude_range"),
+        CheckConstraint("longitude BETWEEN -180 AND 180", name="longitude_range"),
+        CheckConstraint(
+            "latitude = round(latitude, 1) AND longitude = round(longitude, 1)",
+            name="coordinates_rounded",
+        ),
+        IDENTITY_SCHEMA,
     )

@@ -11,11 +11,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
+from enum import StrEnum
 
-from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
-from healthcurve.db import OPS_SCHEMA, OpsBase
+from healthcurve.db import OPS_SCHEMA, OpsBase, StrEnumType
 
 
 class TelegramUpdate(OpsBase):
@@ -35,3 +47,63 @@ class TelegramUpdate(OpsBase):
     draft_id: Mapped[uuid.UUID | None] = mapped_column()
 
     __table_args__ = (OPS_SCHEMA,)
+
+
+class LocationRequestState(StrEnum):
+    PENDING = "pending"
+    ATTACHED = "attached"
+    USED = "used"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class TelegramLocationRequest(OpsBase):
+    """Correlation state containing rounded coordinates only—never raw phone GPS."""
+
+    __tablename__ = "telegram_location_request"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Deliberately not an FK into ai: deleting AI drafts must remain independent.
+    draft_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
+    state: Mapped[LocationRequestState] = mapped_column(
+        StrEnumType(LocationRequestState, 16), nullable=False
+    )
+    rounded_latitude: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+    rounded_longitude: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+    location_label: Mapped[str | None] = mapped_column(String(120))
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "(rounded_latitude IS NULL) = (rounded_longitude IS NULL)",
+            name="coordinate_pair",
+        ),
+        CheckConstraint(
+            "rounded_latitude IS NULL OR rounded_latitude BETWEEN -90 AND 90",
+            name="latitude_range",
+        ),
+        CheckConstraint(
+            "rounded_longitude IS NULL OR rounded_longitude BETWEEN -180 AND 180",
+            name="longitude_range",
+        ),
+        CheckConstraint(
+            "rounded_latitude IS NULL OR (rounded_latitude = round(rounded_latitude, 1) "
+            "AND rounded_longitude = round(rounded_longitude, 1))",
+            name="coordinates_rounded",
+        ),
+        Index(
+            "uq_telegram_location_request_pending_owner",
+            "owner_id",
+            unique=True,
+            postgresql_where=text("state IN ('pending', 'attached')"),
+        ),
+        OPS_SCHEMA,
+    )
