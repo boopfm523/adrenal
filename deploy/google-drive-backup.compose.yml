@@ -1,0 +1,15 @@
+# Owner-approved Google Drive offsite copy. Google Drive has no object lock or
+# write-only OAuth role; see docs/backup-runbook.md and hc-cbs.8.4.
+
+services:
+  backup-worker:
+    environment:
+      HC_BACKUP_OFFSITE_ENABLED: "true"
+      HC_BACKUP_OFFSITE_PROVIDER: rclone-google-drive
+      HC_BACKUP_OFFSITE_DESTINATION: "healthcurve-drive:HealthCurve Backups"
+      HC_BACKUP_OFFSITE_CREDENTIAL_FILE: /run/secrets/rclone.conf
+    volumes:
+      - type: bind
+        source: ${HC_RCLONE_CONFIG_FILE_HOST:?set HC_RCLONE_CONFIG_FILE_HOST}
+        target: /run/secrets/rclone.conf
+        read_only: true

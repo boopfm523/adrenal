@@ -8,11 +8,15 @@ by `hc-cbs.2` and remains a production-launch gate.
 
 - The backup host stores only an `age` **public recipient**. Keep the private identity
   off the HealthCurve host, out of `.env`, Git, logs, Beads, screenshots, and backups.
-- Use a dedicated local/external backup medium. A second directory on the live database
-  disk does not meet the three-copy design.
-- The routine offsite credential may inspect metadata and create objects only. It must
-  not read bodies, replace objects, change retention, or delete. Keep the separately
-  controlled maintenance/deletion credential out of the backup worker environment.
+- The owner chose a private encrypted-backup directory on the Mac's internal disk plus
+  encrypted Google Drive copies and explicitly declined an external drive. This protects
+  against database/container failure and provides an offsite copy, but host-disk loss
+  can remove both the live database and local set at once; it is not strict 3-2-1.
+- The Google Drive OAuth grant can read and delete files created through this rclone
+  authorization; Drive offers neither object lock nor a write-only role. The owner
+  explicitly accepted that limitation. HealthCurve's adapter exposes no delete or
+  replace operation and uses immutable uploads, but it cannot prevent an account or
+  token holder from deleting backups outside the application.
 - Run tests and drills with synthetic records. Do not paste database output, document
   names, medical content, locations, tokens, or exception text into issues or logs.
 - Never restore over the only live copy. Restore into an isolated stack first.
@@ -50,7 +54,7 @@ the key. If a copy cannot be recovered, the backup is not valid.
 
 ### 2. Prepare storage paths
 
-Create three directories: the dedicated local backup destination, uploads source, and
+Create three private directories: the local backup destination, uploads source, and
 report-artifact source. On Linux the bind-mounted directories must be accessible to
 UID/GID `10001:10001`; keep the destination owner-only. On macOS Docker Desktop handles
 the UID mapping, but the host directory should still be private to the owner.
@@ -60,8 +64,9 @@ worker. It contains retained source medical PDFs plus opaque validation state, s
 must not be placed under the web root or inside Git. The backup worker mounts that same
 host directory read-only and includes it in every encrypted backup set.
 
-Do not use the repository, PostgreSQL data volume, `/tmp`, or an unencrypted shared
-folder as the production destination.
+Do not use the PostgreSQL data volume, `/tmp`, or an unencrypted shared folder as the
+destination. This personal deployment uses the repository-ignored `var/backups`
+directory by owner choice; it is private but shares the Mac's failure domain.
 
 ### 3. Configure `.env`
 
@@ -110,6 +115,42 @@ docker compose \
 
 Starting the service schedules the current UTC day's singleton job. The container's
 restart policy keeps the scheduler running after ordinary reboots.
+
+### 6. Activate the owner-approved Google Drive copy
+
+Install `rclone`, create a private remote using OAuth scope `drive.file`, and keep its
+configuration outside the repository at mode `0600`. That scope limits this grant to
+files it creates or the user explicitly opens with it; it does not make the credential
+write-only. Never paste the config, refresh token, client secret, or account identifier
+into `.env`, Git, logs, screenshots, or Beads.
+
+The host-specific setting points Compose to that external file:
+
+```dotenv
+HC_RCLONE_CONFIG_FILE_HOST=<absolute path to the mode-0600 rclone config>
+```
+
+Start the worker with both overlays:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/backup.compose.yml \
+  -f deploy/google-drive-backup.compose.yml \
+  --profile backup-scheduled \
+  up -d --build backup-worker
+```
+
+The provider overlay supplies the registered `rclone-google-drive` adapter and the
+private destination `HealthCurve Backups`. It mounts the config read-only only into
+the dedicated backup worker. The API, Telegram worker, document worker, and general
+job worker do not receive the OAuth token or backup recipient.
+
+The current authorization uses rclone's shared Google OAuth client. rclone reports
+that this shared client is being retired during 2026. `hc-cbs.8.5` is a P0 production
+gate: create an owner-controlled Google Cloud OAuth client, place its ID/secret only in
+the external rclone config, reauthorize the remote, and repeat the encrypted round-trip
+test before relying on scheduled backups.
 
 ## Verification and monitoring
 
@@ -189,29 +230,38 @@ The code defines and tests a capability-limited offsite writer contract: metadat
 uploaded before its envelope, existing matching objects make retries idempotent, and a
 conflict fails closed. Retained historical sets are backfilled before local cleanup.
 
-A concrete provider adapter and real provider account are intentionally not selected
-in the repository. That decision requires the owner's provider/account, terms, cost,
-region, object-lock, and credential choices. Until that Beads dependency is completed,
-leave:
+Google Drive is the owner-approved initial provider. The `rclone-google-drive` adapter
+uploads a checksum sidecar before each ciphertext/envelope, uses immutable `copyto`,
+and verifies exact object size plus SHA-256. Sidecar-first ordering makes interrupted
+uploads resumable; a conflicting checksum or size fails closed. The adapter has no
+delete method.
+
+The normal base overlay remains safely disabled:
 
 ```dotenv
 HC_BACKUP_OFFSITE_ENABLED=false
 ```
 
-Do not treat local-only status as satisfying the production three-copy requirement.
-When a reviewed adapter is installed, activation additionally requires:
+`deploy/google-drive-backup.compose.yml` enables and supplies the following values;
+operators should not duplicate them in `.env`:
 
 ```dotenv
 HC_BACKUP_OFFSITE_ENABLED=true
-HC_BACKUP_OFFSITE_PROVIDER=<registered adapter name>
-HC_BACKUP_OFFSITE_DESTINATION=<private bucket/prefix>
-HC_BACKUP_OFFSITE_CREDENTIAL_FILE=<absolute mode-0600 mounted routine credential>
+HC_BACKUP_OFFSITE_PROVIDER=rclone-google-drive
+HC_BACKUP_OFFSITE_DESTINATION=healthcurve-drive:HealthCurve Backups
+HC_BACKUP_OFFSITE_CREDENTIAL_FILE=/run/secrets/rclone.conf
 ```
 
 The worker refuses incomplete configuration, empty/linked/group-readable credential
 files, a maintenance credential in its environment, a missing adapter, upload conflict,
-or remote metadata mismatch. Never put credential contents in `.env`; mount the file
-read-only through a provider-specific Compose override.
+or remote metadata mismatch. Google Drive lacks provider-enforced immutability and its
+OAuth token can read/delete authorized files, so Google account security, MFA, audit
+review, and a separately stored recovery identity are essential compensating controls.
+
+The selected layout deliberately does not claim strict 3-2-1: the local set shares the
+Mac's internal disk while Google Drive is the second medium/offsite copy. Do not present
+this as an unmet setup action or repeatedly ask the owner for an external drive; revisit
+it only if the owner changes the recovery objective.
 
 ## Failure response
 
@@ -226,13 +276,12 @@ read-only through a provider-specific Compose override.
 
 ### Offsite credential compromise
 
-1. Disable the routine credential at the provider; do not use a delete-capable key.
-2. Rotate to a new create/head-only credential stored as a mode-0600 mounted file.
-3. Inspect provider audit metadata for unexpected creates or reads without downloading
-   objects to an untrusted host.
+1. Revoke the rclone OAuth grant in the Google account and stop the backup worker.
+2. Reauthorize to a new mode-0600 external config; never reuse or paste its token.
+3. Inspect Google account/Drive activity for unexpected reads, changes, or deletions.
 4. Verify local ciphertext checksums against remote size/checksum metadata.
-5. Use the separately controlled maintenance identity only if an explicit, reviewed
-   cleanup is required.
+5. Create a fresh encrypted set and repeat the download/decrypt verification before
+   restarting scheduling.
 
 ### Lost or failed local backup medium
 

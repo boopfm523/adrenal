@@ -2,6 +2,7 @@
 # PostgreSQL 16 client tools and age, but is never used for the API.
 
 FROM postgres@sha256:64154d0babcb1741988719e703419af0382b19953706149f9872fbd0f438efa8 AS postgres-client
+FROM rclone/rclone@sha256:b06aed988cf5967de7c25be5925240983981c757f4ed1ac9d2fa659d51d60548 AS rclone-client
 
 FROM ghcr.io/astral-sh/uv:0.9.9-python3.13-bookworm-slim AS builder
 
@@ -26,6 +27,7 @@ RUN apt-get update \
 
 COPY --from=postgres-client /usr/lib/postgresql/16/bin/pg_dump /usr/local/bin/pg_dump
 COPY --from=postgres-client /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/pg_restore
+COPY --from=rclone-client /usr/local/bin/rclone /usr/local/bin/rclone
 COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
 COPY --from=builder --chown=10001:10001 /app/src /app/src
 

@@ -76,9 +76,11 @@ Nightly sequence:
    encryption success, using exact validated paths inside the private working directory.
 9. Write the encrypted archive and manifest/checksum envelope to the local backup
    medium using an atomic temporary name followed by rename.
-10. Upload the encrypted objects to separately credentialed offsite object storage over
-    TLS. The routine credential can create new versioned objects but cannot read object
-    contents, change retention policy, or delete prior sets.
+10. Upload the encrypted objects to separately credentialed offsite storage over TLS.
+    The initial owner-approved Google Drive provider cannot enforce a write-only role or
+    object lock; the application adapter nevertheless has no delete/replace operation
+    and uses immutable creates. This accepted downgrade and its compensating controls
+    are documented in the runbook and `hc-cbs.8.4`.
 11. Confirm the remote object exists with the expected size and checksum metadata.
 12. Record only operational metadata in HealthCurve: set ID, timestamps, size,
     encrypted checksum, locations, outcome, and redacted failure category.
@@ -125,7 +127,7 @@ cannot be recovered is considered failed, regardless of upload status.
 
 ## 5. Three-copy layout
 
-The practical 3-2-1 layout is:
+The originally proposed strict 3-2-1 layout was:
 
 1. **Primary:** live PostgreSQL and artifact volumes on the HealthCurve host.
 2. **Local backup:** age-encrypted sets on a dedicated local/external backup medium,
@@ -133,13 +135,20 @@ The practical 3-2-1 layout is:
 3. **Offsite backup:** the same independently verified encrypted sets in versioned
    object storage under a separate account and credential.
 
-This provides three copies, two storage/failure media, and one offsite copy. A second
-directory on the production disk does not count as the local backup copy.
+The owner declined an external drive. The implemented personal-deployment layout keeps
+the encrypted local set on the Mac's internal disk and a second encrypted set in Google
+Drive. It has an offsite copy and two media, but only two independent failure domains:
+Mac disk loss removes both the live database and local set. This is an explicit recovery
+objective choice, not a pending request for external storage, and must not be described
+as strict 3-2-1.
 
-The offsite service should provide versioning and a short immutability/object-lock
-window where available. The routine writer must not have delete permission; a separate
-maintenance credential performs audited retention cleanup. Compromise of the app or
-nightly writer therefore cannot erase the historical offsite sets.
+The preferred offsite service provides versioning and an immutability/object-lock
+window. Google Drive does not: its OAuth grant can read/delete files created through
+that authorization. HealthCurve narrows the application surface (no delete method,
+immutable copy calls, exact checksum sidecars, dedicated-worker-only credential), but
+account/token compromise can still erase remote history. The owner accepted this
+residual risk for the initial personal deployment; Google account MFA/audit review and
+separately stored recovery material are the chosen compensating controls.
 
 ## 6. Retention and deletion
 

@@ -22,6 +22,7 @@ from healthcurve.operations.backup_jobs import (
     schedule_nightly,
 )
 from healthcurve.operations.jobs import JobQueueError
+from healthcurve.operations.rclone_drive import writer_from_settings
 
 log = get_logger(__name__)
 _stop = threading.Event()
@@ -48,10 +49,21 @@ def main() -> int:
         )
         return 1
 
+    try:
+        writer = writer_from_settings(config.offsite)
+    except Exception:
+        log.error(
+            "backup offsite configuration rejected",
+            task=BACKUP_TASK,
+            reason_code="offsite_writer_unavailable",
+            outcome="stopped",
+        )
+        return 2
+
     log.info("backup worker started", task=BACKUP_TASK, outcome="running")
     worker.run_loop(
         get_session_factory(),
-        {BACKUP_TASK: make_backup_handler(config)},
+        {BACKUP_TASK: make_backup_handler(config, writer=writer)},
         stop_event=_stop,
         poll_interval_s=settings.job_poll_interval_s,
         worker_id="dedicated-backup-worker",
