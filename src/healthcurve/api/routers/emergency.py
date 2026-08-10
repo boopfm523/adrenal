@@ -18,15 +18,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from html import escape
 
-from fastapi import APIRouter, Form, Request, status
+from fastapi import APIRouter, Form, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 
-from healthcurve.api.deps import CurrentOwner, DbSession, OptionalCurrentOwner
+from healthcurve.api.deps import (
+    CurrentOwner,
+    CurrentSession,
+    DbSession,
+    OptionalCurrentOwner,
+    OptionalCurrentSession,
+)
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
+from healthcurve.identity import service as auth
 from healthcurve.medications.models import (
     ApprovedInstruction,
     InstructionCategory,
@@ -98,7 +105,11 @@ _ANONYMOUS_ADVICE = (
 
 
 @router.get("/emergency", response_class=HTMLResponse)
-def emergency_page(session: DbSession, owner: OptionalCurrentOwner) -> HTMLResponse:
+def emergency_page(
+    session: DbSession,
+    owner: OptionalCurrentOwner,
+    auth_session: OptionalCurrentSession,
+) -> HTMLResponse:
     if owner is None:
         return _page(_ANONYMOUS_ADVICE)
 
@@ -158,7 +169,9 @@ def emergency_page(session: DbSession, owner: OptionalCurrentOwner) -> HTMLRespo
             "an approved regimen version.</p></div>"
         )
 
-    parts.append(_injection_form(session, owner))
+    if auth_session is None:  # pragma: no cover -- owner and session resolve together
+        return _page(_ANONYMOUS_ADVICE)
+    parts.append(_injection_form(session, owner, csrf_token=auth_session.csrf_token))
     parts.append(
         "<p class='meta'>This page shows recorded facts and physician-authored "
         "instructions only. It contains no generated analysis and works with all "
@@ -167,7 +180,7 @@ def emergency_page(session: DbSession, owner: OptionalCurrentOwner) -> HTMLRespo
     return _page("".join(parts))
 
 
-def _injection_form(session: DbSession, owner: CurrentOwner) -> str:
+def _injection_form(session: DbSession, owner: CurrentOwner, *, csrf_token: str) -> str:
     medications = list(
         session.scalars(
             select(Medication).where(Medication.owner_id == owner.id).order_by(Medication.name)
@@ -188,6 +201,7 @@ def _injection_form(session: DbSession, owner: CurrentOwner) -> str:
         "<section class='card'><h2>Log an emergency injection</h2>"
         "<p class='meta'>Recorded as a fact. Log it now; you can add detail later.</p>"
         "<form method='post' action='/emergency/injection'>"
+        f"<input type='hidden' name='csrf_token' value='{escape(csrf_token)}'>"
         f"<label for='m'>Medication</label><select id='m' name='medication_id'>{options}</select>"
         "<label for='a'>Amount (mg)</label>"
         "<input id='a' name='amount' type='number' step='0.5' min='0.5' value='100' required>"
@@ -202,9 +216,10 @@ def _injection_form(session: DbSession, owner: CurrentOwner) -> str:
 
 @router.post("/emergency/injection")
 def log_injection_form(
-    request: Request,
     session: DbSession,
     owner: CurrentOwner,
+    auth_session: CurrentSession,
+    csrf_token: str = Form(default=""),
     medication_id: str = Form(),
     amount: str = Form(),
     injection_site: str = Form(default=""),
@@ -217,6 +232,12 @@ def log_injection_form(
     """
     import uuid as _uuid
     from decimal import Decimal
+
+    if not auth.verify_csrf(auth_session, csrf_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="missing or invalid CSRF token",
+        )
 
     medication = session.get(Medication, _uuid.UUID(medication_id))
     if medication is None or medication.owner_id != owner.id:

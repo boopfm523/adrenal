@@ -18,6 +18,8 @@ from unittest import mock
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -26,6 +28,7 @@ from testcontainers.community.postgres import PostgresContainer
 from healthcurve import models as all_models
 from healthcurve import privacy
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
+from healthcurve.api import deps as api_deps
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
 from healthcurve.development_cleanup import (
@@ -34,6 +37,7 @@ from healthcurve.development_cleanup import (
     preview_synthetic_bootstrap,
 )
 from healthcurve.document_worker import process_available, validate_one
+from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
@@ -3695,12 +3699,124 @@ def test_owner_recovery_preserves_all_non_identity_tables_and_revokes_sessions(
 def test_emergency_page_renders_without_ai_or_javascript(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:
+    _a_medication(client, logged_in)
     response = client.get("/emergency")
     assert response.status_code == 200
     body = response.text
     assert "<script" not in body, "the emergency page must not depend on JavaScript"
     assert "emergency services" in body.lower()
     assert response.headers["cache-control"] == "no-store"
+    assert f"name='csrf_token' value='{logged_in[auth.CSRF_HEADER_NAME]}'" in body
+
+
+@pytest.mark.safety("SAFE-21")
+def test_emergency_injection_form_rejects_cross_session_and_missing_csrf(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    medication_id = _a_medication(client, logged_in)
+    form = {"medication_id": medication_id, "amount": "100"}
+
+    with Session(engine) as session:
+        event_count_before = (
+            session.scalar(select(func.count()).select_from(EmergencyInjectionEvent)) or 0
+        )
+        audit_count_before = (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(
+                    AuditEntry.action == AuditAction.RECORD_CREATED,
+                    AuditEntry.target_type == EmergencyInjectionEvent.__tablename__,
+                )
+            )
+            or 0
+        )
+
+    missing = client.post("/emergency/injection", data=form)
+    wrong = client.post(
+        "/emergency/injection", data={**form, "csrf_token": "not-this-session-token"}
+    )
+
+    second_login = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert second_login.status_code == 200
+    second_csrf = second_login.json()["csrf_token"]
+    other_session = client.post(
+        "/emergency/injection",
+        data={**form, "csrf_token": logged_in[auth.CSRF_HEADER_NAME]},
+    )
+
+    assert missing.status_code == 403
+    assert wrong.status_code == 403
+    assert other_session.status_code == 403
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(EmergencyInjectionEvent)) == (
+            event_count_before
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(
+                    AuditEntry.action == AuditAction.RECORD_CREATED,
+                    AuditEntry.target_type == EmergencyInjectionEvent.__tablename__,
+                )
+            )
+            == audit_count_before
+        )
+
+    valid = client.post(
+        "/emergency/injection",
+        data={**form, "csrf_token": second_csrf},
+        follow_redirects=False,
+    )
+    assert valid.status_code == 303
+    assert valid.headers["location"] == "/emergency?logged=1"
+
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(EmergencyInjectionEvent)) == (
+            event_count_before + 1
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(
+                    AuditEntry.action == AuditAction.RECORD_CREATED,
+                    AuditEntry.target_type == EmergencyInjectionEvent.__tablename__,
+                )
+            )
+            == audit_count_before + 1
+        )
+
+
+def test_cookie_authenticated_unsafe_routes_have_csrf_review(client: TestClient) -> None:
+    """Inventory cookie-authenticated writes so a new route cannot silently skip CSRF."""
+
+    def has_dependency(route: APIRoute, target: Any) -> bool:
+        pending = [route.dependant]
+        while pending:
+            dependant = pending.pop()
+            if dependant.call is target:
+                return True
+            pending.extend(dependant.dependencies)
+        return False
+
+    exceptions = {
+        ("/api/v1/auth/login", "POST"),  # no session exists yet
+        ("/emergency/injection", "POST"),  # session-bound HTML form token, tested above
+    }
+    missing: set[tuple[str, str]] = set()
+    application = cast(FastAPI, client.app)
+    for route in application.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        for method in (route.methods or set()) & {"POST", "PUT", "PATCH", "DELETE"}:
+            key = (route.path, method)
+            if key in exceptions:
+                continue
+            if not has_dependency(route, api_deps.require_csrf):
+                missing.add(key)
+    assert missing == set()
 
 
 @pytest.mark.safety("SAFE-22")

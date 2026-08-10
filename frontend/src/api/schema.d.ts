@@ -1253,6 +1253,11 @@ export interface components {
             /** Amount */
             amount: string;
             /**
+             * Csrf Token
+             * @default
+             */
+            csrf_token: string;
+            /**
              * Injected By
              * @default
              */

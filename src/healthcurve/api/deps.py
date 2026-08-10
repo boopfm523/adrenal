@@ -55,19 +55,28 @@ def current_owner(session: DbSession, auth_session: CurrentSession) -> Owner:
 CurrentOwner = Annotated[Owner, Depends(current_owner)]
 
 
-def optional_current_owner(
+def optional_current_session(
     session: DbSession,
     hc_session: Annotated[str | None, Cookie(alias=auth.SESSION_COOKIE_NAME)] = None,
+) -> AuthSession | None:
+    """Resolve a session when present without making authentication mandatory."""
+    return auth.resolve_session(session, hc_session or "")
+
+
+OptionalCurrentSession = Annotated[AuthSession | None, Depends(optional_current_session)]
+
+
+def optional_current_owner(
+    session: DbSession, auth_session: OptionalCurrentSession
 ) -> Owner | None:
-    """Resolve an owner when a valid session exists, without making login mandatory.
+    """Resolve an owner when a valid optional session exists.
 
     This is deliberately separate from ``CurrentOwner`` and is only suitable for a
     route whose anonymous response contains no owner-scoped data.
     """
-    resolved = auth.resolve_session(session, hc_session or "")
-    if resolved is None:
+    if auth_session is None:
         return None
-    return session.get(Owner, resolved.owner_id)
+    return session.get(Owner, auth_session.owner_id)
 
 
 OptionalCurrentOwner = Annotated[Owner | None, Depends(optional_current_owner)]

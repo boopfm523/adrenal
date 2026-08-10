@@ -358,6 +358,11 @@
             "title": "Amount",
             "type": "string"
           },
+          "csrf_token": {
+            "default": "",
+            "title": "Csrf Token",
+            "type": "string"
+          },
           "injected_by": {
             "default": "",
             "title": "Injected By",
