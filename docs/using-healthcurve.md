@@ -392,9 +392,38 @@ Anything without that filter is showing you history as well as the present.
 
 Use the Plan page for one unapproved, unreferenced draft. Do not use raw SQL to remove
 an approved or retired plan version: those versions are retained so historical doses
-and reports stay interpretable. A development-only previewed cleanup for demonstrably
-synthetic bootstrap medication data is separate work. The following emergency testing
-shortcut is intentionally unsafe and is not the normal deletion workflow:
+and reports stay interpretable.
+
+The one exception is the exact legacy sample emitted by HealthCurve's original
+medication template. In a **development/build-mode installation only**, preview it:
+
+```bash
+docker compose run --rm api \
+  python -m healthcurve.cli purge-synthetic-medication-bootstrap
+```
+
+The command is not a search by words such as “Example” or “synthetic.” It requires a
+versioned whole-record fingerprint, prints every targeted opaque ID and per-table row
+count, and refuses modified, ambiguous, referenced, or non-development data. Preview
+mode never changes the database. If—and only if—the IDs are the sample rows you intend
+to remove, rerun interactively:
+
+```bash
+docker compose run --rm api \
+  python -m healthcurve.cli purge-synthetic-medication-bootstrap --execute
+```
+
+Type the preview-bound phrase exactly. Do not paste it into shell arguments or an
+automation. HealthCurve rechecks the complete fingerprint and all dose, injection,
+other-plan, report, AI-draft/analysis, and source-document references in the same
+transaction. It removes the exact legacy regimen, slots, placeholder instructions,
+and its three now-unreferenced sample medications; unrelated rows remain. Encrypted
+backups may retain deleted sample rows until their configured expiry. The command will
+not remove test facts that reference the sample plan—delete those through their safe
+record-specific workflow first.
+
+The following emergency testing shortcut is intentionally unsafe and is not the normal
+deletion workflow:
 
 ```sql
 TRUNCATE fact.dose_event, fact.symptom_event, fact.diary_event, fact.life_event,

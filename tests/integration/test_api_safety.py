@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -28,6 +28,11 @@ from healthcurve import privacy
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
+from healthcurve.development_cleanup import (
+    SyntheticBootstrapCleanupError,
+    execute_synthetic_bootstrap_cleanup,
+    preview_synthetic_bootstrap,
+)
 from healthcurve.document_worker import process_available, validate_one
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
@@ -49,6 +54,7 @@ from healthcurve.medications.models import (
     ApprovedInstruction,
     DoseEvent,
     DoseUnit,
+    InstructionCategory,
     Medication,
     RegimenDoseSlot,
     RegimenVersion,
@@ -2031,6 +2037,290 @@ def test_regimen_draft_deletion_hides_other_owner_and_retains_historical_version
 
 
 # ---------------------------------------------------------------------------
+# Development-only exact synthetic medication bootstrap cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_exact_synthetic_bootstrap_preview_confirmation_cleanup_and_audit(
+    client: TestClient, engine: Engine
+) -> None:
+    _ = client
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+            assert owner_id is not None
+            target = _legacy_medication_bootstrap(session, owner_id=owner_id, approved=True)
+            unrelated = Medication(
+                owner_id=owner_id,
+                name="Unrelated synthetic medicine",
+                normalized_name="unrelated synthetic medicine",
+                strength=Decimal("1"),
+                default_unit=DoseUnit.MG,
+                default_route=Route.ORAL,
+            )
+            session.add(unrelated)
+            session.flush()
+            unrelated_id = unrelated.id
+            session.expire_all()
+
+            preview = preview_synthetic_bootstrap(session, owner_id=owner_id)
+            assert preview.regimen_version_ids == (target["regimen_id"],)
+            assert preview.counts.regimen_versions == 1
+            assert preview.counts.regimen_dose_slots == 4
+            assert preview.counts.approved_instructions == 2
+            assert preview.counts.medications == 3
+            assert preview.references.total == 0
+            assert preview.confirmation_phrase.startswith("PURGE SYNTHETIC BOOTSTRAP ")
+
+            with pytest.raises(SyntheticBootstrapCleanupError, match="confirmation"):
+                execute_synthetic_bootstrap_cleanup(
+                    session,
+                    owner_id=owner_id,
+                    preview=preview,
+                    confirmation="PURGE SOMETHING ELSE",
+                )
+            assert session.get(RegimenVersion, target["regimen_id"]) is not None
+
+            counts = execute_synthetic_bootstrap_cleanup(
+                session,
+                owner_id=owner_id,
+                preview=preview,
+                confirmation=preview.confirmation_phrase,
+            )
+            session.flush()
+            assert counts == preview.counts
+            assert session.get(RegimenVersion, target["regimen_id"]) is None
+            assert all(
+                session.get(Medication, row_id) is None for row_id in target["medication_ids"]
+            )
+            assert session.get(Medication, unrelated_id) is not None
+            entry = session.scalar(
+                select(AuditEntry).where(
+                    AuditEntry.action == AuditAction.SYNTHETIC_MEDICATION_BOOTSTRAP_PURGED,
+                    AuditEntry.target_id == target["regimen_id"],
+                )
+            )
+            assert entry is not None
+            assert entry.change_summary is not None
+            assert "Hydrocortisone" not in entry.change_summary
+            assert "Dr Example" not in entry.change_summary
+            assert "clinic letter" not in entry.change_summary
+    finally:
+        transaction.rollback()
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "reference_kind",
+    ["dose", "injection", "other_plan", "report", "analysis", "draft", "document"],
+)
+def test_synthetic_bootstrap_cleanup_refuses_every_retained_reference(
+    reference_kind: str, client: TestClient, engine: Engine
+) -> None:
+    _ = client
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+            assert owner_id is not None
+            target = _legacy_medication_bootstrap(session, owner_id=owner_id, approved=False)
+            regimen = session.get(RegimenVersion, target["regimen_id"])
+            medication = session.get(Medication, target["medication_ids"][0])
+            slot = session.get(RegimenDoseSlot, target["slot_ids"][0])
+            assert regimen is not None and medication is not None and slot is not None
+            target_id = str(regimen.id)
+            if reference_kind == "dose":
+                events.create_event(
+                    session,
+                    DoseEvent,
+                    owner_id=owner_id,
+                    event_time=events.build_event_time(datetime(2026, 1, 2, 7, tzinfo=UTC), "UTC"),
+                    source_type=SourceType.WEB,
+                    confirmation_state=ConfirmationState.DIRECT,
+                    medication_id=medication.id,
+                    amount=Decimal("1"),
+                    unit=DoseUnit.MG,
+                    route=Route.ORAL,
+                    category="scheduled",
+                    regimen_version_id=regimen.id,
+                    slot_id=slot.id,
+                )
+            elif reference_kind == "injection":
+                from healthcurve.episodes.models import EmergencyInjectionEvent
+
+                events.create_event(
+                    session,
+                    EmergencyInjectionEvent,
+                    owner_id=owner_id,
+                    event_time=events.build_event_time(datetime(2026, 1, 2, 7, tzinfo=UTC), "UTC"),
+                    source_type=SourceType.WEB,
+                    confirmation_state=ConfirmationState.DIRECT,
+                    medication_id=medication.id,
+                    amount=Decimal("1"),
+                    unit="mg",
+                    route="intramuscular",
+                )
+            elif reference_kind == "other_plan":
+                other = medication_service.create_draft(
+                    session,
+                    owner_id=owner_id,
+                    version_label="Unrelated synthetic draft",
+                    effective_from=datetime(2035, 1, 1, tzinfo=UTC),
+                )
+                session.add(
+                    RegimenDoseSlot(
+                        regimen_version_id=other.id,
+                        medication_id=medication.id,
+                        scheduled_local_time=datetime.min.time(),
+                        amount=Decimal("1"),
+                        unit=DoseUnit.MG,
+                        route=Route.ORAL,
+                    )
+                )
+            elif reference_kind == "report":
+                session.add(
+                    ReportSnapshot(
+                        owner_id=owner_id,
+                        date_from=date(2026, 1, 1),
+                        date_to=date(2026, 1, 1),
+                        timezone="UTC",
+                        selected_sections=["approved_plan"],
+                        include_ai=False,
+                        source_manifest={
+                            "fact": [],
+                            "plan": [target_id],
+                            "patient_note": [],
+                            "ai": [],
+                        },
+                        metric_values={},
+                        snapshot_content={"fact": [], "plan": [], "patient_note": [], "ai": []},
+                        render_version="synthetic-v1",
+                        canonical_sha256="a" * 64,
+                    )
+                )
+            elif reference_kind == "analysis":
+                session.add(
+                    AIAnalysis(
+                        owner_id=owner_id,
+                        analysis_type=AnalysisType.PATTERN_OBSERVATION,
+                        body="Synthetic analysis.",
+                        source_record_ids=[target_id],
+                        computed_inputs={},
+                        model_name="synthetic-model",
+                        prompt_version="synthetic-v1",
+                    )
+                )
+            elif reference_kind == "draft":
+                session.add(
+                    ExtractionDraft(
+                        owner_id=owner_id,
+                        source="web",
+                        candidates=[{"type": "dose", "medication_id": str(medication.id)}],
+                        original_candidates=None,
+                        state=DraftState.PENDING,
+                        prompt_version="synthetic-v1",
+                        schema_version="synthetic-v1",
+                    )
+                )
+            else:
+                regimen.source_document_checksum = "b" * 64
+                session.add(
+                    LabDocument(
+                        owner_id=owner_id,
+                        display_name="synthetic-source.pdf",
+                        media_type="application/pdf",
+                        sha256="b" * 64,
+                        byte_size=1,
+                        status=LabDocumentStatus.PENDING,
+                    )
+                )
+            session.flush()
+            session.expire_all()
+
+            preview = preview_synthetic_bootstrap(session, owner_id=owner_id)
+            assert preview.references.total > 0
+            with pytest.raises(SyntheticBootstrapCleanupError, match="retained references"):
+                execute_synthetic_bootstrap_cleanup(
+                    session,
+                    owner_id=owner_id,
+                    preview=preview,
+                    confirmation=preview.confirmation_phrase,
+                )
+            assert session.get(RegimenVersion, target["regimen_id"]) is not None
+            assert all(
+                session.get(Medication, row_id) is not None for row_id in target["medication_ids"]
+            )
+    finally:
+        transaction.rollback()
+        connection.close()
+
+
+def test_synthetic_bootstrap_cleanup_refuses_near_match_and_ambiguous_targets(
+    client: TestClient, engine: Engine
+) -> None:
+    _ = client
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+            assert owner_id is not None
+            target = _legacy_medication_bootstrap(session, owner_id=owner_id, approved=False)
+            instruction = session.get(ApprovedInstruction, target["instruction_ids"][0])
+            assert instruction is not None
+            instruction.body = "Different synthetic placeholder content."
+            session.flush()
+            session.expire_all()
+
+            with pytest.raises(SyntheticBootstrapCleanupError, match="no single exact"):
+                preview_synthetic_bootstrap(session, owner_id=owner_id)
+            assert session.get(RegimenVersion, target["regimen_id"]) is not None
+    finally:
+        transaction.rollback()
+        connection.close()
+
+
+def test_synthetic_bootstrap_cleanup_requires_exact_slot_medication_identity(
+    client: TestClient, engine: Engine
+) -> None:
+    _ = client
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+            assert owner_id is not None
+            target = _legacy_medication_bootstrap(session, owner_id=owner_id, approved=False)
+            lookalike = Medication(
+                owner_id=owner_id,
+                name="Hydrocortisone",
+                normalized_name="hydrocortisone",
+                formulation="tablet",
+                strength=Decimal("20"),
+                strength_unit="mg",
+                default_unit=DoseUnit.MG,
+                default_route=Route.ORAL,
+            )
+            session.add(lookalike)
+            session.flush()
+            slot = session.get(RegimenDoseSlot, target["slot_ids"][0])
+            assert slot is not None
+            slot.medication_id = lookalike.id
+            session.flush()
+            session.expire_all()
+
+            with pytest.raises(SyntheticBootstrapCleanupError, match="no single exact"):
+                preview_synthetic_bootstrap(session, owner_id=owner_id)
+            assert session.get(RegimenVersion, target["regimen_id"]) is not None
+    finally:
+        transaction.rollback()
+        connection.close()
+
+
+# ---------------------------------------------------------------------------
 # SAFE-16: approval is a human act with provenance
 # ---------------------------------------------------------------------------
 
@@ -2655,6 +2945,107 @@ def test_emergency_page_says_so_when_no_instructions_exist(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _legacy_medication_bootstrap(
+    session: Session, *, owner_id: uuid.UUID, approved: bool
+) -> dict[str, Any]:
+    """Create the exact, explicitly synthetic legacy template inside a test transaction."""
+    medications = [
+        Medication(
+            owner_id=owner_id,
+            name="Hydrocortisone",
+            normalized_name="hydrocortisone",
+            formulation="tablet",
+            strength=Decimal("10"),
+            strength_unit="mg",
+            default_unit=DoseUnit.MG,
+            default_route=Route.ORAL,
+        ),
+        Medication(
+            owner_id=owner_id,
+            name="Fludrocortisone",
+            normalized_name="fludrocortisone",
+            formulation="tablet",
+            strength=Decimal("0.1"),
+            strength_unit="mg",
+            default_unit=DoseUnit.MG,
+            default_route=Route.ORAL,
+        ),
+        Medication(
+            owner_id=owner_id,
+            name="Hydrocortisone sodium succinate",
+            normalized_name="hydrocortisone sodium succinate",
+            formulation="injection",
+            strength=Decimal("100"),
+            strength_unit="mg",
+            default_unit=DoseUnit.MG,
+            default_route=Route.INTRAMUSCULAR,
+        ),
+    ]
+    session.add_all(medications)
+    session.flush()
+    by_name = {row.normalized_name: row for row in medications}
+    regimen = medication_service.create_draft(
+        session,
+        owner_id=owner_id,
+        version_label="2026 replacement schedule",
+        effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    slots = [
+        RegimenDoseSlot(
+            regimen_version_id=regimen.id,
+            medication_id=by_name["hydrocortisone"].id,
+            scheduled_local_time=time.fromisoformat(clock),
+            amount=Decimal(amount),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            sort_order=0,
+        )
+        for clock, amount in (("07:00", "10"), ("12:30", "5"), ("17:00", "2.5"))
+    ]
+    slots.append(
+        RegimenDoseSlot(
+            regimen_version_id=regimen.id,
+            medication_id=by_name["fludrocortisone"].id,
+            scheduled_local_time=time(7, 0),
+            amount=Decimal("0.1"),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            sort_order=0,
+        )
+    )
+    instructions = [
+        ApprovedInstruction(
+            regimen_version_id=regimen.id,
+            category=category,
+            title=title,
+            body="Replace with the exact wording your physician gave you.\n",
+            authored_by="Dr Example, Endocrinology",
+            authored_on=date(2026, 1, 1),
+            sort_order=0,
+        )
+        for category, title in (
+            (InstructionCategory.ILLNESS, "Sick day rules"),
+            (InstructionCategory.EMERGENCY, "Emergency injection"),
+        )
+    ]
+    session.add_all([*slots, *instructions])
+    session.flush()
+    if approved:
+        medication_service.approve_version(
+            session,
+            regimen,
+            approved_by="Dr Example, Endocrinology",
+            approval_source="clinic letter 2026-01-01",
+            approved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    return {
+        "regimen_id": regimen.id,
+        "medication_ids": tuple(row.id for row in medications),
+        "slot_ids": tuple(row.id for row in slots),
+        "instruction_ids": tuple(row.id for row in instructions),
+    }
 
 
 def _a_medication(client: TestClient, headers: dict[str, str]) -> str:

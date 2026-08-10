@@ -304,6 +304,94 @@ def approve_regimen(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# development-only legacy synthetic medication cleanup
+# ---------------------------------------------------------------------------
+
+
+def purge_synthetic_medication_bootstrap(args: argparse.Namespace) -> int:
+    """Preview, then optionally purge only the exact legacy sample data."""
+    from healthcurve.development_cleanup import (
+        SyntheticBootstrapCleanupError,
+        execute_synthetic_bootstrap_cleanup,
+        preview_synthetic_bootstrap,
+    )
+
+    settings = get_settings()
+    if settings.environment is not Environment.DEV:
+        sys.exit("Synthetic medication bootstrap cleanup is available only in development.")
+
+    factory = get_session_factory()
+    try:
+        with factory() as session, session.begin():
+            owner = _owner(session)
+            preview = preview_synthetic_bootstrap(session, owner_id=owner.id)
+            print("Exact legacy synthetic medication bootstrap preview")
+            print(f"  profile: {preview.profile_version}")
+            print(
+                "  regimen_version IDs: "
+                + ", ".join(str(row_id) for row_id in preview.regimen_version_ids)
+            )
+            print(
+                "  regimen_dose_slot IDs: "
+                + ", ".join(str(row_id) for row_id in preview.regimen_dose_slot_ids)
+            )
+            print(
+                "  approved_instruction IDs: "
+                + ", ".join(str(row_id) for row_id in preview.approved_instruction_ids)
+            )
+            print(
+                "  medication IDs: " + ", ".join(str(row_id) for row_id in preview.medication_ids)
+            )
+            print("  rows:")
+            print(f"    plan.regimen_version={preview.counts.regimen_versions}")
+            print(f"    plan.regimen_dose_slot={preview.counts.regimen_dose_slots}")
+            print(f"    plan.approved_instruction={preview.counts.approved_instructions}")
+            print(f"    plan.medication={preview.counts.medications}")
+            print("  retained references:")
+            print(f"    fact.dose_event={preview.references.doses}")
+            print(f"    fact.emergency_injection_event={preview.references.injections}")
+            print(
+                f"    plan.regimen_dose_slot outside target={preview.references.other_plan_slots}"
+            )
+            print(f"    ops.report_snapshot={preview.references.reports}")
+            print(f"    ai.ai_analysis={preview.references.analyses}")
+            print(f"    ai.extraction_draft={preview.references.extraction_drafts}")
+            print(f"    source_document={preview.references.documents}")
+            print(f"  required confirmation: {preview.confirmation_phrase}")
+            if preview.references.total:
+                message = (
+                    "Cleanup is blocked by retained references; nothing changed. "
+                    "Remove only demonstrably synthetic referenced records through their safe "
+                    "record-specific workflows, then preview again."
+                )
+                if args.execute:
+                    raise SyntheticBootstrapCleanupError(message)
+                print(message)
+                return 0
+            if not args.execute:
+                print("Preview only; nothing changed. Rerun with --execute to confirm locally.")
+                return 0
+
+            confirmation = input("Type the required confirmation phrase exactly: ")
+            counts = execute_synthetic_bootstrap_cleanup(
+                session,
+                owner_id=owner.id,
+                preview=preview,
+                confirmation=confirmation,
+            )
+    except SyntheticBootstrapCleanupError as exc:
+        sys.exit(str(exc))
+
+    print(
+        "Purged exact legacy synthetic medication bootstrap: "
+        f"regimen_versions={counts.regimen_versions}; "
+        f"slots={counts.regimen_dose_slots}; "
+        f"instructions={counts.approved_instructions}; medications={counts.medications}."
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # encrypted integration credentials
 # ---------------------------------------------------------------------------
 
@@ -614,6 +702,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--by", required=True, help="Clinician name or role")
     p.add_argument("--source", required=True, help="Letter, consultation, portal message")
     p.set_defaults(func=approve_regimen)
+
+    p = sub.add_parser(
+        "purge-synthetic-medication-bootstrap",
+        help="Preview exact legacy sample-plan cleanup (development only)",
+    )
+    p.add_argument(
+        "--execute",
+        action="store_true",
+        help="Prompt for the preview-bound phrase and perform the cleanup",
+    )
+    p.set_defaults(func=purge_synthetic_medication_bootstrap)
 
     p = sub.add_parser("credential-key-init", help="Create an external credential key ring")
     p.add_argument("path")
