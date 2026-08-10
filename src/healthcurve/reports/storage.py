@@ -113,3 +113,29 @@ def delete_owner_artifacts(root: Path, owner_id: uuid.UUID) -> None:
         raise ArtifactStorageError("owner artifact path escapes private root")
     if owner_directory.exists():
         shutil.rmtree(owner_directory)
+
+
+def delete_snapshot_artifacts(root: Path, *, owner_id: uuid.UUID, snapshot_id: uuid.UUID) -> None:
+    """Tombstone and idempotently remove one immutable report bundle."""
+    root = root.resolve()
+    _secure_directory(root)
+    owner_path = root / str(owner_id)
+    snapshot_path = owner_path / str(snapshot_id)
+    if owner_path.is_symlink() or snapshot_path.is_symlink():
+        raise ArtifactStorageError("snapshot artifact path contains a symlink")
+    owner_directory = owner_path.resolve()
+    snapshot_directory = snapshot_path.resolve()
+    if (
+        not owner_directory.is_relative_to(root)
+        or not snapshot_directory.is_relative_to(owner_directory)
+        or snapshot_directory in {root, owner_directory}
+    ):
+        raise ArtifactStorageError("snapshot artifact path escapes private root")
+
+    tombstone_owner = root / ".tombstones" / str(owner_id)
+    _secure_directory(tombstone_owner)
+    tombstone = tombstone_owner / f"{snapshot_id}.deleted"
+    descriptor = os.open(tombstone, os.O_WRONLY | os.O_CREAT, 0o600)
+    os.close(descriptor)
+    if snapshot_directory.exists():
+        shutil.rmtree(snapshot_directory)

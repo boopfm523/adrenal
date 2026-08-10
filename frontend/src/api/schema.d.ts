@@ -505,6 +505,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/labs/documents/{document_id}/deletion-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview Lab Document Deletion */
+        get: operations["preview_lab_document_deletion_api_v1_labs_documents__document_id__deletion_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/labs/documents/{document_id}/download": {
         parameters: {
             query?: never;
@@ -1952,6 +1969,71 @@ export interface components {
             credentials_deleted: number;
             /** Data Rows Deleted */
             data_rows_deleted: number;
+        };
+        /** LabDeletionAcceptedOut */
+        LabDeletionAcceptedOut: {
+            /** Cleanup Task Count */
+            cleanup_task_count: number;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "deletion_queued" | "already_deleted";
+        };
+        /** LabDeletionIn */
+        LabDeletionIn: {
+            /** Confirmation */
+            confirmation: string;
+            /** Password */
+            password?: string | null;
+        };
+        /** LabDeletionPreviewOut */
+        LabDeletionPreviewOut: {
+            /** Ai Analysis Ids */
+            ai_analysis_ids: string[];
+            /**
+             * Backups May Retain Until Expiry
+             * @default true
+             * @constant
+             */
+            backups_may_retain_until_expiry: true;
+            /** Confirmation Phrase */
+            confirmation_phrase: string;
+            /** Derived Result Count */
+            derived_result_count: number;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Extraction Draft Ids */
+            extraction_draft_ids: string[];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "unconfirmed_upload" | "confirmed_report";
+            /** Page Preview Count */
+            page_preview_count: number;
+            /** Panel Ids */
+            panel_ids: string[];
+            /** Private Storage Artifact Count */
+            private_storage_artifact_count: number;
+            /** Report Artifact Ids */
+            report_artifact_ids: string[];
+            /** Report Snapshot Ids */
+            report_snapshot_ids: string[];
+            /** Requires Password */
+            requires_password: boolean;
+            /** Result Ids */
+            result_ids: string[];
+            /** Trend Point Count */
+            trend_point_count: number;
         };
         /** LabResultOut */
         LabResultOut: {
@@ -3992,14 +4074,20 @@ export interface operations {
                 hc_session?: string | null;
             };
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabDeletionIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            204: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LabDeletionAcceptedOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -4038,6 +4126,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_lab_document_deletion_api_v1_labs_documents__document_id__deletion_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDeletionPreviewOut"];
                 };
             };
             /** @description Validation Error */

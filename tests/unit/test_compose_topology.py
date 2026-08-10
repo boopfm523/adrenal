@@ -23,9 +23,20 @@ def _config(*, production: bool) -> dict[str, Any]:
                     {"target": "/run/tailscale-certs", "read_only": True},
                 ],
             },
-            "api": {"environment": environment},
-            "worker": {"environment": environment},
-            "postgres": {},
+            "api": {"environment": deepcopy(environment)},
+            "worker": {"environment": deepcopy(environment)},
+            "cleanup-worker": {
+                "environment": deepcopy(environment),
+                "networks": {"hc-cleanup": None},
+                "read_only": True,
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "volumes": [
+                    {"target": "/data/uploads"},
+                    {"target": "/data/reports"},
+                ],
+            },
+            "postgres": {"networks": {"hc-internal": None, "hc-cleanup": None}},
             "redis": {},
             "ollama": {},
             "document-worker": {
@@ -34,7 +45,8 @@ def _config(*, production: bool) -> dict[str, Any]:
                 "cap_drop": ["ALL"],
                 "security_opt": ["no-new-privileges:true"],
             },
-        }
+        },
+        "networks": {"hc-cleanup": {"internal": True}},
     }
 
 
@@ -66,3 +78,17 @@ def test_rejects_non_production_application_policy() -> None:
     errors = validate(config, production=True)
     assert "api must require MFA" in errors
     assert "worker must run in the prod environment" in errors
+
+
+def test_rejects_cleanup_worker_external_access_or_credential_expansion() -> None:
+    config = deepcopy(_config(production=False))
+    cleanup = config["services"]["cleanup-worker"]
+    cleanup["networks"] = {"hc-internal": None}
+    cleanup["environment"]["HC_TELEGRAM_BOT_TOKEN"] = "synthetic-placeholder"
+    config["networks"]["hc-cleanup"]["internal"] = False
+    config["services"]["postgres"]["networks"] = {"hc-internal": None}
+    errors = validate(config, production=False)
+    assert "cleanup-worker must use only hc-cleanup" in errors
+    assert "cleanup-worker must not receive HC_TELEGRAM_BOT_TOKEN" in errors
+    assert "hc-cleanup network must be internal-only" in errors
+    assert "postgres must join hc-cleanup for cleanup-worker database access" in errors

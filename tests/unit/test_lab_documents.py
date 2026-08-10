@@ -6,16 +6,20 @@ import io
 import stat
 import uuid
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+from sqlalchemy.orm import Session
 
 from healthcurve.document_worker import validate_one
+from healthcurve.labs.cleanup_jobs import make_document_cleanup_handler
 from healthcurve.labs.documents import (
     DocumentLayout,
     DocumentStorageError,
     mark_deleted,
     store_pdf_upload,
 )
+from healthcurve.operations.jobs import JobQueueError
 from tests.fixtures.pdf import QpdfRunner
 
 
@@ -126,3 +130,31 @@ def test_tombstone_prevents_in_flight_document_from_being_published(tmp_path: Pa
     with pytest.raises(FileNotFoundError):
         validate_one(layout, document_id, runner=QpdfRunner())
     assert not layout.path("stored", document_id).exists()
+
+
+def test_durable_cleanup_handler_is_idempotent_and_rejects_bad_payload(tmp_path: Path) -> None:
+    layout = DocumentLayout(tmp_path / "uploads")
+    document_id = _upload(layout)
+    handler = make_document_cleanup_handler(layout)
+
+    handler(Mock(spec=Session), {"document_id": str(document_id)})
+    handler(Mock(spec=Session), {"document_id": str(document_id)})
+
+    assert not layout.path("quarantine", document_id).exists()
+    assert layout.path("tombstones", document_id, ".deleted").is_file()
+    with pytest.raises(JobQueueError, match="lab_cleanup_payload_invalid"):
+        handler(Mock(spec=Session), {"document_id": "not-a-uuid"})
+
+
+def test_durable_cleanup_failure_is_reduced_to_safe_retry_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    handler = make_document_cleanup_handler(DocumentLayout(tmp_path / "uploads"))
+
+    def fail(_layout: DocumentLayout, _document_id: uuid.UUID) -> None:
+        raise OSError("synthetic private path detail")
+
+    monkeypatch.setattr("healthcurve.labs.cleanup_jobs.mark_deleted", fail)
+    with pytest.raises(JobQueueError, match=r"^lab_document_cleanup_failed$") as error:
+        handler(Mock(spec=Session), {"document_id": str(uuid.uuid4())})
+    assert "private path" not in str(error.value)

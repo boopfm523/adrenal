@@ -232,13 +232,23 @@ Accepted source PDFs can only be retrieved through an owner-authenticated,
 attachment-only download with a CSP sandbox, `nosniff`, and `no-store`. HealthCurve
 never embeds or renders the raw PDF in the browser. The networkless worker instead
 creates bounded inert PNG page previews; the owner-authenticated preview route serves
-only those PNGs with `nosniff`, `no-store`, and a deny-by-default CSP. Before confirmation,
-`DELETE /api/v1/labs/documents/{id}` tombstones the opaque ID before removing source
-and validation artifacts so an in-flight worker cannot recreate them. A document
-linked to confirmed results cannot be deleted independently because that would break
-the source evidence; delete its lab panel or the account instead. Backup configuration
-already includes the same `HC_UPLOADS_DIR`; deleted copies remain in encrypted backups
-only until the documented backup retention window expires.
+only those PNGs with `nosniff`, `no-store`, and a deny-by-default CSP.
+
+The Labs page exposes a deliberate permanent-deletion review for every upload. An
+unconfirmed upload requires its target-specific confirmation phrase. A confirmed
+report additionally requires the current password and previews exact opaque IDs and
+counts for the document, extraction draft, panel/results, derived trend points, AI
+analyses, saved report snapshots/artifacts, page previews, and private files. Because
+saved reports are immutable, deleting a source also deletes any entire saved report
+snapshot that contains it; the preview says so before authorization.
+
+The database deletion and opaque cleanup jobs commit as one transaction. A dedicated
+internal-only cleanup worker tombstones and idempotently removes source/previews and
+report artifacts with bounded retries; it has no Telegram, Ollama, Redis, provider
+credential, or internet access. Linked facts are never orphaned and unrelated records
+are retained. Backup configuration includes `HC_UPLOADS_DIR` and report artifacts, so
+deleted copies remain in encrypted backups only until the documented retention window
+expires.
 
 For local Compose, create `var/uploads` as an owner-private directory before startup,
 or set `HC_UPLOADS_DIR` to another private absolute host path. Never put source medical

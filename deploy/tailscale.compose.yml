@@ -20,3 +20,8 @@ services:
     environment:
       HC_ENVIRONMENT: prod
       HC_MFA_REQUIRED: "true"
+
+  cleanup-worker:
+    environment:
+      HC_ENVIRONMENT: prod
+      HC_MFA_REQUIRED: "true"

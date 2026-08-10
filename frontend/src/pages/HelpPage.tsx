@@ -155,7 +155,7 @@ export function HelpPage(): React.JSX.Element {
           </article>
           <article className="help-workflow">
             <h3>Review laboratory facts and trends</h3>
-            <p>Labs accepts a private PDF upload, shows each extraction candidate beside a networkless-rendered inert page preview, and records only rows you explicitly confirm. You can correct or exclude candidates; unconfirmed drafts never enter trends or reports. The original PDF remains attachment-only. Recorded facts keep their exact source page, wording, units, ranges, collection time, specimen type, and provenance beside any versioned derived value. Trend charts include equivalent tables and never combine incompatible specimen types or units. Cortisol is descriptive only.</p>
+            <p>Labs accepts a private PDF upload, shows each extraction candidate beside a networkless-rendered inert page preview, and records only rows you explicitly confirm. You can correct or exclude candidates; unconfirmed drafts never enter trends or reports. The original PDF remains attachment-only. Permanent deletion first shows the exact linked drafts, facts, trends, AI analyses, files, and saved reports; confirmed reports require your password and a target-specific phrase. Recorded facts keep their exact source page, wording, units, ranges, collection time, specimen type, and provenance beside any versioned derived value. Trend charts include equivalent tables and never combine incompatible specimen types or units. Cortisol is descriptive only.</p>
             <Link to="/labs">Open Labs</Link>
           </article>
           <article className="help-workflow">

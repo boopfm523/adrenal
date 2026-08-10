@@ -6,7 +6,7 @@ import copy
 import hmac
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -24,10 +24,17 @@ from healthcurve.api.deps import (
     enforce_rate_limit,
     require_csrf,
 )
+from healthcurve.api.lab_deletion import (
+    LabDeletionPreview,
+    delete_lab_report_unit,
+    preview_lab_report_deletion,
+)
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import ApiModel, EventTimeIn, LabResultOut
 from healthcurve.config import Settings
 from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.identity import service as auth
+from healthcurve.labs.cleanup_jobs import enqueue_document_cleanup
 from healthcurve.labs.documents import (
     DocumentLayout,
     DocumentStorageError,
@@ -47,6 +54,7 @@ from healthcurve.labs.service import (
     manual_candidate,
 )
 from healthcurve.operations import audit
+from healthcurve.operations.jobs import JobQueueError
 from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/labs", tags=["labs"])
@@ -93,13 +101,20 @@ def list_lab_results(session: DbSession, owner: CurrentOwner) -> list[LabResultO
     return payload
 
 
-def _owned_document(session: DbSession, owner: CurrentOwner, document_id: uuid.UUID) -> LabDocument:
-    document = session.scalar(
-        select(LabDocument).where(
-            LabDocument.id == document_id,
-            LabDocument.owner_id == owner.id,
-        )
+def _owned_document(
+    session: DbSession,
+    owner: CurrentOwner,
+    document_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+) -> LabDocument:
+    statement = select(LabDocument).where(
+        LabDocument.id == document_id,
+        LabDocument.owner_id == owner.id,
     )
+    if for_update:
+        statement = statement.with_for_update()
+    document = session.scalar(statement)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "lab_document_not_found"})
     return document
@@ -473,7 +488,7 @@ def confirm_lab_document(
     limiter: AppRateLimiter,
 ):
     """Promote only owner-reviewed PDF candidates across the AI-to-fact boundary."""
-    document = _owned_document(session, owner, document_id)
+    document = _owned_document(session, owner, document_id, for_update=True)
     if document.status is LabDocumentStatus.DELETED:
         raise HTTPException(status_code=409, detail={"code": "lab_document_deleted"})
     layout = DocumentLayout(settings.uploads_dir)
@@ -594,57 +609,124 @@ def confirm_lab_document(
     return _panel_payload(panel, created=True)
 
 
-@router.delete(
-    "/documents/{document_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_csrf)],
+class LabDeletionPreviewOut(ApiModel):
+    document_id: uuid.UUID
+    mode: Literal["unconfirmed_upload", "confirmed_report"]
+    requires_password: bool
+    confirmation_phrase: str
+    extraction_draft_ids: tuple[uuid.UUID, ...]
+    panel_ids: tuple[uuid.UUID, ...]
+    result_ids: tuple[uuid.UUID, ...]
+    derived_result_count: int
+    trend_point_count: int
+    ai_analysis_ids: tuple[uuid.UUID, ...]
+    report_snapshot_ids: tuple[uuid.UUID, ...]
+    report_artifact_ids: tuple[uuid.UUID, ...]
+    page_preview_count: int
+    private_storage_artifact_count: int
+    backups_may_retain_until_expiry: Literal[True] = True
+
+
+class LabDeletionIn(ApiModel):
+    password: str | None = Field(default=None, min_length=1, max_length=512)
+    confirmation: str = Field(min_length=1, max_length=120)
+
+
+class LabDeletionAcceptedOut(ApiModel):
+    status: Literal["deletion_queued", "already_deleted"]
+    document_id: uuid.UUID
+    cleanup_task_count: int = Field(ge=1)
+
+
+def _preview_out(preview: LabDeletionPreview) -> LabDeletionPreviewOut:
+    return LabDeletionPreviewOut.model_validate(preview)
+
+
+@router.get(
+    "/documents/{document_id}/deletion-preview",
+    response_model=LabDeletionPreviewOut,
 )
-def delete_lab_document(
+def preview_lab_document_deletion(
     document_id: uuid.UUID,
     session: DbSession,
     owner: CurrentOwner,
     settings: AppSettings,
-) -> None:
+) -> LabDeletionPreviewOut:
     document = _owned_document(session, owner, document_id)
     if document.status is LabDocumentStatus.DELETED:
-        return
-    linked_result = session.scalar(
-        select(LabResult.id).where(
-            LabResult.owner_id == owner.id,
-            LabResult.source_document_id == document.id,
-        )
-    )
-    if linked_result is not None:
-        raise HTTPException(status_code=409, detail={"code": "lab_document_has_confirmed_results"})
-    draft = session.scalar(
-        select(ExtractionDraft).where(
-            ExtractionDraft.owner_id == owner.id,
-            ExtractionDraft.source == "lab_pdf",
-            ExtractionDraft.provider_message_id == str(document.id),
-        )
-    )
+        raise HTTPException(status_code=410, detail={"code": "lab_document_deleted"})
     try:
-        mark_deleted(DocumentLayout(settings.uploads_dir), document.id)
+        preview = preview_lab_report_deletion(
+            session,
+            owner_id=owner.id,
+            document=document,
+            layout=DocumentLayout(settings.uploads_dir),
+        )
     except OSError as exc:
-        raise HTTPException(status_code=500, detail={"code": "document_deletion_failed"}) from exc
-    document.status = LabDocumentStatus.DELETED
-    document.deleted_at = datetime.now(UTC)
-    # Keep only an opaque tombstone row for audit/race safety. The submitted name,
-    # checksum, and size are source-document metadata and are scrubbed on deletion.
-    document.display_name = "deleted.pdf"
-    document.sha256 = "0" * 64
-    document.byte_size = 1
-    document.page_count = None
-    document.rejection_reason = None
-    if draft is not None:
-        session.delete(draft)
-    audit.record(
-        session,
-        actor=audit.actor_for_owner(owner.id),
-        action=audit.AuditAction.RECORD_DELETED,
-        target_type="lab_document",
-        target_id=document.id,
-        change_summary="source_and_derivatives_deleted",
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "lab_deletion_preview_storage_unavailable"},
+        ) from exc
+    return _preview_out(preview)
+
+
+@router.delete(
+    "/documents/{document_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=LabDeletionAcceptedOut,
+    dependencies=[Depends(require_csrf)],
+)
+def delete_lab_document(
+    document_id: uuid.UUID,
+    payload: LabDeletionIn,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> LabDeletionAcceptedOut:
+    document = _owned_document(session, owner, document_id, for_update=True)
+    if document.status is LabDocumentStatus.DELETED:
+        try:
+            enqueue_document_cleanup(session, document.id)
+        except JobQueueError as exc:
+            raise HTTPException(
+                status_code=503, detail={"code": "lab_deletion_queue_unavailable"}
+            ) from exc
+        return LabDeletionAcceptedOut(
+            status="already_deleted", document_id=document.id, cleanup_task_count=1
+        )
+    try:
+        preview = preview_lab_report_deletion(
+            session,
+            owner_id=owner.id,
+            document=document,
+            layout=DocumentLayout(settings.uploads_dir),
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "lab_deletion_preview_storage_unavailable"},
+        ) from exc
+    if payload.confirmation != preview.confirmation_phrase:
+        raise HTTPException(status_code=422, detail={"code": "lab_deletion_confirmation_mismatch"})
+    if preview.requires_password and (
+        payload.password is None or not auth.verify_password(owner.password_hash, payload.password)
+    ):
+        raise HTTPException(status_code=403, detail={"code": "current_password_incorrect"})
+    try:
+        delete_lab_report_unit(
+            session,
+            owner_id=owner.id,
+            document=document,
+            preview=preview,
+        )
+    except JobQueueError as exc:
+        raise HTTPException(
+            status_code=503, detail={"code": "lab_deletion_queue_unavailable"}
+        ) from exc
+    return LabDeletionAcceptedOut(
+        status="deletion_queued",
+        document_id=document.id,
+        cleanup_task_count=preview.cleanup_task_count,
     )
 
 

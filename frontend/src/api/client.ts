@@ -108,6 +108,30 @@ export interface LabConfirmationResult {
   result_count: number;
 }
 
+export interface LabDeletionPreview {
+  document_id: string;
+  mode: "unconfirmed_upload" | "confirmed_report";
+  requires_password: boolean;
+  confirmation_phrase: string;
+  extraction_draft_ids: string[];
+  panel_ids: string[];
+  result_ids: string[];
+  derived_result_count: number;
+  trend_point_count: number;
+  ai_analysis_ids: string[];
+  report_snapshot_ids: string[];
+  report_artifact_ids: string[];
+  page_preview_count: number;
+  private_storage_artifact_count: number;
+  backups_may_retain_until_expiry: true;
+}
+
+export interface LabDeletionAccepted {
+  status: "deletion_queued" | "already_deleted";
+  document_id: string;
+  cleanup_task_count: number;
+}
+
 interface ApiErrorBody {
   detail?: string;
 }
@@ -350,6 +374,20 @@ export function confirmLabDocument(
 ): Promise<LabConfirmationResult> {
   return apiRequest<LabConfirmationResult>(`/labs/documents/${documentId}/confirm`, {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getLabDeletionPreview(documentId: string): Promise<LabDeletionPreview> {
+  return apiRequest<LabDeletionPreview>(`/labs/documents/${documentId}/deletion-preview`);
+}
+
+export function deleteLabDocument(
+  documentId: string,
+  payload: { password: string | null; confirmation: string },
+): Promise<LabDeletionAccepted> {
+  return apiRequest<LabDeletionAccepted>(`/labs/documents/${documentId}`, {
+    method: "DELETE",
     body: JSON.stringify(payload),
   });
 }

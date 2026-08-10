@@ -17,9 +17,11 @@ unchanged.
 
 ## Decision
 
-**One API/web application, one worker, one database, one reverse proxy, orchestrated
-with Docker Compose.** Domains are Python packages inside a single deployable, not
-separate services.
+**One API/web application, one deployable worker codebase, one database, one reverse
+proxy, orchestrated with Docker Compose.** Domains are Python packages inside a single
+deployable, not network services. Role-specific worker processes may isolate hostile
+document parsing, credentials, or private storage cleanup without creating a domain
+API or a separately released service.
 
 Topology:
 
@@ -62,6 +64,10 @@ Rules this ADR fixes:
 8. **Migrations are a deliberate step**, run as a one-shot command against a stopped
    or drained application — never automatically on container start, so a bad migration
    cannot be applied by a restart loop.
+9. **Private storage cleanup uses a separate process boundary.** It receives only the
+   primary database URL and private uploads/report mounts, claims only opaque-ID
+   deletion jobs, and runs on an internal-only network shared with PostgreSQL. It has
+   no Telegram/provider credentials, Redis, Ollama, public listener, or internet path.
 
 ## Consequences
 

@@ -69,6 +69,7 @@ describe("Help page", () => {
     expect(screen.getByText("API only—no complete web create form yet")).toBeVisible();
     expect(screen.getByText("Labs web page")).toBeVisible();
     expect(screen.getByText(/original PDF remains attachment-only/i)).toBeVisible();
+    expect(screen.getByText(/permanent deletion first shows the exact linked drafts/i)).toBeVisible();
     expect(screen.queryByText(/fact-confirmation UI is planned/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Garmin account connection:/)).toBeVisible();
     expect(screen.getByText(/automatic provider sync is not implemented/)).toBeVisible();

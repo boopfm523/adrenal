@@ -20,7 +20,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, func, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 from healthcurve import models as all_models
@@ -46,6 +46,10 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminSleepEvent,
 )
+from healthcurve.labs.cleanup_jobs import (
+    LAB_DOCUMENT_CLEANUP_TASK,
+    make_document_cleanup_handler,
+)
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from healthcurve.labs.service import backfill_normalizations
@@ -60,14 +64,19 @@ from healthcurve.medications.models import (
     RegimenVersion,
     Route,
 )
+from healthcurve.operations import worker as queue_worker
 from healthcurve.operations.audit import AuditAction, AuditEntry
-from healthcurve.operations.jobs import Job, JobStatus
+from healthcurve.operations.jobs import Job, JobQueueError, JobStatus
 from healthcurve.operations.rate_limit import (
     RateLimiter,
     RateLimitExceeded,
     RateLimitResult,
 )
 from healthcurve.reports import service as report_service
+from healthcurve.reports.cleanup_jobs import (
+    REPORT_ARTIFACT_CLEANUP_TASK,
+    make_snapshot_artifact_cleanup_handler,
+)
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
 from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
@@ -1238,16 +1247,65 @@ def test_pdf_upload_is_quarantined_validated_downloaded_as_attachment_and_delete
     assert downloaded.headers["x-content-type-options"] == "nosniff"
     assert downloaded.headers["cache-control"] == "no-store"
 
-    deleted = client.delete(f"/api/v1/labs/documents/{document_id}", headers=logged_in)
-    assert deleted.status_code == 204
-    assert not layout.path("stored", document_id).exists()
-    assert layout.path("tombstones", document_id, ".deleted").exists()
+    preview = client.get(f"/api/v1/labs/documents/{document_id}/deletion-preview")
+    assert preview.status_code == 200, preview.text
+    impact = preview.json()
+    assert impact["mode"] == "unconfirmed_upload"
+    assert impact["requires_password"] is False
+    assert impact["panel_ids"] == []
+    assert impact["result_ids"] == []
+    assert impact["report_snapshot_ids"] == []
+    assert impact["private_storage_artifact_count"] >= 1
+
+    mismatch = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=logged_in,
+        json={"password": None, "confirmation": "DELETE THE WRONG TARGET"},
+    )
+    assert mismatch.status_code == 422
+    deleted = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=logged_in,
+        json={"password": None, "confirmation": impact["confirmation_phrase"]},
+    )
+    assert deleted.status_code == 202, deleted.text
+    assert deleted.json()["cleanup_task_count"] == 1
+    # Database privacy deletion commits with the durable job; physical bytes remain
+    # unavailable to the API and are removed by the retryable worker.
+    assert layout.path("stored", document_id).exists()
     with Session(engine) as session:
         document = session.get(LabDocument, document_id)
         assert document is not None
         assert document.status is LabDocumentStatus.DELETED
         assert document.display_name == "deleted.pdf"
         assert document.sha256 == "0" * 64
+        job = session.scalar(
+            select(Job).where(
+                Job.task == LAB_DOCUMENT_CLEANUP_TASK,
+                Job.idempotency_key == f"lab-document:{document_id}",
+            )
+        )
+        assert job is not None and job.status is JobStatus.QUEUED
+
+    factory = sessionmaker(engine, expire_on_commit=False)
+    claimed = queue_worker.run_once(
+        factory,
+        {LAB_DOCUMENT_CLEANUP_TASK: make_document_cleanup_handler(layout)},
+        worker_id="synthetic-lab-cleanup",
+    )
+    assert claimed is not None
+    assert not layout.path("stored", document_id).exists()
+    assert layout.path("tombstones", document_id, ".deleted").exists()
+    repeated = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=logged_in,
+        json={"password": None, "confirmation": impact["confirmation_phrase"]},
+    )
+    assert repeated.status_code == 202
+    assert repeated.json()["status"] == "already_deleted"
 
 
 def test_pdf_upload_rejects_spoofed_content_type_and_signature(
@@ -1282,6 +1340,108 @@ def test_pdf_upload_rejects_spoofed_content_type_and_signature(
     rejected = client.get(f"/api/v1/labs/documents/{document_id}")
     assert rejected.json()["status"] == "rejected"
     assert rejected.json()["rejection_reason"] == "pdf_structure_invalid"
+
+
+def test_lab_deletion_queue_failure_rolls_back_database_state(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    uploaded = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("synthetic-rollback.pdf", b"%PDF-1.7\nsynthetic\n", "application/pdf")},
+    )
+    document_id = uuid.UUID(uploaded.json()["document_id"])
+    preview = client.get(f"/api/v1/labs/documents/{document_id}/deletion-preview").json()
+
+    with mock.patch(
+        "healthcurve.api.lab_deletion.enqueue_document_cleanup",
+        side_effect=JobQueueError("synthetic_queue_unavailable"),
+    ):
+        failed = client.request(
+            "DELETE",
+            f"/api/v1/labs/documents/{document_id}",
+            headers=logged_in,
+            json={"password": None, "confirmation": preview["confirmation_phrase"]},
+        )
+    assert failed.status_code == 503
+    with Session(engine) as session:
+        document = session.get(LabDocument, document_id)
+        assert document is not None
+        assert document.status is LabDocumentStatus.PENDING
+        assert (
+            session.scalar(
+                select(Job.id).where(
+                    Job.task == LAB_DOCUMENT_CLEANUP_TASK,
+                    Job.idempotency_key == f"lab-document:{document_id}",
+                )
+            )
+            is None
+        )
+    assert DocumentLayout(settings.uploads_dir).path("quarantine", document_id).is_file()
+
+
+def test_lab_deletion_preview_and_delete_hide_another_owners_document(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    uploaded = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={"file": ("synthetic-owned.pdf", b"%PDF-1.7\nsynthetic\n", "application/pdf")},
+    )
+    document_id = uuid.UUID(uploaded.json()["document_id"])
+    other_email = f"lab-delete-other-{uuid.uuid4()}@example.com"
+    with Session(engine) as session, session.begin():
+        session.add(
+            Owner(
+                email=other_email,
+                password_hash=auth.hash_password(PASSWORD),
+                default_timezone="UTC",
+            )
+        )
+    other_login = client.post(
+        "/api/v1/auth/login", json={"email": other_email, "password": PASSWORD}
+    )
+    assert other_login.status_code == 200, other_login.text
+    other_headers = {auth.CSRF_HEADER_NAME: other_login.json()["csrf_token"]}
+
+    assert client.get(f"/api/v1/labs/documents/{document_id}/deletion-preview").status_code == 404
+    hidden_delete = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=other_headers,
+        json={"password": PASSWORD, "confirmation": "DELETE LAB UPLOAD 00000000"},
+    )
+    assert hidden_delete.status_code == 404
+
+    owner_login = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    owner_headers = {auth.CSRF_HEADER_NAME: owner_login.json()["csrf_token"]}
+    preview = client.get(f"/api/v1/labs/documents/{document_id}/deletion-preview").json()
+    deleted = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=owner_headers,
+        json={"password": None, "confirmation": preview["confirmation_phrase"]},
+    )
+    assert deleted.status_code == 202
+    factory = sessionmaker(engine, expire_on_commit=False)
+    assert (
+        queue_worker.run_once(
+            factory,
+            {
+                LAB_DOCUMENT_CLEANUP_TASK: make_document_cleanup_handler(
+                    DocumentLayout(settings.uploads_dir)
+                )
+            },
+            worker_id="synthetic-owner-scope-cleanup",
+        )
+        is not None
+    )
 
 
 def test_digital_pdf_extraction_creates_only_review_draft_and_keeps_unparsed_rows(
@@ -1430,9 +1590,8 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
     assert previewed.headers["cache-control"] == "no-store"
     assert previewed.content.startswith(b"\x89PNG\r\n\x1a\n")
     assert client.get(f"/api/v1/labs/documents/{document_id}/view").status_code == 404
-    protected = client.delete(f"/api/v1/labs/documents/{document_id}", headers=logged_in)
-    assert protected.status_code == 409
-    assert protected.json()["detail"]["code"] == "lab_document_has_confirmed_results"
+    result_id = uuid.UUID(rows[0]["id"])
+    panel_id = uuid.UUID(confirmed.json()["panel_id"])
     with Session(engine) as session:
         draft = session.scalar(
             select(ExtractionDraft).where(ExtractionDraft.provider_message_id == str(document_id))
@@ -1440,6 +1599,162 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
         assert draft is not None
         assert draft.state is DraftState.EDITED
         assert draft.created_event_ids == [confirmed.json()["panel_id"]]
+        draft_id = draft.id
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        analysis = AIAnalysis(
+            owner_id=owner_id,
+            analysis_type=AnalysisType.PATTERN_OBSERVATION,
+            body="Synthetic analysis for deletion dependency coverage.",
+            source_record_ids=[str(result_id)],
+            computed_inputs={"synthetic": True},
+            model_name="synthetic-model",
+            prompt_version="synthetic-v1",
+        )
+        session.add(analysis)
+        unrelated_analysis = AIAnalysis(
+            owner_id=owner_id,
+            analysis_type=AnalysisType.PATTERN_OBSERVATION,
+            body="Synthetic unrelated analysis retained by deletion.",
+            source_record_ids=[str(uuid.uuid4())],
+            range_start=datetime(2035, 1, 1, tzinfo=UTC),
+            range_end=datetime(2035, 1, 2, tzinfo=UTC),
+            computed_inputs={"synthetic": True},
+            model_name="synthetic-model",
+            prompt_version="synthetic-v1",
+        )
+        unrelated_snapshot = ReportSnapshot(
+            owner_id=owner_id,
+            date_from=date(2026, 8, 8),
+            date_to=date(2026, 8, 8),
+            timezone="UTC",
+            selected_sections=["metrics"],
+            include_ai=False,
+            source_manifest={"fact": [], "plan": [], "patient_note": [], "ai": []},
+            metric_values={},
+            snapshot_content={"fact": [], "plan": [], "patient_note": [], "ai": []},
+            render_version="synthetic-unrelated-v1",
+            canonical_sha256="f" * 64,
+        )
+        session.add_all([unrelated_analysis, unrelated_snapshot])
+        session.commit()
+        analysis_id = analysis.id
+        unrelated_analysis_id = unrelated_analysis.id
+        unrelated_snapshot_id = unrelated_snapshot.id
+
+    report = client.post(
+        "/api/v1/reports",
+        headers=logged_in,
+        json={
+            "date_from": "2026-08-09",
+            "date_to": "2026-08-09",
+            "timezone": "Europe/London",
+            "selected_sections": ["labs"],
+            "include_ai": False,
+            "include_sensitive": False,
+            "companion_formats": ["json"],
+        },
+    )
+    assert report.status_code == 201, report.text
+    report_id = uuid.UUID(report.json()["id"])
+    report_artifact_ids: set[str]
+    with Session(engine) as session:
+        report_artifact_ids = {
+            str(value)
+            for value in session.scalars(
+                select(ReportArtifact.id).where(ReportArtifact.snapshot_id == report_id)
+            )
+        }
+    assert len(report_artifact_ids) == 2
+
+    deletion_preview = client.get(f"/api/v1/labs/documents/{document_id}/deletion-preview")
+    assert deletion_preview.status_code == 200, deletion_preview.text
+    impact = deletion_preview.json()
+    assert impact["mode"] == "confirmed_report"
+    assert impact["requires_password"] is True
+    assert impact["panel_ids"] == [str(panel_id)]
+    assert impact["result_ids"] == [str(result_id)]
+    assert impact["derived_result_count"] == 0
+    assert impact["trend_point_count"] == 0
+    assert impact["ai_analysis_ids"] == [str(analysis_id)]
+    assert impact["report_snapshot_ids"] == [str(report_id)]
+    assert set(impact["report_artifact_ids"]) == report_artifact_ids
+    assert impact["page_preview_count"] == 1
+
+    wrong_phrase = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=logged_in,
+        json={"password": PASSWORD, "confirmation": "DELETE A DIFFERENT REPORT"},
+    )
+    assert wrong_phrase.status_code == 422
+    wrong_password = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=logged_in,
+        json={"password": PASSWORD + "-wrong", "confirmation": impact["confirmation_phrase"]},
+    )
+    assert wrong_password.status_code == 403
+    assert any(
+        row["source_document_id"] == str(document_id)
+        for row in client.get("/api/v1/labs/results").json()
+    )
+
+    deleted = client.request(
+        "DELETE",
+        f"/api/v1/labs/documents/{document_id}",
+        headers=logged_in,
+        json={"password": PASSWORD, "confirmation": impact["confirmation_phrase"]},
+    )
+    assert deleted.status_code == 202, deleted.text
+    assert deleted.json()["cleanup_task_count"] == 2
+    assert not any(
+        row["source_document_id"] == str(document_id)
+        for row in client.get("/api/v1/labs/results").json()
+    )
+    assert client.get(f"/api/v1/reports/{report_id}").status_code == 404
+    assert client.get(f"/api/v1/labs/documents/{document_id}/download").status_code == 409
+    with Session(engine) as session:
+        assert session.get(LabPanel, panel_id) is None
+        assert session.get(LabResult, result_id) is None
+        assert session.get(ExtractionDraft, draft_id) is None
+        assert session.get(AIAnalysis, analysis_id) is None
+        assert session.get(ReportSnapshot, report_id) is None
+        assert session.get(AIAnalysis, unrelated_analysis_id) is not None
+        assert session.get(ReportSnapshot, unrelated_snapshot_id) is not None
+        entry = session.scalar(
+            select(AuditEntry)
+            .where(
+                AuditEntry.target_type == "lab_report_unit",
+                AuditEntry.target_id == document_id,
+            )
+            .order_by(AuditEntry.occurred_at.desc())
+        )
+        assert entry is not None
+        assert entry.change_summary == (
+            "mode=confirmed_report;drafts=1;panels=1;results=1;analyses=1;reports=1;cleanup_jobs=2"
+        )
+        assert "Synthetic" not in entry.change_summary
+
+    factory = sessionmaker(engine, expire_on_commit=False)
+    handlers = {
+        LAB_DOCUMENT_CLEANUP_TASK: make_document_cleanup_handler(layout),
+        REPORT_ARTIFACT_CLEANUP_TASK: make_snapshot_artifact_cleanup_handler(
+            settings.report_artifacts_dir
+        ),
+    }
+    claimed_tasks: set[str] = set()
+    for _ in range(3):
+        claimed = queue_worker.run_once(factory, handlers, worker_id="synthetic-confirmed-cleanup")
+        if claimed is None:
+            break
+        claimed_tasks.add(claimed.task)
+    assert claimed_tasks == {LAB_DOCUMENT_CLEANUP_TASK, REPORT_ARTIFACT_CLEANUP_TASK}
+    assert layout.path("tombstones", document_id, ".deleted").is_file()
+    assert not (settings.report_artifacts_dir / str(owner_id) / str(report_id)).exists()
+    assert (
+        settings.report_artifacts_dir / ".tombstones" / str(owner_id) / f"{report_id}.deleted"
+    ).is_file()
 
 
 def test_scanned_pdf_ocr_path_remains_a_confirmation_required_draft(

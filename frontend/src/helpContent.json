@@ -230,7 +230,7 @@
       "availability": "Labs web page",
       "instructions": "On Labs, upload the PDF, wait for local extraction, compare each candidate with the inert PNG source-page preview shown beside it, correct fields or exclude rows, enter specimen/report context, and confirm. The original PDF is download-only and is never embedded in the browser.",
       "example": "Synthetic file name: synthetic-cbc-panel.pdf",
-      "result": "Reviewed lab facts with durable source-PDF and page links",
+      "result": "Reviewed lab facts with durable source-PDF and page links; permanent deletion previews every linked record and artifact first",
       "confirmation": "Uploading or extracting never creates a lab fact. Only included rows become facts after explicit confirmation; unparsed rows remain visible and unconfirmed drafts stay out of trends and reports.",
       "endpoints": [
         { "method": "POST", "path": "/api/v1/labs/documents" },

@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   confirmLabDocument,
+  deleteLabDocument,
   getLabDocument,
+  getLabDeletionPreview,
   getLabDocuments,
   getLabExtraction,
   getLabResults,
@@ -11,6 +13,7 @@ import {
   type LabCandidateConfirmation,
   type LabDocument,
   type LabDocumentConfirmation,
+  type LabDeletionPreview,
   type LabExtractionDraft,
   type LabResult,
 } from "../api/client";
@@ -96,7 +99,81 @@ function UploadPanel({ onUploaded }: { onUploaded: (document: LabDocument) => vo
   </section>;
 }
 
-function DocumentList({ documents, selectedId, select }: { documents: LabDocument[]; selectedId: string | null; select: (id: string) => void }): React.JSX.Element {
+function IdList({ label, ids }: { label: string; ids: string[] }): React.JSX.Element {
+  return <div><dt>{label}</dt><dd>{ids.length === 0 ? "None" : ids.join(", ")}</dd></div>;
+}
+
+function DeletionImpact({ preview }: { preview: LabDeletionPreview }): React.JSX.Element {
+  return <>
+    <p><strong>{preview.mode === "confirmed_report" ? "Confirmed recorded facts will be permanently deleted." : "This upload has not become a recorded fact."}</strong></p>
+    <div className="table-scroll" tabIndex={0} role="region" aria-label="Lab report deletion impact">
+      <table><thead><tr><th scope="col">Affected unit</th><th scope="col">Count</th></tr></thead><tbody>
+        <tr><th scope="row">Source document</th><td>1</td></tr>
+        <tr><th scope="row">Extraction drafts</th><td>{preview.extraction_draft_ids.length}</td></tr>
+        <tr><th scope="row">Recorded lab panels</th><td>{preview.panel_ids.length}</td></tr>
+        <tr><th scope="row">Recorded lab results</th><td>{preview.result_ids.length}</td></tr>
+        <tr><th scope="row">Derived normalized results</th><td>{preview.derived_result_count}</td></tr>
+        <tr><th scope="row">Trend points</th><td>{preview.trend_point_count}</td></tr>
+        <tr><th scope="row">AI analyses containing these sources</th><td>{preview.ai_analysis_ids.length}</td></tr>
+        <tr><th scope="row">Immutable physician-report snapshots</th><td>{preview.report_snapshot_ids.length}</td></tr>
+        <tr><th scope="row">Rendered report artifacts</th><td>{preview.report_artifact_ids.length}</td></tr>
+        <tr><th scope="row">Inert page previews</th><td>{preview.page_preview_count}</td></tr>
+        <tr><th scope="row">Private document-storage artifacts</th><td>{preview.private_storage_artifact_count}</td></tr>
+      </tbody></table>
+    </div>
+    <details><summary>Show exact affected record IDs</summary><dl className="data-list">
+      <IdList label="Document ID" ids={[preview.document_id]} />
+      <IdList label="Draft IDs" ids={preview.extraction_draft_ids} />
+      <IdList label="Panel IDs" ids={preview.panel_ids} />
+      <IdList label="Result IDs" ids={preview.result_ids} />
+      <IdList label="AI analysis IDs" ids={preview.ai_analysis_ids} />
+      <IdList label="Report snapshot IDs" ids={preview.report_snapshot_ids} />
+      <IdList label="Report artifact IDs" ids={preview.report_artifact_ids} />
+    </dl></details>
+    {preview.report_snapshot_ids.length === 0 ? null : <p className="draft-warning">Because saved physician reports are immutable copies, every listed snapshot and all of its rendered files will be deleted in full, including unrelated content in that same snapshot.</p>}
+    <p>Live trends, reports, exports, and data-quality views update from the remaining records. Encrypted backups may retain deleted copies until their configured expiry.</p>
+  </>;
+}
+
+function DocumentDeletion({ document, onDeleted }: { document: LabDocument; onDeleted: () => void }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const preview = useQuery({ queryKey: ["lab-deletion-preview", document.document_id], queryFn: () => getLabDeletionPreview(document.document_id), enabled: open });
+  const deletion = useMutation({
+    mutationFn: ({ password, confirmation }: { password: string | null; confirmation: string }) => deleteLabDocument(document.document_id, { password, confirmation }),
+    onSuccess: async () => {
+      onDeleted();
+      queryClient.removeQueries({ queryKey: ["lab-document", document.document_id] });
+      queryClient.removeQueries({ queryKey: ["lab-extraction", document.document_id] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lab-documents"] }),
+        queryClient.invalidateQueries({ queryKey: ["lab-results"] }),
+        queryClient.invalidateQueries({ queryKey: ["reports"] }),
+        queryClient.invalidateQueries({ queryKey: ["data-quality"] }),
+      ]);
+    },
+  });
+  return <details className="danger-zone" onToggle={(event) => { setOpen(event.currentTarget.open); }}>
+    <summary>Review permanent deletion</summary>
+    {preview.isPending ? <p role="status">Calculating exact dependencies…</p> : null}
+    {preview.isError ? <p className="error-summary" role="alert">Deletion impact could not be loaded. Nothing was deleted.</p> : null}
+    {preview.data === undefined ? null : <>
+      <DeletionImpact preview={preview.data} />
+      <form className="privacy-action" aria-label={`Delete lab report ${document.display_name}`} onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        deletion.mutate({ password: preview.data.requires_password ? data.get("password") as string : null, confirmation: data.get("confirmation") as string });
+      }}>
+        {preview.data.requires_password ? <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label> : null}
+        <label>Type {preview.data.confirmation_phrase}<input name="confirmation" required autoComplete="off" pattern={preview.data.confirmation_phrase} /></label>
+        <button type="submit" disabled={deletion.isPending}>{deletion.isPending ? "Queueing permanent deletion…" : preview.data.requires_password ? "Permanently delete confirmed report unit" : "Permanently delete unconfirmed upload"}</button>
+      </form>
+      {deletion.isError ? <p className="error-summary" role="alert">Nothing was deleted. Check the password and exact phrase, then reload the dependency preview before retrying.</p> : null}
+    </>}
+  </details>;
+}
+
+function DocumentList({ documents, selectedId, select, onDeleted }: { documents: LabDocument[]; selectedId: string | null; select: (id: string) => void; onDeleted: (id: string) => void }): React.JSX.Element {
   if (documents.length === 0) return <p>No lab PDFs uploaded yet.</p>;
   return <section aria-labelledby="lab-documents-heading">
     <h2 id="lab-documents-heading">Uploaded lab documents</h2>
@@ -109,6 +186,7 @@ function DocumentList({ documents, selectedId, select }: { documents: LabDocumen
           {resolved ? <a className="button-link" href={sourcePreviewUrl(document.document_id, 1)} target="_blank" rel="noreferrer">View first source page</a> : <button type="button" className={selectedId === document.document_id ? undefined : "button-secondary"} disabled={document.status === "rejected"} onClick={() => { select(document.document_id); }}>{selectedId === document.document_id ? "Review open below" : "Open review"}</button>}
           <a href={sourceDownloadUrl(document.document_id)}>Download original PDF</a>
         </div>
+        <DocumentDeletion document={document} onDeleted={() => { onDeleted(document.document_id); }} />
       </article>;
     })}</div>
   </section>;
@@ -235,7 +313,7 @@ export function LabsPage(): React.JSX.Element {
     <UploadPanel onUploaded={(document) => { setSelectedDocumentId(document.document_id); }} />
     {documentsQuery.isPending ? <p role="status">Loading lab documents…</p> : null}
     {documentsQuery.isError ? <p className="error-summary" role="alert">Lab documents could not be loaded.</p> : null}
-    {documentsQuery.data === undefined ? null : <DocumentList documents={documentsQuery.data} selectedId={selectedDocumentId} select={setSelectedDocumentId} />}
+    {documentsQuery.data === undefined ? null : <DocumentList documents={documentsQuery.data} selectedId={selectedDocumentId} select={setSelectedDocumentId} onDeleted={(id) => { if (selectedDocumentId === id) setSelectedDocumentId(null); }} />}
     {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
     <hr />
     {resultsQuery.isPending ? <p role="status">Loading laboratory facts…</p> : null}

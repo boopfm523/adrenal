@@ -147,6 +147,36 @@ services:
       redis:
         condition: service_healthy
 
+  cleanup-worker:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    <<: *restart
+    user: "10001:10001"
+    command: ["python", "-m", "healthcurve.cleanup_worker"]
+    environment:
+      HC_ENVIRONMENT: dev
+      HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
+      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
+      HC_UPLOADS_DIR: /data/uploads
+      HC_REPORT_ARTIFACTS_DIR: /data/reports
+    volumes:
+      - ${HC_UPLOADS_DIR:-./var/uploads}:/data/uploads
+      - ${HC_REPORT_ARTIFACTS_DIR:-./var/reports}:/data/reports
+    networks: [hc-cleanup]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     # postgres:16-alpine
     image: postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
@@ -165,7 +195,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
-    networks: [hc-internal]
+    networks: [hc-internal, hc-cleanup]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U healthcurve -d healthcurve"]
       interval: 5s
@@ -203,6 +233,9 @@ services:
 networks:
   hc-internal:
     driver: bridge
+  hc-cleanup:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:

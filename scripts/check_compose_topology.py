@@ -46,7 +46,15 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
         if expected and (published != expected or target != expected):
             errors.append("production caddy must publish 443 to container port 443")
 
-    for name in ("postgres", "redis", "ollama", "api", "worker", "document-worker"):
+    for name in (
+        "postgres",
+        "redis",
+        "ollama",
+        "api",
+        "worker",
+        "document-worker",
+        "cleanup-worker",
+    ):
         if services.get(name, {}).get("ports"):
             errors.append(f"{name} must not publish ports")
 
@@ -60,8 +68,48 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
     if "no-new-privileges:true" not in documents.get("security_opt", []):
         errors.append("document-worker must set no-new-privileges")
 
+    cleanup = services.get("cleanup-worker", {})
+    if cleanup.get("read_only") is not True:
+        errors.append("cleanup-worker must be read-only")
+    if "ALL" not in cleanup.get("cap_drop", []):
+        errors.append("cleanup-worker must drop all capabilities")
+    if "no-new-privileges:true" not in cleanup.get("security_opt", []):
+        errors.append("cleanup-worker must set no-new-privileges")
+    cleanup_networks = cleanup.get("networks", {})
+    cleanup_network_names = (
+        set(cleanup_networks) if isinstance(cleanup_networks, (dict, list)) else set()
+    )
+    if cleanup_network_names != {"hc-cleanup"}:
+        errors.append("cleanup-worker must use only hc-cleanup")
+    if services.get("worker", {}).get("volumes"):
+        worker_targets = {
+            mount.get("target")
+            for mount in services["worker"]["volumes"]
+            if isinstance(mount, dict)
+        }
+        if {"/data/uploads", "/data/reports"} & worker_targets:
+            errors.append("worker must not mount private document or report storage")
+    cleanup_environment = cleanup.get("environment", {})
+    for forbidden in (
+        "HC_TELEGRAM_BOT_TOKEN",
+        "HC_TELEGRAM_WEBHOOK_SECRET",
+        "HC_OLLAMA_BASE_URL",
+        "HC_REDIS_URL",
+    ):
+        if forbidden in cleanup_environment:
+            errors.append(f"cleanup-worker must not receive {forbidden}")
+    cleanup_network = compose.get("networks", {}).get("hc-cleanup", {})
+    if cleanup_network.get("internal") is not True:
+        errors.append("hc-cleanup network must be internal-only")
+    postgres_networks = services.get("postgres", {}).get("networks", {})
+    postgres_network_names = (
+        set(postgres_networks) if isinstance(postgres_networks, (dict, list)) else set()
+    )
+    if "hc-cleanup" not in postgres_network_names:
+        errors.append("postgres must join hc-cleanup for cleanup-worker database access")
+
     if production:
-        for name in ("api", "worker"):
+        for name in ("api", "worker", "cleanup-worker"):
             environment = services.get(name, {}).get("environment", {})
             if environment.get("HC_ENVIRONMENT") != "prod":
                 errors.append(f"{name} must run in the prod environment")

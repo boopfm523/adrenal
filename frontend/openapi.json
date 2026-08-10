@@ -2568,6 +2568,179 @@
         "title": "IntegrationDeletionResponse",
         "type": "object"
       },
+      "LabDeletionAcceptedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cleanup_task_count": {
+            "minimum": 1.0,
+            "title": "Cleanup Task Count",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "deletion_queued",
+              "already_deleted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "document_id",
+          "cleanup_task_count"
+        ],
+        "title": "LabDeletionAcceptedOut",
+        "type": "object"
+      },
+      "LabDeletionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "LabDeletionIn",
+        "type": "object"
+      },
+      "LabDeletionPreviewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_analysis_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Ai Analysis Ids",
+            "type": "array"
+          },
+          "backups_may_retain_until_expiry": {
+            "const": true,
+            "default": true,
+            "title": "Backups May Retain Until Expiry",
+            "type": "boolean"
+          },
+          "confirmation_phrase": {
+            "title": "Confirmation Phrase",
+            "type": "string"
+          },
+          "derived_result_count": {
+            "title": "Derived Result Count",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "extraction_draft_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Extraction Draft Ids",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "unconfirmed_upload",
+              "confirmed_report"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "page_preview_count": {
+            "title": "Page Preview Count",
+            "type": "integer"
+          },
+          "panel_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Panel Ids",
+            "type": "array"
+          },
+          "private_storage_artifact_count": {
+            "title": "Private Storage Artifact Count",
+            "type": "integer"
+          },
+          "report_artifact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Report Artifact Ids",
+            "type": "array"
+          },
+          "report_snapshot_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Report Snapshot Ids",
+            "type": "array"
+          },
+          "requires_password": {
+            "title": "Requires Password",
+            "type": "boolean"
+          },
+          "result_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Result Ids",
+            "type": "array"
+          },
+          "trend_point_count": {
+            "title": "Trend Point Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "mode",
+          "requires_password",
+          "confirmation_phrase",
+          "extraction_draft_ids",
+          "panel_ids",
+          "result_ids",
+          "derived_result_count",
+          "trend_point_count",
+          "ai_analysis_ids",
+          "report_snapshot_ids",
+          "report_artifact_ids",
+          "page_preview_count",
+          "private_storage_artifact_count"
+        ],
+        "title": "LabDeletionPreviewOut",
+        "type": "object"
+      },
       "LabResultOut": {
         "additionalProperties": false,
         "properties": {
@@ -7521,8 +7694,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabDeletionIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "204": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDeletionAcceptedOut"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "422": {
@@ -7680,6 +7870,65 @@
           }
         },
         "summary": "Confirm Lab Document",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/documents/{document_id}/deletion-preview": {
+      "get": {
+        "operationId": "preview_lab_document_deletion_api_v1_labs_documents__document_id__deletion_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDeletionPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Lab Document Deletion",
         "tags": [
           "labs"
         ]
