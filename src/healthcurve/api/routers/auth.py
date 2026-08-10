@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from healthcurve.api.deps import (
@@ -68,7 +69,7 @@ def login(
     session: DbSession,
     settings: AppSettings,
     limiter: AppRateLimiter,
-):
+) -> LoginResponse | JSONResponse:
     # Check before password hashing, which is intentionally expensive. The normalized
     # address is hashed by the limiter, so Redis never receives an email address.
     enforce_rate_limit(
@@ -84,25 +85,28 @@ def login(
         request.app.state.telemetry.record(OperationalEvent.AUTH_FAILURE)
         audit.record(
             session,
-            actor=f"email:{payload.email}",
+            actor=audit.UNAUTHENTICATED_ACTOR,
             action=audit.AuditAction.LOGIN_FAILED,
             change_summary="account locked",
         )
-        raise HTTPException(
+        # Return an error response instead of raising: the request-scoped transaction
+        # must commit the lockout and audit evidence written above.
+        return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="too many failed attempts; try again later",
-        ) from None
+            content={"detail": "too many failed attempts; try again later"},
+        )
     except auth.AuthenticationError:
         request.app.state.telemetry.record(OperationalEvent.AUTH_FAILURE)
         audit.record(
             session,
-            actor=f"email:{payload.email}",
+            actor=audit.UNAUTHENTICATED_ACTOR,
             action=audit.AuditAction.LOGIN_FAILED,
         )
         # Same message for unknown account and wrong password: no enumeration.
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials"
-        ) from None
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "invalid credentials"},
+        )
 
     auth_session, token = auth.create_session(
         session, owner, user_agent=request.headers.get("user-agent")

@@ -19,6 +19,8 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from healthcurve.db import OPS_SCHEMA, OpsBase, StrEnumType
 
+UNAUTHENTICATED_ACTOR = "unauthenticated"
+
 
 class AuditAction(StrEnum):
     """Every safety-relevant action named by SAFE-28."""
@@ -70,8 +72,9 @@ class AuditEntry(OpsBase):
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )
 
-    #: Who. "owner:<uuid>", "system", or "telegram:<chat id>". Never null -- an action
-    #: with no actor is not auditable.
+    #: Who. "owner:<uuid>", "system", "unauthenticated", or "telegram:<chat id>".
+    #: Never null -- an action with no actor is not auditable. Unauthenticated login
+    #: attempts deliberately do not contain the submitted email address.
     actor: Mapped[str] = mapped_column(String(120), nullable=False)
     action: Mapped[AuditAction] = mapped_column(
         StrEnumType(AuditAction, 48), nullable=False, index=True

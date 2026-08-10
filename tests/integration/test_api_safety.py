@@ -77,6 +77,7 @@ from healthcurve.medications.models import (
     RegimenVersion,
     Route,
 )
+from healthcurve.operations import audit
 from healthcurve.operations import worker as queue_worker
 from healthcurve.operations.audit import AuditAction, AuditEntry
 from healthcurve.operations.jobs import Job, JobQueueError, JobStatus
@@ -85,6 +86,7 @@ from healthcurve.operations.rate_limit import (
     RateLimitExceeded,
     RateLimitResult,
 )
+from healthcurve.operations.telemetry import OperationalEvent
 from healthcurve.reports import service as report_service
 from healthcurve.reports.cleanup_jobs import (
     REPORT_ARTIFACT_CLEANUP_TASK,
@@ -249,14 +251,149 @@ def test_polling_mode_does_not_expose_the_telegram_webhook(client: TestClient) -
     assert client.post("/api/v1/integrations/telegram/webhook", json={}).status_code == 404
 
 
-def test_login_does_not_reveal_whether_an_account_exists(client: TestClient) -> None:
+def test_login_does_not_reveal_whether_an_account_exists(
+    client: TestClient, engine: Engine
+) -> None:
     client.cookies.clear()
+    with Session(engine) as session:
+        audit_count_before = (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.LOGIN_FAILED)
+            )
+            or 0
+        )
     unknown = client.post(
         "/api/v1/auth/login", json={"email": "nobody@example.com", "password": "x" * 12}
     )
     wrong = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": "wrong-password"})
     assert unknown.status_code == wrong.status_code == 401
     assert unknown.json()["detail"] == wrong.json()["detail"]
+    with Session(engine) as session:
+        entries = list(
+            session.scalars(
+                select(AuditEntry)
+                .where(AuditEntry.action == AuditAction.LOGIN_FAILED)
+                .order_by(AuditEntry.occurred_at.desc())
+                .limit(2)
+            )
+        )
+        assert len(entries) == 2
+        assert all(entry.actor == audit.UNAUTHENTICATED_ACTOR for entry in entries)
+        assert all("example.com" not in entry.actor for entry in entries)
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.LOGIN_FAILED)
+            )
+            == audit_count_before + 2
+        )
+
+
+def test_failed_login_lockout_and_audit_persist_across_requests(
+    client: TestClient, engine: Engine
+) -> None:
+    client.cookies.clear()
+    with Session(engine) as session, session.begin():
+        owner = session.scalar(select(Owner).where(Owner.email == EMAIL))
+        assert owner is not None
+        owner.failed_login_count = 0
+        owner.locked_until = None
+        unchanged_identity = (
+            owner.email,
+            owner.password_hash,
+            owner.display_name,
+            owner.default_timezone,
+        )
+        audit_count_before = (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.LOGIN_FAILED)
+            )
+            or 0
+        )
+
+    application = cast(Any, client.app)
+    original_telemetry = application.state.telemetry
+    telemetry = mock.MagicMock()
+    application.state.telemetry = telemetry
+    try:
+        for expected_count in range(1, auth.MAX_FAILED_LOGINS):
+            rejected = client.post(
+                "/api/v1/auth/login",
+                json={"email": EMAIL, "password": PASSWORD + "-wrong"},
+            )
+            assert rejected.status_code == 401
+            assert rejected.json() == {"detail": "invalid credentials"}
+            with Session(engine) as session:
+                owner = session.scalar(select(Owner).where(Owner.email == EMAIL))
+                assert owner is not None
+                assert owner.failed_login_count == expected_count
+                assert owner.locked_until is None
+
+        threshold = client.post(
+            "/api/v1/auth/login",
+            json={"email": EMAIL, "password": PASSWORD + "-wrong"},
+        )
+        locked = client.post(
+            "/api/v1/auth/login",
+            json={"email": EMAIL, "password": PASSWORD + "-wrong"},
+        )
+    finally:
+        application.state.telemetry = original_telemetry
+
+    assert threshold.status_code == 401
+    assert threshold.json() == {"detail": "invalid credentials"}
+    assert locked.status_code == 429
+    assert locked.json() == {"detail": "too many failed attempts; try again later"}
+    assert telemetry.record.call_count == auth.MAX_FAILED_LOGINS + 1
+    telemetry.record.assert_called_with(OperationalEvent.AUTH_FAILURE)
+
+    with Session(engine) as session, session.begin():
+        owner = session.scalar(select(Owner).where(Owner.email == EMAIL))
+        assert owner is not None
+        assert owner.failed_login_count == 0
+        assert owner.locked_until is not None
+        assert owner.locked_until > datetime.now(UTC)
+        assert (
+            owner.email,
+            owner.password_hash,
+            owner.display_name,
+            owner.default_timezone,
+        ) == unchanged_identity
+        entries = list(
+            session.scalars(
+                select(AuditEntry)
+                .where(AuditEntry.action == AuditAction.LOGIN_FAILED)
+                .order_by(AuditEntry.occurred_at.desc())
+                .limit(auth.MAX_FAILED_LOGINS + 1)
+            )
+        )
+        assert len(entries) == auth.MAX_FAILED_LOGINS + 1
+        assert all(entry.actor == audit.UNAUTHENTICATED_ACTOR for entry in entries)
+        assert all(EMAIL not in entry.actor for entry in entries)
+        assert all(PASSWORD not in (entry.change_summary or "") for entry in entries)
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.LOGIN_FAILED)
+            )
+            == audit_count_before + auth.MAX_FAILED_LOGINS + 1
+        )
+
+        owner.locked_until = datetime.now(UTC) - timedelta(seconds=1)
+
+    recovered = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert recovered.status_code == 200
+    with Session(engine) as session:
+        owner = session.scalar(select(Owner).where(Owner.email == EMAIL))
+        assert owner is not None
+        assert owner.failed_login_count == 0
+        assert owner.locked_until is None
 
 
 def test_login_limit_returns_observable_429_before_authentication(client: TestClient) -> None:
