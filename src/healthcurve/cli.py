@@ -23,10 +23,12 @@ from typing import Any
 import yaml
 from sqlalchemy import select
 
-from healthcurve.config import TelegramMode, get_settings
+from healthcurve.config import Environment, TelegramMode, get_settings
 from healthcurve.db import get_session_factory
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
+from healthcurve.identity.recovery import OwnerRecoveryError
+from healthcurve.identity.recovery import recover_owner_access as recover_owner
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import (
     ApprovedInstruction,
@@ -70,6 +72,46 @@ def create_owner(args: argparse.Namespace) -> int:
         session.add(owner)
         session.flush()
         print(f"Created owner {owner.email} (timezone {owner.default_timezone})")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# recover-owner-access
+# ---------------------------------------------------------------------------
+
+
+def recover_owner_access(args: argparse.Namespace) -> int:
+    """Recover an unknown bootstrap login without creating or deleting an owner."""
+    settings = get_settings()
+    if settings.environment is not Environment.DEV:
+        sys.exit("Owner access recovery is available only in development.")
+
+    phrase = "RECOVER DEVELOPMENT OWNER"
+    print("This changes the existing development owner's login and signs out every session.")
+    print("It does not delete or recreate health, plan, AI, document, or integration data.")
+    if input(f"Type {phrase} to continue: ").strip() != phrase:
+        sys.exit("Recovery cancelled; nothing was changed.")
+
+    email = args.email or input("New owner email: ").strip()
+    password = getpass.getpass("New password (min 12 chars): ")
+    if password != getpass.getpass("Confirm new password: "):
+        sys.exit("Passwords did not match; nothing was changed.")
+
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        try:
+            revoked = recover_owner(
+                session,
+                owner,
+                environment=settings.environment,
+                new_email=email,
+                new_password=password,
+            )
+        except OwnerRecoveryError as exc:
+            sys.exit(str(exc))
+
+    print(f"Owner login recovered. Revoked {revoked} existing session(s).")
     return 0
 
 
@@ -538,6 +580,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--name")
     p.add_argument("--timezone", default="Europe/London")
     p.set_defaults(func=create_owner)
+
+    p = sub.add_parser(
+        "recover-owner-access",
+        help="Recover an unknown bootstrap login (local development only)",
+    )
+    p.add_argument("--email", help="Prompted for if omitted")
+    p.set_defaults(func=recover_owner_access)
 
     p = sub.add_parser("init-medications-file", help="Write a template YAML to fill in")
     p.add_argument("path", nargs="?", default="medications.yaml")

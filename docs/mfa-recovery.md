@@ -72,3 +72,22 @@ ring and all encrypted credentials, then re-enroll MFA. Follow
 Quarterly, verify that one protected recovery code is readable without consuming it,
 that authenticator time is synchronized, and that the separate credential-key backup
 is restorable. Use synthetic accounts for destructive recovery drills.
+
+## Development bootstrap correction
+
+Before MFA enrollment, a local development bootstrap may create the single owner
+without handing its credentials to the operator. On that narrowly defined build-mode
+installation, run this from the trusted project host:
+
+```bash
+docker compose run --rm api python -m healthcurve.cli recover-owner-access
+```
+
+The command requires an exact typed confirmation and prompts privately for the new
+email and password. It updates the existing owner in one transaction, clears login
+lockout state, revokes every session, and writes a value-free audit entry. It does not
+delete or recreate health, plan, AI, document, or integration records.
+
+This command fails closed unless `HC_ENVIRONMENT=dev`, and it also refuses if MFA is
+enabled or any MFA recovery-code state exists. It is not a substitute for normal MFA
+recovery and cannot be used to bypass production authentication.

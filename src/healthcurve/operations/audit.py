@@ -32,6 +32,7 @@ class AuditAction(StrEnum):
     MFA_REMOVED = "mfa_removed"
     MFA_RECOVERY_CODES_REGENERATED = "mfa_recovery_codes_regenerated"
     MFA_RECOVERY_CODE_USED = "mfa_recovery_code_used"
+    OWNER_ACCESS_RECOVERED = "owner_access_recovered"
 
     REGIMEN_DRAFTED = "regimen_drafted"
     REGIMEN_APPROVED = "regimen_approved"

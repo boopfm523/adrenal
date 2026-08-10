@@ -23,9 +23,10 @@ from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
+from healthcurve import models as all_models
 from healthcurve import privacy
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
-from healthcurve.config import Settings, get_settings
+from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
 from healthcurve.document_worker import process_available, validate_one
 from healthcurve.events import service as events
@@ -33,6 +34,7 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
+from healthcurve.identity.recovery import recover_owner_access
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminImportBatch,
@@ -1814,6 +1816,66 @@ def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(
     assert set(planned_slot) >= {"medication_id", "unit", "route"}
     assert planned_slot["unit"] == "mg"
     assert planned_slot["route"] == "oral"
+
+
+# ---------------------------------------------------------------------------
+# Development bootstrap recovery
+# ---------------------------------------------------------------------------
+
+
+def test_owner_recovery_preserves_all_non_identity_tables_and_revokes_sessions(
+    client: TestClient, engine: Engine
+) -> None:
+    """Recovery changes login state in place; every data-domain row survives."""
+    _ = client  # Starts the module-scoped app fixture, which creates the owner.
+    allowed_to_change = {
+        "identity.owner",
+        "identity.auth_session",
+        "ops.audit_entry",
+    }
+    protected_tables = [
+        table
+        for table in all_models.Base.metadata.sorted_tables
+        if table.fullname not in allowed_to_change
+    ]
+
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner = session.scalar(select(Owner).limit(1))
+            assert owner is not None
+            auth.create_session(session, owner, user_agent="synthetic recovery test")
+            session.flush()
+            before = {
+                table.fullname: session.scalar(select(func.count()).select_from(table))
+                for table in protected_tables
+            }
+
+            revoked = recover_owner_access(
+                session,
+                owner,
+                environment=Environment.DEV,
+                new_email="recovered-owner@example.com",
+                new_password=PASSWORD,
+            )
+            session.flush()
+
+            after = {
+                table.fullname: session.scalar(select(func.count()).select_from(table))
+                for table in protected_tables
+            }
+            audit_entry = session.scalar(
+                select(AuditEntry).where(AuditEntry.action == AuditAction.OWNER_ACCESS_RECOVERED)
+            )
+            assert revoked >= 1
+            assert before == after
+            assert audit_entry is not None
+            assert PASSWORD not in (audit_entry.change_summary or "")
+            assert "recovered-owner@example.com" not in (audit_entry.change_summary or "")
+    finally:
+        transaction.rollback()
+        connection.close()
 
 
 # ---------------------------------------------------------------------------
