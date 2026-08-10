@@ -52,6 +52,7 @@ from healthcurve.operations.rate_limit import (
     RateLimitResult,
 )
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 from tests.fixtures.pdf import (
     OcrToolRunner,
@@ -171,6 +172,8 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
         "/api/v1/reports",
         "/api/v1/context-events",
+        "/api/v1/blood-pressure",
+        "/api/v1/weight",
     ):
         assert client.get(path).status_code == 401, path
 
@@ -272,6 +275,140 @@ def test_state_changing_requests_require_csrf(
 
 def test_reads_do_not_require_csrf(client: TestClient, logged_in: dict[str, str]) -> None:
     assert client.get("/api/v1/medications").status_code == 200
+
+
+def test_vitals_are_owner_scoped_correctable_and_exported(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    other_owner_id: uuid.UUID
+    with Session(engine) as session, session.begin():
+        other = Owner(
+            email="vitals-owner@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        other_owner_id = other.id
+        event_time = from_instant(datetime(2026, 8, 9, 6, tzinfo=UTC), "UTC")
+        events.create_event(
+            session,
+            BloodPressureEvent,
+            owner_id=other.id,
+            event_time=event_time,
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            systolic_mmhg=499,
+            diastolic_mmhg=1,
+        )
+        events.create_event(
+            session,
+            WeightEvent,
+            owner_id=other.id,
+            event_time=event_time,
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            value=Decimal("1"),
+            unit=WeightUnit.KG,
+            normalized_kg=Decimal("1.0000"),
+        )
+
+    event_time_payload = {
+        "local_time": "2026-08-09T08:15:00",
+        "timezone": "Europe/London",
+    }
+    no_csrf = client.post(
+        "/api/v1/blood-pressure",
+        json={"systolic_mmhg": 120, "diastolic_mmhg": 80, "time": event_time_payload},
+    )
+    assert no_csrf.status_code == 403
+
+    bp_response = client.post(
+        "/api/v1/blood-pressure",
+        headers=logged_in,
+        json={
+            "systolic_mmhg": 120,
+            "diastolic_mmhg": 80,
+            "pulse_bpm": 62,
+            "time": event_time_payload,
+            "notes": "Synthetic cuff reading",
+        },
+    )
+    assert bp_response.status_code == 201, bp_response.text
+    bp = bp_response.json()
+    assert bp["category"] == "fact"
+    assert bp["time"]["occurred_at"] == "2026-08-09T07:15:00Z"
+    assert bp["provenance"]["source_type"] == "web"
+
+    weight_response = client.post(
+        "/api/v1/weight",
+        headers=logged_in,
+        json={"value": "180", "unit": "lb", "time": event_time_payload},
+    )
+    assert weight_response.status_code == 201, weight_response.text
+    weight = weight_response.json()
+    assert weight["value"] == "180.0000"
+    assert weight["unit"] == "lb"
+    assert weight["normalized_kg"] == "81.6466"
+
+    bp_correction = client.post(
+        f"/api/v1/blood-pressure/{bp['id']}/correct",
+        headers=logged_in,
+        json={
+            "reason": "Synthetic transcription correction",
+            "changes": {"systolic_mmhg": 118, "pulse_bpm": None},
+        },
+    )
+    assert bp_correction.status_code == 201, bp_correction.text
+    corrected_bp = bp_correction.json()
+    assert corrected_bp["systolic_mmhg"] == 118
+    assert corrected_bp["pulse_bpm"] is None
+    assert corrected_bp["provenance"]["supersedes_id"] == bp["id"]
+
+    weight_correction = client.post(
+        f"/api/v1/weight/{weight['id']}/correct",
+        headers=logged_in,
+        json={
+            "reason": "Synthetic unit correction",
+            "changes": {"value": "82", "unit": "kg"},
+        },
+    )
+    assert weight_correction.status_code == 201, weight_correction.text
+    corrected_weight = weight_correction.json()
+    assert corrected_weight["normalized_kg"] == "82.0000"
+
+    current_bp = client.get("/api/v1/blood-pressure").json()
+    current_weight = client.get("/api/v1/weight").json()
+    assert {row["id"] for row in current_bp} == {corrected_bp["id"]}
+    assert {row["id"] for row in current_weight} == {corrected_weight["id"]}
+    assert {
+        row["id"]
+        for row in client.get("/api/v1/blood-pressure", params={"include_superseded": True}).json()
+    } == {bp["id"], corrected_bp["id"]}
+
+    timeline = client.get("/api/v1/timeline", params={"types": "blood_pressure,weight"})
+    assert timeline.status_code == 200, timeline.text
+    items = timeline.json()["items"]
+    assert {item["event_type"] for item in items} == {"blood_pressure", "weight"}
+    assert any(item["summary"] == "Blood pressure 118/80 mmHg" for item in items)
+    assert any(item["summary"] == "Weight 82.0000 kg" for item in items)
+
+    exported = client.post("/api/v1/exports", headers=logged_in)
+    assert exported.status_code == 200, exported.text
+    facts = exported.json()["facts"]
+    assert corrected_bp["id"] in {row["id"] for row in facts["blood_pressure"]}
+    assert corrected_weight["id"] in {row["id"] for row in facts["weight"]}
+
+    with Session(engine) as session, session.begin():
+        session.execute(
+            text("DELETE FROM fact.blood_pressure_event WHERE owner_id = :owner_id"),
+            {"owner_id": other_owner_id},
+        )
+        session.execute(
+            text("DELETE FROM fact.weight_event WHERE owner_id = :owner_id"),
+            {"owner_id": other_owner_id},
+        )
+        session.delete(session.get(Owner, other_owner_id))
 
 
 def test_context_privacy_time_provenance_corrections_and_deletion(

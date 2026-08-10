@@ -30,6 +30,7 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 
 router = APIRouter(tags=["exports"])
 
@@ -130,6 +131,8 @@ def create_export(
             "stress_episodes": _rows(session, StressEpisode, owner.id),
             "emergency_injections": _rows(session, EmergencyInjectionEvent, owner.id),
             "context_events": _rows(session, ContextEvent, owner.id),
+            "blood_pressure": _rows(session, BloodPressureEvent, owner.id),
+            "weight": _rows(session, WeightEvent, owner.id),
             "garmin_import_batches": _rows(session, GarminImportBatch, owner.id),
             "garmin_metrics": _rows(session, GarminMetricEvent, owner.id),
             "garmin_sleep": _rows(session, GarminSleepEvent, owner.id),

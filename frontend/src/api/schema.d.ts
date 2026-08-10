@@ -178,6 +178,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blood-pressure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Blood Pressure */
+        get: operations["list_blood_pressure_api_v1_blood_pressure_get"];
+        put?: never;
+        /** Create Blood Pressure */
+        post: operations["create_blood_pressure_api_v1_blood_pressure_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blood-pressure/{event_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct Blood Pressure */
+        post: operations["correct_blood_pressure_api_v1_blood_pressure__event_id__correct_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/context-events": {
         parameters: {
             query?: never;
@@ -890,6 +925,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/weight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Weight */
+        get: operations["list_weight_api_v1_weight_get"];
+        put?: never;
+        /** Create Weight */
+        post: operations["create_weight_api_v1_weight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/weight/{event_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct Weight */
+        post: operations["correct_weight_api_v1_weight__event_id__correct_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/emergency": {
         parameters: {
             query?: never;
@@ -999,6 +1069,60 @@ export interface components {
             /** Timezone */
             timezone: string;
             timing: components["schemas"]["TimingMetric"];
+        };
+        /** BloodPressureCorrectionChanges */
+        BloodPressureCorrectionChanges: {
+            /** Diastolic Mmhg */
+            diastolic_mmhg?: number | null;
+            /** Notes */
+            notes?: string | null;
+            /** Pulse Bpm */
+            pulse_bpm?: number | null;
+            /** Systolic Mmhg */
+            systolic_mmhg?: number | null;
+            time?: components["schemas"]["EventTimeIn"] | null;
+        };
+        /** BloodPressureCorrectionIn */
+        BloodPressureCorrectionIn: {
+            changes: components["schemas"]["BloodPressureCorrectionChanges"];
+            /** Reason */
+            reason: string;
+        };
+        /** BloodPressureIn */
+        BloodPressureIn: {
+            /** Diastolic Mmhg */
+            diastolic_mmhg: number;
+            /** Notes */
+            notes?: string | null;
+            /** Pulse Bpm */
+            pulse_bpm?: number | null;
+            /** Systolic Mmhg */
+            systolic_mmhg: number;
+            time: components["schemas"]["EventTimeIn"];
+        };
+        /** BloodPressureOut */
+        BloodPressureOut: {
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /** Diastolic Mmhg */
+            diastolic_mmhg: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Notes */
+            notes: string | null;
+            provenance: components["schemas"]["ProvenanceOut"];
+            /** Pulse Bpm */
+            pulse_bpm: number | null;
+            /** Systolic Mmhg */
+            systolic_mmhg: number;
+            time: components["schemas"]["EventTimeOut"];
         };
         /** Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post */
         Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post: {
@@ -2423,6 +2547,58 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WeightCorrectionChanges */
+        WeightCorrectionChanges: {
+            /** Notes */
+            notes?: string | null;
+            time?: components["schemas"]["EventTimeIn"] | null;
+            unit?: components["schemas"]["WeightUnit"] | null;
+            /** Value */
+            value?: number | string | null;
+        };
+        /** WeightCorrectionIn */
+        WeightCorrectionIn: {
+            changes: components["schemas"]["WeightCorrectionChanges"];
+            /** Reason */
+            reason: string;
+        };
+        /** WeightIn */
+        WeightIn: {
+            /** Notes */
+            notes?: string | null;
+            time: components["schemas"]["EventTimeIn"];
+            unit: components["schemas"]["WeightUnit"];
+            /** Value */
+            value: number | string;
+        };
+        /** WeightOut */
+        WeightOut: {
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Normalized Kg */
+            normalized_kg: string;
+            /** Notes */
+            notes: string | null;
+            provenance: components["schemas"]["ProvenanceOut"];
+            time: components["schemas"]["EventTimeOut"];
+            unit: components["schemas"]["WeightUnit"];
+            /** Value */
+            value: string;
+        };
+        /**
+         * WeightUnit
+         * @enum {string}
+         */
+        WeightUnit: "kg" | "lb";
         /** WhoAmI */
         WhoAmI: {
             /** Csrf Token */
@@ -2805,6 +2981,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MfaRecoveryCodesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_blood_pressure_api_v1_blood_pressure_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                include_superseded?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BloodPressureOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_blood_pressure_api_v1_blood_pressure_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BloodPressureIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BloodPressureOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_blood_pressure_api_v1_blood_pressure__event_id__correct_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BloodPressureCorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BloodPressureOut"];
                 };
             };
             /** @description Validation Error */
@@ -4566,6 +4853,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelinePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_weight_api_v1_weight_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                include_superseded?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeightOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_weight_api_v1_weight_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WeightIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeightOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_weight_api_v1_weight__event_id__correct_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WeightCorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeightOut"];
                 };
             };
             /** @description Validation Error */

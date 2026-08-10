@@ -24,6 +24,7 @@ from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.storage import delete_owner_artifacts
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 
 
 class DeletionError(RuntimeError):
@@ -43,6 +44,8 @@ DELETABLE_RECORDS: dict[str, type] = {
     "emergency_injection": EmergencyInjectionEvent,
     "lab_panel": LabPanel,
     "lab_document": LabDocument,
+    "blood_pressure": BloodPressureEvent,
+    "weight": WeightEvent,
 }
 
 
@@ -183,6 +186,8 @@ def delete_account(
         SymptomEvent,
         DiaryEvent,
         LifeEvent,
+        BloodPressureEvent,
+        WeightEvent,
     ):
         session.execute(delete(model).where(model.owner_id == owner_id))
     session.execute(delete(StressEpisode).where(StressEpisode.owner_id == owner_id))

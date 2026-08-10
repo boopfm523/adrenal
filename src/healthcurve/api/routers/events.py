@@ -30,6 +30,7 @@ from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.medications.models import DoseEvent
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 
 router = APIRouter(tags=["events"])
 
@@ -258,6 +259,8 @@ _TIMELINE_TYPES: tuple[tuple[type[EventMixin], str], ...] = (
     (LifeEvent, "life_event"),
     (EmergencyInjectionEvent, "emergency_injection"),
     (ContextEvent, "context"),
+    (BloodPressureEvent, "blood_pressure"),
+    (WeightEvent, "weight"),
 )
 
 
@@ -357,6 +360,11 @@ def _summarize(row: EventMixin, type_name: str) -> str:
                 location = f"Timezone context: {context.timezone}"  # type: ignore[attr-defined]
             conditions = context.conditions  # type: ignore[attr-defined]
             return f"{location} · {conditions}" if conditions else location
+        case "blood_pressure":
+            pulse = f"; pulse {row.pulse_bpm} bpm" if row.pulse_bpm is not None else ""  # type: ignore[attr-defined]
+            return f"Blood pressure {row.systolic_mmhg}/{row.diastolic_mmhg} mmHg{pulse}"  # type: ignore[attr-defined]
+        case "weight":
+            return f"Weight {row.value} {row.unit}"  # type: ignore[attr-defined]
         case _:  # pragma: no cover
             return type_name
 

@@ -27,6 +27,7 @@ from healthcurve.medications.models import (
     RegimenStatus,
     Route,
 )
+from healthcurve.vitals.models import WeightUnit
 
 #: A positive clinical quantity. Bounded above so a typo cannot record 15000 mg.
 Amount = Annotated[Decimal, Field(gt=0, le=10000, max_digits=10, decimal_places=4)]
@@ -278,6 +279,98 @@ class DoseCorrectionIn(ApiModel):
 
     reason: str = Field(min_length=1, max_length=500)
     changes: DoseCorrectionChanges
+
+
+# ---------------------------------------------------------------------------
+# Blood pressure and weight (fact)
+# ---------------------------------------------------------------------------
+
+
+class BloodPressureIn(ApiModel):
+    systolic_mmhg: int = Field(ge=1, le=500)
+    diastolic_mmhg: int = Field(ge=1, le=500)
+    pulse_bpm: int | None = Field(default=None, ge=1, le=500)
+    time: EventTimeIn
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class BloodPressureOut(FactResource):
+    id: uuid.UUID
+    systolic_mmhg: int
+    diastolic_mmhg: int
+    pulse_bpm: int | None
+    time: EventTimeOut
+    provenance: ProvenanceOut
+    notes: str | None
+
+
+class BloodPressureCorrectionChanges(ApiModel):
+    systolic_mmhg: int | None = Field(default=None, ge=1, le=500)
+    diastolic_mmhg: int | None = Field(default=None, ge=1, le=500)
+    pulse_bpm: int | None = Field(default=None, ge=1, le=500)
+    time: EventTimeIn | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _required_values_cannot_be_null(self) -> BloodPressureCorrectionChanges:
+        nullable = {"pulse_bpm", "notes"}
+        null_fields = {
+            name for name in self.model_fields_set - nullable if getattr(self, name) is None
+        }
+        if null_fields:
+            raise ValueError(f"correction field(s) cannot be null: {sorted(null_fields)}")
+        return self
+
+
+class BloodPressureCorrectionIn(ApiModel):
+    reason: str = Field(min_length=1, max_length=500)
+    changes: BloodPressureCorrectionChanges
+
+
+WeightValue = Annotated[Decimal, Field(gt=0, le=5000, max_digits=10, decimal_places=4)]
+
+
+class WeightIn(ApiModel):
+    value: WeightValue
+    unit: WeightUnit
+    time: EventTimeIn
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class WeightOut(FactResource):
+    id: uuid.UUID
+    value: Decimal
+    unit: WeightUnit
+    normalized_kg: Decimal
+    time: EventTimeOut
+    provenance: ProvenanceOut
+    notes: str | None
+
+    @field_serializer("value", "normalized_kg")
+    def _decimal(self, value: Decimal) -> str:
+        return format(value, ".4f")
+
+
+class WeightCorrectionChanges(ApiModel):
+    value: WeightValue | None = None
+    unit: WeightUnit | None = None
+    time: EventTimeIn | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _required_values_cannot_be_null(self) -> WeightCorrectionChanges:
+        nullable = {"notes"}
+        null_fields = {
+            name for name in self.model_fields_set - nullable if getattr(self, name) is None
+        }
+        if null_fields:
+            raise ValueError(f"correction field(s) cannot be null: {sorted(null_fields)}")
+        return self
+
+
+class WeightCorrectionIn(ApiModel):
+    reason: str = Field(min_length=1, max_length=500)
+    changes: WeightCorrectionChanges
 
 
 # ---------------------------------------------------------------------------
