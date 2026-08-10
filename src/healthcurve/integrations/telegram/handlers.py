@@ -1055,9 +1055,15 @@ def _describe(candidate: ValidatedCandidate) -> str:
             pulse = f", pulse {candidate.pulse_bpm} bpm" if candidate.pulse_bpm is not None else ""
             return f"Blood pressure: {reading}{pulse} at {when}"
         case CandidateType.WEIGHT:
-            return (
-                f"Weight: {candidate.weight_value or '?'} {candidate.weight_unit or ''} at {when}"
+            if candidate.weight_value is None or candidate.weight_unit is None:
+                return f"Weight: value or unit missing at {when}"
+            pounds = vitals.display_weight_lb(candidate.weight_value, candidate.weight_unit)
+            entered = (
+                f" (entered {candidate.weight_value} {candidate.weight_unit})"
+                if candidate.weight_unit is WeightUnit.KG
+                else ""
             )
+            return f"Weight: {pounds} lb{entered} at {when}"
         case _:  # pragma: no cover
             return str(candidate.type)
 

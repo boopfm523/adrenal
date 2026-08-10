@@ -2767,6 +2767,8 @@ export interface components {
              * @constant
              */
             category: "fact";
+            /** Display Lb */
+            display_lb: string;
             /**
              * Id
              * Format: uuid

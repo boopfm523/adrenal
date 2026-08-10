@@ -227,7 +227,7 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
     assert reply.draft_id == DRAFT_ID
     assert "Nothing is recorded yet" in reply.text
     assert "Blood pressure: 40/250 mmHg, pulse 1 bpm" in reply.text
-    assert "Weight: 180 lb" in reply.text
+    assert "Weight: 180.0 lb" in reply.text
     privileged.add.assert_not_called()
     stored = restricted.add.call_args.args[0]
     assert isinstance(stored, ExtractionDraft)

@@ -24,6 +24,7 @@ from healthcurve.labs.models import LabPanel
 from healthcurve.medications.models import DoseEvent, RegimenStatus, RegimenVersion
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.service import create_snapshot
+from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 
 SUPPORTED_SECTIONS: Final = frozenset(
@@ -145,8 +146,13 @@ def build_snapshot(
                     "record_type": "weight",
                     "value": row.value,
                     "unit": row.unit,
+                    "display_lb": vitals.display_weight_lb(row.value, row.unit),
                     "normalized_kg": row.normalized_kg,
                     "normalization_definition": "1 lb = 0.45359237 kg",
+                    "presentation_definition": (
+                        "Pounds are primary, rounded half up to 0.1 lb; original value and unit "
+                        "are retained; 1 lb = 0.45359237 kg"
+                    ),
                 }
             )
             manifest["fact"].append(str(row.id))

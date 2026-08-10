@@ -221,6 +221,7 @@ def _weight_out(row: WeightEvent) -> WeightOut:
         value=row.value,
         unit=row.unit,
         normalized_kg=row.normalized_kg,
+        display_lb=vitals.display_weight_lb(row.value, row.unit),
         time=time_out(row),
         provenance=provenance_out(row),
         notes=row.notes,

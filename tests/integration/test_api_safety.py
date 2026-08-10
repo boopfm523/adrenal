@@ -370,6 +370,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert weight["value"] == "180.0000"
     assert weight["unit"] == "lb"
     assert weight["normalized_kg"] == "81.6466"
+    assert weight["display_lb"] == "180.0"
 
     bp_correction = client.post(
         f"/api/v1/blood-pressure/{bp['id']}/correct",
@@ -396,6 +397,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert weight_correction.status_code == 201, weight_correction.text
     corrected_weight = weight_correction.json()
     assert corrected_weight["normalized_kg"] == "82.0000"
+    assert corrected_weight["display_lb"] == "180.8"
 
     current_bp = client.get("/api/v1/blood-pressure").json()
     current_weight = client.get("/api/v1/weight").json()
@@ -411,7 +413,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     items = timeline.json()["items"]
     assert {item["event_type"] for item in items} == {"blood_pressure", "weight"}
     assert any(item["summary"] == "Blood pressure 118/80 mmHg" for item in items)
-    assert any(item["summary"] == "Weight 82.0000 kg" for item in items)
+    assert any(item["summary"] == "Weight 180.8 lb (entered 82.0000 kg)" for item in items)
 
     exported = client.post("/api/v1/exports", headers=logged_in)
     assert exported.status_code == 200, exported.text
@@ -2655,6 +2657,7 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
     assert facts_by_type["weight"]["value"] == "180.0000"
     assert facts_by_type["weight"]["unit"] == "lb"
     assert facts_by_type["weight"]["normalized_kg"] == "81.6466"
+    assert facts_by_type["weight"]["display_lb"] == "180.0"
     assert facts_by_type["weight"]["normalization_definition"] == "1 lb = 0.45359237 kg"
     assert frozen["snapshot_content"]["plan"][0]["record_type"] == "approved_regimen"
     assert dose.json()["id"] in frozen["source_manifest"]["fact"]

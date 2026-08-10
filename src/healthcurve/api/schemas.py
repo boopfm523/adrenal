@@ -349,6 +349,7 @@ class WeightOut(FactResource):
     value: Decimal
     unit: WeightUnit
     normalized_kg: Decimal
+    display_lb: Decimal
     time: EventTimeOut
     provenance: ProvenanceOut
     notes: str | None
@@ -356,6 +357,10 @@ class WeightOut(FactResource):
     @field_serializer("value", "normalized_kg")
     def _decimal(self, value: Decimal) -> str:
         return format(value, ".4f")
+
+    @field_serializer("display_lb")
+    def _display_lb(self, value: Decimal) -> str:
+        return format(value, ".1f")
 
 
 class WeightCorrectionChanges(ApiModel):

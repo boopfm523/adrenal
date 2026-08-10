@@ -74,10 +74,19 @@ def test_vitals_accessibility_safety_and_responsive_contracts_stay_under_ui_test
     for tested_semantic in (
         'getByRole("form", { name: "Record blood pressure"',
         'getByRole("columnheader", { name: "Systolic (mmHg)"',
+        'getAllByRole("columnheader", { name: "Weight (lb)"',
+        'getByRole("region", { name: "Weight records table"',
         'findByRole("img", { name: /Blood pressure/',
         "Revision history (1)",
     ):
         assert tested_semantic in test
+    for responsive_table_contract in (
+        'className="table-scroll vital-table-region" tabIndex={0}',
+        '<table className="vital-table">',
+        ".table-scroll { overflow-x: auto; }",
+        ".vital-table { min-width: 58rem;",
+    ):
+        assert responsive_table_contract in page or responsive_table_contract in styles
     mobile = styles[styles.index("@media (max-width: 720px)") :]
     assert ".vital-entry-grid" in mobile
     assert ".vital-entry-form" in mobile

@@ -111,6 +111,20 @@ a draft with **Confirm** / **Cancel**. Nothing becomes a record until you confir
 If a draft says *"you didn't give a time, so I've used when you sent this"*, that is the
 time that will be recorded — the draft always shows the value that will be written.
 
+### Weight display and history
+
+HealthCurve accepts weight in either pounds or kilograms while preserving the exact
+entered value and unit as part of the recorded fact. The Health data chart, history
+table, Timeline summary, Telegram confirmation, and physician-report snapshot use
+pounds as the primary presentation unit so mixed-unit history stays on one scale.
+
+Presentation conversion is deterministic: `1 lb = 0.45359237 kg`, with displayed
+pounds rounded half up to `0.1 lb`. The stored original value/unit and the normalized
+kilogram value are not rewritten by this presentation conversion. The compact history
+table shows the entered measurement as provenance and keeps immutable correction
+history and correction controls available. The chart's adjacent data table is the
+authoritative accessible alternative; missing intervals are not inferred as zero.
+
 ## The HTTP API
 
 Everything is behind Caddy on `http://localhost:8080`, and every API route is

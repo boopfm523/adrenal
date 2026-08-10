@@ -194,6 +194,10 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         assert weight.confirmation_state.value == "confirmed_from_draft"
         assert weight_confirmed.text.startswith("Recorded:")
 
+        kg_reply = handle_message(session, owner, text="/weight 83.1 kg 08:25", now=NOW)
+        assert "Weight: 183.2 lb (entered 83.1 kg)" in kg_reply.text
+        assert "Nothing is recorded yet" in kg_reply.text
+
 
 def test_phone_location_is_rounded_linked_and_consumed_with_draft(engine: Engine) -> None:
     owner = Owner(

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import {
   correctBloodPressure,
@@ -72,10 +72,38 @@ function bpSeries(records: BloodPressure[]): ChartSeries[] {
 function weightSeries(records: Weight[]): ChartSeries[] {
   const ordered = [...records].sort((left, right) => left.time.occurred_at.localeCompare(right.time.occurred_at));
   return [{
-    name: "Normalized weight",
+    name: "Weight",
     source: "current recorded facts",
-    values: ordered.map((row) => ({ label: displayTime(row.time.local_time), value: row.normalized_kg })),
+    values: ordered.map((row) => ({ label: displayTime(row.time.local_time), value: row.display_lb })),
   }];
+}
+
+function WeightHistoryTable({ records, byId, editing, setEditing }: {
+  records: Weight[];
+  byId: Map<string, Weight>;
+  editing: string | null;
+  setEditing: (id: string | null) => void;
+}): React.JSX.Element {
+  return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Weight records table">
+    <table className="vital-table">
+      <caption>Current recorded weight facts. Pounds are primary; the entered value and unit remain visible.</caption>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Weight (lb)</th><th scope="col">Entered value</th><th scope="col">Source and provenance</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
+      <tbody>{records.map((record) => {
+        const history = historyFor(record, byId);
+        return <Fragment key={record.id}>
+          <tr data-category="fact">
+            <td className="timeline-time">{displayTime(record.time.local_time)}<span>{record.time.timezone}</span></td>
+            <td className="weight-primary"><strong>{record.display_lb} lb</strong></td>
+            <td>{record.value} {record.unit}{record.unit === "kg" ? <span className="secondary-measurement">{record.normalized_kg} kg normalized</span> : null}</td>
+            <td><span>{source(record)}</span><span>{record.provenance.is_correction ? `Corrected · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.display_lb} lb</strong> · entered {prior.value} {prior.unit}</p><p>{displayTime(prior.time.local_time)} · {prior.time.timezone}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
+            <td>{record.notes ?? <span className="missing-value">None</span>}</td>
+            <td><button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button></td>
+          </tr>
+          {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
+        </Fragment>;
+      })}</tbody>
+    </table>
+  </div>;
 }
 
 function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Element {
@@ -192,11 +220,11 @@ export function HealthDataPage(): React.JSX.Element {
     {bp.isError || weight.isError ? <p className="error-summary" role="alert">Some vital records could not be loaded.</p> : null}
     <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
       {currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <AccessibleLineChart title="Blood pressure" summary="Current recorded systolic and diastolic measurements over experienced time." unit="mmHg" timezone={timezone} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} series={bpSeries(currentBp)} />}
-      {currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <AccessibleLineChart title="Weight" summary="Current recorded weight measurements normalized to kilograms for one consistent scale." unit="kg" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact normalized deterministically. The original entered value and unit remain in the records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} series={weightSeries(currentWeight)} />}
+      {currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <AccessibleLineChart title="Weight" summary="Current recorded weight measurements shown on one consistent pounds scale." unit="lb" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The original entered value and unit remain in the records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} series={weightSeries(currentWeight)} />}
     </section>
-    <section aria-labelledby="vital-records-heading"><h2 id="vital-records-heading">Current records and provenance</h2>
+    <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>
       {currentBp.map((record) => { const history = historyFor(record, bpById); return <FactCard key={record.id} title={`${record.systolic_mmhg.toString()}/${record.diastolic_mmhg.toString()} mmHg${record.pulse_bpm === null ? "" : ` · pulse ${record.pulse_bpm.toString()} bpm`}`} metadata={<span>{record.provenance.is_correction ? `Corrected · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>}><p>{displayTime(record.time.local_time)} · {record.time.timezone}</p><p>Source: {source(record)}</p>{record.notes === null ? null : <p>Notes: {record.notes}</p>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct blood pressure"}</button>{editing === record.id ? <BloodPressureCorrection record={record} close={() => { setEditing(null); }} /> : null}{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p>{prior.systolic_mmhg}/{prior.diastolic_mmhg} mmHg{prior.pulse_bpm === null ? "" : ` · pulse ${prior.pulse_bpm.toString()} bpm`} · {displayTime(prior.time.local_time)} · {prior.time.timezone}</p><p>Source: {source(prior)}</p></article>)}</details>}</FactCard>; })}
-      {currentWeight.map((record) => { const history = historyFor(record, weightById); return <FactCard key={record.id} title={`${record.value} ${record.unit}`} metadata={<span>{record.provenance.is_correction ? `Corrected · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>}><p>{record.normalized_kg} kg normalized · {displayTime(record.time.local_time)} · {record.time.timezone}</p><p>Source: {source(record)}</p>{record.notes === null ? null : <p>Notes: {record.notes}</p>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button>{editing === record.id ? <WeightCorrection record={record} close={() => { setEditing(null); }} /> : null}{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p>{prior.value} {prior.unit} · {prior.normalized_kg} kg normalized · {displayTime(prior.time.local_time)} · {prior.time.timezone}</p><p>Source: {source(prior)}</p></article>)}</details>}</FactCard>; })}
     </section>
+    <section aria-labelledby="weight-records-heading"><h2 id="weight-records-heading">Weight records and provenance</h2>{currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <WeightHistoryTable records={currentWeight} byId={weightById} editing={editing} setEditing={setEditing} />}</section>
   </Page>;
 }

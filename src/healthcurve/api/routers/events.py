@@ -31,7 +31,8 @@ from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.medications.models import DoseEvent
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
+from healthcurve.vitals import service as vitals
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
 
 router = APIRouter(tags=["events"])
 
@@ -377,7 +378,13 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             pulse = f"; pulse {row.pulse_bpm} bpm" if row.pulse_bpm is not None else ""  # type: ignore[attr-defined]
             return f"Blood pressure {row.systolic_mmhg}/{row.diastolic_mmhg} mmHg{pulse}"  # type: ignore[attr-defined]
         case "weight":
-            return f"Weight {row.value} {row.unit}"  # type: ignore[attr-defined]
+            pounds = vitals.display_weight_lb(row.value, row.unit)  # type: ignore[attr-defined]
+            entered = (
+                f" (entered {row.value} {row.unit})"  # type: ignore[attr-defined]
+                if row.unit is not WeightUnit.LB  # type: ignore[attr-defined]
+                else ""
+            )
+            return f"Weight {pounds} lb{entered}"
         case _:  # pragma: no cover
             return type_name
 

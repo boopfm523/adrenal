@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from healthcurve.api.schemas import BloodPressureIn, WeightIn
 from healthcurve.vitals.models import WeightUnit
-from healthcurve.vitals.service import normalize_weight_kg
+from healthcurve.vitals.service import display_weight_lb, normalize_weight_kg
 
 SYNTHETIC_TIME = {"local_time": "2026-08-09T08:15:00", "timezone": "Europe/London"}
 
@@ -24,6 +24,20 @@ def test_weight_normalization_is_deterministic(
     value: Decimal, unit: WeightUnit, expected: Decimal
 ) -> None:
     assert normalize_weight_kg(value, unit) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "unit", "expected"),
+    [
+        (Decimal("180"), WeightUnit.LB, Decimal("180.0")),
+        (Decimal("83.1"), WeightUnit.KG, Decimal("183.2")),
+        (Decimal("1.05"), WeightUnit.LB, Decimal("1.1")),
+    ],
+)
+def test_weight_pounds_presentation_is_deterministic_and_half_up(
+    value: Decimal, unit: WeightUnit, expected: Decimal
+) -> None:
+    assert display_weight_lb(value, unit) == expected
 
 
 def test_structurally_unusual_blood_pressure_is_preserved_for_review() -> None:

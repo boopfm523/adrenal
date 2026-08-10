@@ -52,7 +52,7 @@
       "command": "/weight",
       "syntax": "/weight <value> <lb|kg> [HH:MM]",
       "example": "/weight 180 lb 08:15",
-      "purpose": "Prepare a body-weight reading while preserving the unit you entered.",
+      "purpose": "Prepare a body-weight reading while preserving the unit you entered; history and charts display pounds as the primary unit.",
       "result": "Recorded-fact draft",
       "confirmation": "Review the value, unit, and experienced time, then press Confirm. Nothing is recorded before confirmation."
     },

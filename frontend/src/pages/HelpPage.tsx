@@ -149,7 +149,7 @@ export function HelpPage(): React.JSX.Element {
           </article>
           <article className="help-workflow">
             <h3>Record blood pressure or weight on the web</h3>
-            <p>Health data provides mobile-friendly entry, current facts with source and confirmation provenance, immutable corrections, and trend charts with equivalent data tables. Values are displayed without diagnosis or treatment advice.</p>
+            <p>Health data provides mobile-friendly entry, current facts with source and confirmation provenance, immutable corrections, and trend charts with equivalent data tables. Weight is shown primarily in pounds across the chart and compact history table, while the original entered value and unit remain visible. Values are displayed without diagnosis or treatment advice.</p>
             <CopyableExample label="Synthetic web examples" value="Blood pressure: 118/76 mmHg, pulse 62 · Weight: 180 lb" />
             <Link to="/health-data">Open Health data</Link>
           </article>
