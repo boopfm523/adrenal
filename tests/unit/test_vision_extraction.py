@@ -138,13 +138,14 @@ def test_vision_records_schema_validated_page_evidence_and_model_provenance(
     assert vision.parsed is True
     assert vision.requires_confirmation is True
     assert vision.coordinate_space == "rendered_pixels"
+    assert (vision.x0, vision.top, vision.x1, vision.bottom) == (16, 60, 560, 96)
     assert set(vision.flags) == {"model_generated", "prompt_injection_suspected"}
 
 
 @pytest.mark.parametrize(
     ("data", "expected_reason"),
     [
-        ({"candidates": [{**_proposal(), "x1": 900}]}, "vision_schema_invalid"),
+        ({"candidates": [{**_proposal(), "x1": 1001}]}, "vision_schema_invalid"),
         ({"unexpected": []}, "vision_schema_invalid"),
     ],
 )

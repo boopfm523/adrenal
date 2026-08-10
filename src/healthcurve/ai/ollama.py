@@ -214,7 +214,14 @@ class OllamaClient:
             )
 
         latency_ms = int((time.monotonic() - started) * 1000)
-        content = (body.get("message") or {}).get("content")
+        message = body.get("message") or {}
+        content = message.get("content")
+        if not content and isinstance(message.get("thinking"), str):
+            # Ollama 0.32 + qwen3-vl places grammar-constrained JSON in
+            # ``thinking`` when ``think: false`` and leaves ``content`` empty.
+            # Treat it as another untrusted model channel; the same JSON and
+            # caller-owned Pydantic validation still apply before use.
+            content = message["thinking"]
         if not content:
             self._breaker.record_failure()
             return self._failed(

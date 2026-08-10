@@ -185,6 +185,7 @@ def backfill_normalizations(session: Session, *, owner_id: uuid.UUID) -> int:
 
 def manual_candidate(
     *,
+    source_row_index: int = 0,
     analyte_name: str,
     original_value: str | None,
     qualitative_result: str | None,
@@ -200,7 +201,7 @@ def manual_candidate(
     if normalized_value is not None or normalized_unit is not None:
         raise LabConfirmationError("manual_normalization_unsupported")
     candidate = LabCandidate(
-        source_row_index=0,
+        source_row_index=source_row_index,
         analyte_name=analyte_name,
         original_value=original_value,
         qualitative_result=qualitative_result,

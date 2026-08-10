@@ -441,7 +441,10 @@ def create_manual_lab(payload: ManualLabPanelIn, session: DbSession, owner: Curr
     report = resolve_time(payload.report_time)
     if report.occurred_at < specimen.occurred_at:
         raise HTTPException(status_code=422, detail={"code": "report_before_specimen"})
-    candidates = [manual_candidate(**result.model_dump()) for result in payload.results]
+    candidates = [
+        manual_candidate(source_row_index=index, **result.model_dump())
+        for index, result in enumerate(payload.results)
+    ]
     try:
         panel = create_panel(
             session,

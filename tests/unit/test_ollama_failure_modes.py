@@ -104,6 +104,23 @@ def test_empty_content_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _call(_client()).outcome is ModelOutcome.INVALID_JSON
 
 
+def test_constrained_json_in_thinking_channel_is_validated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Qwen3-VL may return constrained output in thinking with empty content."""
+    payload = {"candidates": []}
+    _patch_transport(
+        monkeypatch,
+        _responder(
+            200,
+            json={"message": {"content": "", "thinking": json.dumps(payload)}},
+        ),
+    )
+    result = _call(_client())
+    assert result.ok
+    assert result.data == payload
+
+
 def test_successful_call_returns_parsed_data(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"candidates": []}
     _patch_transport(

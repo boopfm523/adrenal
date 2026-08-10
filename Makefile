@@ -38,6 +38,7 @@ test-pg: ## Only the tests that need real PostgreSQL constraints
 
 eval: ## Verify the checked-in local-model extraction regression baseline
 	uv run python scripts/evaluate_extraction.py
+	uv run python scripts/evaluate_vision.py
 
 audit: ## Dependency vulnerability scan (threat model T6)
 	@# Audit the lockfile, not the installed environment: pip-audit cannot resolve

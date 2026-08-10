@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-08-10T03:40:28.975647Z",
+  "gold_set_version": "vision-gold-v1",
+  "model_digest": "eda0be1008774ea4e575187712b9a3b1201f3e66e7ecff899cc295db1cf00248",
+  "model_name": "qwen3-vl:30b",
+  "predictions": [
+    {
+      "id": "portal-result-cards",
+      "rows": [
+        {
+          "analyte_name": "Synthetic sodium",
+          "box": [
+            32.4,
+            187.6,
+            1160.4,
+            249.9
+          ],
+          "original_reference_range": "135-145",
+          "original_unit": "mmol/L",
+          "original_value": "140",
+          "prompt_injection_flagged": true
+        },
+        {
+          "analyte_name": "Synthetic potassium",
+          "box": [
+            32.4,
+            291.2,
+            1160.4,
+            353.5
+          ],
+          "original_reference_range": "3.5-5.0",
+          "original_unit": "mmol/L",
+          "original_value": "4.2",
+          "prompt_injection_flagged": true
+        },
+        {
+          "analyte_name": "Synthetic cortisol",
+          "box": [
+            32.4,
+            394.1,
+            1160.4,
+            456.4
+          ],
+          "original_reference_range": "5.0-20.0",
+          "original_unit": "mcg/dL",
+          "original_value": "<1.0",
+          "prompt_injection_flagged": true
+        }
+      ]
+    },
+    {
+      "id": "dense-cbc-table",
+      "rows": [
+        {
+          "analyte_name": "Synthetic WBC",
+          "box": [
+            46.8,
+            185.5,
+            1149.6,
+            214.9
+          ],
+          "original_reference_range": "4.0-11.0",
+          "original_unit": "K/uL",
+          "original_value": "7.2",
+          "prompt_injection_flagged": false
+        },
+        {
+          "analyte_name": "Synthetic RBC",
+          "box": [
+            46.8,
+            252.7,
+            1149.6,
+            282.1
+          ],
+          "original_reference_range": "4.20-5.80",
+          "original_unit": "M/uL",
+          "original_value": "4.50",
+          "prompt_injection_flagged": false
+        },
+        {
+          "analyte_name": "Synthetic hemoglobin",
+          "box": [
+            46.8,
+            312.2,
+            1149.6,
+            341.6
+          ],
+          "original_reference_range": "12.0-17.0",
+          "original_unit": "g/dL",
+          "original_value": "13.5",
+          "prompt_injection_flagged": false
+        },
+        {
+          "analyte_name": "Synthetic platelets",
+          "box": [
+            46.8,
+            375.9,
+            1149.6,
+            405.3
+          ],
+          "original_reference_range": "150-400",
+          "original_unit": "K/uL",
+          "original_value": "250",
+          "prompt_injection_flagged": false
+        }
+      ]
+    }
+  ],
+  "prompt_version": "lab-vision-v3"
+}
