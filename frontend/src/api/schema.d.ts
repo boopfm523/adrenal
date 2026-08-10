@@ -978,7 +978,9 @@ export interface paths {
          *
          *     Every item carries its own category, source, timezone, and correction state, so a
          *     reader can tell a confirmed manual entry from a provider import at a glance
-         *     (SAFE-02, plan section 10).
+         *     (SAFE-02, plan section 10). Ordering always uses the experienced instant
+         *     (``occurred_at``), never insertion or recording time. Equal instants are ordered
+         *     deterministically by event type and stable record id.
          */
         get: operations["timeline_api_v1_timeline_get"];
         put?: never;
@@ -5120,6 +5122,8 @@ export interface operations {
                 local_date_from?: string | null;
                 local_date_to?: string | null;
                 include_sensitive?: boolean;
+                /** @description Order by experienced event time: asc is earliest first, desc is latest first */
+                sort_order?: "asc" | "desc";
                 limit?: number;
             };
             header?: never;

@@ -91,7 +91,26 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .filter-actions { display: flex; gap: 0.6rem; }
 .button-secondary { background: white; color: #174c3c; }
 .privacy-note { color: #48554f; }
-.timeline-list { display: grid; gap: 1rem; }
+.timeline-table-region { margin-top: 1.25rem; border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.timeline-table { min-width: 54rem; font-size: 0.94rem; }
+.timeline-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
+.timeline-table thead th { background: #e7ece8; }
+.timeline-table th, .timeline-table td { padding: 0.55rem 0.65rem; }
+.timeline-table tbody tr:hover { background: #f8faf8; }
+.timeline-table tbody tr[data-category="fact"] > :first-child { border-left: 0.35rem solid #365f50; }
+.timeline-table tbody tr[data-category="context"] > :first-child { border-left: 0.35rem double #55708a; background: #f5f9fc; }
+.timeline-table tbody tr[data-category="plan"] > :first-child { border-left: 0.35rem solid #29437a; }
+.timeline-table tbody tr[data-category="ai"] > :first-child { border-left: 0.35rem dashed #684a76; }
+.timeline-table td > span, .timeline-table th > span { display: block; }
+.timeline-time { white-space: nowrap; }
+.timeline-time span, .timeline-type, .timeline-category-note { margin-top: 0.15rem; color: #48554f; font-size: 0.83rem; font-weight: 500; }
+.timeline-summary { font-weight: 750; }
+.timeline-type { text-transform: capitalize; }
+.timeline-category { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.025em; text-transform: uppercase; }
+.timeline-category--fact { color: #174c3c; }
+.timeline-category--context { color: #35546e; }
+.timeline-category--plan { color: #29437a; }
+.timeline-category--ai { color: #684a76; }
 .provenance-grid { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 0.75rem; }
 .provenance-grid div { border-top: 1px solid #dce2dd; padding-top: 0.5rem; }
 .provenance-grid dt { color: #48554f; font-size: 0.85rem; font-weight: 700; }

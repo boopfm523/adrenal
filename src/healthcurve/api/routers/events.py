@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -275,13 +276,19 @@ def timeline(
     local_date_from: date | None = None,
     local_date_to: date | None = None,
     include_sensitive: bool = False,
+    sort_order: Literal["asc", "desc"] = Query(
+        default="asc",
+        description="Order by experienced event time: asc is earliest first, desc is latest first",
+    ),
     limit: int = Query(default=200, ge=1, le=1000),
 ):
     """The unified timeline.
 
     Every item carries its own category, source, timezone, and correction state, so a
     reader can tell a confirmed manual entry from a provider import at a glance
-    (SAFE-02, plan section 10).
+    (SAFE-02, plan section 10). Ordering always uses the experienced instant
+    (``occurred_at``), never insertion or recording time. Equal instants are ordered
+    deterministically by event type and stable record id.
     """
     zone_name = timezone or owner.default_timezone
     try:
@@ -311,7 +318,10 @@ def timeline(
                 else model.occurred_at <= date_to
             )
 
-        rows = list(session.scalars(query.order_by(model.occurred_at.desc()).limit(limit)))
+        occurred_order = (
+            model.occurred_at.asc() if sort_order == "asc" else model.occurred_at.desc()
+        )
+        rows = list(session.scalars(query.order_by(occurred_order, model.id.asc()).limit(limit)))
         for row in events.current_only(session, model, rows):
             sensitive = bool(getattr(row, "is_sensitive", False))
             if sensitive and not include_sensitive:
@@ -328,7 +338,10 @@ def timeline(
                 )
             )
 
-    items.sort(key=lambda i: i.time.occurred_at, reverse=True)
+    # The first stable sort supplies deterministic tie-breaking without making the
+    # secondary keys reverse when the requested time direction is descending.
+    items.sort(key=lambda item: (item.event_type, item.id.int))
+    items.sort(key=lambda item: item.time.occurred_at, reverse=sort_order == "desc")
     return TimelinePage(
         items=items[:limit],
         timezone=zone_name,

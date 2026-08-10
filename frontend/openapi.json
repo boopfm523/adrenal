@@ -9870,7 +9870,7 @@
     },
     "/api/v1/timeline": {
       "get": {
-        "description": "The unified timeline.\n\nEvery item carries its own category, source, timezone, and correction state, so a\nreader can tell a confirmed manual entry from a provider import at a glance\n(SAFE-02, plan section 10).",
+        "description": "The unified timeline.\n\nEvery item carries its own category, source, timezone, and correction state, so a\nreader can tell a confirmed manual entry from a provider import at a glance\n(SAFE-02, plan section 10). Ordering always uses the experienced instant\n(``occurred_at``), never insertion or recording time. Equal instants are ordered\ndeterministically by event type and stable record id.",
         "operationId": "timeline_api_v1_timeline_get",
         "parameters": [
           {
@@ -9983,6 +9983,22 @@
               "default": false,
               "title": "Include Sensitive",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Order by experienced event time: asc is earliest first, desc is latest first",
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "description": "Order by experienced event time: asc is earliest first, desc is latest first",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sort Order",
+              "type": "string"
             }
           },
           {

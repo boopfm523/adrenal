@@ -143,7 +143,7 @@ export function HelpPage(): React.JSX.Element {
           </article>
           <article className="help-workflow">
             <h3>Review timelines, analytics, and data quality</h3>
-            <p>The Timeline shows category and provenance. Analytics states definitions, timezone, sample count, and missingness. Data quality is a bounded review queue—not proof that the record is complete.</p>
+            <p>The Timeline is a compact table ordered by the time each event was experienced, not when it was entered. It starts earliest-first and the Order filter can reverse it. Every row shows category, source, confirmation, timezone, and correction provenance. Analytics states definitions, timezone, sample count, and missingness. Data quality is a bounded review queue—not proof that the record is complete.</p>
             <ul><li><Link to="/timeline">Open Timeline</Link></li><li><Link to="/analytics">Open Analytics</Link></li><li><Link to="/data-quality">Open Data quality</Link></li></ul>
           </article>
           <article className="help-workflow">

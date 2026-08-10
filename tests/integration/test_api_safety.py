@@ -1654,6 +1654,57 @@ def test_timeline_local_date_filter_uses_the_requested_timezone(
     assert excluded["items"] == []
 
 
+def test_timeline_orders_by_experienced_time_with_stable_ties(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    """Insertion time never controls chronology; equal instants use type then id."""
+
+    def symptom(name: str, local_time: str) -> str:
+        response = client.post(
+            "/api/v1/symptoms",
+            json={
+                "name": name,
+                "severity": 1,
+                "time": {"local_time": local_time, "timezone": "UTC"},
+            },
+            headers=logged_in,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    # Deliberately insert the events in a different order from experienced time.
+    late_id = symptom("Synthetic late timeline event", "2024-02-03T21:00:00")
+    first_tie_id = symptom("Synthetic first tied timeline event", "2024-02-03T12:00:00")
+    early_id = symptom("Synthetic early timeline event", "2024-02-03T07:00:00")
+    second_tie_id = symptom("Synthetic second tied timeline event", "2024-02-03T12:00:00")
+    tie_ids = sorted([first_tie_id, second_tie_id])
+    params = {
+        "types": "symptom",
+        "local_date_from": "2024-02-03",
+        "local_date_to": "2024-02-03",
+        "timezone": "UTC",
+    }
+
+    ascending = client.get("/api/v1/timeline", params=params)
+    assert ascending.status_code == 200, ascending.text
+    assert [item["id"] for item in ascending.json()["items"]] == [
+        early_id,
+        *tie_ids,
+        late_id,
+    ]
+
+    descending = client.get("/api/v1/timeline", params={**params, "sort_order": "desc"})
+    assert descending.status_code == 200, descending.text
+    assert [item["id"] for item in descending.json()["items"]] == [
+        late_id,
+        *tie_ids,
+        early_id,
+    ]
+
+    invalid = client.get("/api/v1/timeline", params={**params, "sort_order": "recorded_at"})
+    assert invalid.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # SAFE-16: approval is a human act with provenance
 # ---------------------------------------------------------------------------
