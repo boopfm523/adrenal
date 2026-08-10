@@ -2715,6 +2715,29 @@
             ],
             "title": "Qualitative Result"
           },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "source_page_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Page Number"
+          },
           "source_type": {
             "$ref": "#/components/schemas/SourceType"
           },
@@ -2736,6 +2759,8 @@
         "required": [
           "id",
           "panel_id",
+          "source_document_id",
+          "source_page_number",
           "analyte_name",
           "original_value",
           "qualitative_result",
@@ -3449,6 +3474,140 @@
           "password"
         ],
         "title": "PasswordProof",
+        "type": "object"
+      },
+      "PdfLabCandidateConfirmIn": {
+        "additionalProperties": false,
+        "properties": {
+          "analyte_name": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Analyte Name",
+            "type": "string"
+          },
+          "candidate_index": {
+            "maximum": 1999.0,
+            "minimum": 0.0,
+            "title": "Candidate Index",
+            "type": "integer"
+          },
+          "included": {
+            "default": true,
+            "title": "Included",
+            "type": "boolean"
+          },
+          "original_reference_range": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Reference Range"
+          },
+          "original_unit": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Unit"
+          },
+          "original_value": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Original Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_index",
+          "analyte_name",
+          "original_value"
+        ],
+        "title": "PdfLabCandidateConfirmIn",
+        "type": "object"
+      },
+      "PdfLabConfirmIn": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Id"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PdfLabCandidateConfirmIn"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "laboratory_name": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Laboratory Name"
+          },
+          "report_status": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Status"
+          },
+          "report_time": {
+            "$ref": "#/components/schemas/EventTimeIn"
+          },
+          "specimen_time": {
+            "$ref": "#/components/schemas/EventTimeIn"
+          },
+          "specimen_type": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Type"
+          }
+        },
+        "required": [
+          "specimen_time",
+          "report_time",
+          "candidates"
+        ],
+        "title": "PdfLabConfirmIn",
         "type": "object"
       },
       "PlanComparisonDay": {
@@ -7157,6 +7316,59 @@
       }
     },
     "/api/v1/labs/documents": {
+      "get": {
+        "description": "List owner documents without starting model work for every historical file.",
+        "operationId": "list_lab_documents_api_v1_labs_documents_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Lab Documents Api V1 Labs Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Lab Documents",
+        "tags": [
+          "labs"
+        ]
+      },
       "post": {
         "description": "Quarantine a bounded PDF for the no-network structural validation worker.",
         "operationId": "upload_lab_document_api_v1_labs_documents_post",
@@ -7361,6 +7573,90 @@
         ]
       }
     },
+    "/api/v1/labs/documents/{document_id}/confirm": {
+      "post": {
+        "description": "Promote only owner-reviewed PDF candidates across the AI-to-fact boundary.",
+        "operationId": "confirm_lab_document_api_v1_labs_documents__document_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfLabConfirmIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Lab Document",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
     "/api/v1/labs/documents/{document_id}/download": {
       "get": {
         "operationId": "download_lab_document_api_v1_labs_documents__document_id__download_get",
@@ -7469,6 +7765,68 @@
           }
         },
         "summary": "Get Lab Document Extraction",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/documents/{document_id}/pages/{page_number}/preview": {
+      "get": {
+        "description": "Return a networkless-rendered inert PNG; raw PDFs remain attachment-only.",
+        "operationId": "preview_lab_document_page_api_v1_labs_documents__document_id__pages__page_number__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_number",
+            "required": true,
+            "schema": {
+              "title": "Page Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Lab Document Page",
         "tags": [
           "labs"
         ]

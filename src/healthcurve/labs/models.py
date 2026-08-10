@@ -56,6 +56,7 @@ class LabDocument(FactBase):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
+        UniqueConstraint("id", "owner_id", name="uq_lab_document_id_owner"),
         ForeignKeyConstraint(["owner_id"], ["identity.owner.id"], ondelete="RESTRICT"),
         CheckConstraint("byte_size > 0 AND byte_size <= 26214400", name="document_size_bounded"),
         CheckConstraint("char_length(sha256) = 64", name="document_sha256_length"),
@@ -119,6 +120,8 @@ class LabResult(FactBase):
     owner_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     panel_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     source_row_index: Mapped[int | None] = mapped_column(Integer)
+    source_document_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    source_page_number: Mapped[int | None] = mapped_column(Integer)
 
     analyte_name: Mapped[str] = mapped_column(Text, nullable=False)
     original_value: Mapped[str | None] = mapped_column(Text)
@@ -141,6 +144,11 @@ class LabResult(FactBase):
             ["fact.lab_panel.id", "fact.lab_panel.owner_id"],
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["source_document_id", "owner_id"],
+            ["fact.lab_document.id", "fact.lab_document.owner_id"],
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "original_value IS NOT NULL OR qualitative_result IS NOT NULL",
             name="lab_result_has_source_value",
@@ -153,6 +161,11 @@ class LabResult(FactBase):
         CheckConstraint(
             "source_row_index IS NULL OR source_row_index >= 0",
             name="source_row_nonnegative",
+        ),
+        CheckConstraint(
+            "(source_document_id IS NULL AND source_page_number IS NULL) OR "
+            "(source_document_id IS NOT NULL AND source_page_number BETWEEN 1 AND 100)",
+            name="source_document_page_complete",
         ),
         Index("ix_lab_result_analyte", "owner_id", "analyte_name"),
         FACT_SCHEMA,

@@ -36,9 +36,10 @@ from healthcurve.labs.documents import (
     mark_deleted,
     store_pdf_upload,
 )
-from healthcurve.labs.imports import MAX_CSV_BYTES, LabImportError, parse_csv_import
+from healthcurve.labs.imports import MAX_CSV_BYTES, LabCandidate, LabImportError, parse_csv_import
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from healthcurve.labs.normalization import analyte_definition
+from healthcurve.labs.pdf_schemas import PdfDraftCandidate
 from healthcurve.labs.service import (
     LabConfirmationError,
     confirm_csv,
@@ -67,6 +68,8 @@ def list_lab_results(session: DbSession, owner: CurrentOwner) -> list[LabResultO
             LabResultOut(
                 id=result.id,
                 panel_id=panel.id,
+                source_document_id=result.source_document_id,
+                source_page_number=result.source_page_number,
                 analyte_name=result.analyte_name,
                 original_value=result.original_value,
                 qualitative_result=result.qualitative_result,
@@ -285,6 +288,43 @@ async def upload_lab_document(
     return _document_payload(document)
 
 
+@router.get("/documents")
+def list_lab_documents(
+    session: DbSession, owner: CurrentOwner, settings: AppSettings
+) -> list[dict[str, Any]]:
+    """List owner documents without starting model work for every historical file."""
+    layout = DocumentLayout(settings.uploads_dir)
+    documents = list(
+        session.scalars(
+            select(LabDocument)
+            .where(
+                LabDocument.owner_id == owner.id,
+                LabDocument.status != LabDocumentStatus.DELETED,
+            )
+            .order_by(LabDocument.created_at.desc(), LabDocument.id)
+        )
+    )
+    drafts = {
+        draft.provider_message_id: draft
+        for draft in session.scalars(
+            select(ExtractionDraft).where(
+                ExtractionDraft.owner_id == owner.id,
+                ExtractionDraft.source == "lab_pdf",
+            )
+        )
+    }
+    payload: list[dict[str, Any]] = []
+    for document in documents:
+        _reconcile_document(document, layout)
+        item = _document_payload(document)
+        draft = drafts.get(str(document.id))
+        item["extraction_status"] = "draft_ready" if draft is not None else "pending"
+        item["extraction_draft_id"] = str(draft.id) if draft is not None else None
+        item["draft_state"] = draft.state.value if draft is not None else None
+        payload.append(item)
+    return payload
+
+
 @router.get("/documents/{document_id}")
 def get_lab_document(
     document_id: uuid.UUID,
@@ -359,6 +399,201 @@ def download_lab_document(
     )
 
 
+@router.get("/documents/{document_id}/pages/{page_number}/preview", response_class=FileResponse)
+def preview_lab_document_page(
+    document_id: uuid.UUID,
+    page_number: int,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+) -> FileResponse:
+    """Return a networkless-rendered inert PNG; raw PDFs remain attachment-only."""
+    document = _owned_document(session, owner, document_id)
+    layout = DocumentLayout(settings.uploads_dir)
+    _reconcile_document(document, layout)
+    if document.status is not LabDocumentStatus.STORED:
+        raise HTTPException(status_code=409, detail={"code": "lab_document_not_available"})
+    if document.page_count is None or not 1 <= page_number <= document.page_count:
+        raise HTTPException(status_code=404, detail={"code": "lab_source_page_not_found"})
+    path = layout.preview_path(document.id, page_number)
+    if not path.is_file():
+        raise HTTPException(status_code=409, detail={"code": "lab_source_preview_unavailable"})
+    return FileResponse(
+        path,
+        media_type="image/png",
+        filename=f"lab-document-{document.id}-page-{page_number}.png",
+        content_disposition_type="inline",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+class PdfLabCandidateConfirmIn(ApiModel):
+    candidate_index: int = Field(ge=0, le=1_999)
+    included: bool = True
+    analyte_name: str = Field(min_length=1, max_length=500)
+    original_value: str = Field(min_length=1, max_length=300)
+    original_unit: str | None = Field(default=None, max_length=120)
+    original_reference_range: str | None = Field(default=None, max_length=300)
+
+
+class PdfLabConfirmIn(ApiModel):
+    specimen_time: EventTimeIn
+    report_time: EventTimeIn
+    laboratory_name: str | None = Field(default=None, max_length=300)
+    accession_id: str | None = Field(default=None, max_length=255)
+    specimen_type: str | None = Field(default=None, max_length=255)
+    report_status: str | None = Field(default=None, max_length=120)
+    candidates: list[PdfLabCandidateConfirmIn] = Field(min_length=1, max_length=2_000)
+
+    @model_validator(mode="after")
+    def candidates_are_unique_and_some_are_included(self) -> PdfLabConfirmIn:
+        indexes = [candidate.candidate_index for candidate in self.candidates]
+        if len(indexes) != len(set(indexes)):
+            raise ValueError("candidate indexes must be unique")
+        if not any(candidate.included for candidate in self.candidates):
+            raise ValueError("at least one candidate must be included")
+        return self
+
+
+@router.post(
+    "/documents/{document_id}/confirm",
+    dependencies=[Depends(require_csrf)],
+)
+def confirm_lab_document(
+    document_id: uuid.UUID,
+    payload: PdfLabConfirmIn,
+    response: Response,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+    limiter: AppRateLimiter,
+):
+    """Promote only owner-reviewed PDF candidates across the AI-to-fact boundary."""
+    document = _owned_document(session, owner, document_id)
+    if document.status is LabDocumentStatus.DELETED:
+        raise HTTPException(status_code=409, detail={"code": "lab_document_deleted"})
+    layout = DocumentLayout(settings.uploads_dir)
+    _reconcile_document(document, layout)
+    _reconcile_extraction(session, owner, document, layout, settings, response, limiter)
+    draft = session.scalar(
+        select(ExtractionDraft)
+        .where(
+            ExtractionDraft.owner_id == owner.id,
+            ExtractionDraft.source == "lab_pdf",
+            ExtractionDraft.provider_message_id == str(document.id),
+        )
+        .with_for_update()
+    )
+    if draft is None:
+        raise HTTPException(status_code=409, detail={"code": "lab_extraction_not_ready"})
+    if not draft.is_pending:
+        if draft.created_event_ids:
+            try:
+                existing_id = uuid.UUID(draft.created_event_ids[0])
+            except (ValueError, TypeError):
+                existing_id = None
+            existing = session.get(LabPanel, existing_id) if existing_id is not None else None
+            if existing is not None and existing.owner_id == owner.id:
+                return _panel_payload(existing, created=False)
+        raise HTTPException(status_code=409, detail={"code": "lab_draft_already_resolved"})
+
+    specimen = resolve_time(payload.specimen_time)
+    report = resolve_time(payload.report_time)
+    if report.occurred_at < specimen.occurred_at:
+        raise HTTPException(status_code=422, detail={"code": "report_before_specimen"})
+
+    candidates: list[LabCandidate] = []
+    edited_payload = copy.deepcopy(draft.candidates)
+    changed = False
+    for requested in payload.candidates:
+        if requested.candidate_index >= len(draft.candidates):
+            raise HTTPException(status_code=422, detail={"code": "lab_candidate_not_found"})
+        stored_payload = draft.candidates[requested.candidate_index]
+        if stored_payload.get("document_id") != str(document.id):
+            raise HTTPException(status_code=422, detail={"code": "lab_candidate_source_mismatch"})
+        try:
+            stored = PdfDraftCandidate.model_validate(stored_payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": "lab_candidate_invalid"}) from exc
+        if not stored.parsed:
+            raise HTTPException(status_code=422, detail={"code": "lab_candidate_unparsed"})
+        original = (
+            stored.analyte_name,
+            stored.original_value,
+            stored.original_unit,
+            stored.original_reference_range,
+        )
+        reviewed = (
+            requested.analyte_name,
+            requested.original_value,
+            requested.original_unit,
+            requested.original_reference_range,
+        )
+        changed = changed or not requested.included or original != reviewed
+        edited_payload[requested.candidate_index].update(
+            {
+                "included": requested.included,
+                "analyte_name": requested.analyte_name,
+                "original_value": requested.original_value,
+                "original_unit": requested.original_unit,
+                "original_reference_range": requested.original_reference_range,
+            }
+        )
+        if not requested.included:
+            continue
+        if not layout.preview_path(document.id, stored.page_number).is_file():
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "lab_source_preview_unavailable"},
+            )
+        candidates.append(
+            LabCandidate(
+                source_row_index=stored.row_index,
+                source_page_number=stored.page_number,
+                analyte_name=requested.analyte_name,
+                original_value=requested.original_value,
+                original_unit=requested.original_unit,
+                original_reference_range=requested.original_reference_range,
+            )
+        )
+    parsed_count = sum(
+        1
+        for candidate in draft.candidates
+        if bool(candidate.get("parsed")) and candidate.get("document_id") == str(document.id)
+    )
+    if len(payload.candidates) != parsed_count:
+        raise HTTPException(status_code=422, detail={"code": "lab_candidate_set_incomplete"})
+    try:
+        panel = create_panel(
+            session,
+            owner_id=owner.id,
+            specimen_time=specimen,
+            report_time=report,
+            candidates=candidates,
+            source_type=SourceType.FILE_IMPORT,
+            confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+            provider_id=str(document.id),
+            source_revision=document.sha256,
+            laboratory_name=payload.laboratory_name,
+            accession_id=payload.accession_id,
+            specimen_type=payload.specimen_type,
+            report_status=payload.report_status,
+            source_document_id=document.id,
+        )
+    except LabConfirmationError as exc:
+        raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+    draft.candidates = edited_payload
+    draft.state = DraftState.EDITED if changed else DraftState.CONFIRMED
+    draft.resolved_at = datetime.now(UTC)
+    draft.created_event_ids = [str(panel.id)]
+    draft.purge_raw_text()
+    return _panel_payload(panel, created=True)
+
+
 @router.delete(
     "/documents/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -373,6 +608,14 @@ def delete_lab_document(
     document = _owned_document(session, owner, document_id)
     if document.status is LabDocumentStatus.DELETED:
         return
+    linked_result = session.scalar(
+        select(LabResult.id).where(
+            LabResult.owner_id == owner.id,
+            LabResult.source_document_id == document.id,
+        )
+    )
+    if linked_result is not None:
+        raise HTTPException(status_code=409, detail={"code": "lab_document_has_confirmed_results"})
     draft = session.scalar(
         select(ExtractionDraft).where(
             ExtractionDraft.owner_id == owner.id,

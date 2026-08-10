@@ -22,14 +22,22 @@ from healthcurve.labs.documents import (
     MAX_PDF_PAGES,
     MAX_VALIDATION_JSON_BYTES,
     DocumentLayout,
+    DocumentStorageError,
     ValidationResult,
     is_deleted,
+    load_extraction_result,
     load_validation_result,
     write_extraction_result,
     write_page_preview,
     write_validation_result,
 )
-from healthcurve.labs.ocr_extraction import OcrError, extract_textless_pages, failed_ocr_result
+from healthcurve.labs.ocr_extraction import (
+    OcrError,
+    PreviewError,
+    extract_textless_pages,
+    failed_ocr_result,
+    render_review_previews,
+)
 from healthcurve.labs.pdf_extraction import EMBEDDED_EXTRACTOR_VERSION, extract_embedded_text
 from healthcurve.labs.pdf_schemas import EmbeddedExtractionResult, PdfDraftCandidate
 
@@ -253,9 +261,14 @@ def _extract_if_needed(
     layout: DocumentLayout, validation: ValidationResult, *, runner: CommandRunner
 ) -> None:
     target = layout.path("extractions", validation.document_id, ".json")
-    if target.exists() or is_deleted(layout, validation.document_id):
+    if is_deleted(layout, validation.document_id):
         return
     source = layout.path("stored", validation.document_id)
+    if target.exists():
+        extraction = load_extraction_result(layout, validation.document_id)
+        if extraction is not None:
+            _ensure_review_previews(layout, source, extraction, runner=runner)
+        return
     try:
         extraction = extract_embedded_text(
             source,
@@ -268,9 +281,6 @@ def _extract_if_needed(
                     source,
                     embedded=extraction,
                     runner=runner,
-                    preview_sink=lambda page, image: write_page_preview(
-                        layout, validation.document_id, page, image
-                    ),
                 )
             except OcrError as exc:
                 extraction = failed_ocr_result(extraction, reason_code=str(exc))
@@ -298,9 +308,41 @@ def _extract_if_needed(
                 )
             ],
         )
+    if not _ensure_review_previews(layout, source, extraction, runner=runner):
+        # Do not publish a reviewable draft without inert page evidence. Leaving the
+        # extraction mailbox absent makes the next worker pass retry safely.
+        return
     if is_deleted(layout, validation.document_id):
         return
     write_extraction_result(layout, extraction)
+
+
+def _ensure_review_previews(
+    layout: DocumentLayout,
+    source: Path,
+    extraction: EmbeddedExtractionResult,
+    *,
+    runner: CommandRunner,
+) -> bool:
+    missing_pages = [
+        page
+        for page in range(1, extraction.page_count + 1)
+        if not layout.preview_path(extraction.document_id, page).is_file()
+    ]
+    if not missing_pages:
+        return True
+    try:
+        render_review_previews(
+            source,
+            page_numbers=missing_pages,
+            runner=runner,
+            preview_sink=lambda page, image: write_page_preview(
+                layout, extraction.document_id, page, image
+            ),
+        )
+    except (PreviewError, DocumentStorageError):
+        return False
+    return True
 
 
 def main() -> None:

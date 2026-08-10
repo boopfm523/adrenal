@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import csv
+import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Final, Protocol
 
 from PIL import Image
 
+from healthcurve.labs.documents import MAX_PDF_PAGES
 from healthcurve.labs.pdf_extraction import candidates_from_words
 from healthcurve.labs.pdf_schemas import EmbeddedExtractionResult, PdfDraftCandidate
 
@@ -160,6 +162,80 @@ def extract_textless_pages(
 
 class OcrError(RuntimeError):
     pass
+
+
+class PreviewError(RuntimeError):
+    """A stable, content-free failure while producing inert review evidence."""
+
+
+def render_review_previews(
+    path: Path,
+    *,
+    page_numbers: Iterable[int],
+    runner: OcrRunner,
+    preview_sink: Callable[[int, Path], None],
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Render bounded inert PNG evidence for every page represented by a draft.
+
+    The scale is reduced for unusually long documents so the existing per-page and
+    per-document pixel ceilings remain true even when all 100 allowed pages need
+    review evidence. Raw PDFs are never exposed to the browser (ADR-0010).
+    """
+    pages = sorted(set(page_numbers))
+    if not pages:
+        return
+    if pages[0] < 1 or pages[-1] > MAX_PDF_PAGES:
+        raise PreviewError("preview_page_invalid")
+    scale_to = min(MAX_RENDER_DIMENSION, math.isqrt(MAX_DOCUMENT_PIXELS // len(pages)))
+    if scale_to < 1:
+        raise PreviewError("preview_pixel_limit_exceeded")
+    started = clock()
+    total_pixels = 0
+    with TemporaryDirectory(prefix="hc-preview-") as scratch_name:
+        scratch = Path(scratch_name)
+        for page_number in pages:
+            remaining = MAX_DOCUMENT_SECONDS - (clock() - started)
+            if remaining <= 0:
+                raise PreviewError("preview_document_timeout")
+            prefix = scratch / f"page-{page_number}"
+            rendered = runner(
+                [
+                    "pdftoppm",
+                    "-f",
+                    str(page_number),
+                    "-l",
+                    str(page_number),
+                    "-singlefile",
+                    "-scale-to",
+                    str(scale_to),
+                    "-png",
+                    str(path),
+                    str(prefix),
+                ],
+                timeout=min(MAX_COMMAND_SECONDS, remaining),
+            )
+            image_path = prefix.with_suffix(".png")
+            if rendered.returncode != 0 or not image_path.is_file():
+                raise PreviewError("preview_render_failed")
+            try:
+                with Image.open(image_path) as image:
+                    width, height = image.size
+                    image.verify()
+            except (OSError, ValueError) as exc:
+                raise PreviewError("preview_render_invalid") from exc
+            pixels = width * height
+            total_pixels += pixels
+            if (
+                width < 1
+                or height < 1
+                or width > MAX_RENDER_DIMENSION
+                or height > MAX_RENDER_DIMENSION
+                or pixels > MAX_PAGE_PIXELS
+                or total_pixels > MAX_DOCUMENT_PIXELS
+            ):
+                raise PreviewError("preview_pixel_limit_exceeded")
+            preview_sink(page_number, image_path)
 
 
 def failed_ocr_result(

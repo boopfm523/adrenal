@@ -171,7 +171,9 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/timeline",
         "/api/v1/medications",
         "/api/v1/labs/results",
+        "/api/v1/labs/documents",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
+        "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000/pages/1/preview",
         "/api/v1/reports",
         "/api/v1/context-events",
         "/api/v1/blood-pressure",
@@ -1305,6 +1307,121 @@ def test_digital_pdf_extraction_creates_only_review_draft_and_keeps_unparsed_row
         assert (
             session.scalar(select(func.count()).select_from(ExtractionDraft)) == drafts_before + 1
         )
+
+
+def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    uploaded = client.post(
+        "/api/v1/labs/documents",
+        headers=logged_in,
+        files={
+            "file": (
+                "synthetic-review.pdf",
+                synthetic_text_lab_pdf(),
+                "application/pdf",
+            )
+        },
+    )
+    assert uploaded.status_code == 202, uploaded.text
+    document_id = uuid.UUID(uploaded.json()["document_id"])
+    process_available(DocumentLayout(settings.uploads_dir), runner=QpdfRunner())
+    extraction = client.get(f"/api/v1/labs/documents/{document_id}/extraction")
+    assert extraction.status_code == 200, extraction.text
+    parsed = [
+        (index, candidate)
+        for index, candidate in enumerate(extraction.json()["candidates"])
+        if candidate["parsed"]
+    ]
+    assert len(parsed) == 1
+    candidate_index, candidate = parsed[0]
+
+    before = client.get("/api/v1/labs/results").json()
+    assert not any(row["source_document_id"] == str(document_id) for row in before)
+    confirmation = {
+        "specimen_time": {
+            "local_time": "2026-08-09T08:00:00",
+            "timezone": "Europe/London",
+        },
+        "report_time": {
+            "local_time": "2026-08-09T09:00:00",
+            "timezone": "Europe/London",
+        },
+        "laboratory_name": "Synthetic reviewed laboratory",
+        "specimen_type": "Synthetic serum",
+        "candidates": [
+            {
+                "candidate_index": candidate_index,
+                "included": True,
+                "analyte_name": "Synthetic sodium corrected",
+                "original_value": candidate["original_value"],
+                "original_unit": candidate["original_unit"],
+                "original_reference_range": candidate["original_reference_range"],
+            }
+        ],
+    }
+    layout = DocumentLayout(settings.uploads_dir)
+    layout.preview_path(document_id, 1).unlink()
+    missing_preview = client.post(
+        f"/api/v1/labs/documents/{document_id}/confirm",
+        headers=logged_in,
+        json=confirmation,
+    )
+    assert missing_preview.status_code == 409
+    assert missing_preview.json()["detail"]["code"] == "lab_source_preview_unavailable"
+    assert not any(
+        row["source_document_id"] == str(document_id)
+        for row in client.get("/api/v1/labs/results").json()
+    )
+    process_available(layout, runner=QpdfRunner())
+    assert layout.preview_path(document_id, 1).is_file()
+    confirmed = client.post(
+        f"/api/v1/labs/documents/{document_id}/confirm",
+        headers=logged_in,
+        json=confirmation,
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["created"] is True
+    repeated = client.post(
+        f"/api/v1/labs/documents/{document_id}/confirm",
+        headers=logged_in,
+        json=confirmation,
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["created"] is False
+    assert repeated.json()["panel_id"] == confirmed.json()["panel_id"]
+
+    rows = [
+        row
+        for row in client.get("/api/v1/labs/results").json()
+        if row["source_document_id"] == str(document_id)
+    ]
+    assert len(rows) == 1
+    assert rows[0]["analyte_name"] == "Synthetic sodium corrected"
+    assert rows[0]["source_page_number"] == 1
+    assert rows[0]["source_type"] == "file_import"
+    assert rows[0]["confirmation_state"] == "confirmed_from_draft"
+    previewed = client.get(f"/api/v1/labs/documents/{document_id}/pages/1/preview")
+    assert previewed.status_code == 200
+    assert previewed.headers["content-type"] == "image/png"
+    assert previewed.headers["content-disposition"].startswith("inline;")
+    assert previewed.headers["x-content-type-options"] == "nosniff"
+    assert previewed.headers["cache-control"] == "no-store"
+    assert previewed.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert client.get(f"/api/v1/labs/documents/{document_id}/view").status_code == 404
+    protected = client.delete(f"/api/v1/labs/documents/{document_id}", headers=logged_in)
+    assert protected.status_code == 409
+    assert protected.json()["detail"]["code"] == "lab_document_has_confirmed_results"
+    with Session(engine) as session:
+        draft = session.scalar(
+            select(ExtractionDraft).where(ExtractionDraft.provider_message_id == str(document_id))
+        )
+        assert draft is not None
+        assert draft.state is DraftState.EDITED
+        assert draft.created_event_ids == [confirmed.json()["panel_id"]]
 
 
 def test_scanned_pdf_ocr_path_remains_a_confirmation_required_draft(

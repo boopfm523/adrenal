@@ -450,7 +450,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Lab Documents
+         * @description List owner documents without starting model work for every historical file.
+         */
+        get: operations["list_lab_documents_api_v1_labs_documents_get"];
         put?: never;
         /**
          * Upload Lab Document
@@ -476,6 +480,26 @@ export interface paths {
         post?: never;
         /** Delete Lab Document */
         delete: operations["delete_lab_document_api_v1_labs_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labs/documents/{document_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Lab Document
+         * @description Promote only owner-reviewed PDF candidates across the AI-to-fact boundary.
+         */
+        post: operations["confirm_lab_document_api_v1_labs_documents__document_id__confirm_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -507,6 +531,26 @@ export interface paths {
         };
         /** Get Lab Document Extraction */
         get: operations["get_lab_document_extraction_api_v1_labs_documents__document_id__extraction_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labs/documents/{document_id}/pages/{page_number}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Lab Document Page
+         * @description Return a networkless-rendered inert PNG; raw PDFs remain attachment-only.
+         */
+        get: operations["preview_lab_document_page_api_v1_labs_documents__document_id__pages__page_number__preview_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1926,6 +1970,10 @@ export interface components {
             panel_id: string;
             /** Qualitative Result */
             qualitative_result: string | null;
+            /** Source Document Id */
+            source_document_id: string | null;
+            /** Source Page Number */
+            source_page_number: number | null;
             source_type: components["schemas"]["SourceType"];
             specimen_time: components["schemas"]["EventTimeOut"];
             /** Specimen Type */
@@ -2130,6 +2178,39 @@ export interface components {
         PasswordProof: {
             /** Password */
             password: string;
+        };
+        /** PdfLabCandidateConfirmIn */
+        PdfLabCandidateConfirmIn: {
+            /** Analyte Name */
+            analyte_name: string;
+            /** Candidate Index */
+            candidate_index: number;
+            /**
+             * Included
+             * @default true
+             */
+            included: boolean;
+            /** Original Reference Range */
+            original_reference_range?: string | null;
+            /** Original Unit */
+            original_unit?: string | null;
+            /** Original Value */
+            original_value: string;
+        };
+        /** PdfLabConfirmIn */
+        PdfLabConfirmIn: {
+            /** Accession Id */
+            accession_id?: string | null;
+            /** Candidates */
+            candidates: components["schemas"]["PdfLabCandidateConfirmIn"][];
+            /** Laboratory Name */
+            laboratory_name?: string | null;
+            /** Report Status */
+            report_status?: string | null;
+            report_time: components["schemas"]["EventTimeIn"];
+            specimen_time: components["schemas"]["EventTimeIn"];
+            /** Specimen Type */
+            specimen_type?: string | null;
         };
         /**
          * PlanComparisonDay
@@ -3750,6 +3831,39 @@ export interface operations {
             };
         };
     };
+    list_lab_documents_api_v1_labs_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_lab_document_api_v1_labs_documents_post: {
         parameters: {
             query?: never;
@@ -3857,6 +3971,45 @@ export interface operations {
             };
         };
     };
+    confirm_lab_document_api_v1_labs_documents__document_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PdfLabConfirmIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_lab_document_api_v1_labs_documents__document_id__download_get: {
         parameters: {
             query?: never;
@@ -3911,6 +4064,38 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_lab_document_page_api_v1_labs_documents__document_id__pages__page_number__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                page_number: number;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -19,7 +19,7 @@ from healthcurve.integrations.credentials import IntegrationCredential
 from healthcurve.integrations.garmin.models import GarminImportBatch
 from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
 from healthcurve.labs.documents import DocumentLayout, mark_deleted
-from healthcurve.labs.models import LabDocument, LabPanel
+from healthcurve.labs.models import LabDocument, LabPanel, LabResult
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportSnapshot
@@ -78,6 +78,17 @@ def delete_record(
                 "correction-linked records cannot be deleted individually; delete the account"
             )
     if isinstance(row, LabDocument):
+        linked_result = session.scalar(
+            select(LabResult.id).where(
+                LabResult.owner_id == owner_id,
+                LabResult.source_document_id == row.id,
+            )
+        )
+        if linked_result is not None:
+            raise CorrectionHistoryError(
+                "source-linked lab documents cannot be deleted individually; "
+                "delete the lab panel or account"
+            )
         mark_deleted(DocumentLayout(uploads_dir), row.id)
     session.delete(row)
     audit.record(

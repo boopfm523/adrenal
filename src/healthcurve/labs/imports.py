@@ -47,6 +47,7 @@ class CsvColumnMapping(BaseModel):
 
 class LabCandidate(BaseModel):
     source_row_index: int
+    source_page_number: int | None = None
     analyte_name: str
     original_value: str | None = None
     qualitative_result: str | None = None

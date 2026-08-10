@@ -256,6 +256,12 @@ def build_snapshot(
                     "results": [
                         {
                             "id": str(result.id),
+                            "source_document_id": (
+                                str(result.source_document_id)
+                                if result.source_document_id is not None
+                                else None
+                            ),
+                            "source_page_number": result.source_page_number,
                             "analyte_name": result.analyte_name,
                             "original_value": result.original_value,
                             "qualitative_result": result.qualitative_result,

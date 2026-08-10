@@ -17,7 +17,7 @@ import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from healthcurve.db import SCHEMAS, Base
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity.models import Owner
-from healthcurve.labs.models import LabPanel, LabResult
+from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
@@ -164,3 +164,31 @@ def test_result_cannot_reference_another_owners_panel(engine: Engine) -> None:
     )
     with Session(engine) as session, pytest.raises(IntegrityError), session.begin():
         session.add_all((first, second, panel, crossed))
+
+
+def test_result_cannot_reference_another_owners_source_document(engine: Engine) -> None:
+    first = _owner("lab-document-owner-one")
+    second = _owner("lab-document-owner-two")
+    document_id = uuid.uuid4()
+    document = LabDocument(
+        id=document_id,
+        owner_id=first.id,
+        display_name="synthetic-source.pdf",
+        media_type="application/pdf",
+        sha256="a" * 64,
+        byte_size=100,
+        status=LabDocumentStatus.STORED,
+        page_count=1,
+        validated_at=datetime.now(UTC),
+    )
+    panel = _panel(second.id)
+    crossed = LabResult(
+        owner_id=second.id,
+        panel=panel,
+        source_document_id=document_id,
+        source_page_number=1,
+        analyte_name="Synthetic crossed source",
+        original_value="1",
+    )
+    with Session(engine) as session, pytest.raises(IntegrityError), session.begin():
+        session.add_all((first, second, document, panel, crossed))

@@ -221,6 +221,25 @@ circle.chart-series { fill: white; }
 .vital-entry-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .vital-entry-form input, .vital-entry-form select, .vital-entry-form textarea { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
 .vital-entry-form textarea { min-height: 5rem; resize: vertical; }
+.lab-upload-form { display: flex; align-items: end; gap: 0.8rem; max-width: 48rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1rem; background: white; }
+.lab-upload-form label { display: grid; flex: 1; gap: 0.35rem; font-weight: 700; }
+.lab-upload-form input { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.lab-document-list { display: grid; grid-template-columns: repeat(2, minmax(18rem, 1fr)); gap: 1rem; }
+.lab-review { margin-block: 2rem; border-top: 0.35rem solid #684a76; padding-top: 1.5rem; }
+.lab-review-layout { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(24rem, 1fr); gap: 1.25rem; align-items: start; }
+.lab-source-panel { position: sticky; top: 1rem; min-width: 0; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1rem; background: white; }
+.lab-source-panel h3 { margin-top: 0; }
+.lab-source-panel img { display: block; width: 100%; max-height: min(70vh, 52rem); border: 1px solid #68756f; background: #f2f0e9; object-fit: contain; }
+.lab-review-form { display: grid; gap: 1rem; }
+.lab-review-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(10rem, 1fr)); gap: 0.75rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1rem; background: white; }
+.lab-review-form legend { padding-inline: 0.4rem; font-weight: 800; }
+.lab-review-form label:not(.checkbox-label) { display: grid; gap: 0.35rem; font-weight: 700; }
+.lab-review-form input:not([type="checkbox"]) { min-height: 44px; min-width: 0; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.lab-candidate > p, .lab-candidate > .checkbox-label { grid-column: 1 / -1; }
+.lab-candidate > button { justify-self: start; }
+.lab-candidate:has(input[type="checkbox"]:not(:checked)) { background: #f2f0e9; }
+.lab-unparsed { margin-top: 1rem; border: 1px solid #a86712; border-radius: 0.5rem; padding: 1rem; background: #fffbf3; }
+.lab-unparsed summary { cursor: pointer; font-weight: 800; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
@@ -235,6 +254,11 @@ circle.chart-series { fill: white; }
   .report-layout, .report-range { grid-template-columns: 1fr; }
   .help-category-grid, .help-command-grid, .help-workflow-grid { grid-template-columns: 1fr; }
   .vital-entry-grid, .vital-entry-form { grid-template-columns: 1fr; }
+  .lab-document-list, .lab-review-layout, .lab-review-form fieldset { grid-template-columns: 1fr; }
+  .lab-upload-form { align-items: stretch; flex-direction: column; }
+  .lab-source-panel { position: static; }
+  .lab-source-panel img { max-height: 55vh; }
+  .lab-candidate > p, .lab-candidate > .checkbox-label { grid-column: auto; }
   .vital-entry-form h3 { grid-column: auto; }
   .help-workflow__heading { display: block; }
   .availability-label { display: inline-block; margin-bottom: 0.5rem; }

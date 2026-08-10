@@ -69,6 +69,12 @@ def test_networkless_worker_publishes_extraction_mailbox_after_validation(tmp_pa
     assert extraction.parsed_count == 1
     assert extraction.unparsed_count == 2
     assert layout.path("stored", upload.document_id).read_bytes() == payload
+    preview = layout.preview_path(upload.document_id, 1)
+    assert preview.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    preview.unlink()
+    assert process_available(layout, runner=QpdfRunner()) == 0
+    assert preview.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_tampered_extraction_mailbox_fails_closed(tmp_path: Path) -> None:

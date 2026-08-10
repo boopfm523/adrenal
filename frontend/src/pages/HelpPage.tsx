@@ -154,7 +154,7 @@ export function HelpPage(): React.JSX.Element {
           </article>
           <article className="help-workflow">
             <h3>Review laboratory facts and trends</h3>
-            <p>Labs keeps report wording, units, ranges, collection time, specimen type, and provenance visible beside any versioned derived value. Trend charts include equivalent tables and never combine incompatible specimen types or units. Cortisol is descriptive only.</p>
+            <p>Labs accepts a private PDF upload, shows each extraction candidate beside a networkless-rendered inert page preview, and records only rows you explicitly confirm. You can correct or exclude candidates; unconfirmed drafts never enter trends or reports. The original PDF remains attachment-only. Recorded facts keep their exact source page, wording, units, ranges, collection time, specimen type, and provenance beside any versioned derived value. Trend charts include equivalent tables and never combine incompatible specimen types or units. Cortisol is descriptive only.</p>
             <Link to="/labs">Open Labs</Link>
           </article>
           <article className="help-workflow">
@@ -176,7 +176,6 @@ export function HelpPage(): React.JSX.Element {
         <h2 id="planned-title">Clearly not available yet</h2>
         <ul>
           <li><strong>Garmin account connection:</strong> automatic provider sync is not implemented. Only owner-supplied FIT, CSV, or ZIP preview/confirm is available.</li>
-          <li><strong>Lab PDF fact confirmation:</strong> private upload and local candidate extraction exist; the complete review-and-confirm web workflow is not yet available.</li>
           <li><strong>Offsite backup assurance:</strong> encrypted local backup exists, but production readiness still requires an offsite copy and a successful isolated restore drill.</li>
         </ul>
       </section>

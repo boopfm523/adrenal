@@ -1,6 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, type SyntheticEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getLabResults, type LabResult } from "../api/client";
+import {
+  confirmLabDocument,
+  getLabDocument,
+  getLabDocuments,
+  getLabExtraction,
+  getLabResults,
+  uploadLabDocument,
+  type LabCandidateConfirmation,
+  type LabDocument,
+  type LabDocumentConfirmation,
+  type LabExtractionDraft,
+  type LabResult,
+} from "../api/client";
 import { useAuth } from "../auth/context";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
 import { Page } from "../components/Page";
@@ -45,17 +58,190 @@ function dateLabel(result: LabResult): string {
   return `${result.specimen_time.local_time.replace("T", " ")} ${result.specimen_time.timezone}`;
 }
 
+function optional(value: FormDataEntryValue | null): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized === "" ? null : normalized;
+}
+
+function sourcePreviewUrl(documentId: string, pageNumber: number): string {
+  return `/api/v1/labs/documents/${documentId}/pages/${String(pageNumber)}/preview`;
+}
+
+function sourceDownloadUrl(documentId: string): string {
+  return `/api/v1/labs/documents/${documentId}/download`;
+}
+
+function UploadPanel({ onUploaded }: { onUploaded: (document: LabDocument) => void }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const upload = useMutation({
+    mutationFn: uploadLabDocument,
+    onSuccess: async (document) => {
+      onUploaded(document);
+      await queryClient.invalidateQueries({ queryKey: ["lab-documents"] });
+    },
+  });
+  function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
+    event.preventDefault();
+    const file = new FormData(event.currentTarget).get("file");
+    if (file instanceof File && file.size > 0) upload.mutate(file);
+  }
+  return <section aria-labelledby="pdf-import-heading">
+    <h2 id="pdf-import-heading">Import and review a lab PDF</h2>
+    <p>Upload creates a private extraction draft only. Nothing enters charts, reports, or your health record until you review and confirm it.</p>
+    <form className="lab-upload-form" onSubmit={submit} aria-label="Upload lab PDF">
+      <label>PDF file<input required name="file" type="file" accept="application/pdf,.pdf" /></label>
+      <button type="submit" disabled={upload.isPending}>{upload.isPending ? "Uploading privately…" : "Upload for review"}</button>
+    </form>
+    {upload.isError ? <p className="error-summary" role="alert">The PDF could not be uploaded. Use a non-interactive PDF up to 25 MB.</p> : null}
+  </section>;
+}
+
+function DocumentList({ documents, selectedId, select }: { documents: LabDocument[]; selectedId: string | null; select: (id: string) => void }): React.JSX.Element {
+  if (documents.length === 0) return <p>No lab PDFs uploaded yet.</p>;
+  return <section aria-labelledby="lab-documents-heading">
+    <h2 id="lab-documents-heading">Uploaded lab documents</h2>
+    <div className="lab-document-list">{documents.map((document) => {
+      const resolved = document.draft_state === "confirmed" || document.draft_state === "edited";
+      return <article className="version-card" key={document.document_id}>
+        <h3>{document.display_name}</h3>
+        <p>{document.page_count === null ? "Validation pending" : `${String(document.page_count)} page${document.page_count === 1 ? "" : "s"}`} · {resolved ? "Confirmed into recorded facts" : document.status === "rejected" ? `Rejected: ${document.rejection_reason ?? "validation failed"}` : "Not recorded—review required"}</p>
+        <div className="quick-actions">
+          {resolved ? <a className="button-link" href={sourcePreviewUrl(document.document_id, 1)} target="_blank" rel="noreferrer">View first source page</a> : <button type="button" className={selectedId === document.document_id ? undefined : "button-secondary"} disabled={document.status === "rejected"} onClick={() => { select(document.document_id); }}>{selectedId === document.document_id ? "Review open below" : "Open review"}</button>}
+          <a href={sourceDownloadUrl(document.document_id)}>Download original PDF</a>
+        </div>
+      </article>;
+    })}</div>
+  </section>;
+}
+
+interface ReviewCandidate extends LabCandidateConfirmation {
+  page_number: number;
+  row_index: number;
+  extraction_tier: string;
+  confidence: number;
+  flags: string[];
+}
+
+function ReviewForm({ document, draft, timezone, done }: { document: LabDocument; draft: LabExtractionDraft; timezone: string; done: () => void }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const initial = draft.candidates.flatMap((candidate, candidateIndex): ReviewCandidate[] => candidate.parsed && candidate.analyte_name !== null && candidate.original_value !== null ? [{
+    candidate_index: candidateIndex,
+    included: true,
+    analyte_name: candidate.analyte_name,
+    original_value: candidate.original_value,
+    original_unit: candidate.original_unit,
+    original_reference_range: candidate.original_reference_range,
+    page_number: candidate.page_number,
+    row_index: candidate.row_index,
+    extraction_tier: candidate.extraction_tier,
+    confidence: candidate.confidence,
+    flags: candidate.flags,
+  }] : []);
+  const [candidates, setCandidates] = useState(initial);
+  const [activePage, setActivePage] = useState(initial[0]?.page_number ?? 1);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const confirmation = useMutation({
+    mutationFn: (payload: LabDocumentConfirmation) => confirmLabDocument(document.document_id, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lab-results"] }),
+        queryClient.invalidateQueries({ queryKey: ["lab-documents"] }),
+      ]);
+      done();
+    },
+  });
+  const unparsed = draft.candidates.filter((candidate) => !candidate.parsed);
+  function update(index: number, changes: Partial<ReviewCandidate>): void {
+    setCandidates(candidates.map((candidate, position) => position === index ? { ...candidate, ...changes } : candidate));
+  }
+  function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    confirmation.mutate({
+      specimen_time: { local_time: data.get("specimen_time") as string, timezone: data.get("timezone") as string },
+      report_time: { local_time: data.get("report_time") as string, timezone: data.get("timezone") as string },
+      laboratory_name: optional(data.get("laboratory_name")),
+      accession_id: optional(data.get("accession_id")),
+      specimen_type: optional(data.get("specimen_type")),
+      report_status: optional(data.get("report_status")),
+      candidates: candidates.map(({ candidate_index, included, analyte_name, original_value, original_unit, original_reference_range }) => ({ candidate_index, included, analyte_name, original_value, original_unit, original_reference_range })),
+    });
+  }
+  return <section className="lab-review" aria-labelledby="lab-review-heading">
+    <h2 id="lab-review-heading">Review extraction: {document.display_name}</h2>
+    <p className="draft-warning">Extraction draft—not recorded. Compare every included value with the source page. HealthCurve does not interpret or recommend treatment.</p>
+    <div className="lab-review-layout">
+      <div className="lab-source-panel">
+        <h3>Source document · page {activePage}</h3>
+        <img key={activePage} alt={`Inert preview of source lab document ${document.display_name}, page ${String(activePage)}`} src={sourcePreviewUrl(document.document_id, activePage)} onError={() => { setPreviewFailed(true); }} />
+        {previewFailed ? <p className="error-summary" role="alert">This inert page preview is unavailable, so confirmation is disabled. The local document worker will retry it.</p> : null}
+        <p><a href={sourcePreviewUrl(document.document_id, activePage)} target="_blank" rel="noreferrer">Open inert source-page preview in a new tab</a> · <a href={sourceDownloadUrl(document.document_id)}>Download original PDF</a></p>
+      </div>
+      <form className="lab-review-form" onSubmit={submit} aria-label="Confirm extracted lab results">
+        <fieldset className="lab-panel-metadata"><legend>Specimen and report context</legend>
+          <label>Specimen collection local time<input required name="specimen_time" type="datetime-local" /></label>
+          <label>Report local time<input required name="report_time" type="datetime-local" /></label>
+          <label>IANA timezone<input required name="timezone" defaultValue={timezone} /></label>
+          <label>Specimen type<input name="specimen_type" placeholder="For example: Serum" /></label>
+          <label>Laboratory<input name="laboratory_name" /></label>
+          <label>Accession ID<input name="accession_id" /></label>
+          <label>Report status<input name="report_status" /></label>
+        </fieldset>
+        <h3>Candidate results</h3>
+        {candidates.length === 0 ? <p className="error-summary" role="alert">No parsed rows can be confirmed. The unparsed evidence remains visible below.</p> : candidates.map((candidate, index) => <fieldset className="lab-candidate" key={`${String(candidate.page_number)}-${String(candidate.row_index)}`}><legend>Page {candidate.page_number}, row {candidate.row_index}</legend>
+          <p>{candidate.extraction_tier.replaceAll("_", " ")} extraction · confidence {Math.round(candidate.confidence * 100)}%{candidate.flags.length === 0 ? "" : ` · ${candidate.flags.join(", ").replaceAll("_", " ")}`}</p>
+          <label className="checkbox-label"><input type="checkbox" checked={candidate.included} onChange={(event) => { update(index, { included: event.target.checked }); }} />Include this row when I confirm</label>
+          <button type="button" className="button-secondary" onClick={() => { setPreviewFailed(false); setActivePage(candidate.page_number); }}>Show source page {candidate.page_number}</button>
+          <label>Analyte<input required={candidate.included} disabled={!candidate.included} value={candidate.analyte_name} onChange={(event) => { update(index, { analyte_name: event.target.value }); }} /></label>
+          <label>Value<input required={candidate.included} disabled={!candidate.included} value={candidate.original_value} onChange={(event) => { update(index, { original_value: event.target.value }); }} /></label>
+          <label>Unit<input disabled={!candidate.included} value={candidate.original_unit ?? ""} onChange={(event) => { update(index, { original_unit: event.target.value === "" ? null : event.target.value }); }} /></label>
+          <label>Reference range<input disabled={!candidate.included} value={candidate.original_reference_range ?? ""} onChange={(event) => { update(index, { original_reference_range: event.target.value === "" ? null : event.target.value }); }} /></label>
+        </fieldset>)}
+        <button type="submit" disabled={previewFailed || confirmation.isPending || candidates.length === 0 || !candidates.some((candidate) => candidate.included)}>{confirmation.isPending ? "Recording reviewed facts…" : "Confirm included rows as recorded facts"}</button>
+        {confirmation.isError ? <p className="error-summary" role="alert">Nothing was recorded. Check the times and every included row, then try again.</p> : null}
+      </form>
+    </div>
+    {unparsed.length === 0 ? null : <details className="lab-unparsed"><summary>Unparsed evidence requiring manual entry ({unparsed.length})</summary><p>These lines were not guessed and cannot be confirmed from this draft.</p><ul>{unparsed.map((candidate) => <li key={`${String(candidate.page_number)}-${String(candidate.row_index)}`}><strong>Page {candidate.page_number}:</strong> {candidate.source_text || "No readable text"} · {candidate.flags.join(", ").replaceAll("_", " ")}</li>)}</ul></details>}
+  </section>;
+}
+
+function DocumentReview({ documentId, timezone, close }: { documentId: string; timezone: string; close: () => void }): React.JSX.Element {
+  const status = useQuery({
+    queryKey: ["lab-document", documentId],
+    queryFn: () => getLabDocument(documentId),
+    refetchInterval: (query) => query.state.data?.extraction_status === "draft_ready" || query.state.data?.status === "rejected" ? false : 1500,
+  });
+  const extraction = useQuery({
+    queryKey: ["lab-extraction", documentId],
+    queryFn: () => getLabExtraction(documentId),
+    enabled: status.data?.extraction_status === "draft_ready",
+  });
+  if (status.isError) return <p className="error-summary" role="alert">The document status could not be loaded.</p>;
+  if (status.data?.status === "rejected") return <p className="error-summary" role="alert">The PDF was rejected during private structural validation: {status.data.rejection_reason ?? "validation failed"}.</p>;
+  if (status.data?.extraction_status !== "draft_ready" || extraction.data === undefined) return <p role="status">Validating and extracting locally… This page updates automatically.</p>;
+  if (extraction.isError) return <p className="error-summary" role="alert">The extraction draft could not be loaded.</p>;
+  return <ReviewForm key={extraction.data.draft_id} document={status.data} draft={extraction.data} timezone={timezone} done={close} />;
+}
+
 export function LabsPage(): React.JSX.Element {
   const timezone = useAuth().session?.user.defaultTimezone ?? "UTC";
-  const query = useQuery({ queryKey: ["lab-results"], queryFn: getLabResults });
-  const results = query.data ?? [];
+  const resultsQuery = useQuery({ queryKey: ["lab-results"], queryFn: getLabResults });
+  const documentsQuery = useQuery({ queryKey: ["lab-documents"], queryFn: getLabDocuments });
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const results = resultsQuery.data ?? [];
   const groups = trendGroups(results);
-  return <Page title="Laboratory results" description="Original report values remain recorded facts. HealthCurve shows optional deterministic derived values separately; it does not diagnose, interpret cortisol, or recommend treatment.">
+  return <Page title="Laboratory results" description="Review private PDF extraction drafts, then view recorded source facts and deterministic trends. HealthCurve does not diagnose, interpret cortisol, or recommend treatment.">
     <aside className="safety-note"><strong>Descriptive records only.</strong> Reference ranges are preserved exactly from each source and are never invented or used here to diagnose. Cortisol collection time and specimen type materially affect context; discuss interpretation with your physician.</aside>
-    {query.isPending ? <p role="status">Loading laboratory facts…</p> : null}
-    {query.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}
-    {!query.isPending && !query.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
+    <UploadPanel onUploaded={(document) => { setSelectedDocumentId(document.document_id); }} />
+    {documentsQuery.isPending ? <p role="status">Loading lab documents…</p> : null}
+    {documentsQuery.isError ? <p className="error-summary" role="alert">Lab documents could not be loaded.</p> : null}
+    {documentsQuery.data === undefined ? null : <DocumentList documents={documentsQuery.data} selectedId={selectedDocumentId} select={setSelectedDocumentId} />}
+    {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
+    <hr />
+    {resultsQuery.isPending ? <p role="status">Loading laboratory facts…</p> : null}
+    {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}
+    {!resultsQuery.isPending && !resultsQuery.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
     {groups.map((group) => <AccessibleLineChart key={group.key} title={`${group.name} — ${group.specimen}`} summary="Each point is one recorded specimen. Lines are descriptive only; missing intervals are not inferred." unit={group.unit} timezone={timezone} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={`Values use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match.`} sampleCount={group.values.length} missingCount={0} series={[{ name: group.name, source: "recorded lab facts with deterministic derivation", values: group.values.map((result) => ({ label: dateLabel(result), value: result.normalized_value })) }]} />)}
-    {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : `${result.normalized_value} ${result.normalized_unit}`}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}</td></tr>)}</tbody></table></div></section>}
+    {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : `${result.normalized_value} ${result.normalized_unit}`}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div></section>}
   </Page>;
 }

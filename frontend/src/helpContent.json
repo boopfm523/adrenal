@@ -227,14 +227,17 @@
     {
       "id": "lab-pdf",
       "title": "Upload a laboratory PDF",
-      "availability": "API upload and extraction review; fact-confirmation UI is planned",
-      "instructions": "Upload the PDF into quarantine. Validation and local extraction produce evidence-linked candidates only.",
+      "availability": "Labs web page",
+      "instructions": "On Labs, upload the PDF, wait for local extraction, compare each candidate with the inert PNG source-page preview shown beside it, correct fields or exclude rows, enter specimen/report context, and confirm. The original PDF is download-only and is never embedded in the browser.",
       "example": "Synthetic file name: synthetic-cbc-panel.pdf",
-      "result": "Private source document and confirmation-required AI draft",
-      "confirmation": "Uploading or extracting never creates a lab fact. Values and units require explicit review and confirmation in the future review flow.",
+      "result": "Reviewed lab facts with durable source-PDF and page links",
+      "confirmation": "Uploading or extracting never creates a lab fact. Only included rows become facts after explicit confirmation; unparsed rows remain visible and unconfirmed drafts stay out of trends and reports.",
       "endpoints": [
         { "method": "POST", "path": "/api/v1/labs/documents" },
-        { "method": "GET", "path": "/api/v1/labs/documents/{document_id}/extraction" }
+        { "method": "GET", "path": "/api/v1/labs/documents/{document_id}/extraction" },
+        { "method": "GET", "path": "/api/v1/labs/documents/{document_id}/pages/{page_number}/preview" },
+        { "method": "GET", "path": "/api/v1/labs/documents/{document_id}/download" },
+        { "method": "POST", "path": "/api/v1/labs/documents/{document_id}/confirm" }
       ]
     },
     {

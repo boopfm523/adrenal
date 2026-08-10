@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from healthcurve.labs.ocr_extraction import OcrError, extract_textless_pages
+from healthcurve.labs.ocr_extraction import (
+    OcrError,
+    PreviewError,
+    extract_textless_pages,
+    render_review_previews,
+)
 from healthcurve.labs.pdf_extraction import extract_embedded_text
 from tests.fixtures.pdf import OcrToolRunner, synthetic_scanned_lab_pdf
 
@@ -95,3 +100,38 @@ def test_unresolved_ocr_page_publishes_only_bounded_inert_preview(tmp_path: Path
     assert result.vision_pages == [1]
     assert published[0][0] == 1
     assert published[0][1].startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_review_previews_cover_every_validated_page_with_inert_png(tmp_path: Path) -> None:
+    path, _embedded = _embedded_scan(tmp_path)
+    runner = OcrToolRunner()
+    published: list[tuple[int, bytes]] = []
+
+    render_review_previews(
+        path,
+        page_numbers=[3, 1, 2, 2],
+        runner=runner,
+        preview_sink=lambda page, preview: published.append((page, preview.read_bytes())),
+    )
+
+    assert [page for page, _payload in published] == [1, 2, 3]
+    assert all(payload.startswith(b"\x89PNG\r\n\x1a\n") for _page, payload in published)
+    render_calls = [call for call in runner.calls if call[0] == "pdftoppm"]
+    assert len(render_calls) == 3
+    assert all(int(call[call.index("-scale-to") + 1]) <= 2400 for call in render_calls)
+
+
+def test_review_preview_pixel_limit_fails_closed_and_purges_scratch(tmp_path: Path) -> None:
+    path, _embedded = _embedded_scan(tmp_path)
+    runner = OcrToolRunner(width=2401, height=100)
+
+    with pytest.raises(PreviewError, match="preview_pixel_limit_exceeded"):
+        render_review_previews(
+            path,
+            page_numbers=[1],
+            runner=runner,
+            preview_sink=lambda _page, _preview: None,
+        )
+
+    scratch_paths = [Path(call[-1]).parent for call in runner.calls if call[0] == "pdftoppm"]
+    assert scratch_paths and all(not path.exists() for path in scratch_paths)

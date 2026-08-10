@@ -88,6 +88,9 @@ class QpdfRunner:
         self, args: list[str], *, timeout: float, stdout_path: Path | None = None
     ) -> CommandResult:
         self.calls.append(args)
+        if args[0] == "pdftoppm":
+            Image.new("RGB", (1200, 800), "white").save(f"{args[-1]}.png")
+            return CommandResult(0, "")
         if "--check" in args:
             return CommandResult(self.check_code, "")
         if "--show-npages" in args:

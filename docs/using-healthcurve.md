@@ -170,12 +170,17 @@ interactive-content, and 100-page checks. Until that completes, the document sta
 `pending`; malformed, encrypted, over-limit, or interactive PDFs become `rejected` with
 a stable reason code and their bytes are removed.
 
-Accepted sources can only be retrieved through the owner-authenticated explicit
-download endpoint, which always uses `Content-Disposition: attachment`, CSP sandbox,
-`nosniff`, and `no-store`. `DELETE /api/v1/labs/documents/{id}` tombstones the opaque ID
-before removing source and validation artifacts so an in-flight worker cannot recreate
-them. Backup configuration already includes the same `HC_UPLOADS_DIR`; deleted copies
-remain in encrypted backups only until the documented backup retention window expires.
+Accepted source PDFs can only be retrieved through an owner-authenticated,
+attachment-only download with a CSP sandbox, `nosniff`, and `no-store`. HealthCurve
+never embeds or renders the raw PDF in the browser. The networkless worker instead
+creates bounded inert PNG page previews; the owner-authenticated preview route serves
+only those PNGs with `nosniff`, `no-store`, and a deny-by-default CSP. Before confirmation,
+`DELETE /api/v1/labs/documents/{id}` tombstones the opaque ID before removing source
+and validation artifacts so an in-flight worker cannot recreate them. A document
+linked to confirmed results cannot be deleted independently because that would break
+the source evidence; delete its lab panel or the account instead. Backup configuration
+already includes the same `HC_UPLOADS_DIR`; deleted copies remain in encrypted backups
+only until the documented backup retention window expires.
 
 For local Compose, create `var/uploads` as an owner-private directory before startup,
 or set `HC_UPLOADS_DIR` to another private absolute host path. Never put source medical
@@ -200,8 +205,10 @@ live in a temporary directory and are purged on success or failure. The extracti
 records whether it used `embedded_text`, `ocr`, or `mixed`; OCR still creates only a
 confirmation-required draft.
 
-If OCR still cannot produce a high-confidence row, the networkless worker publishes a
-bounded inert PNG for that page. On extraction review, HealthCurve sends only that PNG
+For review, the networkless worker publishes a bounded inert PNG for every validated
+page. The per-document renderer reduces resolution for unusually long PDFs so the
+100-million-pixel ceiling still applies. If OCR still cannot produce a high-confidence
+row, HealthCurve sends only that already-generated PNG
 and capped lower-tier candidates through the private Ollama boundary to
 `qwen3-vl:30b`. The response is constrained to a strict schema and rejected unless
 every candidate cites the expected page and a bounding box inside the rendered image.
@@ -215,6 +222,17 @@ this fallback:
 ```bash
 ollama pull qwen3-vl:30b
 ```
+
+The authenticated `/labs` page implements the confirmation boundary. Upload a PDF,
+wait for local validation/extraction, then compare every candidate with the inert source
+page preview shown beside it. You can correct analyte, value, unit, and range or exclude a row;
+specimen time, report time, timezone, and specimen type remain explicit owner inputs.
+Unparsed evidence stays visible but cannot be guessed into a fact. Confirming creates
+only the included rows with `confirmed_from_draft` provenance. Each result retains the
+source document ID and page number, and its Labs-table link opens that exact inert page
+preview. The original PDF remains available separately as an attachment download.
+Confirmation fails closed if the page preview is missing, and the document worker
+retries missing previews. Unconfirmed drafts never appear in trends or physician reports.
 
 ---
 
@@ -383,9 +401,6 @@ So you don't go looking for it:
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
-- **No PDF review UI yet.** Manual/CSV lab facts, private PDF source storage,
-  deterministic embedded-text drafts, bounded scanned-page OCR, and private local
-  vision fallback exist. Per-result review remains `hc-xo6.6`.
 - **No automatic Garmin sync or weather enrichment.** Reviewed Garmin FIT/CSV/ZIP
   import and manual context recording are implemented. Direct Garmin API access
   remains gated by vendor approval, and external weather requires an owner-approved

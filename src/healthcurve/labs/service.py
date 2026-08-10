@@ -45,6 +45,7 @@ def create_panel(
     accession_id: str | None = None,
     specimen_type: str | None = None,
     report_status: str | None = None,
+    source_document_id: uuid.UUID | None = None,
 ) -> LabPanel:
     if not candidates or any("missing_result" in candidate.flags for candidate in candidates):
         raise LabConfirmationError("lab_candidates_incomplete")
@@ -80,6 +81,8 @@ def create_panel(
                 owner_id=owner_id,
                 panel_id=panel.id,
                 source_row_index=candidate.source_row_index,
+                source_document_id=source_document_id,
+                source_page_number=candidate.source_page_number,
                 analyte_name=candidate.analyte_name,
                 original_value=candidate.original_value,
                 qualitative_result=candidate.qualitative_result,

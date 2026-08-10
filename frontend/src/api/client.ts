@@ -35,6 +35,75 @@ export type WeightInput = components["schemas"]["WeightIn"];
 export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
 export type LabResult = components["schemas"]["LabResultOut"];
 
+export interface LabDocument {
+  document_id: string;
+  display_name: string;
+  media_type: string;
+  sha256: string;
+  byte_size: number;
+  status: "pending" | "stored" | "rejected" | "deleted";
+  page_count: number | null;
+  rejection_reason: string | null;
+  created_at: string;
+  validated_at: string | null;
+  extraction_status: "pending" | "draft_ready";
+  extraction_draft_id: string | null;
+  draft_state?: "pending" | "edited" | "confirmed" | "cancelled" | "expired" | null;
+}
+
+export interface LabDraftCandidate {
+  page_number: number;
+  row_index: number;
+  extraction_tier: "embedded_text" | "ocr" | "vision";
+  coordinate_space: "pdf_points" | "rendered_pixels";
+  parsed: boolean;
+  analyte_name: string | null;
+  original_value: string | null;
+  original_unit: string | null;
+  original_reference_range: string | null;
+  source_text: string;
+  confidence: number;
+  flags: string[];
+  requires_confirmation: true;
+}
+
+export interface LabExtractionDraft {
+  category: "ai_draft";
+  draft_id: string;
+  document_id: string;
+  state: "pending" | "edited" | "confirmed" | "cancelled" | "expired";
+  schema_version: string;
+  prompt_version: string;
+  model_name: string | null;
+  candidates: LabDraftCandidate[];
+}
+
+export interface LabCandidateConfirmation {
+  candidate_index: number;
+  included: boolean;
+  analyte_name: string;
+  original_value: string;
+  original_unit: string | null;
+  original_reference_range: string | null;
+}
+
+export interface LabDocumentConfirmation {
+  specimen_time: { local_time: string; timezone: string };
+  report_time: { local_time: string; timezone: string };
+  laboratory_name: string | null;
+  accession_id: string | null;
+  specimen_type: string | null;
+  report_status: string | null;
+  candidates: LabCandidateConfirmation[];
+}
+
+export interface LabConfirmationResult {
+  category: "fact";
+  panel_id: string;
+  created: boolean;
+  result_count: number;
+}
+
 interface ApiErrorBody {
   detail?: string;
 }
@@ -249,6 +318,34 @@ export function getWeight(includeSuperseded = false): Promise<Weight[]> {
 
 export function getLabResults(): Promise<LabResult[]> {
   return apiRequest<LabResult[]>("/labs/results");
+}
+
+export function getLabDocuments(): Promise<LabDocument[]> {
+  return apiRequest<LabDocument[]>("/labs/documents");
+}
+
+export function getLabDocument(documentId: string): Promise<LabDocument> {
+  return apiRequest<LabDocument>(`/labs/documents/${documentId}`);
+}
+
+export function getLabExtraction(documentId: string): Promise<LabExtractionDraft> {
+  return apiRequest<LabExtractionDraft>(`/labs/documents/${documentId}/extraction`);
+}
+
+export function uploadLabDocument(file: File): Promise<LabDocument> {
+  const body = new FormData();
+  body.set("file", file);
+  return apiRequest<LabDocument>("/labs/documents", { method: "POST", body });
+}
+
+export function confirmLabDocument(
+  documentId: string,
+  payload: LabDocumentConfirmation,
+): Promise<LabConfirmationResult> {
+  return apiRequest<LabConfirmationResult>(`/labs/documents/${documentId}/confirm`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function createWeight(payload: WeightInput): Promise<Weight> {

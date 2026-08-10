@@ -381,6 +381,8 @@ class WeightCorrectionIn(ApiModel):
 class LabResultOut(FactResource):
     id: uuid.UUID
     panel_id: uuid.UUID
+    source_document_id: uuid.UUID | None
+    source_page_number: int | None
     analyte_name: str
     original_value: str | None
     qualitative_result: str | None
