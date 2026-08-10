@@ -11,9 +11,9 @@ Deterministic slash commands exist so the bot stays useful when the model is dow
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -367,10 +367,10 @@ def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
     )
 
     lines = [f"Today ({local_today.isoformat()}, {owner.default_timezone})", ""]
-    slots = comparison["slots"]
+    slots = cast(list[meds.SlotComparison], comparison["slots"])
     if not slots:
         lines.append("Nothing recorded, and no approved plan for today.")
-    for slot in slots:  # type: ignore[union-attr]
+    for slot in sorted(slots, key=lambda item: _today_slot_sort_key(item, local_today)):
         if slot.status == "missing":
             lines.append(
                 f"  [ ] {slot.scheduled_local_time:%H:%M}  {slot.medication_name} "
@@ -398,6 +398,26 @@ def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
         # difference between a skipped dose and one taken but not logged.
         lines.append(f"{comparison['missed_slots']} scheduled dose(s) not recorded.")
     return Reply("\n".join(lines))
+
+
+def _today_slot_sort_key(slot: meds.SlotComparison, day: date) -> tuple[datetime, int, str, str]:
+    """Order /today rows by the local time printed for that row.
+
+    Recorded rows use experienced time; absent plan slots use scheduled time. At
+    equal times, recorded facts precede derived absences, then medication and row ID
+    keep the output stable without changing matching or totals.
+    """
+    if slot.actual_local_time is not None:
+        displayed_at = slot.actual_local_time.replace(tzinfo=None)
+        row_kind = 0
+        row_id = slot.dose_id
+    else:
+        if not isinstance(slot.scheduled_local_time, time):
+            raise AssertionError("today comparison row has no display time")
+        displayed_at = datetime.combine(day, slot.scheduled_local_time)
+        row_kind = 1
+        row_id = slot.slot_id
+    return displayed_at, row_kind, slot.medication_name.casefold(), str(row_id or "")
 
 
 def _cmd_undo(session: Session, owner: Owner) -> Reply:
