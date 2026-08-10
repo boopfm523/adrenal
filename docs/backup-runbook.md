@@ -213,8 +213,25 @@ uv run python scripts/check_rclone_drive_config.py \
 ```
 
 It must report that an owner client, `drive.file` scope, refresh token, and mode-0600
-file protections are verified. A failure prints only a stable reason code. Then test
-remote access without rendering filenames:
+file protections are verified. A failure prints only a stable reason code.
+
+`drive.file` access is tied to the OAuth application, not just the Google account.
+Consequently, the owner-controlled client cannot discover a folder created through
+rclone's former shared client. During this one-time cutover:
+
+1. In the Google Drive web interface, rename the existing `HealthCurve Backups` folder
+   to `HealthCurve Backups - old client`. Keep it as an archive; do not delete it as
+   part of authorization maintenance.
+2. Create the replacement active folder through the owner-controlled client:
+
+   ```bash
+   rclone \
+     --config /Users/jeff/.config/healthcurve/rclone.conf \
+     --log-level ERROR \
+     mkdir "healthcurve-drive:HealthCurve Backups"
+   ```
+
+3. Confirm access without rendering filenames:
 
 ```bash
 rclone \
@@ -223,6 +240,11 @@ rclone \
   lsf "healthcurve-drive:HealthCurve Backups" \
   --max-depth 1 >/dev/null
 ```
+
+The archived folder remains intact but is outside the new client's visibility. New
+scheduled backups use only the replacement folder with the exact
+`HealthCurve Backups` name. Do not broaden the OAuth scope to all of Drive merely to
+avoid this one-time migration.
 
 Run the purpose-built encrypted synthetic round trip:
 
