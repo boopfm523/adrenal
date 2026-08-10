@@ -146,11 +146,122 @@ private destination `HealthCurve Backups`. It mounts the config read-only only i
 the dedicated backup worker. The API, Telegram worker, document worker, and general
 job worker do not receive the OAuth token or backup recipient.
 
-The current authorization uses rclone's shared Google OAuth client. rclone reports
-that this shared client is being retired during 2026. `hc-cbs.8.5` is a P0 production
-gate: create an owner-controlled Google Cloud OAuth client, place its ID/secret only in
-the external rclone config, reauthorize the remote, and repeat the encrypted round-trip
-test before relying on scheduled backups.
+### Replace rclone's retiring shared OAuth client
+
+Rclone 1.75 reports that its shared Google Drive client will stop working during 2026.
+`hc-cbs.8.5` is therefore a P0 production gate. Use an owner-controlled **Desktop app**
+OAuth client and keep the existing least-privilege `drive.file` scope. Do not broaden it
+to full Drive access merely because rclone's general-purpose guide demonstrates that
+scope.
+
+The Google Cloud and browser authorization steps are owner actions. Sign in to Google
+Cloud as the account that will own the OAuth project; the Drive authorization itself
+must be completed as the account that owns `HealthCurve Backups`.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create or select a
+   project dedicated to HealthCurve backups.
+2. In **APIs & Services**, enable **Google Drive API**.
+3. In **Google Auth Platform**, configure Branding with an accurate private-use app
+   name, owner support email, and owner contact email. Set Audience to **External**
+   unless the account is part of a Google Workspace organization and the Drive account
+   is inside that same organization.
+4. Under Data Access, add only
+   `https://www.googleapis.com/auth/drive.file`. Do not add `drive`, `docs`, or a
+   service-account grant.
+5. Add the Drive owner as a test user while configuring the client. Before relying on
+   unattended backups, publish the personal-use app to **In production**: Google's
+   Testing status expires non-basic refresh-token grants after seven days. A personal
+   app with fewer than 100 users can remain unverified, although Google will show an
+   unverified-app warning during authorization.
+6. Under Clients, create an OAuth client of type **Desktop app**. Store its client ID
+   and client secret in the owner's password manager. Do not paste either value into a
+   shell command, Codex/ChatGPT, Beads, Git, screenshots, or `.env`.
+
+Stop the scheduled worker before changing the grant:
+
+```bash
+cd /Users/jeff/Documents/adrenal
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/backup.compose.yml \
+  -f deploy/google-drive-backup.compose.yml \
+  --profile backup-scheduled \
+  stop backup-worker
+```
+
+Edit the existing remote interactively so the secret is not placed in shell history.
+Run this in a private macOS Terminal window outside Codex, VS Code task capture, screen
+sharing, or recording: rclone may display a configuration summary while editing.
+
+```bash
+rclone --config /Users/jeff/.config/healthcurve/rclone.conf config
+```
+
+Choose **Edit existing remote**, then `healthcurve-drive`. Keep storage type `drive`,
+enter the private Desktop-app client ID and secret at their prompts, select
+`drive.file`, leave the service-account field empty, decline advanced configuration,
+and replace the existing token. Allow local browser authorization, sign in as the Drive
+owner, approve the requested `drive.file` access, decline Shared Drive configuration,
+and keep the edited remote. Do not choose the retiring shared client when prompted.
+
+Run the fixed-output verifier; it reads the private file but never prints its path,
+client values, token, account identifier, or parser errors:
+
+```bash
+uv run python scripts/check_rclone_drive_config.py \
+  --config /Users/jeff/.config/healthcurve/rclone.conf
+```
+
+It must report that an owner client, `drive.file` scope, refresh token, and mode-0600
+file protections are verified. A failure prints only a stable reason code. Then test
+remote access without rendering filenames:
+
+```bash
+rclone \
+  --config /Users/jeff/.config/healthcurve/rclone.conf \
+  --log-level ERROR \
+  lsf "healthcurve-drive:HealthCurve Backups" \
+  --max-depth 1 >/dev/null
+```
+
+Run the purpose-built encrypted synthetic round trip:
+
+```bash
+uv run python scripts/verify_rclone_drive_roundtrip.py \
+  --config /Users/jeff/.config/healthcurve/rclone.conf
+```
+
+The verifier creates a disposable `age` identity in a mode-0700 temporary directory,
+encrypts random synthetic content, performs an immutable upload/download, compares the
+ciphertext checksum, decrypts and compares the source, then removes all local temporary
+material automatically. It never uses or exposes the real backup recovery identity.
+The randomly named encrypted probe remains remotely because HealthCurve deliberately
+does not grant or exercise deletion capability.
+
+Restart the worker with both provider overlays:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/backup.compose.yml \
+  -f deploy/google-drive-backup.compose.yml \
+  --profile backup-scheduled \
+  up -d --force-recreate backup-worker
+```
+
+Before closing `hc-cbs.8.5`, complete all of these checks without recording names or
+credentials: both verifiers pass; a new `backup.nightly` job completes after the
+cutover; its encrypted set and public envelope exist both locally and remotely with
+matching metadata; and the backup status command is healthy. Keep the synthetic remote
+object as an immutable probe rather than granting or using deletion capability.
+
+If the new authorization fails, keep the worker stopped. Re-run interactive config and
+authorize again; do not weaken the scope or expose values for debugging. The live data
+and local encrypted sets are unaffected by an OAuth failure. If necessary while the
+shared client still functions, re-edit the remote back to the shared client and replace
+the token, then repeat the complete cutover later. After a successful cutover, revoke
+the old rclone grant in the Google Account's third-party connections and confirm the
+next scheduled upload before treating the replacement as complete.
 
 ## Verification and monitoring
 
