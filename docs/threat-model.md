@@ -69,24 +69,27 @@ audit trail making the intrusion visible after the fact.
 
 ---
 
-### T2 — Public hosting exposure
+### T2 — Network-edge exposure
 
 **Assets:** database, Redis, Ollama, admin surfaces, the host itself.
 
-**Attacker capability:** internet-wide port scanning; exploiting an unauthenticated
-service accidentally bound to `0.0.0.0`; hitting a debug endpoint or an unauthenticated
-metrics endpoint; requesting a health endpoint that leaks data.
+**Attacker capability:** internet-wide or LAN port scanning; joining or compromising
+an allowed tailnet identity; exploiting a service accidentally bound to `0.0.0.0`;
+hitting a debug endpoint or an unauthenticated metrics endpoint; requesting a health
+endpoint that leaks data.
 
 **Mitigations:**
 - Compose services bind to the internal network only; no `ports:` mapping for
   PostgreSQL, Redis, or Ollama. Caddy is the only service publishing ports.
-- Caddy terminates TLS with automatic certificates; HSTS; no plaintext service.
+- Production Caddy binds only to the host's concrete Tailscale IPv4, terminates TLS
+  with a host-issued Tailscale certificate mounted read-only, and sends HSTS. No
+  plaintext or public listener exists (ADR-0007).
 - `GET /health/live` and `GET /health/ready` return status only — no version strings,
   no counts, no health data (plan §7).
 - Debug mode, interactive tracebacks, and API docs are disabled in production builds.
-- A release check verifies from outside the host that only 443/80 respond and that
-  PostgreSQL/Redis/Ollama ports refuse connections. This is a gating criterion of the
-  security-review issue.
+- Release checks verify authorized HTTPS access, denial to an unauthorized tailnet
+  identity, and no response from outside the tailnet. Host socket inspection confirms
+  that only Caddy publishes and only on the Tailscale address at 443.
 
 **Residual risk:** a container-escape or Caddy vulnerability. Mitigated by pinned,
 patched images, non-root containers, and least-privilege capabilities.

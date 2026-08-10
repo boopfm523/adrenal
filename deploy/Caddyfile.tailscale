@@ -1,0 +1,15 @@
+# Tailnet-only HTTPS listener (ADR-0007). The host publishes this container port
+# only on its concrete Tailscale IPv4. Certificates are issued and renewed by the
+# host Tailscale client; Caddy receives the files read-only.
+{
+	admin off
+	auto_https off
+}
+
+import /etc/caddy/healthcurve-app.caddy
+
+https://{$HC_TAILSCALE_DNS_NAME}:443 {
+	tls /run/tailscale-certs/healthcurve.crt /run/tailscale-certs/healthcurve.key
+	header Strict-Transport-Security "max-age=31536000"
+	import healthcurve_app
+}

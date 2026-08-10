@@ -1,0 +1,39 @@
+(healthcurve_app) {
+	encode zstd gzip
+
+	# No third-party resources: a health record must not describe itself to another
+	# origin (ADR-0005). Geolocation is collected only through Telegram's explicit
+	# location-share flow, never by this web application.
+	header {
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		Cache-Control "no-store"
+		-Server
+	}
+
+	@health path /health/live /health/ready
+	handle @health {
+		reverse_proxy api:8000
+	}
+
+	@backend path /api /api/* /emergency /emergency/*
+	handle @backend {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

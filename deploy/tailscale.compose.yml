@@ -1,0 +1,22 @@
+# Production-only overlay for ADR-0007. Start it with the base compose file and
+# the environment described in docs/tailscale-hosting.md. The base port mapping is
+# parameterized so this overlay cannot accidentally retain the development listener.
+name: healthcurve
+
+services:
+  caddy:
+    environment:
+      HC_TAILSCALE_DNS_NAME: ${HC_TAILSCALE_DNS_NAME:?set HC_TAILSCALE_DNS_NAME}
+    volumes:
+      - ./deploy/Caddyfile.tailscale:/etc/caddy/Caddyfile:ro
+      - ${HC_TAILSCALE_CERT_DIR:?set HC_TAILSCALE_CERT_DIR}:/run/tailscale-certs:ro
+
+  api:
+    environment:
+      HC_ENVIRONMENT: prod
+      HC_MFA_REQUIRED: "true"
+
+  worker:
+    environment:
+      HC_ENVIRONMENT: prod
+      HC_MFA_REQUIRED: "true"

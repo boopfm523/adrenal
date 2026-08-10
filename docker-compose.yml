@@ -19,7 +19,10 @@ services:
       dockerfile: deploy/Caddy.Dockerfile
     <<: *restart
     ports:
-      - "127.0.0.1:8080:80" # dev binds to loopback only; prod publishes 80/443
+      # Development defaults to loopback HTTP. Production must set the three
+      # HC_CADDY_* values to its concrete Tailscale IPv4 and 443:443; CI rejects
+      # wildcard, LAN, and non-Tailscale production bindings (ADR-0007).
+      - "${HC_CADDY_BIND_IP:-127.0.0.1}:${HC_CADDY_HOST_PORT:-8080}:${HC_CADDY_CONTAINER_PORT:-80}"
     volumes:
       - caddy_data:/data
       - caddy_config:/config

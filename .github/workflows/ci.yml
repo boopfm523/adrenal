@@ -158,51 +158,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # ADR-0007: only caddy may publish, and an omitted/wildcard/LAN host binding
-      # is forbidden. Production uses its concrete 100.64.0.0/10 Tailscale address;
-      # development uses loopback.
+      # ADR-0007: validate rendered development and production configurations. The
+      # checker never reports environment values because they may contain secrets.
       - name: Only caddy publishes to loopback or Tailscale
         run: |
-          python3 - <<'PY'
-          import ipaddress, sys, yaml
-          compose = yaml.safe_load(open("docker-compose.yml"))
-          offenders = [
-              name for name, svc in compose["services"].items()
-              if svc.get("ports") and name != "caddy"
-          ]
-          if offenders:
-              print(f"::error::services publishing ports besides caddy: {offenders}")
-              sys.exit(1)
-          for required in ("postgres", "redis", "ollama"):
-              assert not compose["services"][required].get("ports"), required
+          POSTGRES_PASSWORD=ci-placeholder-not-a-secret \
+          POSTGRES_AI_PASSWORD=ci-placeholder-not-a-secret \
+          docker compose --env-file /dev/null config --format json > /tmp/healthcurve-dev.json
+          python3 scripts/check_compose_topology.py /tmp/healthcurve-dev.json
 
-          documents = compose["services"]["document-worker"]
-          assert documents.get("network_mode") == "none"
-          assert documents.get("read_only") is True
-          assert "ALL" in documents.get("cap_drop", [])
-          assert "no-new-privileges:true" in documents.get("security_opt", [])
-          assert not documents.get("ports")
-
-          allowed_tailnet = ipaddress.ip_network("100.64.0.0/10")
-          for binding in compose["services"]["caddy"].get("ports", []):
-              if not isinstance(binding, str):
-                  print(f"::error::caddy port must use explicit host-IP string syntax: {binding!r}")
-                  sys.exit(1)
-              parts = binding.rsplit(":", 2)
-              if len(parts) != 3:
-                  print(f"::error::caddy port omits an explicit host IP: {binding!r}")
-                  sys.exit(1)
-              host = parts[0].strip("[]")
-              try:
-                  address = ipaddress.ip_address(host)
-              except ValueError:
-                  print(f"::error::caddy host binding is not a literal IP: {host!r}")
-                  sys.exit(1)
-              if not (address.is_loopback or address in allowed_tailnet):
-                  print(f"::error::caddy publishes outside loopback/tailnet: {address}")
-                  sys.exit(1)
-          print("topology ok: only caddy publishes to loopback or Tailscale")
-          PY
+          POSTGRES_PASSWORD=ci-placeholder-not-a-secret \
+          POSTGRES_AI_PASSWORD=ci-placeholder-not-a-secret \
+          HC_CADDY_BIND_IP=100.64.0.1 \
+          HC_CADDY_HOST_PORT=443 \
+          HC_CADDY_CONTAINER_PORT=443 \
+          HC_TAILSCALE_DNS_NAME=machine.example-tailnet.ts.net \
+          HC_TAILSCALE_CERT_DIR=/tmp/healthcurve-validation-certs \
+          docker compose --env-file /dev/null \
+            -f docker-compose.yml -f deploy/tailscale.compose.yml \
+            config --format json > /tmp/healthcurve-prod.json
+          python3 scripts/check_compose_topology.py --production /tmp/healthcurve-prod.json
 
       - name: Images are pinned by digest (threat model T6)
         run: |

@@ -15,10 +15,11 @@ Two independent paths are required:
    authentication and model failures, Garmin import age when enabled, backup age,
    Ollama availability, and disk free space. It sends transition alerts and six-hour
    reminders to the owner's Telegram account using the encrypted bot credential.
-2. The **off-host probe** runs on a different physical host/network and checks the
-   public or tailnet `/health/ready` URL. It sends outage and recovery notifications
-   to a private ntfy-compatible HTTPS topic. It must not run on the HealthCurve host:
-   an on-host probe cannot report host, power, ISP, or Docker failure.
+2. The **off-host probe** runs on a different physical host that is an explicitly
+   authorized tailnet device and checks the private `/health/ready` URL. It sends
+   outage and recovery notifications to a private ntfy-compatible HTTPS topic. It
+   must not run on the HealthCurve host: an on-host probe cannot report host, power,
+   ISP, Docker, or Tailscale failure.
 
 The on-host monitor exits nonzero if Telegram delivery is not configured. Production
 is not ready until both paths have delivered a controlled test notification to a
@@ -55,16 +56,18 @@ ntfy topic URL as a credential and run the probe every minute using that machine
 scheduler:
 
 ```bash
-HC_TARGET_URL=https://healthcurve.example/health/ready \
+HC_TARGET_URL=https://machine.example-tailnet.ts.net/health/ready \
 HC_ALERT_URL=https://notify.example/private-random-topic \
 HC_STATE_FILE=/var/lib/healthcurve-monitor/state \
 python3 /opt/healthcurve/offhost-monitor.py
 ```
 
-The state directory must be owner-writable and mode `0700`; the environment file must
-be mode `0600`. A first run sends the current transition. Test failure by using a
+The probe host must be narrowly allowed to reach TCP 443 by the tailnet policy. The
+state directory must be owner-writable and mode `0700`; the environment file must be
+mode `0600`. A first run sends the current transition. Test failure by using a
 nonexistent target temporarily, verify the off-host notification, restore the target,
-and verify the recovery notification. Never put the alert URL in Git or shell history.
+and verify the recovery notification. Never put the private URL or alert URL in Git,
+Beads, or shell history.
 
 ## Signals and first response
 
