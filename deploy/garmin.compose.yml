@@ -14,7 +14,6 @@ services:
     environment:
       HC_ENVIRONMENT: ${HC_ENVIRONMENT:-dev}
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
-      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
       HC_JOB_POLL_INTERVAL_S: ${HC_JOB_POLL_INTERVAL_S:-2}
       HC_GARMIN_ENABLED: ${HC_GARMIN_ENABLED:-false}
       HC_GARMIN_TOKEN_STORE: /run/secrets/garmin

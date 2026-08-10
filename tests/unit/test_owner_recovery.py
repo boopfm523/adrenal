@@ -15,14 +15,13 @@ from healthcurve.operations.audit import AuditAction
 PASSWORD = "synthetic-new-password"
 
 
-def _owner(*, mfa_enabled: bool = False) -> Owner:
+def _owner() -> Owner:
     return Owner(
         id=uuid.uuid4(),
         email="old@example.test",
         password_hash="old-hash",
         display_name="Preserved Name",
         default_timezone="America/New_York",
-        mfa_enabled=mfa_enabled,
         failed_login_count=4,
         locked_until=datetime(2026, 8, 10, tzinfo=UTC),
     )
@@ -42,29 +41,6 @@ def test_recovery_fails_closed_outside_development(environment: Environment) -> 
         )
 
     session.scalar.assert_not_called()
-    session.add.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    ("mfa_enabled", "recovery_code_count"),
-    [(True, 0), (False, 1)],
-)
-def test_recovery_refuses_any_mfa_state(mfa_enabled: bool, recovery_code_count: int) -> None:
-    session = MagicMock()
-    session.scalar.return_value = recovery_code_count
-    owner = _owner(mfa_enabled=mfa_enabled)
-    original = (owner.email, owner.password_hash)
-
-    with pytest.raises(OwnerRecoveryError, match="disabled after MFA enrollment"):
-        recover_owner_access(
-            session,
-            owner,
-            environment=Environment.DEV,
-            new_email="new@example.test",
-            new_password=PASSWORD,
-        )
-
-    assert (owner.email, owner.password_hash) == original
     session.add.assert_not_called()
 
 

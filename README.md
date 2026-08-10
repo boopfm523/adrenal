@@ -99,15 +99,15 @@ Then connect Telegram by following [docs/telegram-setup.md](docs/telegram-setup.
 If an automated development bootstrap created the owner but its credentials were not
 handed off, use the reviewed local recovery command below. It updates the same owner
 row and revokes all sessions; it does not delete health data. The command refuses to
-run outside development or after MFA has been enrolled, and the password is accepted
+run outside development or when legacy MFA data exists, and the password is accepted
 only at a hidden prompt.
 
 ```bash
 docker compose run --rm api python -m healthcurve.cli recover-owner-access
 ```
 
-Normal operation uses the login page's password-change and MFA recovery flows; this
-command is only for correcting an inaccessible development bootstrap account.
+Normal operation uses the password-change flow; this command is only for correcting
+an inaccessible development bootstrap account.
 
 ## Layout
 

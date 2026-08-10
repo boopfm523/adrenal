@@ -10,10 +10,7 @@ def _config(*, production: bool) -> dict[str, Any]:
     host = "100.64.0.10" if production else "127.0.0.1"
     port = 443 if production else 8080
     target = 443 if production else 80
-    environment = {
-        "HC_ENVIRONMENT": "prod" if production else "dev",
-        "HC_MFA_REQUIRED": "true" if production else "false",
-    }
+    environment = {"HC_ENVIRONMENT": "prod" if production else "dev"}
     return {
         "services": {
             "caddy": {
@@ -73,10 +70,8 @@ def test_rejects_a_second_publisher_and_writable_certificates() -> None:
 
 def test_rejects_non_production_application_policy() -> None:
     config = deepcopy(_config(production=True))
-    config["services"]["api"]["environment"]["HC_MFA_REQUIRED"] = "false"
     config["services"]["worker"]["environment"]["HC_ENVIRONMENT"] = "dev"
     errors = validate(config, production=True)
-    assert "api must require MFA" in errors
     assert "worker must run in the prod environment" in errors
 
 

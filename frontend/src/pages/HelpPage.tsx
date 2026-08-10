@@ -166,7 +166,7 @@ export function HelpPage(): React.JSX.Element {
           </article>
           <article className="help-workflow">
             <h3>Export, disconnect, or delete</h3>
-            <p>Settings & privacy supports a password-confirmed private export, integration disconnection with provider-data deletion, independent context deletion, session revocation, MFA, and account deletion. Encrypted backups retain deleted copies until their configured expiry.</p>
+            <p>Settings & privacy supports a password-confirmed private export, integration disconnection with provider-data deletion, independent context deletion, session revocation, and account deletion. HealthCurve is password-only and must remain behind the owner-restricted Tailscale boundary. Encrypted backups retain deleted copies until their configured expiry.</p>
             <CopyableExample label="Privacy review" value="Before deleting: export → verify the download → review backup retention → delete the exact record or integration." />
             <Link to="/settings">Open Settings & privacy</Link>
           </article>

@@ -13,7 +13,6 @@ const auth: AuthContextValue = {
       email: "owner@example.test",
       displayName: "Synthetic Owner",
       defaultTimezone: "America/New_York",
-      mfaEnabled: false,
     },
   },
   signIn: vi.fn(),

@@ -173,9 +173,6 @@ class Settings(BaseSettings):
     monitor_disk_free_percent: float = Field(default=10.0, gt=0, lt=100)
     backup_local_dir: Path | None = None
 
-    # --- Sign-in MFA (hc-cbs.6) ---
-    mfa_required: bool = False
-
     # --- Sensitive local artifacts (ADR-0010) ---
     #: Exact source documents live outside the web root. In Compose this path is a
     #: bind mount shared only with the network-isolated document worker and backup.
@@ -278,12 +275,6 @@ class Settings(BaseSettings):
                 "HC_REDIS_URL is required in production: abuse limits must be shared "
                 "and survive application restarts"
             )
-        return self
-
-    @model_validator(mode="after")
-    def _validate_production_requires_mfa(self) -> Self:
-        if self.environment is Environment.PROD and not self.mfa_required:
-            raise ValueError("HC_MFA_REQUIRED=true is required in production")
         return self
 
     @property

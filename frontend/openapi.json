@@ -3410,19 +3410,6 @@
             "minLength": 1,
             "title": "Password",
             "type": "string"
-          },
-          "second_factor_code": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 6,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Second Factor Code"
           }
         },
         "required": [
@@ -3456,18 +3443,13 @@
           "email": {
             "title": "Email",
             "type": "string"
-          },
-          "mfa_enabled": {
-            "title": "Mfa Enabled",
-            "type": "boolean"
           }
         },
         "required": [
           "csrf_token",
           "email",
           "display_name",
-          "default_timezone",
-          "mfa_enabled"
+          "default_timezone"
         ],
         "title": "LoginResponse",
         "type": "object"
@@ -3836,95 +3818,6 @@
         "title": "MedicationOut",
         "type": "object"
       },
-      "MfaChangeProof": {
-        "properties": {
-          "code": {
-            "maxLength": 64,
-            "minLength": 6,
-            "title": "Code",
-            "type": "string"
-          },
-          "password": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Password",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "password"
-        ],
-        "title": "MfaChangeProof",
-        "type": "object"
-      },
-      "MfaCode": {
-        "properties": {
-          "code": {
-            "maxLength": 64,
-            "minLength": 6,
-            "title": "Code",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code"
-        ],
-        "title": "MfaCode",
-        "type": "object"
-      },
-      "MfaEnrollmentOut": {
-        "properties": {
-          "provisioning_uri": {
-            "title": "Provisioning Uri",
-            "type": "string"
-          },
-          "secret": {
-            "title": "Secret",
-            "type": "string"
-          }
-        },
-        "required": [
-          "secret",
-          "provisioning_uri"
-        ],
-        "title": "MfaEnrollmentOut",
-        "type": "object"
-      },
-      "MfaRecoveryCodesOut": {
-        "properties": {
-          "recovery_codes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Recovery Codes",
-            "type": "array"
-          }
-        },
-        "required": [
-          "recovery_codes"
-        ],
-        "title": "MfaRecoveryCodesOut",
-        "type": "object"
-      },
-      "MfaStatus": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "recovery_codes_remaining": {
-            "title": "Recovery Codes Remaining",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "enabled",
-          "recovery_codes_remaining"
-        ],
-        "title": "MfaStatus",
-        "type": "object"
-      },
       "PasswordChange": {
         "properties": {
           "current_password": {
@@ -3945,21 +3838,6 @@
           "new_password"
         ],
         "title": "PasswordChange",
-        "type": "object"
-      },
-      "PasswordProof": {
-        "properties": {
-          "password": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Password",
-            "type": "string"
-          }
-        },
-        "required": [
-          "password"
-        ],
-        "title": "PasswordProof",
         "type": "object"
       },
       "PdfLabCandidateConfirmIn": {
@@ -5674,18 +5552,13 @@
           "email": {
             "title": "Email",
             "type": "string"
-          },
-          "mfa_enabled": {
-            "title": "Mfa Enabled",
-            "type": "boolean"
           }
         },
         "required": [
           "email",
           "display_name",
           "default_timezone",
-          "csrf_token",
-          "mfa_enabled"
+          "csrf_token"
         ],
         "title": "WhoAmI",
         "type": "object"
@@ -6053,346 +5926,6 @@
           }
         },
         "summary": "Me",
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/api/v1/auth/mfa": {
-      "delete": {
-        "operationId": "remove_mfa_api_v1_auth_mfa_delete",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-CSRF-Token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Csrf-Token"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "hc_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Hc Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MfaChangeProof"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remove Mfa",
-        "tags": [
-          "auth"
-        ]
-      },
-      "get": {
-        "operationId": "mfa_status_api_v1_auth_mfa_get",
-        "parameters": [
-          {
-            "in": "cookie",
-            "name": "hc_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Hc Session"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MfaStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Mfa Status",
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/api/v1/auth/mfa/enrollment": {
-      "post": {
-        "operationId": "start_mfa_enrollment_api_v1_auth_mfa_enrollment_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-CSRF-Token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Csrf-Token"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "hc_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Hc Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PasswordProof"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MfaEnrollmentOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Start Mfa Enrollment",
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/api/v1/auth/mfa/enrollment/confirm": {
-      "post": {
-        "operationId": "confirm_mfa_enrollment_api_v1_auth_mfa_enrollment_confirm_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-CSRF-Token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Csrf-Token"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "hc_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Hc Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MfaCode"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MfaRecoveryCodesOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Confirm Mfa Enrollment",
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/api/v1/auth/mfa/recovery-codes": {
-      "post": {
-        "operationId": "regenerate_mfa_recovery_codes_api_v1_auth_mfa_recovery_codes_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-CSRF-Token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Csrf-Token"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "hc_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Hc Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MfaChangeProof"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MfaRecoveryCodesOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Regenerate Mfa Recovery Codes",
         "tags": [
           "auth"
         ]

@@ -7,7 +7,7 @@ import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
 import { LabsPage } from "./LabsPage";
 
-const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", mfaEnabled: false } };
+const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
 const documentId = "55555555-5555-4555-8555-555555555555";
 const base = { id: "11111111-1111-4111-8111-111111111111", panel_id: "22222222-2222-4222-8222-222222222222", source_document_id: null, source_page_number: null, category: "fact", analyte_name: "Cortisol AM", original_value: "10", qualitative_result: null, original_unit: "mcg/dL", original_reference_range: "source range", abnormal_flag: null, normalized_analyte_code: "cortisol", normalized_analyte_name: "Cortisol", normalized_value: "276.0000000000", normalized_unit: "nmol/L", normalization_method: "hc-lab-normalization-v1:cortisol:27.6", specimen_time: { occurred_at: "2026-08-09T12:00:00Z", local_time: "2026-08-09T08:00:00", timezone: "America/New_York", utc_offset_minutes: -240 }, specimen_type: "Serum", laboratory_name: "Synthetic laboratory", source_type: "web", confirmation_state: "direct" };
 const document = { document_id: documentId, display_name: "synthetic-results.pdf", media_type: "application/pdf", sha256: "a".repeat(64), byte_size: 1024, status: "stored", page_count: 1, rejection_reason: null, created_at: "2026-08-09T12:00:00Z", validated_at: "2026-08-09T12:01:00Z", extraction_status: "draft_ready", extraction_draft_id: "66666666-6666-4666-8666-666666666666", draft_state: "pending" };

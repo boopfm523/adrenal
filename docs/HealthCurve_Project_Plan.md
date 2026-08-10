@@ -85,7 +85,7 @@ Weather ──────┘       ├──> background jobs│
 
 Suggested domain modules:
 
-- `identity`: owner account, sessions, MFA/passkeys, authorization.
+- `identity`: owner account, password sessions, authorization, and revocation.
 - `events`: canonical timeline, corrections, provenance.
 - `medications`: medications, plan versions, dose slots, approved instructions.
 - `episodes`: stress/up-dose and emergency injection workflows.
@@ -252,7 +252,9 @@ A physician report should include reporting period; current approved regimen and
 ## 12. Security and privacy
 
 - Threat-model account takeover, public hosting, stolen tokens/backups, malicious webhooks, prompt injection, dependency compromise, and shared devices.
-- Use passkeys or strong passwords plus MFA, secure HTTP-only same-site cookies, CSRF protection, expiry/revocation, and login throttling.
+- Use a strong owner password behind the owner-restricted Tailscale boundary, secure
+  HTTP-only same-site cookies, CSRF protection, expiry/revocation, and login
+  throttling. Public exposure is prohibited without a new authentication review.
 - TLS everywhere; expose only 80/443. Keep PostgreSQL, Redis, Ollama, and administration private.
 - Encrypt integration tokens and sensitive fields with keys outside the database; encrypt disks and backups.
 - Keep secrets out of Git, issue bodies, logs, prompts in fixtures, screenshots, and browser bundles.
@@ -366,7 +368,8 @@ Deliver hardened infrastructure, domain/TLS, monitoring, alerts, encrypted backu
 Acceptance:
 
 - Only HTTPS is public; data services and Ollama are unreachable publicly.
-- MFA/passkeys, sessions, rate limits, audit, secrets, and redaction are verified.
+- Password login, the Tailscale-only boundary, sessions, rate limits, audit, secrets,
+  and redaction are verified.
 - An encrypted backup restores within RTO/RPO targets in isolation.
 - Controlled tests trigger outage, stale-backup, failed-integration, and disk alerts.
 - Export, disconnect, and deletion workflows pass.

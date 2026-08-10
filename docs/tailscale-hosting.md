@@ -23,7 +23,6 @@ HC_CADDY_HOST_PORT=443
 HC_CADDY_CONTAINER_PORT=443
 HC_TAILSCALE_DNS_NAME=machine.example-tailnet.ts.net
 HC_TAILSCALE_CERT_DIR=/absolute/private/path/tailscale-certs
-HC_MFA_REQUIRED=true
 ```
 
 ## Issue and renew the certificate
@@ -63,8 +62,8 @@ env -i PATH="$PATH" \
   config --quiet
 ```
 
-Start production only after real secrets, MFA enrollment, backups, and monitoring are
-ready:
+Start production only after real secrets, backups, monitoring, the owner-only
+tailnet policy, and the password login are ready:
 
 ```bash
 docker compose -f docker-compose.yml -f deploy/tailscale.compose.yml up -d --build
@@ -84,5 +83,9 @@ health data.
   network), confirm the hostname/service cannot be reached.
 - Inspect the router and confirm no port forward targets this host. Confirm Funnel is
   disabled.
+
+HealthCurve intentionally offers no application MFA/passkey option for this private,
+single-owner deployment. Public exposure is prohibited and requires a new security and
+authentication review before any deployment change.
 
 An emergency-care plan must remain available independently of this host and tailnet.

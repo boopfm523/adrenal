@@ -14,7 +14,6 @@ export function LoginPage(): React.JSX.Element {
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [secondFactorCode, setSecondFactorCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const state = location.state as LocationState | null;
@@ -26,7 +25,7 @@ export function LoginPage(): React.JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
-      await signIn(email, password, secondFactorCode.trim() || undefined);
+      await signIn(email, password);
       const destination = state?.from?.startsWith("/") === true ? state.from : "/today";
       void navigate(destination, { replace: true });
     } catch (caught: unknown) {
@@ -64,19 +63,6 @@ export function LoginPage(): React.JSX.Element {
             value={password}
             onChange={(event) => { setPassword(event.currentTarget.value); }}
           />
-          <label htmlFor="second-factor">Authenticator or recovery code</label>
-          <input
-            id="second-factor"
-            name="second_factor_code"
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            spellCheck={false}
-            value={secondFactorCode}
-            onChange={(event) => { setSecondFactorCode(event.currentTarget.value); }}
-            aria-describedby="second-factor-help"
-          />
-          <p id="second-factor-help" className="field-help">Required after MFA is enabled. Recovery codes also work here.</p>
           <button type="submit" disabled={submitting}>
             {submitting ? "Signing in…" : "Sign in"}
           </button>

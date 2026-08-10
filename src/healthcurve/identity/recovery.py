@@ -1,8 +1,7 @@
 """Development-only recovery for an inaccessible bootstrap owner account.
 
 This is deliberately not a general password-reset mechanism.  It exists only for a
-trusted local operator during development, before MFA is enrolled.  Production and
-MFA-bearing accounts fail closed.
+trusted local operator during development. Production always fails closed.
 """
 
 from __future__ import annotations
@@ -10,12 +9,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from healthcurve.config import Environment
 from healthcurve.identity import service as auth
-from healthcurve.identity.models import MfaRecoveryCode, Owner
+from healthcurve.identity.models import Owner
 from healthcurve.operations import audit
 
 _EMAIL = TypeAdapter(EmailStr)
@@ -51,16 +49,6 @@ def recover_owner_access(
     """
     if environment is not Environment.DEV:
         raise OwnerRecoveryError("Owner access recovery is available only in development.")
-
-    recovery_code_count = session.scalar(
-        select(func.count())
-        .select_from(MfaRecoveryCode)
-        .where(MfaRecoveryCode.owner_id == owner.id)
-    )
-    if owner.mfa_enabled or bool(recovery_code_count):
-        raise OwnerRecoveryError(
-            "Owner access recovery is disabled after MFA enrollment. Use an MFA recovery code."
-        )
 
     if len(new_password) < MINIMUM_PASSWORD_LENGTH:
         raise OwnerRecoveryError(f"Password must be at least {MINIMUM_PASSWORD_LENGTH} characters.")

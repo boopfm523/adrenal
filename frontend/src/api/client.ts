@@ -26,9 +26,6 @@ export type DataQuality = components["schemas"]["DataQualityOut"];
 export type ReportSummary = components["schemas"]["ReportOut"];
 export type ReportPreview = components["schemas"]["ReportPreviewOut"];
 export type ReportCreate = components["schemas"]["ReportCreateRequest"];
-export type MfaStatus = components["schemas"]["MfaStatus"];
-export type MfaEnrollment = components["schemas"]["MfaEnrollmentOut"];
-export type MfaRecoveryCodes = components["schemas"]["MfaRecoveryCodesOut"];
 export type ContextEvent = components["schemas"]["ContextOut"];
 export type ContextInput = components["schemas"]["ContextIn"];
 export type BloodPressure = components["schemas"]["BloodPressureOut"];
@@ -161,7 +158,6 @@ function toSession(response: LoginResponse | WhoAmI): ActiveSession {
       email: response.email,
       displayName: response.display_name,
       defaultTimezone: response.default_timezone,
-      mfaEnabled: response.mfa_enabled,
     },
   };
 }
@@ -225,41 +221,6 @@ export async function logout(): Promise<void> {
   } finally {
     sessionStore.clear();
   }
-}
-
-export function getMfaStatus(): Promise<MfaStatus> {
-  return apiRequest<MfaStatus>("/auth/mfa");
-}
-
-export function startMfaEnrollment(password: string): Promise<MfaEnrollment> {
-  return apiRequest<MfaEnrollment>("/auth/mfa/enrollment", {
-    method: "POST",
-    body: JSON.stringify({ password }),
-  });
-}
-
-export function confirmMfaEnrollment(code: string): Promise<MfaRecoveryCodes> {
-  return apiRequest<MfaRecoveryCodes>("/auth/mfa/enrollment/confirm", {
-    method: "POST",
-    body: JSON.stringify({ code }),
-  });
-}
-
-export function regenerateMfaRecoveryCodes(
-  password: string,
-  code: string,
-): Promise<MfaRecoveryCodes> {
-  return apiRequest<MfaRecoveryCodes>("/auth/mfa/recovery-codes", {
-    method: "POST",
-    body: JSON.stringify({ password, code }),
-  });
-}
-
-export async function removeMfa(password: string, code: string): Promise<void> {
-  await apiRequest<unknown>("/auth/mfa", {
-    method: "DELETE",
-    body: JSON.stringify({ password, code }),
-  });
 }
 
 export function getPlanComparison(day: string, timezone: string): Promise<PlanComparisonDay> {

@@ -2,19 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
-  confirmMfaEnrollment,
   deleteAccount,
   disconnectIntegration,
   downloadPrivateExport,
   getGarminDisconnectPreview,
   getGarminStatus,
-  getMfaStatus,
-  regenerateMfaRecoveryCodes,
-  removeMfa,
   requestGarminSync,
   revokeAllSessions,
-  startMfaEnrollment,
-  type MfaEnrollment,
 } from "../api/client";
 import { sessionStore } from "../api/session";
 import { useAuth } from "../auth/context";
@@ -93,51 +87,6 @@ function GarminControl(): React.JSX.Element {
   </article>;
 }
 
-function MfaSettings(): React.JSX.Element {
-  const status = useQuery({ queryKey: ["mfa-status"], queryFn: getMfaStatus });
-  const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
-  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
-  const start = useMutation({ mutationFn: startMfaEnrollment, onSuccess: (value) => { setEnrollment(value); setRecoveryCodes(null); } });
-  const confirm = useMutation({ mutationFn: confirmMfaEnrollment, onSuccess: (value) => { setEnrollment(null); setRecoveryCodes(value.recovery_codes); void status.refetch(); } });
-  const regenerate = useMutation({ mutationFn: ({ password, code }: { password: string; code: string }) => regenerateMfaRecoveryCodes(password, code), onSuccess: (value) => { setRecoveryCodes(value.recovery_codes); void status.refetch(); } });
-  const removal = useMutation({ mutationFn: ({ password, code }: { password: string; code: string }) => removeMfa(password, code), onSuccess: () => { sessionStore.clear(); } });
-
-  const error = start.isError || confirm.isError || regenerate.isError || removal.isError;
-  return <div className="settings-card" id="mfa-settings">
-    <h3>Multi-factor authentication</h3>
-    <p>Use a standard authenticator app. The seed is encrypted with the external credential key; HealthCurve never sends it to an AI service.</p>
-    {status.isLoading ? <p role="status">Checking MFA status…</p> : null}
-    {status.data?.enabled === true ? <>
-      <p className="success-message"><strong>Enabled.</strong> {status.data.recovery_codes_remaining} unused recovery code(s) remain.</p>
-      <form className="privacy-action" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); regenerate.mutate({ password: data.get("password") as string, code: data.get("code") as string }); }}>
-        <h4>Replace recovery codes</h4><p>This invalidates every previous recovery code. The replacements are shown once.</p>
-        <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label>
-        <label>Authenticator or recovery code<input name="code" required autoComplete="one-time-code" /></label>
-        <button type="submit" disabled={regenerate.isPending}>Generate replacements</button>
-      </form>
-      <form className="privacy-action danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); removal.mutate({ password: data.get("password") as string, code: data.get("code") as string }); }}>
-        <h4>Remove MFA</h4><p>This signs out every device. Production will refuse password-only login until MFA is enrolled locally again.</p>
-        <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label>
-        <label>Authenticator or recovery code<input name="code" required autoComplete="one-time-code" /></label>
-        <button type="submit" disabled={removal.isPending}>Remove MFA and sign out</button>
-      </form>
-    </> : enrollment === null ? <form className="privacy-action" onSubmit={(event) => { event.preventDefault(); start.mutate(new FormData(event.currentTarget).get("password") as string); }}>
-      <p>MFA is not enabled. Re-enter your password to begin enrollment.</p>
-      <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label>
-      <button type="submit" disabled={start.isPending}>Start enrollment</button>
-    </form> : <div className="privacy-action">
-      <p><strong>Add the account before continuing.</strong> Enter this secret manually in your authenticator. It is shown only during this enrollment.</p>
-      <code className="credential-value">{enrollment.secret}</code>
-      <form onSubmit={(event) => { event.preventDefault(); confirm.mutate(new FormData(event.currentTarget).get("code") as string); }}>
-        <label>Current 6-digit code<input name="code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" /></label>
-        <button type="submit" disabled={confirm.isPending}>Verify and enable MFA</button>
-      </form>
-    </div>}
-    {recoveryCodes === null ? null : <div className="recovery-codes" role="status"><h4>Save these recovery codes now</h4><p>Each works once. They will not be shown again after you leave or replace them. Store them off-device in a protected password manager or sealed copy.</p><ul>{recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul></div>}
-    {error ? <p className="error-summary" role="alert">The MFA change was not completed. Check the password/code and try again.</p> : null}
-  </div>;
-}
-
 export function SettingsPage(): React.JSX.Element {
   const { session } = useAuth();
   const [includeAi, setIncludeAi] = useState(false);
@@ -146,7 +95,7 @@ export function SettingsPage(): React.JSX.Element {
   const account = useMutation({ mutationFn: ({ password, confirmation }: { password: string; confirmation: string }) => deleteAccount(password, confirmation), onSuccess: () => { sessionStore.clear(); } });
 
   return <Page title="Settings & privacy" description="Control access, integrations, exports, retention, and deletion without exposing stored secrets.">
-    <section aria-labelledby="security-heading"><h2 id="security-heading">Account and sessions</h2><div className="settings-card"><p><strong>Signed in as:</strong> {session?.user.email}</p><p><strong>Default timezone:</strong> {session?.user.defaultTimezone}</p><button type="button" onClick={() => { sessions.mutate(); }} disabled={sessions.isPending}>Sign out every session</button>{sessions.isError ? <p className="error-summary" role="alert">Sessions could not be revoked.</p> : null}</div><MfaSettings /></section>
+    <section aria-labelledby="security-heading"><h2 id="security-heading">Account and sessions</h2><div className="settings-card"><p><strong>Signed in as:</strong> {session?.user.email}</p><p><strong>Default timezone:</strong> {session?.user.defaultTimezone}</p><p>HealthCurve uses your password and is reachable only through the approved Tailscale network. Sessions remain protected by secure cookies, CSRF checks, expiration, revocation, and login rate limits.</p><button type="button" onClick={() => { sessions.mutate(); }} disabled={sessions.isPending}>Sign out every session</button>{sessions.isError ? <p className="error-summary" role="alert">Sessions could not be revoked.</p> : null}</div></section>
     <section aria-labelledby="integration-heading"><h2 id="integration-heading">Integrations</h2><p>Stored tokens are encrypted and are never displayed here.</p><div className="settings-grid"><GarminControl /><IntegrationControl provider="telegram" description="HealthCurve retains Telegram update IDs and outcomes for replay protection. Pending health drafts may retain message text; confirmed or cancelled drafts purge that raw text. A /beads-add directive is sent only to the configured local model; its outbox and Bead retain the validated proposal and a one-way message hash, not the raw directive. Telegram itself may retain messages under your Telegram account settings." /><IntegrationControl provider="weather" description="A confirmed Telegram location sends only rounded 0.1-degree coordinates and fixed current-weather field names to Open-Meteo. No health text, account identifier, event time, or token is sent. Open-Meteo returns the observation time and may retain request logs under its policy. Deleting weather data leaves your coarse location and health facts intact." /></div></section>
     <ContextSettings />
     <section aria-labelledby="export-heading"><h2 id="export-heading">Export</h2><form className="settings-card privacy-action" onSubmit={(event) => { event.preventDefault(); exportMutation.mutate(new FormData(event.currentTarget).get("password") as string); }}><p>Download facts and physician-approved plan data. Integration credentials are never included.</p><label>Current password<input name="password" type="password" required autoComplete="current-password" /></label><label className="checkbox-label"><input type="checkbox" checked={includeAi} onChange={(event) => { setIncludeAi(event.target.checked); }} />Include separately labeled AI analysis</label><button type="submit" disabled={exportMutation.isPending}>Download private export</button>{exportMutation.isError ? <p className="error-summary" role="alert">The export was not created. Check your password.</p> : null}</form></section>

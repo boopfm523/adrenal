@@ -53,7 +53,9 @@ owner; password reuse from an unrelated breach; session-cookie theft via XSS or 
 shared device; bypassing a weak second factor.
 
 **Mitigations:**
-- Passkeys preferred; password + MFA otherwise. No SMS second factor.
+- Password-only HealthCurve authentication behind an owner-restricted Tailscale ACL;
+  no public edge, Funnel, public reverse proxy, or port forward. Public exposure is a
+  blocking condition requiring a new authentication and threat-model review.
 - Sessions in secure, HTTP-only, `SameSite=Lax` cookies with server-side expiry and
   explicit revocation; CSRF tokens on state-changing requests.
 - Login throttling and lockout with exponential backoff, counted per-account and

@@ -174,15 +174,6 @@ def test_production_requires_a_separate_ai_role() -> None:
         _settings(environment=Environment.PROD)
 
 
-def test_production_requires_mfa_policy() -> None:
-    with pytest.raises(ValueError, match="HC_MFA_REQUIRED=true"):
-        _settings(
-            environment=Environment.PROD,
-            ai_database_url="postgresql+psycopg://healthcurve_ai@postgres/healthcurve",
-            redis_url="redis://redis:6379/0",
-        )
-
-
 def test_pointing_both_urls_at_the_same_role_is_rejected() -> None:
     """The dangerous case: it looks configured while enforcing nothing."""
     url = "postgresql+psycopg://healthcurve@postgres:5432/healthcurve"

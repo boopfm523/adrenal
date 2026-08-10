@@ -513,8 +513,10 @@ So you don't go looking for it:
   Structural audit entries survive, and encrypted backup copies retain deleted data
   until their configured expiry.
 - **Production access still needs its deployment gates.** Persistent rate limiting,
-  TOTP/recovery-code MFA, and integration-token encryption are implemented. The
-  Tailscale identity/hostname, offsite backup destination, and restore drill still
-  require owner deployment choices.
+  password sessions, and integration-token encryption are implemented. HealthCurve
+  intentionally has no MFA/passkey option because access is owner-only through
+  Tailscale; any public exposure is prohibited until a new authentication/security
+  review. The Tailscale identity/hostname and restore drill still require deployment
+  verification.
 
 `bd ready` lists what's actually next.

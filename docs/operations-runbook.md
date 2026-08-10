@@ -132,8 +132,7 @@ recoverable from PostgreSQL.
 
 1. From a trusted device, remove the lost device from the tailnet immediately and
    expire its keys/sessions at the identity provider.
-2. Use **log out everywhere** in HealthCurve. Change the account password and rotate
-   the second factor/recovery codes once MFA is enabled.
+2. Use **log out everywhere** in HealthCurve and change the account password.
 3. Revoke browser credentials, Telegram sessions, and any provider tokens accessible
    from the device. Rotate the Telegram bot token if its operator credentials might
    have been exposed.

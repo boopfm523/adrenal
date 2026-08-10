@@ -157,8 +157,9 @@ Grouped by why it matters rather than by phase.
 
 ### Security gaps that matter before real data
 
-- **Only a password protects the entire record.** No passkey, no second factor. The
-  plan requires one. `hc-cbs.6`.
+- **Password-only is an explicit owner decision.** It is acceptable only while the
+  application remains behind the owner-restricted Tailscale boundary. Public exposure
+  requires a new authentication/security review. `hc-cbs.14`.
 - **No rate limiting anywhere.** Redis is deployed and completely unused. Login,
   extraction and report generation are all unbounded. `hc-cbs.5`.
 - **Integration tokens are not encrypted at rest.** Fine while Telegram's token lives
@@ -211,7 +212,7 @@ performance work.
 5. **Frontend foundation, then Today and timeline.** The point at which it becomes an
    application rather than an API.
 6. **Telegram long polling.** Makes capture work on your actual hosting.
-7. **Security: passkeys, rate limiting, deletion.**
+7. **Security: Tailscale boundary, password sessions, rate limiting, deletion.**
 8. **Analytics and reports.** The physician-appointment payoff.
 9. **Garmin spike**, then Garmin if the spike says go.
 10. **Production checklist, security review, restore drill.**

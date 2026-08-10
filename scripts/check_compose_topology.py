@@ -151,8 +151,6 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
             environment = services.get(name, {}).get("environment", {})
             if environment.get("HC_ENVIRONMENT") != "prod":
                 errors.append(f"{name} must run in the prod environment")
-            if environment.get("HC_MFA_REQUIRED") != "true":
-                errors.append(f"{name} must require MFA")
 
         volumes = caddy.get("volumes", [])
         config_mount = next(

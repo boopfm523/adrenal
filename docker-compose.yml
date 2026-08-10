@@ -51,7 +51,6 @@ services:
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_OLLAMA_VISION_MODEL: ${HC_OLLAMA_VISION_MODEL:-qwen3-vl:30b}
       HC_REDIS_URL: redis://redis:6379/0
-      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
       # The API receives only the non-secret feature flag/lookback so it can expose
       # owner controls. Garmin credentials and tokens are mounted only into the
       # isolated one-shot connector and Garmin worker (deploy/garmin.compose.yml).
@@ -132,7 +131,6 @@ services:
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_REDIS_URL: redis://redis:6379/0
-      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
       # environment. Empty is fine -- the app treats unset as "not configured".
@@ -163,7 +161,6 @@ services:
     environment:
       HC_ENVIRONMENT: dev
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
-      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
       HC_UPLOADS_DIR: /data/uploads
       HC_REPORT_ARTIFACTS_DIR: /data/reports
     volumes:

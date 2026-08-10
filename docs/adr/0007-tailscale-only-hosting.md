@@ -51,9 +51,12 @@ host Tailscale address:443
    dedicated device group and only for this host. Tailnet membership is necessary but
    not sufficient when an ACL/grant can narrow access. Device approval, tailnet MFA,
    key expiry, and prompt removal of lost devices are part of the production runbook.
-4. **Application authentication remains required.** Tailscale is defense in depth, not
-   a replacement for application sessions, CSRF protection, rate limits, audit events,
-   or passkeys/MFA. A compromised approved device can still reach the login page.
+4. **Application authentication remains required.** The owner explicitly selected a
+   password-only HealthCurve login for this single-user, Tailscale-only deployment.
+   Secure sessions, CSRF protection, login throttling, audit events, password
+   reauthentication, and session revocation remain required. HealthCurve exposes no
+   MFA/passkey enrollment or login route. A compromised approved device can still
+   reach the login page.
 5. **No public ingress dependencies.** Telegram uses outbound long polling
    (ADR-0008). Garmin and weather integrations are outbound. Backups leave through an
    outbound, create-only interface. HealthCurve must not enable Funnel merely to make
@@ -70,6 +73,11 @@ host Tailscale address:443
 This decision supersedes ADR-0002 only where it described an internet edge, public
 80/443, ACME HTTP challenges, or an external test expecting public 443. Its modular
 monolith and internal service topology remain accepted.
+
+The password-only decision is inseparable from the private network boundary. Public
+exposure—including Funnel, a public reverse proxy, public port forwarding, or a hosted
+tunnel—is a release blocker. Any proposal for public access requires a new threat
+model and authentication review before deployment; this ADR does not authorize it.
 
 ## Threat-model effects
 

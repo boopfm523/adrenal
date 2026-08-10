@@ -109,75 +109,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/mfa": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Mfa Status */
-        get: operations["mfa_status_api_v1_auth_mfa_get"];
-        put?: never;
-        post?: never;
-        /** Remove Mfa */
-        delete: operations["remove_mfa_api_v1_auth_mfa_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/enrollment": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start Mfa Enrollment */
-        post: operations["start_mfa_enrollment_api_v1_auth_mfa_enrollment_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/enrollment/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Confirm Mfa Enrollment */
-        post: operations["confirm_mfa_enrollment_api_v1_auth_mfa_enrollment_confirm_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/recovery-codes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Regenerate Mfa Recovery Codes */
-        post: operations["regenerate_mfa_recovery_codes_api_v1_auth_mfa_recovery_codes_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/blood-pressure": {
         parameters: {
             query?: never;
@@ -2312,8 +2243,6 @@ export interface components {
             email: string;
             /** Password */
             password: string;
-            /** Second Factor Code */
-            second_factor_code?: string | null;
         };
         /** LoginResponse */
         LoginResponse: {
@@ -2325,8 +2254,6 @@ export interface components {
             display_name: string | null;
             /** Email */
             email: string;
-            /** Mfa Enabled */
-            mfa_enabled: boolean;
         };
         /** ManualLabPanelIn */
         ManualLabPanelIn: {
@@ -2410,48 +2337,12 @@ export interface components {
             /** Strength Unit */
             strength_unit: string | null;
         };
-        /** MfaChangeProof */
-        MfaChangeProof: {
-            /** Code */
-            code: string;
-            /** Password */
-            password: string;
-        };
-        /** MfaCode */
-        MfaCode: {
-            /** Code */
-            code: string;
-        };
-        /** MfaEnrollmentOut */
-        MfaEnrollmentOut: {
-            /** Provisioning Uri */
-            provisioning_uri: string;
-            /** Secret */
-            secret: string;
-        };
-        /** MfaRecoveryCodesOut */
-        MfaRecoveryCodesOut: {
-            /** Recovery Codes */
-            recovery_codes: string[];
-        };
-        /** MfaStatus */
-        MfaStatus: {
-            /** Enabled */
-            enabled: boolean;
-            /** Recovery Codes Remaining */
-            recovery_codes_remaining: number;
-        };
         /** PasswordChange */
         PasswordChange: {
             /** Current Password */
             current_password: string;
             /** New Password */
             new_password: string;
-        };
-        /** PasswordProof */
-        PasswordProof: {
-            /** Password */
-            password: string;
         };
         /** PdfLabCandidateConfirmIn */
         PdfLabCandidateConfirmIn: {
@@ -3047,8 +2938,6 @@ export interface components {
             display_name: string | null;
             /** Email */
             email: string;
-            /** Mfa Enabled */
-            mfa_enabled: boolean;
         };
     };
     responses: never;
@@ -3242,183 +3131,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WhoAmI"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mfa_status_api_v1_auth_mfa_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                hc_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaStatus"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_mfa_api_v1_auth_mfa_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-CSRF-Token"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                hc_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaChangeProof"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    start_mfa_enrollment_api_v1_auth_mfa_enrollment_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-CSRF-Token"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                hc_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasswordProof"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaEnrollmentOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    confirm_mfa_enrollment_api_v1_auth_mfa_enrollment_confirm_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-CSRF-Token"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                hc_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaCode"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaRecoveryCodesOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    regenerate_mfa_recovery_codes_api_v1_auth_mfa_recovery_codes_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-CSRF-Token"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                hc_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaChangeProof"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaRecoveryCodesOut"];
                 };
             };
             /** @description Validation Error */
