@@ -282,7 +282,7 @@ export function createReport(payload: ReportCreate): Promise<ReportSummary> {
 
 export interface IntegrationDeletionResult { credentials_deleted: number; data_rows_deleted: number; }
 
-export function disconnectIntegration(provider: "garmin" | "telegram", password: string, deleteData: boolean): Promise<IntegrationDeletionResult> {
+export function disconnectIntegration(provider: "garmin" | "telegram" | "weather", password: string, deleteData: boolean): Promise<IntegrationDeletionResult> {
   return apiRequest<IntegrationDeletionResult>(`/privacy/integrations/${provider}`, { method: "DELETE", body: JSON.stringify({ password, delete_data: deleteData }) });
 }
 

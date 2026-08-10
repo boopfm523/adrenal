@@ -30,14 +30,15 @@ describe("Settings and privacy page", () => {
     expect(screen.getByText(/Default: coarse location/)).toBeVisible();
     expect(screen.getByText(/Exact location is opt-in per record/)).toBeVisible();
 
-    for (const provider of ["garmin", "telegram"] as const) {
+    expect(screen.getByText(/only rounded 0.1-degree coordinates and fixed/)).toBeVisible();
+    for (const provider of ["garmin", "telegram", "weather"] as const) {
       const button = screen.getByRole("button", { name: `Disconnect ${provider}` });
       const form = button.closest("form");
       if (form === null) throw new Error("integration form missing");
       fireEvent.change(within(form).getByLabelText("Current password"), { target: { value: submittedPassword } });
       fireEvent.click(button);
     }
-    await waitFor(() => { expect(requests.filter((request) => request.url.includes("/privacy/integrations/")).length).toBe(2); });
+    await waitFor(() => { expect(requests.filter((request) => request.url.includes("/privacy/integrations/")).length).toBe(3); });
 
     const exportButton = screen.getByRole("button", { name: "Download private export" });
     const exportForm = exportButton.closest("form");

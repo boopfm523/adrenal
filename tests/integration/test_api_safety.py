@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -26,9 +26,11 @@ from testcontainers.community.postgres import PostgresContainer
 from healthcurve import privacy
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
 from healthcurve.config import Settings, get_settings
-from healthcurve.context.models import ContextEvent, LocationPrecision
+from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
 from healthcurve.document_worker import process_available, validate_one
+from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.models import (
@@ -562,6 +564,72 @@ def test_integration_deletion_removes_provider_data_and_audits(
             )
         )
         assert entry is not None
+
+
+def test_weather_deletion_is_independent_of_the_coarse_location(engine: Engine) -> None:
+    observed_at = datetime.now(UTC) - timedelta(minutes=5)
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email="weather-delete@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="America/New_York",
+        )
+        session.add(owner)
+        session.flush()
+        owner_id = owner.id
+        source = events.create_event(
+            session,
+            ContextEvent,
+            owner_id=owner_id,
+            event_time=from_instant(observed_at, owner.default_timezone),
+            source_type=SourceType.TELEGRAM,
+            confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+            location_precision=LocationPrecision.COARSE,
+            coarse_location_label="Synthetic location",
+            latitude=Decimal("40.7"),
+            longitude=Decimal("-74.0"),
+            exact_location_consent=False,
+            provider_id="telegram-location:synthetic-weather-delete",
+            source_revision="rounded-0.1-v1",
+        )
+        source_id = source.id
+        events.create_event(
+            session,
+            ContextEvent,
+            owner_id=owner_id,
+            event_time=from_instant(observed_at, owner.default_timezone),
+            source_type=SourceType.PROVIDER,
+            confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+            location_precision=LocationPrecision.COARSE,
+            coarse_location_label=source.coarse_location_label,
+            latitude=source.latitude,
+            longitude=source.longitude,
+            exact_location_consent=False,
+            weather_provider="open-meteo",
+            weather_observation_id="synthetic-observation",
+            weather_observed_at=observed_at,
+            temperature=Decimal("20.0"),
+            temperature_unit=TemperatureUnit.CELSIUS,
+            provider_id=f"open-meteo:{source.id}",
+            source_revision="synthetic-weather-v1",
+        )
+        result = privacy.delete_integration(
+            session,
+            owner_id=owner_id,
+            provider="weather",
+            delete_data=True,
+            telegram_chat_id=None,
+        )
+        assert result.credentials == 0
+        assert result.data_rows == 1
+
+    with Session(engine) as session:
+        remaining = session.scalars(
+            select(ContextEvent).where(ContextEvent.owner_id == owner_id)
+        ).all()
+        assert len(remaining) == 1
+        assert remaining[0].id == source_id
+        assert remaining[0].weather_provider is None
 
 
 def test_account_deletion_service_removes_data_but_retains_structural_audit(

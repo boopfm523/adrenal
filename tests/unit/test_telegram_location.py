@@ -171,6 +171,8 @@ def test_confirm_creates_only_coarse_context_then_purges_request(
     context.id = uuid.UUID("00000000-0000-4000-8000-000000000103")
     create = MagicMock(return_value=context)
     monkeypatch.setattr(location.events, "create_event", create)
+    enqueue = MagicMock()
+    monkeypatch.setattr(location, "enqueue_weather_enrichment", enqueue)
 
     created = location.consume_for_confirm(
         session, _owner(), draft_id=DRAFT_ID, now=NOW + timedelta(minutes=1)
@@ -185,6 +187,7 @@ def test_confirm_creates_only_coarse_context_then_purges_request(
     assert request.state is LocationRequestState.USED
     assert request.rounded_latitude is None
     assert request.rounded_longitude is None
+    enqueue.assert_called_once_with(session, context)
 
 
 def test_decline_and_expiry_clear_even_rounded_location() -> None:

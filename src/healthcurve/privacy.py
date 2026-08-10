@@ -96,7 +96,7 @@ def delete_integration(
     delete_data: bool,
     telegram_chat_id: int | None,
 ) -> IntegrationDeletion:
-    if provider not in {"garmin", "telegram"}:
+    if provider not in {"garmin", "telegram", "weather"}:
         raise DeletionError("unsupported integration")
     credentials = _delete_count(
         session,
@@ -136,6 +136,14 @@ def delete_integration(
             data_rows += _delete_count(
                 session, delete(TelegramUpdate).where(TelegramUpdate.chat_id == telegram_chat_id)
             )
+    if delete_data and provider == "weather":
+        data_rows += _delete_count(
+            session,
+            delete(ContextEvent).where(
+                ContextEvent.owner_id == owner_id,
+                ContextEvent.weather_provider == "open-meteo",
+            ),
+        )
     audit.record(
         session,
         actor=audit.actor_for_owner(owner_id),

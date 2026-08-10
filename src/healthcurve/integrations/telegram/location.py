@@ -22,6 +22,7 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram.models import LocationRequestState, TelegramLocationRequest
+from healthcurve.integrations.weather.jobs import enqueue_weather_enrichment
 
 LOCATION_REQUEST_TTL: Final = timedelta(minutes=10)
 ROUNDING_QUANTUM: Final = Decimal("0.1")
@@ -200,6 +201,7 @@ def consume_for_confirm(
         provider_id=f"telegram-location:{draft_id}",
         source_revision="rounded-0.1-v1",
     )
+    enqueue_weather_enrichment(session, context)
     _resolve(request, LocationRequestState.USED, now=now)
     return context
 

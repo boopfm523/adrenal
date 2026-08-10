@@ -23,6 +23,7 @@ from healthcurve.integrations.telegram.draft_jobs import (
     schedule_draft_expiry,
 )
 from healthcurve.integrations.telegram.secrets import TelegramSecrets, load_telegram_secrets
+from healthcurve.integrations.weather.jobs import WEATHER_ENRICHMENT_TASK, make_weather_handler
 from healthcurve.logging import configure_logging, get_logger
 from healthcurve.operations import worker as queue_worker
 
@@ -82,7 +83,10 @@ def main() -> int:
 
     queue_worker.run_loop(
         get_session_factory(),
-        {DRAFT_EXPIRY_TASK: make_draft_expiry_handler()},
+        {
+            DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
+            WEATHER_ENRICHMENT_TASK: make_weather_handler(),
+        },
         stop_event=_stop,
         poll_interval_s=settings.job_poll_interval_s,
         schedulers=(schedule_draft_expiry,),
