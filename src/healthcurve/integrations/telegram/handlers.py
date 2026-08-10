@@ -27,6 +27,7 @@ from healthcurve.ai.extraction import (
 )
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
+from healthcurve.config import get_settings
 from healthcurve.db import get_ai_session_factory
 from healthcurve.episodes.models import EmergencyInjectionEvent, EpisodeStatus, StressEpisode
 from healthcurve.events import service as events
@@ -40,6 +41,10 @@ from healthcurve.events.timekeeping import (
 )
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
+from healthcurve.integrations.telegram.feature_requests import (
+    FeatureRequestRejected,
+    queue_request,
+)
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 from healthcurve.operations.rate_limit import (
@@ -59,6 +64,7 @@ DRAFT_TTL: Final = timedelta(hours=6)
 # this set to reach dispatch below; adding one therefore requires documenting it.
 SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
     {
+        "beads-add",
         "bp",
         "dose",
         "edit",
@@ -87,6 +93,7 @@ Commands (these always work, even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
 /bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
 /weight <value> <lb|kg> [HH:MM] - record body weight
+/beads-add <feature request> - add a request to the later-work inbox
 /symptom <name> [0-10] - record a symptom
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
@@ -151,7 +158,7 @@ def handle_message(
         return Reply("I didn't get any text. Try /help.")
 
     if text.startswith("/"):
-        return _handle_command(session, owner, text, now=now)
+        return _handle_command(session, owner, text, message_id=message_id, now=now)
 
     return _handle_free_text(
         session,
@@ -170,10 +177,18 @@ def handle_message(
 # ---------------------------------------------------------------------------
 
 
-def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime) -> Reply:
-    parts = text.split()
-    command = parts[0].lower().lstrip("/").split("@")[0]
-    args = parts[1:]
+def _handle_command(
+    session: Session,
+    owner: Owner,
+    text: str,
+    *,
+    message_id: str | None,
+    now: datetime,
+) -> Reply:
+    command_part, *remainder = text.split(maxsplit=1)
+    command = command_part.lower().lstrip("/").split("@")[0]
+    raw_argument = remainder[0] if remainder else ""
+    args = raw_argument.split()
 
     if command not in SUPPORTED_TELEGRAM_COMMANDS:
         return Reply(f"Unknown command /{command}. Try /help.")
@@ -189,6 +204,8 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
             return _cmd_blood_pressure(session, owner, args, now=now)
         case "weight":
             return _cmd_weight(session, owner, args, now=now)
+        case "beads-add":
+            return _cmd_beads_add(raw_argument, message_id=message_id, now=now)
         case "symptom":
             return _cmd_symptom(session, owner, args, now=now)
         case "injection":
@@ -205,6 +222,41 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
             return _cmd_undo(session, owner)
         case _:  # pragma: no cover - registry and dispatch are checked together
             raise AssertionError(f"registered Telegram command is not dispatched: {command}")
+
+
+def _cmd_beads_add(request: str, *, message_id: str | None, now: datetime) -> Reply:
+    """Queue untrusted product text; never call a shell, Beads, or an agent here."""
+    settings = get_settings()
+    if settings.beads_outbox_dir is None:
+        return Reply(
+            "Feature-request capture is temporarily unavailable. "
+            "Nothing was created; try again later."
+        )
+    try:
+        queued = queue_request(
+            settings.beads_outbox_dir,
+            message_id=message_id or "",
+            text=request,
+            backlog_epic_id=settings.beads_backlog_epic_id,
+            now=now,
+        )
+    except FeatureRequestRejected as exc:
+        if str(exc) == "request_too_long":
+            return Reply("That feature request is too long. Keep it to 500 characters or fewer.")
+        if str(exc) == "request_may_contain_private_data":
+            return Reply(
+                "Please describe only the feature—remove passwords, tokens, contact details, "
+                "and personal health values."
+            )
+        return Reply(
+            "Usage: /beads-add <feature request>\n"
+            "Example: /beads-add add a feature that allows me to record hydration"
+        )
+    state = "already queued" if queued.already_queued else "queued"
+    return Reply(
+        f"Feature request {state} as {queued.request_id}. "
+        "The safe host bridge will reply with its hc-* Beads ID; no agent or code was started."
+    )
 
 
 def _cmd_dose(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:

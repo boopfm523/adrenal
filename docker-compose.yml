@@ -136,6 +136,10 @@ services:
       HC_TELEGRAM_ALLOWED_CHAT_ID: ${HC_TELEGRAM_ALLOWED_CHAT_ID:-}
       HC_TELEGRAM_WEBHOOK_SECRET: ${HC_TELEGRAM_WEBHOOK_SECRET:-}
       HC_PUBLIC_BASE_URL: ${HC_PUBLIC_BASE_URL:-}
+      HC_BEADS_OUTBOX_DIR: /data/beads-outbox
+      HC_BEADS_BACKLOG_EPIC_ID: ${HC_BEADS_BACKLOG_EPIC_ID:-hc-inbox}
+    volumes:
+      - ${HC_BEADS_OUTBOX_DIR:-./var/beads-outbox}:/data/beads-outbox
     networks: [hc-internal]
     depends_on:
       postgres:

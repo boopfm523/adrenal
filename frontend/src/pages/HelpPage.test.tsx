@@ -63,14 +63,15 @@ describe("Help page", () => {
     expect(within(doseCard).getByRole("status")).toHaveTextContent("Copied");
   });
 
-  it("labels API-only and planned capabilities instead of advertising them as web forms", () => {
+  it("labels API-only and planned capabilities while documenting implemented backlog capture", () => {
     renderHelp();
 
     expect(screen.getByText("API only—no complete web create form yet")).toBeVisible();
     expect(screen.getByText("API upload and extraction review; fact-confirmation UI is planned")).toBeVisible();
     expect(screen.getByText(/Garmin account connection:/)).toBeVisible();
     expect(screen.getByText(/automatic provider sync is not implemented/)).toBeVisible();
-    expect(screen.getByText(/planned, not currently recognized by the bot/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "/beads-add" })).toBeVisible();
+    expect(screen.getByText(/no agent, shell command, or implementation starts/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open record a scheduled dose from today" })).toHaveAttribute("href", "/today");
     expect(screen.getByRole("link", { name: "Open emergency page" })).toHaveAttribute("href", "/emergency");
   });

@@ -19,6 +19,8 @@ reports_out/
 !docs/**/*.pdf
 # Exact uploaded medical sources (class C4); shared with backup by host bind mount.
 var/uploads/
+# Telegram feature-request envelopes and bridge results are local operational data.
+var/beads-outbox/
 
 # --- Python ---
 __pycache__/

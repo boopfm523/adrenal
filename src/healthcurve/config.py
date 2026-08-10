@@ -130,6 +130,10 @@ class Settings(BaseSettings):
     telegram_mode: TelegramMode = TelegramMode.POLLING
     #: Public HTTPS base for the webhook, e.g. https://health.example.com
     public_base_url: str | None = None
+    #: Shared request-only directory for the host-side Beads bridge. The app never
+    #: receives repository or ``bd`` access; unset disables /beads-add safely.
+    beads_outbox_dir: Path | None = None
+    beads_backlog_epic_id: str = Field(default="hc-inbox", pattern=r"^hc-[a-z0-9.]+$")
 
     # --- Owner scoping (single-owner product; see docs/threat-model.md) ---
     owner_email: str | None = None

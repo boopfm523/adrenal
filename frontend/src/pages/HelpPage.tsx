@@ -170,7 +170,6 @@ export function HelpPage(): React.JSX.Element {
       <section id="planned" className="help-section help-planned anchor-target" aria-labelledby="planned-title">
         <h2 id="planned-title">Clearly not available yet</h2>
         <ul>
-          <li><strong>Telegram <code>/beads-add</code>:</strong> planned, not currently recognized by the bot.</li>
           <li><strong>Curated CBC, acute chemistry, and cortisol trends:</strong> normalization and accessible trends are planned. Original lab values can already be entered or imported.</li>
           <li><strong>Garmin account connection:</strong> automatic provider sync is not implemented. Only owner-supplied FIT, CSV, or ZIP preview/confirm is available.</li>
           <li><strong>Lab PDF fact confirmation:</strong> private upload and local candidate extraction exist; the complete review-and-confirm web workflow is not yet available.</li>

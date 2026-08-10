@@ -57,6 +57,14 @@
       "confirmation": "Review the value, unit, and experienced time, then press Confirm. Nothing is recorded before confirmation."
     },
     {
+      "command": "/beads-add",
+      "syntax": "/beads-add <feature request>",
+      "example": "/beads-add add a feature that allows me to record hydration",
+      "purpose": "Queue a product idea in the fixed HealthCurve feature inbox for a later normal agent run.",
+      "result": "Open backlog Bead",
+      "confirmation": "The bot returns a queue ID first, then the host bridge returns the hc-* issue ID. Text is treated as untrusted data; no agent, shell command, or implementation starts. Do not include personal health values or secrets."
+    },
+    {
       "command": "/injection",
       "syntax": "/injection [amount]",
       "example": "/injection 100",
