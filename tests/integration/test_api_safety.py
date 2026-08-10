@@ -42,7 +42,7 @@ from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity import service as auth
-from healthcurve.identity.models import Owner
+from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.identity.recovery import recover_owner_access
 from healthcurve.integrations.garmin.connect_jobs import (
     GARMIN_DISCONNECT_TASK,
@@ -317,6 +317,71 @@ def test_state_changing_requests_require_csrf(
 
 def test_reads_do_not_require_csrf(client: TestClient, logged_in: dict[str, str]) -> None:
     assert client.get("/api/v1/medications").status_code == 200
+
+
+def test_session_expiry_idle_timeout_and_logout_everywhere_revoke_access(
+    client: TestClient, engine: Engine
+) -> None:
+    client.cookies.clear()
+    first = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    second = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_token = first.cookies.get(auth.SESSION_COOKIE_NAME)
+    second_token = second.cookies.get(auth.SESSION_COOKIE_NAME)
+    assert first_token
+    assert second_token
+
+    revoked = client.post(
+        "/api/v1/auth/logout-everywhere",
+        headers={auth.CSRF_HEADER_NAME: second.json()["csrf_token"]},
+    )
+    assert revoked.status_code == 204
+    for token in (first_token, second_token):
+        client.cookies.set(auth.SESSION_COOKIE_NAME, token)
+        assert client.get("/api/v1/auth/me").status_code == 401
+
+    with Session(engine) as session:
+        assert session.scalar(
+            select(func.count())
+            .select_from(AuditEntry)
+            .where(AuditEntry.action == AuditAction.SESSION_REVOKED)
+        )
+
+    expired = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    expired_token = expired.cookies.get(auth.SESSION_COOKIE_NAME)
+    assert expired_token
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        expired_session = session.scalar(
+            select(AuthSession)
+            .where(AuthSession.owner_id == owner_id)
+            .order_by(AuthSession.created_at.desc())
+            .limit(1)
+        )
+        assert expired_session is not None
+        expired_session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    client.cookies.set(auth.SESSION_COOKIE_NAME, expired_token)
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+    idle = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    idle_token = idle.cookies.get(auth.SESSION_COOKIE_NAME)
+    assert idle_token
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        idle_session = session.scalar(
+            select(AuthSession)
+            .where(AuthSession.owner_id == owner_id)
+            .order_by(AuthSession.created_at.desc())
+            .limit(1)
+        )
+        assert idle_session is not None
+        idle_session.last_seen_at = (
+            datetime.now(UTC) - auth.SESSION_IDLE_TIMEOUT - timedelta(seconds=1)
+        )
+    client.cookies.set(auth.SESSION_COOKIE_NAME, idle_token)
+    assert client.get("/api/v1/auth/me").status_code == 401
+    client.cookies.clear()
 
 
 def test_vitals_are_owner_scoped_correctable_and_exported(
