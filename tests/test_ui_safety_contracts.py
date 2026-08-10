@@ -10,6 +10,8 @@ CHART_TEST = REPO_ROOT / "frontend" / "src" / "components" / "AccessibleLineChar
 CONTEXT_SETTINGS = REPO_ROOT / "frontend" / "src" / "components" / "ContextSettings.tsx"
 CONTEXT_SETTINGS_TEST = REPO_ROOT / "frontend" / "src" / "pages" / "SettingsPage.test.tsx"
 STYLES = REPO_ROOT / "frontend" / "src" / "styles.css"
+HEALTH_DATA = REPO_ROOT / "frontend" / "src" / "pages" / "HealthDataPage.tsx"
+HEALTH_DATA_TEST = REPO_ROOT / "frontend" / "src" / "pages" / "HealthDataPage.test.tsx"
 
 
 @pytest.mark.safety("SAFE-25")
@@ -55,3 +57,27 @@ def test_context_privacy_and_responsive_contracts_stay_under_ui_test() -> None:
         ".context-delete-form",
     ):
         assert responsive_grid in mobile
+
+
+def test_vitals_accessibility_safety_and_responsive_contracts_stay_under_ui_test() -> None:
+    page = HEALTH_DATA.read_text(encoding="utf-8")
+    test = HEALTH_DATA_TEST.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+    for contract in (
+        "does not diagnose or recommend treatment",
+        "absence of a record is not a zero",
+        "Correction reason",
+        "Source:",
+    ):
+        assert contract in page
+    assert "View data table" in CHART.read_text(encoding="utf-8")
+    for tested_semantic in (
+        'getByRole("form", { name: "Record blood pressure"',
+        'getByRole("columnheader", { name: "Systolic (mmHg)"',
+        'findByRole("img", { name: /Blood pressure/',
+        "Revision history (1)",
+    ):
+        assert tested_semantic in test
+    mobile = styles[styles.index("@media (max-width: 720px)") :]
+    assert ".vital-entry-grid" in mobile
+    assert ".vital-entry-form" in mobile

@@ -14,6 +14,8 @@ const eventTypes = [
   ["life_event", "Life events"],
   ["emergency_injection", "Emergency injections"],
   ["context", "Environmental context"],
+  ["blood_pressure", "Blood pressure"],
+  ["weight", "Weight"],
 ] as const;
 
 function localTime(value: string): string {

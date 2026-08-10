@@ -24,6 +24,7 @@ from healthcurve.labs.models import LabPanel
 from healthcurve.medications.models import DoseEvent, RegimenStatus, RegimenVersion
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.service import create_snapshot
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 
 SUPPORTED_SECTIONS: Final = frozenset(
     {
@@ -37,6 +38,7 @@ SUPPORTED_SECTIONS: Final = frozenset(
         "approved_plan",
         "labs",
         "wearables",
+        "vitals",
     }
 )
 
@@ -118,6 +120,33 @@ def build_snapshot(
                     "severity": row.severity,
                     "body_area": row.body_area,
                     "ended_at": row.ended_at,
+                }
+            )
+            manifest["fact"].append(str(row.id))
+
+    if "vitals" in selected_sections:
+        for row in _current_events(
+            session, BloodPressureEvent, owner_id=owner_id, start=start, end=end
+        ):
+            facts.append(
+                {
+                    **_base_event(row),
+                    "record_type": "blood_pressure",
+                    "systolic_mmhg": row.systolic_mmhg,
+                    "diastolic_mmhg": row.diastolic_mmhg,
+                    "pulse_bpm": row.pulse_bpm,
+                }
+            )
+            manifest["fact"].append(str(row.id))
+        for row in _current_events(session, WeightEvent, owner_id=owner_id, start=start, end=end):
+            facts.append(
+                {
+                    **_base_event(row),
+                    "record_type": "weight",
+                    "value": row.value,
+                    "unit": row.unit,
+                    "normalized_kg": row.normalized_kg,
+                    "normalization_definition": "1 lb = 0.45359237 kg",
                 }
             )
             manifest["fact"].append(str(row.id))

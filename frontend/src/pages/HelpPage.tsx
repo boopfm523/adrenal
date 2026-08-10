@@ -147,6 +147,12 @@ export function HelpPage(): React.JSX.Element {
             <ul><li><Link to="/timeline">Open Timeline</Link></li><li><Link to="/analytics">Open Analytics</Link></li><li><Link to="/data-quality">Open Data quality</Link></li></ul>
           </article>
           <article className="help-workflow">
+            <h3>Record blood pressure or weight on the web</h3>
+            <p>Health data provides mobile-friendly entry, current facts with source and confirmation provenance, immutable corrections, and trend charts with equivalent data tables. Values are displayed without diagnosis or treatment advice.</p>
+            <CopyableExample label="Synthetic web examples" value="Blood pressure: 118/76 mmHg, pulse 62 · Weight: 180 lb" />
+            <Link to="/health-data">Open Health data</Link>
+          </article>
+          <article className="help-workflow">
             <h3>Create a physician report</h3>
             <p>Select a date range and sections. Facts, approved plan, patient notes, and optional AI remain visibly separated. AI and sensitive notes are off by default.</p>
             <CopyableExample label="Synthetic report range" value="2026-07-01 through 2026-07-31 · America/New_York · AI off" />
@@ -165,7 +171,6 @@ export function HelpPage(): React.JSX.Element {
         <h2 id="planned-title">Clearly not available yet</h2>
         <ul>
           <li><strong>Telegram <code>/beads-add</code>:</strong> planned, not currently recognized by the bot.</li>
-          <li><strong>Blood pressure and weight web views:</strong> Telegram commands and API storage are available; web forms, trends, and report sections are planned.</li>
           <li><strong>Curated CBC, acute chemistry, and cortisol trends:</strong> normalization and accessible trends are planned. Original lab values can already be entered or imported.</li>
           <li><strong>Garmin account connection:</strong> automatic provider sync is not implemented. Only owner-supplied FIT, CSV, or ZIP preview/confirm is available.</li>
           <li><strong>Lab PDF fact confirmation:</strong> private upload and local candidate extraction exist; the complete review-and-confirm web workflow is not yet available.</li>

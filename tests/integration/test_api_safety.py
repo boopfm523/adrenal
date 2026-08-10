@@ -1608,11 +1608,32 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
     )
     assert note.status_code == 201, note.text
     note_id = note.json()["id"]
+    blood_pressure = client.post(
+        "/api/v1/blood-pressure",
+        headers=logged_in,
+        json={
+            "systolic_mmhg": 118,
+            "diastolic_mmhg": 76,
+            "pulse_bpm": 62,
+            "time": {"local_time": "2025-08-09T08:15:00", "timezone": "Europe/London"},
+        },
+    )
+    assert blood_pressure.status_code == 201, blood_pressure.text
+    weight = client.post(
+        "/api/v1/weight",
+        headers=logged_in,
+        json={
+            "value": "180",
+            "unit": "lb",
+            "time": {"local_time": "2025-08-09T08:20:00", "timezone": "Europe/London"},
+        },
+    )
+    assert weight.status_code == 201, weight.text
     request = {
         "date_from": "2025-08-09",
         "date_to": "2025-08-09",
         "timezone": "Europe/London",
-        "selected_sections": ["metrics", "doses", "approved_plan", "patient_notes"],
+        "selected_sections": ["metrics", "doses", "vitals", "approved_plan", "patient_notes"],
         "companion_formats": ["csv", "json"],
     }
     assert client.post("/api/v1/reports", json=request).status_code == 403
@@ -1630,9 +1651,19 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
     assert frozen["snapshot_content"]["ai"] == []
     assert frozen["source_manifest"]["ai"] == []
     assert frozen["snapshot_content"]["patient_note"][0]["text"] == note_text
-    assert frozen["snapshot_content"]["fact"][0]["record_type"] == "dose"
+    facts_by_type = {record["record_type"]: record for record in frozen["snapshot_content"]["fact"]}
+    assert facts_by_type["dose"]["amount"] == "10.0000"
+    assert facts_by_type["blood_pressure"]["systolic_mmhg"] == 118
+    assert facts_by_type["blood_pressure"]["diastolic_mmhg"] == 76
+    assert facts_by_type["blood_pressure"]["pulse_bpm"] == 62
+    assert facts_by_type["weight"]["value"] == "180.0000"
+    assert facts_by_type["weight"]["unit"] == "lb"
+    assert facts_by_type["weight"]["normalized_kg"] == "81.6466"
+    assert facts_by_type["weight"]["normalization_definition"] == "1 lb = 0.45359237 kg"
     assert frozen["snapshot_content"]["plan"][0]["record_type"] == "approved_regimen"
     assert dose.json()["id"] in frozen["source_manifest"]["fact"]
+    assert blood_pressure.json()["id"] in frozen["source_manifest"]["fact"]
+    assert weight.json()["id"] in frozen["source_manifest"]["fact"]
     assert regimen.json()["id"] in frozen["source_manifest"]["plan"]
     assert all(
         metric["definition"] and metric["timezone"] for metric in frozen["metric_values"].values()

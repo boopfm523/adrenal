@@ -12,6 +12,7 @@ const sectionOptions = [
   ["approved_plan", "Physician-approved plan"],
   ["episodes", "Stress/up-dose episodes"],
   ["symptoms", "Symptoms"],
+  ["vitals", "Blood pressure and weight"],
   ["emergency_injections", "Emergency injections"],
   ["patient_notes", "Patient notes and questions"],
   ["life_events", "Life events"],

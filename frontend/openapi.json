@@ -3900,7 +3900,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 10,
+            "maxItems": 11,
             "minItems": 1,
             "title": "Selected Sections",
             "type": "array"

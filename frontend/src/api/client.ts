@@ -27,6 +27,12 @@ export type MfaEnrollment = components["schemas"]["MfaEnrollmentOut"];
 export type MfaRecoveryCodes = components["schemas"]["MfaRecoveryCodesOut"];
 export type ContextEvent = components["schemas"]["ContextOut"];
 export type ContextInput = components["schemas"]["ContextIn"];
+export type BloodPressure = components["schemas"]["BloodPressureOut"];
+export type BloodPressureInput = components["schemas"]["BloodPressureIn"];
+export type BloodPressureCorrectionInput = components["schemas"]["BloodPressureCorrectionIn"];
+export type Weight = components["schemas"]["WeightOut"];
+export type WeightInput = components["schemas"]["WeightIn"];
+export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -222,6 +228,30 @@ export function createContextEvent(payload: ContextInput): Promise<ContextEvent>
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getBloodPressure(includeSuperseded = false): Promise<BloodPressure[]> {
+  return apiRequest<BloodPressure[]>(`/blood-pressure${includeSuperseded ? "?include_superseded=true" : ""}`);
+}
+
+export function createBloodPressure(payload: BloodPressureInput): Promise<BloodPressure> {
+  return apiRequest<BloodPressure>("/blood-pressure", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function correctBloodPressure(id: string, payload: BloodPressureCorrectionInput): Promise<BloodPressure> {
+  return apiRequest<BloodPressure>(`/blood-pressure/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getWeight(includeSuperseded = false): Promise<Weight[]> {
+  return apiRequest<Weight[]>(`/weight${includeSuperseded ? "?include_superseded=true" : ""}`);
+}
+
+export function createWeight(payload: WeightInput): Promise<Weight> {
+  return apiRequest<Weight>("/weight", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function correctWeight(id: string, payload: WeightCorrectionInput): Promise<Weight> {
+  return apiRequest<Weight>(`/weight/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function deleteContextEvent(id: string, password: string): Promise<void> {
