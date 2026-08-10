@@ -13,7 +13,6 @@ from base64 import b64encode
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
@@ -33,8 +32,6 @@ from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
 from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
-
-router = APIRouter(tags=["exports"])
 
 
 def _rows(session: DbSession, model: type, owner_id: Any) -> list[dict[str, Any]]:
@@ -97,15 +94,11 @@ def _report_export(session: DbSession, owner_id: Any, *, include_ai: bool) -> di
     }
 
 
-@router.post("/exports")
 def create_export(
     session: DbSession,
     owner: CurrentOwner,
-    include_ai: bool = Query(
-        default=False,
-        description="AI analysis is excluded by default (SAFE-07). Opt in explicitly.",
-    ),
-    include_sensitive: bool = Query(default=True),
+    include_ai: bool = False,
+    include_sensitive: bool = True,
 ) -> StreamingResponse:
     payload: dict[str, Any] = {
         "export_version": 1,

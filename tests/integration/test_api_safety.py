@@ -433,7 +433,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert any(item["summary"] == "Blood pressure 118/80 mmHg" for item in items)
     assert any(item["summary"] == "Weight 180.8 lb (entered 82.0000 kg)" for item in items)
 
-    exported = client.post("/api/v1/exports", headers=logged_in)
+    exported = client.post("/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD})
     assert exported.status_code == 200, exported.text
     facts = exported.json()["facts"]
     assert corrected_bp["id"] in {row["id"] for row in facts["blood_pressure"]}
@@ -692,6 +692,70 @@ def test_individual_deletion_requires_password_and_preserves_audit(
     assert private_export.status_code == 200
     assert "attachment" in private_export.headers["content-disposition"]
     assert private_export.json()["ai"] == {}
+
+
+def test_full_export_requires_csrf_and_password_reauthentication(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    with Session(engine) as session:
+        audit_count_before = (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.EXPORT_GENERATED)
+            )
+            or 0
+        )
+
+    missing_csrf = client.post("/api/v1/privacy/export", json={"password": PASSWORD})
+    wrong_csrf = client.post(
+        "/api/v1/privacy/export",
+        headers={auth.CSRF_HEADER_NAME: "not-this-session-token"},
+        json={"password": PASSWORD},
+    )
+    wrong_password = client.post(
+        "/api/v1/privacy/export",
+        headers=logged_in,
+        json={"password": PASSWORD + "-wrong"},
+    )
+    legacy = client.post("/api/v1/exports", headers=logged_in)
+
+    assert missing_csrf.status_code == 403
+    assert wrong_csrf.status_code == 403
+    assert wrong_password.status_code == 403
+    assert legacy.status_code == 404
+    for failed in (missing_csrf, wrong_csrf, wrong_password, legacy):
+        assert "facts" not in failed.text
+        assert "plan" not in failed.text
+
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.EXPORT_GENERATED)
+            )
+            == audit_count_before
+        )
+
+    exported = client.post(
+        "/api/v1/privacy/export",
+        headers=logged_in,
+        json={"password": PASSWORD},
+    )
+    assert exported.status_code == 200
+    assert exported.headers["cache-control"] == "no-store"
+    assert set(exported.json()) >= {"plan", "facts", "ai"}
+
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(AuditEntry.action == AuditAction.EXPORT_GENERATED)
+            )
+            == audit_count_before + 1
+        )
 
 
 def test_integration_deletion_removes_provider_data_and_audits(
@@ -3117,7 +3181,9 @@ def test_nonexistent_dst_time_is_rejected(client: TestClient, logged_in: dict[st
 def test_export_separates_categories_and_excludes_ai_by_default(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:
-    payload = client.post("/api/v1/exports", headers=logged_in).json()
+    payload = client.post(
+        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD}
+    ).json()
     assert set(payload) >= {"plan", "facts", "ai"}
     assert payload["ai"] == {}, "AI content must be excluded unless asked for"
     assert "credentials" in payload["notice"]

@@ -24,7 +24,7 @@ does not depend on JavaScript.
 | Learn how to enter or import data | Web Help; examples are synthetic and distinguish immediate records from drafts |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
-| Get all your data out | `POST /api/v1/exports` |
+| Get all your data out | Settings → Export, or `POST /api/v1/privacy/export` |
 | Sync Garmin Connect | Connect once locally, then review status/sync in Settings and observations in Health data; see [Garmin Connect](garmin-connect.md) |
 | Import an exported Garmin FIT/CSV/ZIP | Preview then confirm through the API as a durable fallback; see [Garmin import](garmin-import.md) |
 | Check encrypted backups | `python -m healthcurve.backup_status` in `backup-worker` |
@@ -173,7 +173,10 @@ the plan expected and what the record contains, every time you ask.
 
 ## Getting all your data out
 
-An export is a `POST`, so it needs the CSRF token from login:
+The easiest export is **Settings → Export**. Enter your current password, choose
+whether to include separately labelled AI analysis, and download the JSON file.
+
+The API equivalent requires both the session's CSRF token and the current password:
 
 ```bash
 CSRF=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
@@ -182,12 +185,16 @@ CSRF=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -c cookies.txt | python3 -c 'import json,sys; print(json.load(sys.stdin)["csrf_token"])')
 
 curl -s -b cookies.txt -H "X-CSRF-Token: $CSRF" \
-  -X POST 'http://localhost:8080/api/v1/exports' > export.json
+  -H 'content-type: application/json' \
+  -X POST 'http://localhost:8080/api/v1/privacy/export' \
+  -d '{"password": "...", "include_ai": false, "include_sensitive": true}' \
+  > export.json
 ```
 
 Sections are separated by category: `facts` (what you recorded), `plan` (physician-
-approved), and `ai` (generated analysis, **excluded** unless you pass
-`?include_ai=true`). Integration credentials are never exported.
+approved), and `ai` (generated analysis, **excluded** unless you explicitly set
+`include_ai` to `true`). Integration credentials are never exported. HealthCurve
+does not expose a cookie-only legacy export route.
 
 ## Emergency page
 
