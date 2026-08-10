@@ -191,6 +191,80 @@ def create_regimen(payload: RegimenVersionIn, session: DbSession, owner: Current
     return _regimen_out(version)
 
 
+@router.put(
+    "/regimens/{version_id}",
+    response_model=RegimenVersionOut,
+    dependencies=[Depends(require_csrf)],
+)
+def update_regimen_draft(
+    version_id: uuid.UUID,
+    payload: RegimenVersionIn,
+    session: DbSession,
+    owner: CurrentOwner,
+):
+    """Atomically replace an unapproved draft's editable plan content."""
+    version = _owned_version(session, owner.id, version_id)
+    medications: dict[uuid.UUID, Medication] = {}
+    for slot in payload.slots:
+        medication = session.get(Medication, slot.medication_id)
+        if medication is None or medication.owner_id != owner.id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="one or more selected medications are unavailable",
+            )
+        medications[slot.medication_id] = medication
+
+    try:
+        service.update_draft(
+            session,
+            version,
+            version_label=payload.version_label,
+            effective_from=payload.effective_from,
+            effective_to=payload.effective_to,
+            notes=payload.notes,
+        )
+    except service.PlanError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    version.slots.clear()
+    version.instructions.clear()
+    session.flush()
+    for slot in payload.slots:
+        version.slots.append(
+            RegimenDoseSlot(
+                medication_id=slot.medication_id,
+                medication=medications[slot.medication_id],
+                scheduled_local_time=slot.scheduled_local_time,
+                amount=slot.amount,
+                unit=slot.unit,
+                route=slot.route,
+                condition=slot.condition,
+                sort_order=slot.sort_order,
+            )
+        )
+    for instruction in payload.instructions:
+        version.instructions.append(
+            ApprovedInstruction(
+                category=instruction.category,
+                title=instruction.title,
+                body=instruction.body,
+                authored_by=instruction.authored_by,
+                authored_on=instruction.authored_on,
+                sort_order=instruction.sort_order,
+            )
+        )
+    session.flush()
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=audit.AuditAction.REGIMEN_DRAFT_UPDATED,
+        target_type="regimen_version",
+        target_id=version.id,
+        change_summary="draft metadata, slots, and instructions replaced",
+    )
+    return _regimen_out(version)
+
+
 @router.post(
     "/regimens/{version_id}/approve",
     response_model=RegimenVersionOut,
@@ -227,7 +301,7 @@ def approve_regimen(
         action=audit.AuditAction.REGIMEN_APPROVED,
         target_type="regimen_version",
         target_id=version.id,
-        change_summary=f"approved_by={payload.approved_by}",
+        change_summary="approval provenance recorded",
     )
     return _regimen_out(version)
 

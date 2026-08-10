@@ -86,6 +86,29 @@ def create_draft(
     return version
 
 
+def update_draft(
+    session: Session,
+    version: RegimenVersion,
+    *,
+    version_label: str,
+    effective_from: datetime,
+    effective_to: datetime | None = None,
+    notes: str | None = None,
+) -> RegimenVersion:
+    """Replace editable metadata on a draft; approved history is immutable."""
+    if version.status is not RegimenStatus.DRAFT:
+        raise PlanError("only an unapproved draft can be edited; create a new version")
+    if effective_to is not None and effective_to <= effective_from:
+        raise PlanError("effective_to must be after effective_from")
+
+    version.version_label = version_label
+    version.effective_from = effective_from
+    version.effective_to = effective_to
+    version.effective_period = _period(effective_from, effective_to)
+    version.notes = notes
+    return version
+
+
 def _period(start: datetime, end: datetime | None) -> Range[datetime]:
     """The tsrange the exclusion constraint compares. Half-open, naive."""
     return Range(_naive(start), _naive(end) if end else None, bounds="[)")

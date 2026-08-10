@@ -786,7 +786,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * Update Regimen Draft
+         * @description Atomically replace an unapproved draft's editable plan content.
+         */
+        put: operations["update_regimen_draft_api_v1_regimens__version_id__put"];
         post?: never;
         /**
          * Delete Regimen Draft
@@ -4666,6 +4670,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegimenVersionOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_regimen_draft_api_v1_regimens__version_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegimenVersionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegimenVersionOut"];
                 };
             };
             /** @description Validation Error */

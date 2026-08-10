@@ -135,6 +135,17 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .version-card--approved { border: 2px solid #29437a; }
 .version-card--retired { background: #f2f0e9; }
 .version-card details summary { cursor: pointer; font-weight: 700; }
+.page-actions, .form-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+.plan-editor { min-width: 0; border: 2px solid #a86712; border-radius: 0.75rem; padding: 1rem; background: #fffaf1; }
+.plan-editor fieldset { min-width: 0; margin: 1.25rem 0; border: 1px solid #89978f; border-radius: 0.5rem; padding: 1rem; }
+.plan-editor legend { font-weight: 800; padding: 0 0.4rem; }
+.plan-editor input:not([type="checkbox"]), .plan-editor select, .plan-editor textarea { width: 100%; min-width: 0; max-width: 100%; }
+.plan-form-grid, .repeatable-row { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 0.8rem; }
+.repeatable-row { min-width: 0; margin: 0.8rem 0; padding: 0.8rem; border: 1px solid #ccd4ce; border-radius: 0.5rem; background: white; }
+.wide-field { grid-column: 1 / -1; }
+.nested-form, .approval-form { margin-top: 1rem; padding: 0.75rem; border: 1px solid #89978f; border-radius: 0.5rem; }
+.checkbox-label { display: flex; flex-direction: row; gap: 0.6rem; align-items: flex-start; }
+.checkbox-label input { width: auto; margin-top: 0.2rem; }
 .draft-delete { margin-top: 1rem; padding: 0.8rem; }
 .draft-delete summary { cursor: pointer; font-weight: 800; }
 .draft-delete form { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
@@ -269,7 +280,8 @@ circle.chart-series { fill: white; }
   .session-menu span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .dose-slot { align-items: stretch; flex-direction: column; }
   .dose-slot button { width: 100%; }
-  .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values { grid-template-columns: 1fr; }
+  .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values, .plan-form-grid, .repeatable-row { grid-template-columns: 1fr; }
+  .wide-field { grid-column: auto; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
   .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: 1fr; }
   .quality-grid { grid-template-columns: 1fr; }

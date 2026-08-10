@@ -17,6 +17,10 @@ export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
+export type RegimenInput = components["schemas"]["RegimenVersionIn"];
+export type RegimenApprovalInput = components["schemas"]["RegimenApprovalIn"];
+export type Medication = components["schemas"]["MedicationOut"];
+export type MedicationInput = components["schemas"]["MedicationIn"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
 export type DataQuality = components["schemas"]["DataQualityOut"];
 export type ReportSummary = components["schemas"]["ReportOut"];
@@ -383,6 +387,30 @@ export function getLifeEvents(includeSensitive = false): Promise<LifeEvent[]> {
 
 export function getRegimens(): Promise<RegimenVersion[]> {
   return apiRequest<RegimenVersion[]>("/regimens");
+}
+
+export function getMedications(): Promise<Medication[]> {
+  return apiRequest<Medication[]>("/medications");
+}
+
+export function createMedication(payload: MedicationInput): Promise<Medication> {
+  return apiRequest<Medication>("/medications", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function createRegimen(payload: RegimenInput): Promise<RegimenVersion> {
+  return apiRequest<RegimenVersion>("/regimens", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateRegimenDraft(versionId: string, payload: RegimenInput): Promise<RegimenVersion> {
+  return apiRequest<RegimenVersion>(`/regimens/${versionId}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export function approveRegimen(versionId: string, payload: RegimenApprovalInput): Promise<RegimenVersion> {
+  return apiRequest<RegimenVersion>(`/regimens/${versionId}/approve`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function retireRegimen(versionId: string): Promise<RegimenVersion> {
+  return apiRequest<RegimenVersion>(`/regimens/${versionId}/retire`, { method: "POST" });
 }
 
 export function getActiveRegimen(): Promise<RegimenVersion | null> {

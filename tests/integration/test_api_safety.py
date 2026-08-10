@@ -2326,6 +2326,133 @@ def test_synthetic_bootstrap_cleanup_requires_exact_slot_medication_identity(
 
 
 @pytest.mark.safety("SAFE-16")
+def test_draft_plan_can_be_replaced_atomically_but_approved_plan_is_immutable(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    medication_id = _a_medication(client, logged_in)
+    original = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            "version_label": "Synthetic editable draft",
+            "effective_from": "2035-01-01T00:00:00",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert original.status_code == 201, original.text
+    version_id = original.json()["id"]
+    replacement: dict[str, Any] = {
+        "version_label": "Synthetic revised draft",
+        "effective_from": "2035-02-01T00:00:00",
+        "effective_to": "2035-03-01T00:00:00",
+        "slots": [
+            {
+                "medication_id": medication_id,
+                "scheduled_local_time": "08:30:00",
+                "amount": "12.5",
+                "unit": "mg",
+                "route": "oral",
+                "condition": "Synthetic condition",
+                "sort_order": 0,
+            }
+        ],
+        "instructions": [
+            {
+                "category": "general",
+                "title": "Synthetic title",
+                "body": "Synthetic physician text",
+                "authored_by": "Dr Synthetic Private",
+                "authored_on": "2035-01-15",
+                "sort_order": 0,
+            }
+        ],
+    }
+
+    assert client.put(f"/api/v1/regimens/{version_id}", json=replacement).status_code == 403
+    updated = client.put(f"/api/v1/regimens/{version_id}", json=replacement, headers=logged_in)
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["status"] == "draft"
+    assert updated.json()["version_label"] == "Synthetic revised draft"
+    assert Decimal(updated.json()["slots"][0]["amount"]) == Decimal("12.5")
+    assert updated.json()["instructions"][0]["title"] == "Synthetic title"
+
+    impossible = {**replacement, "version_label": "Must not partly apply"}
+    impossible["slots"] = [{**replacement["slots"][0], "medication_id": str(uuid.uuid4())}]
+    refused = client.put(f"/api/v1/regimens/{version_id}", json=impossible, headers=logged_in)
+    assert refused.status_code == 422
+    unchanged = next(
+        item for item in client.get("/api/v1/regimens").json() if item["id"] == version_id
+    )
+    assert unchanged["version_label"] == "Synthetic revised draft"
+    assert Decimal(unchanged["slots"][0]["amount"]) == Decimal("12.5")
+
+    approval = client.post(
+        f"/api/v1/regimens/{version_id}/approve",
+        headers=logged_in,
+        json={
+            "approved_by": "Dr Synthetic Private",
+            "approval_source": "Synthetic private portal message",
+        },
+    )
+    assert approval.status_code == 200, approval.text
+    immutable = client.put(f"/api/v1/regimens/{version_id}", json=replacement, headers=logged_in)
+    assert immutable.status_code == 409
+
+    with Session(engine) as session:
+        entries = list(
+            session.scalars(
+                select(AuditEntry).where(
+                    AuditEntry.target_id == uuid.UUID(version_id),
+                    AuditEntry.action.in_(
+                        [AuditAction.REGIMEN_DRAFT_UPDATED, AuditAction.REGIMEN_APPROVED]
+                    ),
+                )
+            )
+        )
+        assert {entry.action for entry in entries} == {
+            AuditAction.REGIMEN_DRAFT_UPDATED,
+            AuditAction.REGIMEN_APPROVED,
+        }
+        summaries = " ".join(entry.change_summary or "" for entry in entries)
+        assert "Synthetic" not in summaries
+        assert "12.5" not in summaries
+
+
+@pytest.mark.safety("SAFE-16")
+def test_draft_plan_update_hides_another_owners_version(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    with Session(engine) as session, session.begin():
+        other = Owner(
+            email="other-plan-editor@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        draft = medication_service.create_draft(
+            session,
+            owner_id=other.id,
+            version_label="Other owner draft",
+            effective_from=datetime(2039, 1, 1, tzinfo=UTC),
+        )
+        version_id = draft.id
+
+    response = client.put(
+        f"/api/v1/regimens/{version_id}",
+        headers=logged_in,
+        json={
+            "version_label": "Synthetic attempted edit",
+            "effective_from": "2039-02-01T00:00:00",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.safety("SAFE-16")
 def test_approval_requires_an_approver_and_a_source(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

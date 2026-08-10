@@ -96,4 +96,71 @@ describe("Medication plan page", () => {
       body: { password: submittedPassword, confirmation: "DELETE DRAFT PLAN" },
     });
   });
+
+  it("creates an unapproved draft from the guided form without recording approval", async () => {
+    const medication = {
+      id: "99999999-9999-4999-8999-999999999999", category: "plan", name: "Synthetic medicine",
+      formulation: "tablet", strength: "10", strength_unit: "mg", default_unit: "mg", default_route: "oral",
+      active_from: null, active_to: null, notes: null,
+    };
+    const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/medications")) return Promise.resolve(response([medication]));
+      if (url.endsWith("/regimens") && method === "POST") return Promise.resolve(response(version("33333333-3333-4333-8333-333333333333", "My real plan", "draft", "2026-08-15T07:00:00")));
+      if (url.endsWith("/regimens")) return Promise.resolve(response([]));
+      return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
+    expect(screen.getByRole("heading", { name: "Create your first plan draft" })).toHaveFocus();
+    await userEvent.type(screen.getByLabelText("Version label"), "My real plan");
+    await userEvent.type(screen.getByLabelText("Effective from"), "2026-08-15T07:00");
+    await userEvent.selectOptions(screen.getByLabelText("Medication"), medication.id);
+    await userEvent.clear(screen.getByLabelText("Amount"));
+    await userEvent.type(screen.getByLabelText("Amount"), "10");
+    await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Unapproved plan draft created");
+    const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
+    expect(creation?.body).toMatchObject({
+      version_label: "My real plan",
+      effective_from: "2026-08-15T07:00",
+      slots: [{ medication_id: medication.id, amount: "10", unit: "mg", route: "oral" }],
+      instructions: [],
+    });
+    expect(requests.some((request) => request.url.includes("/approve"))).toBe(false);
+  });
+
+  it("requires explicit provenance and acknowledgement before approving a draft", async () => {
+    const draft = version("33333333-3333-4333-8333-333333333333", "Reviewed synthetic draft", "draft", "2026-09-01T00:00:00");
+    const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/medications")) return Promise.resolve(response([]));
+      if (url.endsWith(`/regimens/${draft.id}/approve`) && method === "POST") return Promise.resolve(response({ ...draft, status: "approved", approved_by: "Dr Synthetic", approval_source: "Portal message" }));
+      if (url.endsWith("/regimens")) return Promise.resolve(response([draft]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+
+    await userEvent.click(await screen.findByText("Approve this draft"));
+    await userEvent.type(screen.getByLabelText("Approving clinician or role"), "Dr Synthetic");
+    await userEvent.type(screen.getByLabelText("Approval source"), "Portal message");
+    await userEvent.click(screen.getByLabelText(/confirm this records a real clinician-approved plan/i));
+    await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("approved with the provenance");
+    const approval = requests.find((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST");
+    expect(approval?.body).toEqual({ approved_by: "Dr Synthetic", approval_source: "Portal message", approved_at: null, source_document_checksum: null });
+  });
 });

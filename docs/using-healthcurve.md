@@ -20,7 +20,7 @@ does not depend on JavaScript.
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
 | Review symptoms, diary, and life events | Web Symptoms & diary; sensitive entries are hidden until explicitly revealed |
-| Review the approved plan and version changes | Web Plan; approval remains a separate CLI-only human action, while an unreferenced draft can be deleted on the web |
+| Create, review, approve, retire, or compare plan versions | Web Plan; approval is an explicit human action with clinician provenance |
 | Learn how to enter or import data | Web Help; examples are synthetic and distinguish immediate records from drafts |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
@@ -36,6 +36,32 @@ does not depend on JavaScript.
 
 Nothing can be recorded against a medication HealthCurve doesn't know about — the bot
 deliberately refuses to guess at an unrecognised name.
+
+### Guided web workflow
+
+Open **Plan** in the authenticated web interface. Choose **Create first plan draft**
+when there is no approved plan, or **Create new version from active plan** to start with
+the current schedule. The form lets you:
+
+- select an existing medication or add one to the owner's medication list;
+- enter one or more scheduled times, amounts, units, routes, and optional conditions;
+- set effective dates and copy physician-authored instructions with their author/date;
+- cancel without writing, save an unapproved draft, and return later to edit it.
+
+Saving never approves the plan and never records a dose as taken. Review the draft's
+slots and instructions, expand **Approve this draft**, enter the clinician/role and
+the source of approval, and acknowledge that this is a real clinician-approved plan.
+The local LLM has no route that can perform this action. Once approved, the version is
+immutable: make a new version for any change. **Retire this approved version** ends an
+ongoing version while preserving its history. An unreferenced unapproved draft may be
+permanently deleted with the separate password-and-phrase flow described below.
+
+Dates and times use the values shown in the form. An effective-through value must be
+later than effective-from, amounts must be positive, and every slot needs an explicit
+unit and route. If an approval would overlap another approved version, HealthCurve
+refuses it so there is never more than one plan in force for a moment.
+
+### CLI alternative
 
 ```bash
 # 1. Write a template you can fill in

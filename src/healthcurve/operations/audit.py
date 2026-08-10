@@ -35,6 +35,7 @@ class AuditAction(StrEnum):
     OWNER_ACCESS_RECOVERED = "owner_access_recovered"
 
     REGIMEN_DRAFTED = "regimen_drafted"
+    REGIMEN_DRAFT_UPDATED = "regimen_draft_updated"
     REGIMEN_DRAFT_DELETED = "regimen_draft_deleted"
     SYNTHETIC_MEDICATION_BOOTSTRAP_PURGED = "synthetic_medication_bootstrap_purged"
     REGIMEN_APPROVED = "regimen_approved"
