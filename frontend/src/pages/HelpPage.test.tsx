@@ -1,0 +1,77 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+
+import { App } from "../App";
+import { AuthContext, type AuthContextValue } from "../auth/context";
+import helpContent from "../helpContent.json";
+
+const auth: AuthContextValue = {
+  status: "authenticated",
+  session: {
+    csrfToken: "synthetic-csrf",
+    user: {
+      email: "owner@example.test",
+      displayName: "Synthetic Owner",
+      defaultTimezone: "America/New_York",
+      mfaEnabled: false,
+    },
+  },
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+};
+
+function renderHelp(): void {
+  render(<AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/help"]}><App /></MemoryRouter></AuthContext.Provider>);
+}
+
+describe("Help page", () => {
+  it("is authenticated primary navigation with prominent safety and category boundaries", () => {
+    renderHelp();
+
+    expect(screen.getByRole("heading", { name: "Help", level: 1 })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Help" })).toHaveClass("active");
+    const safety = screen.getByRole("heading", { name: "HealthCurve is not emergency care or dosing advice" }).closest("aside");
+    if (safety === null) throw new Error("emergency safety region missing");
+    expect(within(safety).getByText(/contact local emergency services/)).toBeVisible();
+    expect(within(safety).getByText(/does not decide whether, when, or how much/)).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Help topics" })).toBeVisible();
+    expect(document.querySelector('[data-category="fact"]')).toBeVisible();
+    expect(document.querySelector('[data-category="plan"]')).toBeVisible();
+    expect(document.querySelector('[data-category="ai"]')).toBeVisible();
+  });
+
+  it("documents every manifest command with a copyable example and confirmation state", async () => {
+    const writeText = vi.fn<(value: string) => Promise<void>>().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    renderHelp();
+
+    for (const item of helpContent.telegramCommands) {
+      const heading = screen.getByRole("heading", { name: item.command });
+      const card = heading.closest("article");
+      if (card === null) throw new Error(`${item.command} help card missing`);
+      expect(within(card).getByText(item.result)).toBeVisible();
+      expect(within(card).getByText(item.confirmation)).toBeVisible();
+      expect(within(card).getByLabelText(`${item.command} example`)).toHaveTextContent(item.example);
+    }
+
+    const doseCard = screen.getByRole("heading", { name: "/dose" }).closest("article");
+    if (doseCard === null) throw new Error("/dose help card missing");
+    const copy = within(doseCard).getByRole("button", { name: "Copy /dose example" });
+    copy.focus();
+    fireEvent.click(copy);
+    await waitFor(() => { expect(writeText).toHaveBeenCalledWith("/dose 10 hydrocortisone 07:05"); });
+    expect(within(doseCard).getByRole("status")).toHaveTextContent("Copied");
+  });
+
+  it("labels API-only and planned capabilities instead of advertising them as web forms", () => {
+    renderHelp();
+
+    expect(screen.getByText("API only—no complete web create form yet")).toBeVisible();
+    expect(screen.getByText("API upload and extraction review; fact-confirmation UI is planned")).toBeVisible();
+    expect(screen.getByText(/Garmin account connection:/)).toBeVisible();
+    expect(screen.getByText(/automatic provider sync is not implemented/)).toBeVisible();
+    expect(screen.getByText(/planned, not currently recognized by the bot/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open record a scheduled dose from today" })).toHaveAttribute("href", "/today");
+    expect(screen.getByRole("link", { name: "Open emergency page" })).toHaveAttribute("href", "/emergency");
+  });
+});

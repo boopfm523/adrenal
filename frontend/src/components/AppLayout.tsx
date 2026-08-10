@@ -14,6 +14,7 @@ const navigation = [
   ["Reports", "/reports"],
   ["Data quality", "/data-quality"],
   ["Settings & privacy", "/settings"],
+  ["Help", "/help"],
 ] as const;
 
 export function AppLayout(): React.JSX.Element {

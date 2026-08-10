@@ -1,0 +1,230 @@
+{
+  "telegramCommands": [
+    {
+      "command": "/start",
+      "syntax": "/start",
+      "example": "/start",
+      "purpose": "Show the same orientation and command list as /help.",
+      "result": "Read-only reply",
+      "confirmation": "No data is created."
+    },
+    {
+      "command": "/help",
+      "syntax": "/help",
+      "example": "/help",
+      "purpose": "Show deterministic commands that remain available if the local model is offline.",
+      "result": "Read-only reply",
+      "confirmation": "No data is created."
+    },
+    {
+      "command": "/privacy",
+      "syntax": "/privacy",
+      "example": "/privacy",
+      "purpose": "Explain Telegram message retention, local-model use, location rounding, and chat authorization.",
+      "result": "Read-only reply",
+      "confirmation": "No data is created."
+    },
+    {
+      "command": "/dose",
+      "syntax": "/dose <amount> <medication> [HH:MM]",
+      "example": "/dose 10 hydrocortisone 07:05",
+      "purpose": "Prepare one actual-dose candidate without using the language model.",
+      "result": "Recorded-fact draft",
+      "confirmation": "Review the medication, amount, unit, route, and time, then press Confirm. Nothing is recorded before confirmation."
+    },
+    {
+      "command": "/symptom",
+      "syntax": "/symptom <name> [severity 0-10]",
+      "example": "/symptom nausea 4",
+      "purpose": "Prepare one symptom candidate without using the language model.",
+      "result": "Recorded-fact draft",
+      "confirmation": "Review the symptom, severity, and time, then press Confirm. Nothing is recorded before confirmation."
+    },
+    {
+      "command": "/injection",
+      "syntax": "/injection [amount]",
+      "example": "/injection 100",
+      "purpose": "Rapidly record that an emergency injection was given using the injectable medication already configured in HealthCurve.",
+      "result": "Immediate recorded fact",
+      "confirmation": "This safety-critical shortcut records immediately and then reminds you to contact emergency services. It is a record, not an instruction to inject."
+    },
+    {
+      "command": "/episode",
+      "syntax": "/episode start <trigger> or /episode end",
+      "example": "/episode start synthetic stomach illness",
+      "purpose": "Open or close a stress episode so related facts can be reviewed together.",
+      "result": "Immediate recorded episode",
+      "confirmation": "The command records the episode state immediately. It does not approve or recommend any dose."
+    },
+    {
+      "command": "/today",
+      "syntax": "/today",
+      "example": "/today",
+      "purpose": "Compare what is recorded today with the active physician-approved plan.",
+      "result": "Read-only comparison",
+      "confirmation": "No data is created. “Not recorded” never means a zero dose or proves that a dose was missed."
+    },
+    {
+      "command": "/location",
+      "syntax": "/location",
+      "example": "/location",
+      "purpose": "Open the optional phone-location flow for the pending draft.",
+      "result": "Pending context for a draft",
+      "confirmation": "Use Telegram’s share button. Exact coordinates are rounded before storage, and the rounded context is recorded only when the original draft is confirmed."
+    },
+    {
+      "command": "/edit",
+      "syntax": "/edit <number> <amount|unit|time|medication> <value>",
+      "example": "/edit 1 amount 15",
+      "purpose": "Correct a dose candidate while it is still a pending draft.",
+      "result": "Edited draft",
+      "confirmation": "Editing does not record anything. Review the updated draft and press Confirm."
+    },
+    {
+      "command": "/undo",
+      "syntax": "/undo",
+      "example": "/undo",
+      "purpose": "Cancel the current Telegram draft.",
+      "result": "Cancelled draft",
+      "confirmation": "Nothing from the cancelled draft becomes a recorded fact."
+    }
+  ],
+  "apiWorkflows": [
+    {
+      "id": "today-dose",
+      "title": "Record a scheduled dose from Today",
+      "availability": "Web page",
+      "webPath": "/today",
+      "instructions": "Choose “Record … taken now” beside a scheduled slot. The plan remains unchanged.",
+      "example": "Synthetic example: record the displayed 10 mg hydrocortisone slot at the current time.",
+      "result": "Immediate recorded fact",
+      "confirmation": "The button itself is the direct entry action; review the displayed plan slot before selecting it.",
+      "endpoints": [{ "method": "POST", "path": "/api/v1/doses" }]
+    },
+    {
+      "id": "dose-correction",
+      "title": "Correct a recorded dose",
+      "availability": "Web page",
+      "webPath": "/doses",
+      "instructions": "Open a dose, choose Correct recorded fact, change the relevant fields, and provide a reason.",
+      "example": "Synthetic example: correct the experienced time from 07:15 to 07:05 and explain the transcription error.",
+      "result": "New corrected fact",
+      "confirmation": "Saving creates a new version. The original remains in revision history and is not silently overwritten.",
+      "endpoints": [{ "method": "POST", "path": "/api/v1/doses/{dose_id}/correct" }]
+    },
+    {
+      "id": "symptom-correction",
+      "title": "Correct a recorded symptom",
+      "availability": "Web page",
+      "webPath": "/symptoms-diary",
+      "instructions": "Choose Correct recorded symptom, edit the fields, and provide a correction reason.",
+      "example": "Synthetic example: change nausea severity from 5 to 4 after reviewing the original note.",
+      "result": "New corrected fact",
+      "confirmation": "Saving preserves the superseded symptom in revision history.",
+      "endpoints": [{ "method": "POST", "path": "/api/v1/symptoms/{event_id}/correct" }]
+    },
+    {
+      "id": "stress-episode",
+      "title": "Open and update a stress episode",
+      "availability": "Web page",
+      "webPath": "/episodes",
+      "instructions": "Record the trigger, experienced start time, timezone, and optional context. Close it when the episode ends.",
+      "example": "Synthetic example: trigger “stomach illness,” moderate severity, starting 2026-08-01 09:30 America/New_York.",
+      "result": "Recorded episode facts",
+      "confirmation": "Web submission records what happened. It never changes the approved plan or recommends an up-dose.",
+      "endpoints": [
+        { "method": "POST", "path": "/api/v1/stress-episodes" },
+        { "method": "PATCH", "path": "/api/v1/stress-episodes/{episode_id}" }
+      ]
+    },
+    {
+      "id": "emergency-injection",
+      "title": "Record an emergency injection",
+      "availability": "Emergency page or Telegram",
+      "webPath": "/emergency",
+      "instructions": "Use the authenticated emergency page’s fast form, or the deterministic /injection command.",
+      "example": "Synthetic example: record 100 mg of the configured intramuscular medication after it was given.",
+      "result": "Immediate recorded fact",
+      "confirmation": "This records an event; it does not tell you whether to inject. Follow dated physician-authored instructions and contact emergency services.",
+      "endpoints": [{ "method": "POST", "path": "/emergency/injection" }]
+    },
+    {
+      "id": "context-weather",
+      "title": "Add location, timezone, and weather context",
+      "availability": "Web page",
+      "webPath": "/settings",
+      "instructions": "Use Settings & privacy. Coarse location is the default; exact coordinates require explicit per-record consent.",
+      "example": "Synthetic example: “Synthetic Cambridge,” 2026-08-01 08:30 America/New_York, with optional manual weather.",
+      "result": "Immediate recorded context fact",
+      "confirmation": "Review precision and consent before submitting. Context remains separate from medical facts and can be deleted independently.",
+      "endpoints": [{ "method": "POST", "path": "/api/v1/context-events" }]
+    },
+    {
+      "id": "direct-fact-api",
+      "title": "Add facts through the authenticated API",
+      "availability": "API only—no complete web create form yet",
+      "instructions": "Authenticate first and include the in-memory CSRF token on writes. Use explicit local time and IANA timezone.",
+      "example": "Synthetic symptom body: {\"name\":\"nausea\",\"severity\":4,\"time\":{\"local_time\":\"2026-08-01T08:30:00\",\"timezone\":\"America/New_York\"}}",
+      "result": "Immediate recorded facts",
+      "confirmation": "API writes are direct user entries. Validate the response; AI output must never call these fact endpoints directly.",
+      "endpoints": [
+        { "method": "POST", "path": "/api/v1/doses" },
+        { "method": "POST", "path": "/api/v1/symptoms" },
+        { "method": "POST", "path": "/api/v1/diary-events" },
+        { "method": "POST", "path": "/api/v1/life-events" },
+        { "method": "POST", "path": "/api/v1/emergency-injections" }
+      ]
+    }
+  ],
+  "importWorkflows": [
+    {
+      "id": "lab-manual",
+      "title": "Enter a lab panel manually",
+      "availability": "API only—web review form is planned",
+      "instructions": "Submit original analyte labels, values, units, ranges, specimen time, and source metadata without normalizing them yourself.",
+      "example": "Synthetic panel: sodium 140 mmol/L, source range 135–145, collected 2026-08-01 08:00 America/New_York.",
+      "result": "Recorded lab facts",
+      "confirmation": "Manual API entry is direct. Preserve the source report wording and do not infer missing ranges or collection times.",
+      "endpoints": [{ "method": "POST", "path": "/api/v1/labs/manual" }]
+    },
+    {
+      "id": "lab-csv",
+      "title": "Import laboratory CSV",
+      "availability": "API preview and confirm",
+      "instructions": "Upload to preview first. Review every mapped row and the preview token, then call confirm.",
+      "example": "fixture,analyte,value,unit,reference_range\nSYNTHETIC_TEST_DATA,Sodium,140,mmol/L,135-145",
+      "result": "Preview, then recorded lab facts",
+      "confirmation": "Preview writes no lab facts. The explicit confirm request records only the reviewed rows.",
+      "endpoints": [
+        { "method": "POST", "path": "/api/v1/labs/imports/csv/preview" },
+        { "method": "POST", "path": "/api/v1/labs/imports/csv/confirm" }
+      ]
+    },
+    {
+      "id": "lab-pdf",
+      "title": "Upload a laboratory PDF",
+      "availability": "API upload and extraction review; fact-confirmation UI is planned",
+      "instructions": "Upload the PDF into quarantine. Validation and local extraction produce evidence-linked candidates only.",
+      "example": "Synthetic file name: synthetic-cbc-panel.pdf",
+      "result": "Private source document and confirmation-required AI draft",
+      "confirmation": "Uploading or extracting never creates a lab fact. Values and units require explicit review and confirmation in the future review flow.",
+      "endpoints": [
+        { "method": "POST", "path": "/api/v1/labs/documents" },
+        { "method": "GET", "path": "/api/v1/labs/documents/{document_id}/extraction" }
+      ]
+    },
+    {
+      "id": "garmin-file",
+      "title": "Import an exported Garmin FIT, CSV, or ZIP file",
+      "availability": "API preview and confirm—Garmin account sync is not implemented",
+      "instructions": "Upload a provider export for a preview, inspect observed and genuinely missing metrics, then confirm the exact preview.",
+      "example": "Synthetic file name: synthetic-garmin-export.zip",
+      "result": "Preview, then provider-recorded facts",
+      "confirmation": "Preview writes no Garmin facts. Confirm is explicit and idempotent; unavailable metrics remain missing, never zero.",
+      "endpoints": [
+        { "method": "POST", "path": "/api/v1/integrations/garmin/imports/preview" },
+        { "method": "POST", "path": "/api/v1/integrations/garmin/imports/confirm" }
+      ]
+    }
+  ]
+}

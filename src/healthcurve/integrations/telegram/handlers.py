@@ -53,6 +53,24 @@ from healthcurve.operations.rate_limit import (
 #: later against a time nobody remembers.
 DRAFT_TTL: Final = timedelta(hours=6)
 
+# Public command registry used by the in-app Help drift gate. Commands must be in
+# this set to reach dispatch below; adding one therefore requires documenting it.
+SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
+    {
+        "dose",
+        "edit",
+        "episode",
+        "help",
+        "injection",
+        "location",
+        "privacy",
+        "start",
+        "symptom",
+        "today",
+        "undo",
+    }
+)
+
 HELP_TEXT: Final = """\
 HealthCurve bot
 
@@ -151,6 +169,9 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
     command = parts[0].lower().lstrip("/").split("@")[0]
     args = parts[1:]
 
+    if command not in SUPPORTED_TELEGRAM_COMMANDS:
+        return Reply(f"Unknown command /{command}. Try /help.")
+
     match command:
         case "help" | "start":
             return Reply(HELP_TEXT)
@@ -172,8 +193,8 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
             return _cmd_edit(session, owner, args, now=now)
         case "undo":
             return _cmd_undo(session, owner)
-        case _:
-            return Reply(f"Unknown command /{command}. Try /help.")
+        case _:  # pragma: no cover - registry and dispatch are checked together
+            raise AssertionError(f"registered Telegram command is not dispatched: {command}")
 
 
 def _cmd_dose(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:

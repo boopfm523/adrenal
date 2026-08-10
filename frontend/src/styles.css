@@ -192,6 +192,29 @@ circle.chart-series { fill: white; }
 .report-options { display: grid; gap: 0.65rem; }
 .report-history { display: grid; gap: 1rem; }
 .report-record { max-height: 24rem; overflow: auto; border: 1px solid #dce2dd; border-radius: 0.4rem; padding: 0.75rem; background: #fbfcfb; white-space: pre-wrap; overflow-wrap: anywhere; }
+.help-emergency { margin-bottom: 1.5rem; border: 2px solid #8a260f; border-radius: 0.75rem; padding: 1.25rem; background: #fff7e8; }
+.help-emergency h2 { margin-top: 0; color: #8a260f; }
+.help-topics { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-block: 1.5rem; }
+.help-topics a { min-height: 44px; border: 1px solid #89978f; border-radius: 999px; padding: 0.65rem 0.85rem; background: white; }
+.help-section { margin-top: 3rem; }
+.help-category-grid, .help-command-grid, .help-workflow-grid { display: grid; grid-template-columns: repeat(2, minmax(18rem, 1fr)); gap: 1rem; }
+.help-category-grid .category-card { margin: 0; }
+.help-command, .help-workflow { min-width: 0; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
+.help-command h3, .help-workflow h3 { margin-top: 0; }
+.help-workflow__heading { display: flex; align-items: start; justify-content: space-between; gap: 0.75rem; }
+.availability-label { border-radius: 999px; padding: 0.3rem 0.6rem; background: #e7ece8; font-size: 0.82rem; font-weight: 750; }
+.help-outcome { display: grid; gap: 0.55rem; }
+.help-outcome div { border-left: 0.25rem solid #365f50; padding-left: 0.7rem; }
+.help-outcome dt { color: #48554f; font-size: 0.82rem; font-weight: 800; text-transform: uppercase; }
+.help-outcome dd { margin: 0.2rem 0 0; }
+.copy-example { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0.6rem; margin-block: 1rem; }
+.copy-example pre { min-height: 44px; max-width: 100%; margin: 0; overflow-x: auto; border: 1px solid #ccd4ce; border-radius: 0.45rem; padding: 0.75rem; background: #f2f0e9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.copy-status { grid-column: 1 / -1; min-height: 1.2rem; color: #48554f; font-size: 0.85rem; }
+.help-endpoints { margin-top: 1rem; }
+.help-endpoints summary { cursor: pointer; font-weight: 700; }
+.help-endpoints code { overflow-wrap: anywhere; }
+.help-planned { border-left: 0.45rem solid #a86712; padding: 1rem 1.25rem; background: #fffbf3; }
+.help-planned li { margin-block: 0.7rem; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
@@ -204,5 +227,11 @@ circle.chart-series { fill: white; }
   .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: 1fr; }
   .quality-grid { grid-template-columns: 1fr; }
   .report-layout, .report-range { grid-template-columns: 1fr; }
+  .help-category-grid, .help-command-grid, .help-workflow-grid { grid-template-columns: 1fr; }
+  .help-workflow__heading { display: block; }
+  .availability-label { display: inline-block; margin-bottom: 0.5rem; }
+  .copy-example { grid-template-columns: 1fr; }
+  .copy-example button { width: 100%; }
+  .copy-status { grid-column: auto; }
   .report-range label:last-child { grid-column: auto; }
 }

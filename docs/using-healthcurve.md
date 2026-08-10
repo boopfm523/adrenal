@@ -3,9 +3,11 @@
 What works right now, and how to get at your data. Written against the running stack,
 not the plan — where something doesn't exist yet, this says so.
 
-The authenticated web interface now has login and Today views. Other navigation items
-are safe placeholders while their dedicated Beads issues are implemented. The
-emergency page remains server-rendered so it does not depend on JavaScript.
+The authenticated web interface includes Today, timeline, dose, symptom and diary,
+plan, episode, reports, data-quality, settings, and Help views. Help is the task-oriented
+starting point for current Telegram commands, web/API entry methods, imports, and
+clearly labelled planned features. The emergency page remains server-rendered so it
+does not depend on JavaScript.
 
 ---
 
@@ -19,6 +21,7 @@ emergency page remains server-rendered so it does not depend on JavaScript.
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
 | Review symptoms, diary, and life events | Web Symptoms & diary; sensitive entries are hidden until explicitly revealed |
 | Review the approved plan and version changes | Web Plan; approval remains a separate CLI-only human action |
+| Learn how to enter or import data | Web Help; examples are synthetic and distinguish immediate records from drafts |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |
@@ -43,9 +46,10 @@ docker compose run --rm api python -m healthcurve.cli init-medications-file meds
 # 3. Load it. This creates a *draft* regimen -- not yet in effect.
 docker compose run --rm api python -m healthcurve.cli load-medications meds.yaml
 
-# 4. Record that a physician approved it. Until this, the plan is not active.
+# 4. The load command prints the new version ID. Record the approval source.
+#    Until this succeeds, the plan is not active.
 docker compose run --rm api python -m healthcurve.cli approve-regimen \
-    --approved-by "Dr Smith" --approved-on 2026-08-09
+    <VERSION_ID> --by "Dr Smith" --source "clinic letter 2026-08-09"
 ```
 
 The approval step is not bureaucracy: an unapproved regimen can't be the baseline that
