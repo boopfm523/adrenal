@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { getActiveRegimen, getRegimenDiff, getRegimens, type RegimenVersion } from "../api/client";
+import { deleteRegimenDraft, getActiveRegimen, getRegimenDiff, getRegimens, type RegimenVersion } from "../api/client";
 import { PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
 
@@ -27,25 +27,57 @@ function PlanContents({ version }: { version: RegimenVersion }): React.JSX.Eleme
   </>;
 }
 
+function DraftDeletionForm({ versionId, onDeleted }: { versionId: string; onDeleted: () => void }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ password, confirmation }: { password: string; confirmation: "DELETE DRAFT PLAN" }) => deleteRegimenDraft(versionId, password, confirmation),
+    onSuccess: async () => {
+      onDeleted();
+      await queryClient.invalidateQueries({ queryKey: ["regimens"] });
+      await queryClient.invalidateQueries({ queryKey: ["regimen-diff"] });
+    },
+  });
+  return <details className="draft-delete danger-zone">
+    <summary>Delete this unapproved draft</summary>
+    <p>This permanently removes only this draft and its draft slots/instructions. Approved or retired plan history cannot be deleted.</p>
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      mutation.mutate({
+        password: data.get("password") as string,
+        confirmation: data.get("confirmation") as "DELETE DRAFT PLAN",
+      });
+    }}>
+      <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label>
+      <label>Type DELETE DRAFT PLAN<input name="confirmation" required autoComplete="off" pattern="DELETE DRAFT PLAN" /></label>
+      <button type="submit" disabled={mutation.isPending}>Permanently delete draft</button>
+    </form>
+    {mutation.isError ? <p className="error-summary" role="alert">Draft was not deleted. Check the password and phrase; referenced or historical plans cannot be deleted.</p> : null}
+  </details>;
+}
+
 export function PlanPage(): React.JSX.Element {
   const active = useQuery({ queryKey: ["regimens", "active"], queryFn: getActiveRegimen });
   const history = useQuery({ queryKey: ["regimens", "history"], queryFn: getRegimens });
   const [olderId, setOlderId] = useState("");
   const [newerId, setNewerId] = useState("");
+  const [draftDeleted, setDraftDeleted] = useState(false);
   const chronological = [...(history.data ?? [])].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
   const selectedOlderId = olderId !== "" ? olderId : (chronological[chronological.length - 2]?.id ?? "");
   const selectedNewerId = newerId !== "" ? newerId : (chronological[chronological.length - 1]?.id ?? "");
   const diff = useQuery({ queryKey: ["regimen-diff", selectedOlderId, selectedNewerId], queryFn: () => getRegimenDiff(selectedOlderId, selectedNewerId), enabled: selectedOlderId !== "" && selectedNewerId !== "" && selectedOlderId !== selectedNewerId });
 
-  return <Page title="Medication plan" description="Read-only physician-approved schedules and their provenance, kept separate from actual recorded doses.">
+  return <Page title="Medication plan" description="Physician-approved schedules and their provenance, kept separate from actual recorded doses.">
     {(active.isPending || history.isPending) ? <p role="status">Loading medication plan…</p> : null}
     {(active.isError || history.isError) ? <p className="error-summary" role="alert">Medication plan history could not be loaded.</p> : null}
     {active.data === null ? <section className="empty-state"><h2>No approved plan currently in force</h2><p>Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</p></section> : null}
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} /></PlanCard>}
+    {draftDeleted ? <p className="success-message" role="status">The unapproved draft was permanently deleted. Approved plan history and recorded doses were unchanged.</p> : null}
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2>
+      <p>Approved and retired plan versions are retained as history. Only an unapproved draft with no recorded-dose, report, or analysis references can be permanently deleted.</p>
       {history.data?.length === 0 ? <p>No plan versions recorded.</p> : null}
-      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details></article>)}</div>
+      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <DraftDeletionForm versionId={version.id} onDeleted={() => { setDraftDeleted(true); }} /> : null}</article>)}</div>
     </section>
 
     <section aria-labelledby="diff-heading"><h2 id="diff-heading">Compare versions</h2>

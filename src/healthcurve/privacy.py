@@ -6,7 +6,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.models import AIAnalysis, ExtractionDraft
@@ -20,7 +21,13 @@ from healthcurve.integrations.garmin.models import GarminImportBatch
 from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
 from healthcurve.labs.documents import DocumentLayout, mark_deleted
 from healthcurve.labs.models import LabDocument, LabPanel, LabResult
-from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
+from healthcurve.medications.models import (
+    DoseEvent,
+    Medication,
+    RegimenDoseSlot,
+    RegimenStatus,
+    RegimenVersion,
+)
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.storage import delete_owner_artifacts
@@ -33,6 +40,10 @@ class DeletionError(RuntimeError):
 
 class CorrectionHistoryError(DeletionError):
     pass
+
+
+class RegimenDraftDeletionError(DeletionError):
+    """A plan draft cannot be physically removed without losing provenance."""
 
 
 DELETABLE_RECORDS: dict[str, type] = {
@@ -53,6 +64,101 @@ DELETABLE_RECORDS: dict[str, type] = {
 class IntegrationDeletion:
     credentials: int
     data_rows: int
+
+
+@dataclass(frozen=True, slots=True)
+class RegimenDraftDeletion:
+    slots: int
+    instructions: int
+
+
+def delete_regimen_draft(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    version_id: uuid.UUID,
+) -> RegimenDraftDeletion | None:
+    """Delete only an unapproved, owner-owned, completely unreferenced draft.
+
+    Draft-owned slots and instructions are part of the same plan draft and may cascade.
+    Facts, immutable report snapshots, and AI source manifests are independent records;
+    any reference from them refuses the deletion instead of silently orphaning history.
+    The caller owns the transaction, so an unexpected database reference rolls back the
+    draft deletion and its audit entry together.
+    """
+    version = session.get(RegimenVersion, version_id)
+    if version is None or version.owner_id != owner_id:
+        return None
+    if version.status is not RegimenStatus.DRAFT:
+        raise RegimenDraftDeletionError(
+            "approved and retired plan history cannot be deleted; retire an approved plan instead"
+        )
+
+    dose_references = (
+        session.scalar(
+            select(func.count())
+            .select_from(DoseEvent)
+            .where(
+                DoseEvent.owner_id == owner_id,
+                or_(
+                    DoseEvent.regimen_version_id == version_id,
+                    DoseEvent.slot_id.in_(
+                        select(RegimenDoseSlot.id).where(
+                            RegimenDoseSlot.regimen_version_id == version_id
+                        )
+                    ),
+                ),
+            )
+        )
+        or 0
+    )
+    version_key = str(version_id)
+    report_references = sum(
+        version_key in (manifest or {}).get("plan", [])
+        for manifest in session.scalars(
+            select(ReportSnapshot.source_manifest).where(ReportSnapshot.owner_id == owner_id)
+        )
+    )
+    ai_references = sum(
+        version_key in (source_ids or [])
+        for source_ids in session.scalars(
+            select(AIAnalysis.source_record_ids).where(AIAnalysis.owner_id == owner_id)
+        )
+    )
+    if dose_references or report_references or ai_references:
+        kinds = [
+            label
+            for count, label in (
+                (dose_references, "recorded doses"),
+                (report_references, "saved reports"),
+                (ai_references, "AI analyses"),
+            )
+            if count
+        ]
+        raise RegimenDraftDeletionError(
+            f"draft is referenced by {', '.join(kinds)} and cannot be deleted"
+        )
+
+    result = RegimenDraftDeletion(slots=len(version.slots), instructions=len(version.instructions))
+    session.delete(version)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        raise RegimenDraftDeletionError(
+            "draft has an unexpected retained reference and cannot be deleted"
+        ) from exc
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner_id),
+        action=audit.AuditAction.REGIMEN_DRAFT_DELETED,
+        target_type="regimen_version",
+        target_id=version_id,
+        change_summary=(
+            f"unapproved draft physically deleted; slots={result.slots}; "
+            f"instructions={result.instructions}"
+        ),
+    )
+    return result
 
 
 def delete_record(

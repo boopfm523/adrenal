@@ -20,7 +20,7 @@ does not depend on JavaScript.
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
 | Review symptoms, diary, and life events | Web Symptoms & diary; sensitive entries are hidden until explicitly revealed |
-| Review the approved plan and version changes | Web Plan; approval remains a separate CLI-only human action |
+| Review the approved plan and version changes | Web Plan; approval remains a separate CLI-only human action, while an unreferenced draft can be deleted on the web |
 | Learn how to enter or import data | Web Help; examples are synthetic and distinguish immediate records from drafts |
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
@@ -54,6 +54,16 @@ docker compose run --rm api python -m healthcurve.cli approve-regimen \
 
 The approval step is not bureaucracy: an unapproved regimen can't be the baseline that
 adherence is measured against, because nothing has established it as correct.
+
+An unwanted **unapproved draft** can be permanently deleted from its card on the
+authenticated Plan page. Expand “Delete this unapproved draft,” enter the current
+password, and type `DELETE DRAFT PLAN` exactly. HealthCurve refuses if the version was
+approved or retired, belongs to another owner, or is referenced by a recorded dose,
+saved report, or AI analysis. Its draft slots and draft instructions are removed with
+it; medications, facts, approved history, reports, analyses, and unrelated drafts are
+left unchanged. The structural audit entry contains only the deleted draft ID and row
+counts, not medication, schedule, instruction, clinician, or source values. Encrypted
+backups may retain the deleted draft until their configured expiry.
 
 ## Recording things
 
@@ -380,8 +390,11 @@ Anything without that filter is showing you history as well as the present.
 
 ### Clearing test data
 
-There is no deletion feature yet (`hc-cbs.10`). To wipe everything you've recorded
-while testing:
+Use the Plan page for one unapproved, unreferenced draft. Do not use raw SQL to remove
+an approved or retired plan version: those versions are retained so historical doses
+and reports stay interpretable. A development-only previewed cleanup for demonstrably
+synthetic bootstrap medication data is separate work. The following emergency testing
+shortcut is intentionally unsafe and is not the normal deletion workflow:
 
 ```sql
 TRUNCATE fact.dose_event, fact.symptom_event, fact.diary_event, fact.life_event,
@@ -390,7 +403,7 @@ TRUNCATE fact.dose_event, fact.symptom_event, fact.diary_event, fact.life_event,
 ```
 
 This deletes real data with no confirmation and no undo. Check which database you are
-connected to first.
+connected to first; never use it against an installation containing real records.
 
 ---
 

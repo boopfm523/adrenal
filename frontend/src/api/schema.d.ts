@@ -778,6 +778,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/regimens/{version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Regimen Draft
+         * @description Physically remove an unapproved draft, never approved plan history.
+         */
+        delete: operations["delete_regimen_draft_api_v1_regimens__version_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/regimens/{version_id}/approve": {
         parameters: {
             query?: never;
@@ -2345,6 +2365,19 @@ export interface components {
             approved_by: string;
             /** Source Document Checksum */
             source_document_checksum?: string | null;
+        };
+        /**
+         * RegimenDraftDeleteIn
+         * @description High-friction deletion request for an unapproved plan draft.
+         */
+        RegimenDraftDeleteIn: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "DELETE DRAFT PLAN";
+            /** Password */
+            password: string;
         };
         /**
          * RegimenStatus
@@ -4634,6 +4667,43 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RegimenVersionOut"] | null;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_regimen_draft_api_v1_regimens__version_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegimenDraftDeleteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

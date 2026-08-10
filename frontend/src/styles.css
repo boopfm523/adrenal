@@ -135,6 +135,9 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .version-card--approved { border: 2px solid #29437a; }
 .version-card--retired { background: #f2f0e9; }
 .version-card details summary { cursor: pointer; font-weight: 700; }
+.draft-delete { margin-top: 1rem; padding: 0.8rem; }
+.draft-delete summary { cursor: pointer; font-weight: 800; }
+.draft-delete form { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
 .diff-controls { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 1rem; }
 .diff-controls label { display: grid; gap: 0.35rem; font-weight: 700; }
 .diff-controls select { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }

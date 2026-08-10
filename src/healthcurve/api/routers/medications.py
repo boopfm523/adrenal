@@ -11,6 +11,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
+from healthcurve import privacy
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
     DoseSlotOut,
@@ -18,9 +19,11 @@ from healthcurve.api.schemas import (
     MedicationIn,
     MedicationOut,
     RegimenApprovalIn,
+    RegimenDraftDeleteIn,
     RegimenVersionIn,
     RegimenVersionOut,
 )
+from healthcurve.identity import service as auth
 from healthcurve.medications import service
 from healthcurve.medications.models import (
     ApprovedInstruction,
@@ -245,6 +248,35 @@ def retire_regimen(version_id: uuid.UUID, session: DbSession, owner: CurrentOwne
         target_id=version.id,
     )
     return _regimen_out(version)
+
+
+@router.delete(
+    "/regimens/{version_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+def delete_regimen_draft(
+    version_id: uuid.UUID,
+    payload: RegimenDraftDeleteIn,
+    session: DbSession,
+    owner: CurrentOwner,
+) -> None:
+    """Physically remove an unapproved draft, never approved plan history."""
+    if not auth.verify_password(owner.password_hash, payload.password):
+        raise HTTPException(status_code=403, detail="current password is incorrect")
+    try:
+        deleted = privacy.delete_regimen_draft(
+            session,
+            owner_id=owner.id,
+            version_id=version_id,
+        )
+    except privacy.RegimenDraftDeletionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if deleted is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="regimen version not found",
+        )
 
 
 @router.get("/regimens/{version_id}/diff/{other_id}")

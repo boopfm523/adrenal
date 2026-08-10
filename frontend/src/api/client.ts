@@ -393,6 +393,17 @@ export function getRegimenDiff(olderId: string, newerId: string): Promise<Record
   return apiRequest<Record<string, string[]>>(`/regimens/${olderId}/diff/${newerId}`);
 }
 
+export async function deleteRegimenDraft(
+  versionId: string,
+  password: string,
+  confirmation: "DELETE DRAFT PLAN",
+): Promise<void> {
+  await apiRequest<unknown>(`/regimens/${versionId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ password, confirmation }),
+  });
+}
+
 export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: string): Promise<AnalyticsSummary> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
