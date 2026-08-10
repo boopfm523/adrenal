@@ -38,11 +38,12 @@ from healthcurve.events.timekeeping import (
     resolve_event_time,
 )
 from healthcurve.medications.models import DoseEvent, Medication
+from healthcurve.vitals.models import WeightUnit
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
-PROMPT_VERSION: Final = "extract-v2"
-SCHEMA_VERSION: Final = "candidates-v1"
+PROMPT_VERSION: Final = "extract-v3"
+SCHEMA_VERSION: Final = "candidates-v2"
 
 #: Nothing plausible for adrenal replacement exceeds this. A larger number is a parse
 #: error until a human says otherwise.
@@ -91,6 +92,10 @@ You are a parser, not an adviser. You must:
 - If any field is unclear, leave it null and lower your confidence. Do not guess.
 - Create one candidate for each distinct event. A dose and a symptom in one message
   are two candidates; never put symptom fields on a dose candidate.
+- A blood-pressure candidate must preserve the stated systolic and diastolic mmHg
+  values and optional pulse. Do not interpret or comment on the reading.
+- A weight candidate must preserve the stated decimal value in the amount field and
+  explicit lb or kg in the unit field. Do not infer a missing unit or comment on it.
 - Write amount as a decimal string only (for example "2.5"), with the unit only in
   the unit field.
 - Write local_time as an ISO 8601 local datetime without a UTC offset. A clock time
@@ -109,6 +114,8 @@ class CandidateType(StrEnum):
     SYMPTOM = "symptom"
     DIARY = "diary"
     LIFE_EVENT = "life_event"
+    BLOOD_PRESSURE = "blood_pressure"
+    WEIGHT = "weight"
 
 
 class ExtractedCandidate(BaseModel):
@@ -124,6 +131,11 @@ class ExtractedCandidate(BaseModel):
     symptom_name: str | None = None
     severity: int | None = Field(default=None, ge=0, le=10)
     text: str | None = None
+    systolic_mmhg: int | None = None
+    diastolic_mmhg: int | None = None
+    pulse_bpm: int | None = None
+    weight_value: str | None = Field(default=None, description="Decimal as a string")
+    weight_unit: str | None = None
     local_time: str | None = Field(default=None, description="ISO 8601 local, no offset")
     negated: bool = False
     hypothetical: bool = False
@@ -152,6 +164,11 @@ CANDIDATE_JSON_SCHEMA: Final[dict[str, Any]] = {
                     "symptom_name": {"type": ["string", "null"]},
                     "severity": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
                     "text": {"type": ["string", "null"]},
+                    "systolic_mmhg": {"type": ["integer", "null"]},
+                    "diastolic_mmhg": {"type": ["integer", "null"]},
+                    "pulse_bpm": {"type": ["integer", "null"]},
+                    "weight_value": {"type": ["string", "null"]},
+                    "weight_unit": {"type": ["string", "null"], "enum": ["lb", "kg", None]},
                     "local_time": {"type": ["string", "null"]},
                     "negated": {"type": "boolean"},
                     "hypothetical": {"type": "boolean"},
@@ -186,6 +203,8 @@ class FlagCode(StrEnum):
     POSSIBLE_DUPLICATE = "possible_duplicate"
     LOW_CONFIDENCE = "low_confidence"
     PROMPT_INJECTION_SUSPECTED = "prompt_injection_suspected"
+    MISSING_VITAL_VALUE = "missing_vital_value"
+    INVALID_VITAL_VALUE = "invalid_vital_value"
 
 
 BLOCKING_FLAGS: Final[frozenset[FlagCode]] = frozenset(
@@ -198,6 +217,8 @@ BLOCKING_FLAGS: Final[frozenset[FlagCode]] = frozenset(
         FlagCode.UNPARSEABLE_TIME,
         FlagCode.NONEXISTENT_TIME,
         FlagCode.FUTURE_TIME,
+        FlagCode.MISSING_VITAL_VALUE,
+        FlagCode.INVALID_VITAL_VALUE,
     }
 )
 
@@ -214,6 +235,11 @@ class ValidatedCandidate(BaseModel):
     symptom_name: str | None = None
     severity: int | None = None
     text: str | None = None
+    systolic_mmhg: int | None = None
+    diastolic_mmhg: int | None = None
+    pulse_bpm: int | None = None
+    weight_value: Decimal | None = None
+    weight_unit: WeightUnit | None = None
     local_time: datetime | None = None
     timezone: str
     confidence: float = 0.0
@@ -389,6 +415,30 @@ def _validate_candidate(
         if not candidate.unit:
             flags.append(FlagCode.MISSING_UNIT)
 
+    weight_value: Decimal | None = None
+    weight_unit: WeightUnit | None = None
+    if candidate.type is CandidateType.BLOOD_PRESSURE:
+        values = (candidate.systolic_mmhg, candidate.diastolic_mmhg)
+        if any(value is None for value in values):
+            flags.append(FlagCode.MISSING_VITAL_VALUE)
+        elif any(value is not None and not 1 <= value <= 500 for value in values):
+            flags.append(FlagCode.INVALID_VITAL_VALUE)
+        if candidate.pulse_bpm is not None and not 1 <= candidate.pulse_bpm <= 500:
+            flags.append(FlagCode.INVALID_VITAL_VALUE)
+    elif candidate.type is CandidateType.WEIGHT:
+        raw_weight = candidate.weight_value or candidate.amount
+        raw_unit = candidate.weight_unit or candidate.unit
+        if raw_weight is None or raw_unit is None:
+            flags.append(FlagCode.MISSING_VITAL_VALUE)
+        else:
+            weight_value = normalise_amount(raw_weight)
+            try:
+                weight_unit = WeightUnit(raw_unit.lower())
+            except ValueError:
+                flags.append(FlagCode.INVALID_VITAL_VALUE)
+            if weight_value is None or not Decimal(0) < weight_value <= Decimal(5000):
+                flags.append(FlagCode.INVALID_VITAL_VALUE)
+
     local_time = _validate_time(candidate.local_time, timezone, now, flags, message=message)
 
     if candidate.confidence < 0.6:
@@ -412,6 +462,11 @@ def _validate_candidate(
         symptom_name=candidate.symptom_name,
         severity=candidate.severity,
         text=candidate.text,
+        systolic_mmhg=candidate.systolic_mmhg,
+        diastolic_mmhg=candidate.diastolic_mmhg,
+        pulse_bpm=candidate.pulse_bpm,
+        weight_value=weight_value,
+        weight_unit=weight_unit,
         local_time=local_time,
         timezone=timezone,
         confidence=candidate.confidence,

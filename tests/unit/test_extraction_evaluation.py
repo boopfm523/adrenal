@@ -85,6 +85,8 @@ def test_gold_set_covers_required_synthetic_safety_cases() -> None:
         "negated-dose",
         "hypothetical-dose",
         "prompt-injection",
+        "blood-pressure",
+        "body-weight",
     }
     assert {case.id for case in gold.cases} == required
     assert gold.synthetic_marker == SYNTHETIC_MARKER

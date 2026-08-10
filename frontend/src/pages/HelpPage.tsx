@@ -165,7 +165,7 @@ export function HelpPage(): React.JSX.Element {
         <h2 id="planned-title">Clearly not available yet</h2>
         <ul>
           <li><strong>Telegram <code>/beads-add</code>:</strong> planned, not currently recognized by the bot.</li>
-          <li><strong>Blood pressure and weight:</strong> structured storage, web forms, Telegram commands, trends, exports, and reports are planned.</li>
+          <li><strong>Blood pressure and weight web views:</strong> Telegram commands and API storage are available; web forms, trends, and report sections are planned.</li>
           <li><strong>Curated CBC, acute chemistry, and cortisol trends:</strong> normalization and accessible trends are planned. Original lab values can already be entered or imported.</li>
           <li><strong>Garmin account connection:</strong> automatic provider sync is not implemented. Only owner-supplied FIT, CSV, or ZIP preview/confirm is available.</li>
           <li><strong>Lab PDF fact confirmation:</strong> private upload and local candidate extraction exist; the complete review-and-confirm web workflow is not yet available.</li>

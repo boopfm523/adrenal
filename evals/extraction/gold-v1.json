@@ -1,6 +1,6 @@
 {
   "version": "gold-v1",
-  "prompt_version": "extract-v2",
+  "prompt_version": "extract-v3",
   "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
   "known_medications": ["hydrocortisone", "fludrocortisone"],
   "thresholds": {
@@ -11,6 +11,9 @@
     "medication_name": 0.9,
     "negated": 1.0,
     "severity": 1.0,
+    "systolic_mmhg": 1.0,
+    "diastolic_mmhg": 1.0,
+    "pulse_bpm": 1.0,
     "symptom_name": 1.0,
     "type": 1.0,
     "unit": 0.9
@@ -23,6 +26,9 @@
     "medication_name": 0.98,
     "negated": 1.0,
     "severity": 1.0,
+    "systolic_mmhg": 1.0,
+    "diastolic_mmhg": 1.0,
+    "pulse_bpm": 1.0,
     "symptom_name": 1.0,
     "type": 1.0,
     "unit": 0.98
@@ -110,6 +116,22 @@
       "timezone": "Europe/London",
       "now": "2026-08-09T09:00:00+01:00",
       "expected": [{"fields": {"type": "dose", "medication_name": "hydrocortisone", "amount": "10", "unit": "mg", "local_time": "2026-08-09T08:00:00", "negated": false, "hypothetical": false}}]
+    },
+    {
+      "id": "blood-pressure",
+      "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
+      "message": "My blood pressure was 118 over 76 with a pulse of 62 at 08:15.",
+      "timezone": "Europe/London",
+      "now": "2026-08-09T09:00:00+01:00",
+      "expected": [{"fields": {"type": "blood_pressure", "systolic_mmhg": 118, "diastolic_mmhg": 76, "pulse_bpm": 62, "local_time": "2026-08-09T08:15:00", "negated": false, "hypothetical": false}}]
+    },
+    {
+      "id": "body-weight",
+      "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
+      "message": "I weighed 180.5 lb at 08:20.",
+      "timezone": "Europe/London",
+      "now": "2026-08-09T09:00:00+01:00",
+      "expected": [{"fields": {"type": "weight", "amount": "180.5", "unit": "lb", "local_time": "2026-08-09T08:20:00", "negated": false, "hypothetical": false}}]
     }
   ]
 }

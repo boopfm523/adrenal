@@ -25,6 +25,7 @@ from healthcurve.integrations.telegram.handlers import (
 )
 from healthcurve.integrations.telegram.models import TelegramLocationRequest
 from healthcurve.medications.models import DoseEvent, DoseUnit, Medication, Route
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
@@ -141,6 +142,57 @@ def test_all_supported_fields_edit_without_bypassing_confirmation(engine: Engine
         assert draft.resolved_at is not None
         assert draft.raw_text is None
         assert not draft.is_pending
+
+
+def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
+    engine: Engine,
+) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email="vital-draft@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        bp_reply = handle_message(session, owner, text="/bp 40/250 1 08:15", now=NOW)
+        assert bp_reply.draft_id is not None
+        assert "Blood pressure: 40/250 mmHg, pulse 1 bpm" in bp_reply.text
+        assert "Nothing is recorded yet" in bp_reply.text
+        assert session.scalar(select(BloodPressureEvent)) is None
+
+        bp_confirmed = confirm_draft(session, owner, bp_reply.draft_id)
+        session.flush()
+        pressure = session.scalar(
+            select(BloodPressureEvent).where(BloodPressureEvent.owner_id == owner.id)
+        )
+        assert pressure is not None
+        assert (pressure.systolic_mmhg, pressure.diastolic_mmhg, pressure.pulse_bpm) == (
+            40,
+            250,
+            1,
+        )
+        assert pressure.confirmation_state.value == "confirmed_from_draft"
+        assert bp_confirmed.text.startswith("Recorded:")
+
+        weight_reply = handle_message(session, owner, text="/weight 180 lb 08:20", now=NOW)
+        assert weight_reply.draft_id is not None
+        assert session.scalar(select(WeightEvent)) is None
+        edited = handle_message(session, owner, text="/edit 1 amount 181", now=NOW)
+        assert edited.text.startswith("Edited draft:")
+        assert session.scalar(select(WeightEvent)) is None
+
+        weight_confirmed = confirm_draft(session, owner, weight_reply.draft_id)
+        session.flush()
+        weight = session.scalar(select(WeightEvent).where(WeightEvent.owner_id == owner.id))
+        assert weight is not None
+        assert weight.value == Decimal("181.0000")
+        assert weight.unit.value == "lb"
+        assert weight.normalized_kg == Decimal("82.1002")
+        assert weight.confirmation_state.value == "confirmed_from_draft"
+        assert weight_confirmed.text.startswith("Recorded:")
 
 
 def test_phone_location_is_rounded_linked_and_consumed_with_draft(engine: Engine) -> None:

@@ -168,3 +168,70 @@ def test_schema_valid_output_creates_only_a_pending_draft(
     assert stored.model_name == "qwen3:30b"
     assert stored.state.value == "pending"
     assert stored.raw_text is not None and SYNTHETIC_MARKER in stored.raw_text
+
+
+def test_natural_language_vitals_create_only_confirmation_required_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session, privileged = _empty_session()
+    restricted = MagicMock(spec=Session)
+    restricted.scalar.return_value = None
+    restricted.begin.return_value = nullcontext()
+
+    def assign_database_default() -> None:
+        draft = restricted.add.call_args.args[0]
+        assert isinstance(draft, ExtractionDraft)
+        draft.id = DRAFT_ID
+
+    restricted.flush.side_effect = assign_database_default
+    factory = MagicMock(return_value=nullcontext(cast(Session, restricted)))
+    monkeypatch.setattr(handlers, "get_ai_session_factory", lambda: factory)
+    client = StubOllamaClient(
+        ModelResult(
+            outcome=ModelOutcome.OK,
+            model_name="qwen3:30b",
+            data={
+                "candidates": [
+                    {
+                        "type": "blood_pressure",
+                        "systolic_mmhg": 40,
+                        "diastolic_mmhg": 250,
+                        "pulse_bpm": 1,
+                        "local_time": "2026-08-09T08:15:00",
+                        "negated": False,
+                        "hypothetical": False,
+                        "confidence": 0.99,
+                    },
+                    {
+                        "type": "weight",
+                        "amount": "180",
+                        "unit": "lb",
+                        "local_time": "2026-08-09T08:20:00",
+                        "negated": False,
+                        "hypothetical": False,
+                        "confidence": 0.99,
+                    },
+                ]
+            },
+        )
+    )
+
+    reply = handlers.handle_message(
+        session,
+        _owner(),
+        text=f"{SYNTHETIC_MARKER}: blood pressure 40/250 pulse 1 and weight 180 lb",
+        client=client,
+        now=NOW,
+    )
+
+    assert reply.draft_id == DRAFT_ID
+    assert "Nothing is recorded yet" in reply.text
+    assert "Blood pressure: 40/250 mmHg, pulse 1 bpm" in reply.text
+    assert "Weight: 180 lb" in reply.text
+    privileged.add.assert_not_called()
+    stored = restricted.add.call_args.args[0]
+    assert isinstance(stored, ExtractionDraft)
+    assert {candidate["type"] for candidate in stored.candidates} == {
+        "blood_pressure",
+        "weight",
+    }

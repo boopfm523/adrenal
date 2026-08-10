@@ -48,6 +48,8 @@ from healthcurve.operations.rate_limit import (
     RateLimitPolicy,
     RateLimitUnavailable,
 )
+from healthcurve.vitals import service as vitals
+from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
 
 #: A draft the owner never answers is purged rather than left to be confirmed days
 #: later against a time nobody remembers.
@@ -57,6 +59,7 @@ DRAFT_TTL: Final = timedelta(hours=6)
 # this set to reach dispatch below; adding one therefore requires documenting it.
 SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
     {
+        "bp",
         "dose",
         "edit",
         "episode",
@@ -68,6 +71,7 @@ SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
         "symptom",
         "today",
         "undo",
+        "weight",
     }
 )
 
@@ -81,6 +85,8 @@ Nothing is recorded until you confirm it.
 
 Commands (these always work, even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
+/bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
+/weight <value> <lb|kg> [HH:MM] - record body weight
 /symptom <name> [0-10] - record a symptom
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
@@ -179,6 +185,10 @@ def _handle_command(session: Session, owner: Owner, text: str, *, now: datetime)
             return Reply(PRIVACY_TEXT)
         case "dose":
             return _cmd_dose(session, owner, args, now=now)
+        case "bp":
+            return _cmd_blood_pressure(session, owner, args, now=now)
+        case "weight":
+            return _cmd_weight(session, owner, args, now=now)
         case "symptom":
             return _cmd_symptom(session, owner, args, now=now)
         case "injection":
@@ -266,6 +276,79 @@ def _cmd_symptom(session: Session, owner: Owner, args: list[str], *, now: dateti
         timezone=owner.default_timezone,
         confidence=1.0,
         flags=[],
+    )
+    draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
+    return _draft_reply(draft, [candidate])
+
+
+def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = "Usage: /bp <systolic>/<diastolic> [pulse] [HH:MM]\nExample: /bp 120/80 62 08:15"
+    if not args:
+        return Reply(usage)
+    values = args[0].split("/", maxsplit=1)
+    remaining = args[1:]
+    if len(values) != 2 and len(args) >= 2:
+        values, remaining = args[:2], args[2:]
+    if len(values) != 2 or not all(value.isdigit() for value in values):
+        return Reply(usage)
+    systolic, diastolic = (int(value) for value in values)
+    if not 1 <= systolic <= 500 or not 1 <= diastolic <= 500:
+        return Reply("Blood-pressure values must be positive whole numbers at most 500 mmHg.")
+
+    time_token = remaining[-1] if remaining and _looks_like_time(remaining[-1]) else None
+    pulse_parts = remaining[:-1] if time_token else remaining
+    if len(pulse_parts) > 1 or (pulse_parts and not pulse_parts[0].isdigit()):
+        return Reply(usage)
+    pulse = int(pulse_parts[0]) if pulse_parts else None
+    if pulse is not None and not 1 <= pulse <= 500:
+        return Reply("Pulse must be a positive whole number at most 500 bpm.")
+
+    local = _local_now(owner, now)
+    if time_token:
+        parsed = _parse_time_token(time_token, local)
+        if parsed is None:
+            return Reply(f"I couldn't read '{time_token}' as a time. Use HH:MM.")
+        local = parsed
+    candidate = ValidatedCandidate(
+        type=CandidateType.BLOOD_PRESSURE,
+        systolic_mmhg=systolic,
+        diastolic_mmhg=diastolic,
+        pulse_bpm=pulse,
+        local_time=local,
+        timezone=owner.default_timezone,
+        confidence=1.0,
+    )
+    draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
+    return _draft_reply(draft, [candidate])
+
+
+def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = "Usage: /weight <value> <lb|kg> [HH:MM]\nExample: /weight 180 lb 08:15"
+    if len(args) < 2:
+        return Reply(usage)
+    try:
+        value = Decimal(args[0])
+        unit = WeightUnit(args[1].lower())
+    except (InvalidOperation, ValueError):
+        return Reply(usage)
+    if not Decimal(0) < value <= Decimal(5000):
+        return Reply("Weight must be greater than zero and at most 5000 lb or kg.")
+    if len(args) > 3:
+        return Reply(usage)
+    time_token = args[2] if len(args) == 3 else None
+    local = _local_now(owner, now)
+    if time_token:
+        parsed = _parse_time_token(time_token, local)
+        if parsed is None:
+            return Reply(f"I couldn't read '{time_token}' as a time. Use HH:MM.")
+        local = parsed
+    candidate = ValidatedCandidate(
+        type=CandidateType.WEIGHT,
+        weight_value=value,
+        weight_unit=unit,
+        local_time=local,
+        timezone=owner.default_timezone,
+        confidence=1.0,
     )
     draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
     return _draft_reply(draft, [candidate])
@@ -443,6 +526,17 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
     if index < 0 or index >= len(candidates):
         return Reply(f"That draft has {len(candidates)} item(s). {usage}")
     candidate = candidates[index]
+    if candidate.type in {CandidateType.BLOOD_PRESSURE, CandidateType.WEIGHT}:
+        return _edit_vital_candidate(
+            draft,
+            candidates,
+            index,
+            candidate,
+            args[1].lower(),
+            " ".join(args[2:]).strip(),
+            owner,
+            now,
+        )
     if candidate.type is not CandidateType.DOSE:
         return Reply("Only dose amount, unit, time, and medication can be edited here.")
 
@@ -504,6 +598,103 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
     changes["flags"] = flags
     changes["is_actionable"] = not bool(BLOCKING_FLAGS & set(flags))
     edited = ValidatedCandidate.model_validate({**candidate.model_dump(mode="python"), **changes})
+    if draft.original_candidates is None:
+        draft.original_candidates = [dict(item) for item in draft.candidates]
+    candidates[index] = edited
+    draft.candidates = [item.model_dump(mode="json") for item in candidates]
+    draft.state = DraftState.EDITED
+    return _draft_reply(draft, candidates, edited=True)
+
+
+def _edit_vital_candidate(
+    draft: ExtractionDraft,
+    candidates: list[ValidatedCandidate],
+    index: int,
+    candidate: ValidatedCandidate,
+    field: str,
+    value: str,
+    owner: Owner,
+    now: datetime,
+) -> Reply:
+    changes: dict[str, object] = {}
+    if field == "time":
+        local = _parse_time_token(value, _local_now(owner, now))
+        if local is None:
+            return Reply("I couldn't read that time. Use 24-hour HH:MM, e.g. /edit 1 time 08:15")
+        try:
+            resolved = resolve_event_time(local, owner.default_timezone)
+        except AmbiguousLocalTimeError:
+            return Reply("That time happened twice when the clocks changed; use the web editor.")
+        except NonExistentLocalTimeError:
+            return Reply("That time did not exist when the clocks changed; choose another time.")
+        if resolved.occurred_at > now + timedelta(minutes=10):
+            return Reply("That time resolves into the future; choose the time the event happened.")
+        changes["local_time"] = local
+    elif candidate.type is CandidateType.BLOOD_PRESSURE:
+        if field not in {"systolic", "diastolic", "pulse"}:
+            return Reply("For blood pressure, edit systolic, diastolic, pulse, or time.")
+        if field == "pulse" and value.lower() in {"none", "clear"}:
+            changes["pulse_bpm"] = None
+        elif not value.isdigit() or not 1 <= int(value) <= 500:
+            return Reply("Blood-pressure and pulse values must be whole numbers from 1 to 500.")
+        else:
+            changes[
+                {"systolic": "systolic_mmhg", "diastolic": "diastolic_mmhg", "pulse": "pulse_bpm"}[
+                    field
+                ]
+            ] = int(value)
+    else:
+        if field in {"amount", "value"}:
+            try:
+                amount = Decimal(value)
+            except InvalidOperation:
+                return Reply("I couldn't read that weight. Example: /edit 1 amount 180")
+            if not Decimal(0) < amount <= Decimal(5000):
+                return Reply("Weight must be greater than zero and at most 5000.")
+            changes["weight_value"] = amount
+        elif field == "unit":
+            try:
+                changes["weight_unit"] = WeightUnit(value.lower())
+            except ValueError:
+                return Reply("Weight unit must be lb or kg.")
+        else:
+            return Reply("For weight, edit amount, unit, or time.")
+
+    edited = ValidatedCandidate.model_validate({**candidate.model_dump(mode="python"), **changes})
+    flags = list(edited.flags)
+    _remove_flags(
+        flags,
+        FlagCode.MISSING_VITAL_VALUE,
+        FlagCode.INVALID_VITAL_VALUE,
+        FlagCode.MISSING_TIME,
+        FlagCode.ASSUMED_TIME,
+        FlagCode.UNPARSEABLE_TIME,
+        FlagCode.AMBIGUOUS_TIME,
+        FlagCode.NONEXISTENT_TIME,
+        FlagCode.FUTURE_TIME,
+    )
+    if edited.type is CandidateType.BLOOD_PRESSURE:
+        systolic = edited.systolic_mmhg
+        diastolic = edited.diastolic_mmhg
+        if systolic is None or diastolic is None:
+            flags.append(FlagCode.MISSING_VITAL_VALUE)
+        elif (
+            not 1 <= systolic <= 500
+            or not 1 <= diastolic <= 500
+            or (edited.pulse_bpm is not None and not 1 <= edited.pulse_bpm <= 500)
+        ):
+            flags.append(FlagCode.INVALID_VITAL_VALUE)
+    if edited.type is CandidateType.WEIGHT:
+        if edited.weight_value is None or edited.weight_unit is None:
+            flags.append(FlagCode.MISSING_VITAL_VALUE)
+        elif not Decimal(0) < edited.weight_value <= Decimal(5000):
+            flags.append(FlagCode.INVALID_VITAL_VALUE)
+    edited = edited.model_copy(
+        update={
+            "flags": flags,
+            "is_actionable": not bool(BLOCKING_FLAGS & set(flags)),
+        }
+    )
     if draft.original_candidates is None:
         draft.original_candidates = [dict(item) for item in draft.candidates]
     candidates[index] = edited
@@ -645,6 +836,8 @@ _FLAG_EXPLANATIONS: Final[dict[FlagCode, str]] = {
     FlagCode.POSSIBLE_DUPLICATE: "there's already a similar dose near that time",
     FlagCode.LOW_CONFIDENCE: "I'm not confident about this one",
     FlagCode.PROMPT_INJECTION_SUSPECTED: "this message contains text aimed at the parser",
+    FlagCode.MISSING_VITAL_VALUE: "a required blood-pressure or weight value is missing",
+    FlagCode.INVALID_VITAL_VALUE: "a blood-pressure or weight value needs correction",
 }
 
 
@@ -782,8 +975,10 @@ def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Repl
     reply = _draft_reply(draft, candidates, edited=draft.state is DraftState.EDITED)
     reply.text += (
         "\n\nCorrect one field with:\n"
-        "/edit <number> <amount|unit|time|medication> <value>\n"
-        "Example: /edit 1 amount 15"
+        "/edit <number> <field> <value>\n"
+        "Dose fields: amount, unit, time, medication.\n"
+        "Blood pressure: systolic, diastolic, pulse, time.\n"
+        "Weight: amount, unit, time."
     )
     return reply
 
@@ -803,6 +998,14 @@ def _describe(candidate: ValidatedCandidate) -> str:
             return f"Note: {(candidate.text or '')[:100]}"
         case CandidateType.LIFE_EVENT:
             return f"Life event: {(candidate.text or '')[:100]} at {when}"
+        case CandidateType.BLOOD_PRESSURE:
+            reading = f"{candidate.systolic_mmhg or '?'}/{candidate.diastolic_mmhg or '?'} mmHg"
+            pulse = f", pulse {candidate.pulse_bpm} bpm" if candidate.pulse_bpm is not None else ""
+            return f"Blood pressure: {reading}{pulse} at {when}"
+        case CandidateType.WEIGHT:
+            return (
+                f"Weight: {candidate.weight_value or '?'} {candidate.weight_unit or ''} at {when}"
+            )
         case _:  # pragma: no cover
             return str(candidate.type)
 
@@ -914,6 +1117,36 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 source_type=SourceType.TELEGRAM,
                 confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
                 text=candidate.text or "",
+            )
+        case CandidateType.BLOOD_PRESSURE:
+            if candidate.systolic_mmhg is None or candidate.diastolic_mmhg is None:
+                return None
+            return events.create_event(
+                session,
+                BloodPressureEvent,
+                owner_id=owner.id,
+                event_time=event_time,
+                source_type=SourceType.TELEGRAM,
+                confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+                systolic_mmhg=candidate.systolic_mmhg,
+                diastolic_mmhg=candidate.diastolic_mmhg,
+                pulse_bpm=candidate.pulse_bpm,
+            )
+        case CandidateType.WEIGHT:
+            if candidate.weight_value is None or candidate.weight_unit is None:
+                return None
+            return events.create_event(
+                session,
+                WeightEvent,
+                owner_id=owner.id,
+                event_time=event_time,
+                source_type=SourceType.TELEGRAM,
+                confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+                value=candidate.weight_value,
+                unit=candidate.weight_unit,
+                normalized_kg=vitals.normalize_weight_kg(
+                    candidate.weight_value, candidate.weight_unit
+                ),
             )
         case _:  # pragma: no cover
             return None

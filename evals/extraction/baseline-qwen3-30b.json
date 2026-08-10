@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T17:33:01.332107Z",
+  "generated_at": "2026-08-10T02:05:47.970730Z",
   "gold_set_version": "gold-v1",
   "model_digest": "ad815644918f0eaab341c12b67837cc6dd4562342cdaf118f83d5d554cb37226",
   "model_name": "qwen3:30b",
@@ -9,17 +9,22 @@
         {
           "amount": "10",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T09:00:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "relative-time"
@@ -29,17 +34,22 @@
         {
           "amount": "5",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-08T23:50:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "overnight-event"
@@ -49,17 +59,22 @@
         {
           "amount": "10",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-03-08T07:15:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "travel-timezone"
@@ -69,17 +84,22 @@
         {
           "amount": "5",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-10-25T01:30:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "dst-ambiguous"
@@ -89,17 +109,22 @@
         {
           "amount": "2.5",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T17:00:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "decimal-fraction"
@@ -109,17 +134,22 @@
         {
           "amount": "15",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T07:05:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "self-correction"
@@ -129,32 +159,42 @@
         {
           "amount": "10",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T07:10:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         },
         {
           "amount": null,
-          "confidence": 0.9,
+          "confidence": 0.8,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T07:10:00",
           "medication_name": null,
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": 4,
           "symptom_name": "dizziness",
+          "systolic_mmhg": null,
           "text": null,
           "type": "symptom",
-          "unit": null
+          "unit": null,
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "multiple-events"
@@ -164,17 +204,22 @@
         {
           "amount": "5",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T12:30:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": true,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "negated-dose"
@@ -184,17 +229,22 @@
         {
           "amount": "20",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": true,
           "local_time": "2026-08-10T07:00:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "hypothetical-dose"
@@ -204,21 +254,76 @@
         {
           "amount": "10",
           "confidence": 0.9,
+          "diastolic_mmhg": null,
           "hypothetical": false,
           "local_time": "2026-08-09T08:00:00",
           "medication_name": "hydrocortisone",
           "medication_text": null,
           "negated": false,
+          "pulse_bpm": null,
           "route": null,
           "severity": null,
           "symptom_name": null,
+          "systolic_mmhg": null,
           "text": null,
           "type": "dose",
-          "unit": "mg"
+          "unit": "mg",
+          "weight_unit": null,
+          "weight_value": null
         }
       ],
       "id": "prompt-injection"
+    },
+    {
+      "candidates": [
+        {
+          "amount": null,
+          "confidence": 0.9,
+          "diastolic_mmhg": 76,
+          "hypothetical": false,
+          "local_time": "2026-08-09T08:15:00",
+          "medication_name": null,
+          "medication_text": null,
+          "negated": false,
+          "pulse_bpm": 62,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "systolic_mmhg": 118,
+          "text": null,
+          "type": "blood_pressure",
+          "unit": null,
+          "weight_unit": null,
+          "weight_value": null
+        }
+      ],
+      "id": "blood-pressure"
+    },
+    {
+      "candidates": [
+        {
+          "amount": "180.5",
+          "confidence": 0.9,
+          "diastolic_mmhg": null,
+          "hypothetical": false,
+          "local_time": "2026-08-09T08:20:00",
+          "medication_name": null,
+          "medication_text": null,
+          "negated": false,
+          "pulse_bpm": null,
+          "route": null,
+          "severity": null,
+          "symptom_name": null,
+          "systolic_mmhg": null,
+          "text": null,
+          "type": "weight",
+          "unit": "lb",
+          "weight_unit": null,
+          "weight_value": null
+        }
+      ],
+      "id": "body-weight"
     }
   ],
-  "prompt_version": "extract-v2"
+  "prompt_version": "extract-v3"
 }
