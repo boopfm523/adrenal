@@ -171,6 +171,28 @@ def test_schema_is_sent_to_constrain_decoding(monkeypatch: pytest.MonkeyPatch) -
     assert seen["stream"] is False
 
 
+def test_generation_limits_are_forwarded_as_ollama_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "{}"}})
+
+    _patch_transport(monkeypatch, handler)
+    _client().generate_json(
+        system_prompt="s",
+        user_content="u",
+        json_schema=SCHEMA,
+        max_output_tokens=700,
+        context_window=8192,
+    )
+
+    assert seen["options"]["num_predict"] == 700
+    assert seen["options"]["num_ctx"] == 8192
+
+
 def test_vision_image_is_data_on_the_selected_private_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

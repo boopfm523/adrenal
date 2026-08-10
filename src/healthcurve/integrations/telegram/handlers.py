@@ -4,8 +4,9 @@ The flow for free text is: receive -> extract -> validate -> show draft -> confi
 edit, or cancel -> store -> reply with what was recorded. Nothing becomes a fact
 before the confirm step (SAFE-11, SAFE-12).
 
-Deterministic slash commands exist so the bot stays useful when the model is down
-(ADR-0003). They are the fallback the plan requires, and they never touch the model.
+Deterministic health-recording slash commands keep the bot useful when the model is
+down (ADR-0003). They never touch the model. ``/beads-add`` is the explicit product-
+request exception: it fails closed unless the local model produces a validated proposal.
 """
 
 from __future__ import annotations
@@ -42,8 +43,13 @@ from healthcurve.events.timekeeping import (
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
 from healthcurve.integrations.telegram.feature_requests import (
+    FeatureRequestEvaluationFailed,
+    FeatureRequestNeedsClarification,
     FeatureRequestRejected,
+    evaluate_request,
     queue_request,
+    queued_request,
+    validate_request,
 )
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
@@ -89,11 +95,10 @@ Example: "Took 15mg hydrocortisone at 7:08, slept badly, mild nausea"
 
 Nothing is recorded until you confirm it.
 
-Commands (these always work, even if the language model is offline):
+Recording commands (these work even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
 /bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
 /weight <value> <lb|kg> [HH:MM] - record body weight
-/beads-add <feature request> - add a request to the later-work inbox
 /symptom <name> [0-10] - record a symptom
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
@@ -104,6 +109,9 @@ Commands (these always work, even if the language model is offline):
 /undo - cancel the pending draft
 /privacy - what this bot stores
 /help - this message
+
+Product requests (requires the local language model):
+/beads-add <feature request> - evaluate, deduplicate, and add a structured inbox Bead
 """
 
 PRIVACY_TEXT: Final = """\
@@ -113,6 +121,9 @@ What this bot stores
   or cancel, the raw text is deleted and only the structured record remains.
 - Telegram itself keeps your chat history. That is outside HealthCurve's control.
   Clear the chat there if that matters to you.
+- /beads-add sends only the feature text to the configured local model. A successful
+  outbox item and Bead retain the generated proposal and a one-way message hash, not
+  the raw Telegram directive. Invalid or unavailable model output creates nothing.
 - Message text is sent to a language model running on private infrastructure. It is
   not sent to any third-party AI service.
 - Phone location is optional and requires pressing Telegram's share button. Exact
@@ -158,7 +169,16 @@ def handle_message(
         return Reply("I didn't get any text. Try /help.")
 
     if text.startswith("/"):
-        return _handle_command(session, owner, text, message_id=message_id, now=now)
+        return _handle_command(
+            session,
+            owner,
+            text,
+            message_id=message_id,
+            client=client,
+            limiter=limiter,
+            model_policy=model_policy,
+            now=now,
+        )
 
     return _handle_free_text(
         session,
@@ -173,7 +193,7 @@ def handle_message(
 
 
 # ---------------------------------------------------------------------------
-# Commands (never touch the model)
+# Commands (only /beads-add uses the model, and only to create bounded backlog data)
 # ---------------------------------------------------------------------------
 
 
@@ -183,6 +203,9 @@ def _handle_command(
     text: str,
     *,
     message_id: str | None,
+    client: OllamaClient | None,
+    limiter: RateLimiter | None,
+    model_policy: RateLimitPolicy | None,
     now: datetime,
 ) -> Reply:
     command_part, *remainder = text.split(maxsplit=1)
@@ -205,7 +228,14 @@ def _handle_command(
         case "weight":
             return _cmd_weight(session, owner, args, now=now)
         case "beads-add":
-            return _cmd_beads_add(raw_argument, message_id=message_id, now=now)
+            return _cmd_beads_add(
+                raw_argument,
+                message_id=message_id,
+                client=client,
+                limiter=limiter,
+                model_policy=model_policy,
+                now=now,
+            )
         case "symptom":
             return _cmd_symptom(session, owner, args, now=now)
         case "injection":
@@ -224,22 +254,28 @@ def _handle_command(
             raise AssertionError(f"registered Telegram command is not dispatched: {command}")
 
 
-def _cmd_beads_add(request: str, *, message_id: str | None, now: datetime) -> Reply:
-    """Queue untrusted product text; never call a shell, Beads, or an agent here."""
+def _cmd_beads_add(
+    request: str,
+    *,
+    message_id: str | None,
+    client: OllamaClient | None,
+    limiter: RateLimiter | None,
+    model_policy: RateLimitPolicy | None,
+    now: datetime,
+) -> Reply:
+    """Evaluate locally and queue only a validated proposal, never raw text."""
     settings = get_settings()
     if settings.beads_outbox_dir is None:
         return Reply(
             "Feature-request capture is temporarily unavailable. "
             "Nothing was created; try again later."
         )
+    safe_message_id = message_id or ""
     try:
-        queued = queue_request(
-            settings.beads_outbox_dir,
-            message_id=message_id or "",
-            text=request,
-            backlog_epic_id=settings.beads_backlog_epic_id,
-            now=now,
-        )
+        validate_request(request)
+        existing = queued_request(settings.beads_outbox_dir, message_id=safe_message_id)
+    except FeatureRequestNeedsClarification as exc:
+        return Reply(f"I need one clarification before creating a Bead:\n{exc.question}")
     except FeatureRequestRejected as exc:
         if str(exc) == "request_too_long":
             return Reply("That feature request is too long. Keep it to 500 characters or fewer.")
@@ -248,14 +284,54 @@ def _cmd_beads_add(request: str, *, message_id: str | None, now: datetime) -> Re
                 "Please describe only the feature—remove passwords, tokens, contact details, "
                 "and personal health values."
             )
+        if str(exc) == "request_contains_model_instructions":
+            return Reply(
+                "I couldn't safely evaluate that as a product request. Describe only the "
+                "feature outcome, without instructions to the language model."
+            )
         return Reply(
             "Usage: /beads-add <feature request>\n"
             "Example: /beads-add add a feature that allows me to record hydration"
         )
-    state = "already queued" if queued.already_queued else "queued"
+    if existing is not None:
+        return Reply(
+            f"Feature request already queued as {existing.request_id}. "
+            "The safe host bridge will reply with its hc-* Beads ID."
+        )
+    if limiter is not None and model_policy is not None:
+        try:
+            limiter.check("model", "telegram-feature-request", model_policy)
+        except RateLimitExceeded as exc:
+            return Reply(
+                "The local feature-request evaluator is rate limited. Nothing was created. "
+                f"Try again in about {exc.result.retry_after} seconds."
+            )
+        except RateLimitUnavailable:
+            return Reply(
+                "I can't safely check the feature-request limit right now. Nothing was created."
+            )
+    try:
+        evaluated = evaluate_request(request, client=client)
+        queued = queue_request(
+            settings.beads_outbox_dir,
+            message_id=safe_message_id,
+            evaluated=evaluated,
+            backlog_epic_id=settings.beads_backlog_epic_id,
+            now=now,
+        )
+    except FeatureRequestNeedsClarification as exc:
+        return Reply(f"I need one clarification before creating a Bead:\n{exc.question}")
+    except FeatureRequestEvaluationFailed:
+        return Reply(
+            "The local language model couldn't safely evaluate that feature request. "
+            "Nothing was created; try again later or rephrase it more specifically."
+        )
+    except FeatureRequestRejected:
+        return Reply("That request could not be queued safely. Nothing was created.")
     return Reply(
-        f"Feature request {state} as {queued.request_id}. "
-        "The safe host bridge will reply with its hc-* Beads ID; no agent or code was started."
+        f"Evaluated locally and queued as {queued.request_id}: {evaluated.proposal.title}. "
+        "The safe host bridge will search for duplicates and reply with an hc-* Beads ID; "
+        "no agent or code was started."
     )
 
 

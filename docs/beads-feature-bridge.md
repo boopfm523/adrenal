@@ -1,19 +1,66 @@
 # Telegram feature-request bridge
 
-`/beads-add` lets the single allowlisted Telegram chat add a bounded product idea
-to the `hc-inbox` Beads epic. It does not start Codex, claim work, run commands from
-the message, or change existing issues.
+`/beads-add` lets the single allowlisted Telegram chat propose a bounded product idea
+for the `hc-inbox` Beads epic. It does not start Codex, claim work, run message text as
+a command, or change an existing issue.
 
 Example:
 
 ```text
-/beads-add add a feature that allows me to record hydration
+/beads-add add a feature that lets me record hydration and review a daily total
 ```
 
-The worker writes a small request envelope to `var/beads-outbox/pending`. The worker
-has no repository mount and no `bd` binary. A trusted host process reads the envelope,
-invokes the installed `bd` CLI with a fixed argument list (never a shell), syncs the
-Beads database, and sends the new `hc-*` ID back to the configured Telegram chat.
+The response is intentionally two-stage:
+
+1. The Telegram worker says that the request was evaluated locally and gives a
+   one-way `tg-*` queue ID.
+2. The host bridge searches open and closed Beads for a strong duplicate. It then
+   replies with either the existing `hc-*` ID or the newly created one.
+
+The Bead still waits for a later agent to pull and claim it normally. Sending the
+command never authorizes implementation.
+
+## Local-model evaluation boundary
+
+The worker sends only the request text to the configured local Ollama/Qwen endpoint.
+There is no cloud fallback. Ollama receives the text as an untrusted JSON value, under
+a versioned system prompt and strict JSON Schema. It can return either:
+
+- a generated title, problem statement, design constraints, testable acceptance
+  criteria, allowlisted area/risk labels, and duplicate-search terms; or
+- one clarification question when the outcome is ambiguous or needs a medical-safety,
+  privacy, or security decision.
+
+Every generated field is then validated independently for schema, size, control
+characters, fixed label allowlists, secrets, personal measurements, contact details,
+and exact coordinates. Prompt-injection phrases are rejected before the model call.
+Requests to diagnose, prescribe, or automatically change medication receive a safe
+clarification instead of a Bead.
+
+If Ollama is unavailable, times out, omits its model identity, returns malformed JSON,
+adds unsupported fields, copies the raw directive, or produces unsafe content,
+HealthCurve creates nothing. The bot gives a retry/rephrase response; it never falls
+back to inserting the Telegram directive verbatim.
+
+## Outbox and host boundary
+
+After successful evaluation, the worker writes a versioned envelope to
+`var/beads-outbox/pending`. The envelope contains only:
+
+- the generated proposal;
+- a one-way hash derived from the Telegram message ID;
+- the fixed inbox parent; and
+- local model tag/digest plus prompt and schema versions.
+
+It does **not** contain the raw Telegram request, chat ID, bot token, health record, or
+credentials. The worker has no repository mount and no `bd` binary.
+
+A trusted host process independently validates the complete envelope, invokes the
+installed `bd` CLI with a fixed argv list (never a shell), searches all Beads for the
+hashed external reference and strong content duplicates, syncs the Beads database,
+and sends the resulting `hc-*` ID to the configured Telegram chat. The model cannot
+choose priority, status, assignee, parent, dependencies, arbitrary labels, commands,
+or implementation actions.
 
 ## Configuration
 
@@ -22,11 +69,12 @@ In `.env`:
 ```dotenv
 HC_BEADS_OUTBOX_DIR=./var/beads-outbox
 HC_BEADS_BACKLOG_EPIC_ID=hc-inbox
+HC_OLLAMA_BASE_URL=http://host.docker.internal:11434
+HC_OLLAMA_MODEL=qwen3:30b
 ```
 
-The existing `HC_TELEGRAM_BOT_TOKEN` and `HC_TELEGRAM_ALLOWED_CHAT_ID` are used by
-the host bridge. Never put those values in Beads, logs, command arguments, or this
-document.
+The existing encrypted/configured Telegram credentials are used by the host bridge.
+Never put their values in Beads, logs, command arguments, or documentation.
 
 Run one drain manually from the repository root:
 
@@ -45,20 +93,19 @@ after replacing its two `REPOSITORY_PATH` placeholders, then use `launchctl boot
 for the current GUI user. Its working directory must be the repository so `Settings`
 can read `.env` and `bd` can find the correct Beads database.
 
-## Safety and failure behavior
+## Recovery behavior
 
-- Only Telegram's configured allowlisted chat reaches command dispatch.
-- Requests are limited to 500 characters. Obvious credentials, contact details, and
-  personal measurement values are rejected. Describe the feature, not your data.
-- Quotes, newlines, semicolons, `$()`, and leading dashes remain literal argv values.
-- Fixed fields are type `feature`, priority `P2`, labels `source:telegram` and
-  `area:product`, and parent `hc-inbox`. The trusted host independently checks the
-  configured parent and rejects any worker envelope that tries to select another.
-- The Telegram message ID becomes a one-way hashed idempotency key. A result record
-  prevents a Telegram delivery retry from creating another issue.
-- A matching Beads `external_ref` recovers safely if the bridge crashes after create.
-- A failed Beads call, Dolt push, or Telegram acknowledgement leaves the request in
-  `pending` and emits only a reason code. The request text and credentials are not
-  logged.
-- Later agents still pull, claim, implement, test, close, sync, commit, and push using
-  the root `AGENTS.md`. The request cannot bypass that workflow.
+- An identical Telegram update is claimed once by the Telegram update ledger. The
+  hashed message ID also makes the outbox idempotent before another model call.
+- A matching Beads external reference recovers a crash that happened after creation.
+- A durable result file prevents failed Telegram acknowledgement from creating a
+  second issue on retry.
+- A strong title/content match returns the existing open or closed Bead instead of
+  creating a duplicate.
+- A failed Beads call, Dolt push, or Telegram acknowledgement keeps the request in
+  `pending` and logs only a reason code—never proposal text or credentials.
+- An old, malformed, or tampered envelope fails closed. Correct the local service and
+  submit the feature again; do not hand-edit an envelope into validity.
+
+Later agents still pull, claim, implement, test, close, sync, commit, and push using
+the repository-root `AGENTS.md` and normal Beads workflow.

@@ -133,6 +133,8 @@ class OllamaClient:
         temperature: float = 0.0,
         model_name: str | None = None,
         images: list[bytes] | None = None,
+        max_output_tokens: int | None = None,
+        context_window: int | None = None,
     ) -> ModelResult:
         """Ask for a JSON object matching ``json_schema``.
 
@@ -152,13 +154,22 @@ class OllamaClient:
         user_message: dict[str, Any] = {"role": "user", "content": user_content}
         if images:
             user_message["images"] = [b64encode(image).decode("ascii") for image in images]
+        if max_output_tokens is not None and max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be positive")
+        if context_window is not None and context_window <= 0:
+            raise ValueError("context_window must be positive")
+        options: dict[str, Any] = {"temperature": temperature}
+        if max_output_tokens is not None:
+            options["num_predict"] = max_output_tokens
+        if context_window is not None:
+            options["num_ctx"] = context_window
         payload: dict[str, Any] = {
             "model": selected_model,
             "stream": False,
             # Ollama's structured-output mode. Constrains decoding to the schema, which
             # makes invalid JSON rare -- but never assumed away.
             "format": json_schema,
-            "options": {"temperature": temperature},
+            "options": options,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 user_message,

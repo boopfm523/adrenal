@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from healthcurve.ai.ollama import OllamaClient
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import handlers
 from healthcurve.integrations.telegram.client import TelegramClient
@@ -55,6 +56,7 @@ def process_update(
     *,
     allowed_chat_id: int,
     client: TelegramClient,
+    model_client: OllamaClient | None = None,
     limiter: RateLimiter | None = None,
     model_policy: RateLimitPolicy | None = None,
 ) -> UpdateOutcome:
@@ -130,6 +132,7 @@ def process_update(
         owner,
         text=text,
         message_id=str(message.get("message_id")),
+        client=model_client,
         limiter=limiter,
         model_policy=model_policy,
     )

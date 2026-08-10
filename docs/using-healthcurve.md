@@ -93,8 +93,8 @@ backups may retain the deleted draft until their configured expiry.
 
 ## Recording things
 
-**Telegram** is the fastest path. Commands are deterministic and work even when the
-language model is unavailable:
+**Telegram** is the fastest path. Health-recording commands are deterministic and work
+even when the language model is unavailable:
 
 | Command | Example |
 |---|---|
@@ -104,6 +104,14 @@ language model is unavailable:
 | `/episode` | `/episode start vomiting` / `/episode end` |
 | `/today` | today's doses against your plan |
 | `/undo` | cancels the pending draft |
+
+`/beads-add <feature request>` is the deliberate exception: it asks only the configured
+local Ollama/Qwen model to generate a structured product proposal. The host bridge
+searches for a duplicate before creating a Bead. The raw directive is not copied into
+Beads, and an unavailable model, ambiguity, invalid output, prompt-injection text, or
+sensitive content creates nothing. It never starts an agent or implementation. See
+[Telegram feature-request bridge](beads-feature-bridge.md) for the privacy boundary and
+recovery behavior.
 
 Free text goes to the model: *"Took 15mg hydrocortisone at 7:08, slept badly"*. You get
 a draft with **Confirm** / **Cancel**. Nothing becomes a record until you confirm it.

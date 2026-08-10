@@ -47,8 +47,19 @@ class StubOllamaClient(OllamaClient):
         temperature: float = 0.0,
         model_name: str | None = None,
         images: list[bytes] | None = None,
+        max_output_tokens: int | None = None,
+        context_window: int | None = None,
     ) -> ModelResult:
-        del system_prompt, user_content, json_schema, temperature, model_name, images
+        del (
+            system_prompt,
+            user_content,
+            json_schema,
+            temperature,
+            model_name,
+            images,
+            max_output_tokens,
+            context_window,
+        )
         return self.result
 
 

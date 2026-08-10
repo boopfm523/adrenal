@@ -73,7 +73,8 @@ describe("Help page", () => {
     expect(screen.getByText(/Garmin account connection:/)).toBeVisible();
     expect(screen.getByText(/automatic provider sync is not implemented/)).toBeVisible();
     expect(screen.getByRole("heading", { name: "/beads-add" })).toBeVisible();
-    expect(screen.getByText(/no agent, shell command, or implementation starts/)).toBeVisible();
+    expect(screen.getByText(/no agent, shell command, or implementation starts/i)).toBeVisible();
+    expect(screen.getByText(/never falls back to copying the directive/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open record a scheduled dose from today" })).toHaveAttribute("href", "/today");
     expect(screen.getByRole("link", { name: "Open emergency page" })).toHaveAttribute("href", "/emergency");
   });
