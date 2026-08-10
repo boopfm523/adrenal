@@ -116,6 +116,33 @@ def test_controlled_failures_trigger_every_required_alert(
     }
 
 
+def test_enabled_automatic_garmin_sync_uses_last_success_and_specific_alert(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    telemetry = mock.MagicMock(spec=OperationalTelemetry)
+    telemetry.count.side_effect = [0, 0, 0]
+    monkeypatch.setattr(
+        monitoring, "queue_metrics", mock.MagicMock(return_value=QueueMetrics(0, 0, 0, 0))
+    )
+    monkeypatch.setattr(monitoring, "backup_health", mock.MagicMock(return_value=_backup()))
+    session = mock.MagicMock(spec=Session)
+    session.scalar.side_effect = [None, NOW - timedelta(hours=37)]
+
+    snapshot = monitoring.collect_snapshot(
+        cast(Session, session),
+        _settings(tmp_path, garmin_enabled=True),
+        telemetry=telemetry,
+        now=NOW,
+        model_health=lambda: True,
+        disk_usage=lambda _path: Disk(100, 20, 80),
+    )
+
+    garmin_signal = next(signal for signal in snapshot.signals if signal.name == "garmin_data_age")
+    assert garmin_signal.state == "alert"
+    assert garmin_signal.reason_code == "garmin_sync_stopped"
+    assert garmin_signal.value == 37
+
+
 def test_telemetry_records_only_allowlisted_event_and_server_time() -> None:
     client = mock.MagicMock()
     client.time.return_value = (1000, 0)

@@ -288,7 +288,17 @@ def build_snapshot(
     if "wearables" in selected_sections:
         for model, record_type, fields in (
             (GarminMetricEvent, "garmin_metric", ("metric_type", "value", "unit", "period_end_at")),
-            (GarminSleepEvent, "garmin_sleep", ("ended_at", "overall_sleep_score", "stage_count")),
+            (
+                GarminSleepEvent,
+                "garmin_sleep",
+                (
+                    "ended_at",
+                    "duration_seconds",
+                    "garmin_duration_source",
+                    "awakenings",
+                    "overall_sleep_score",
+                ),
+            ),
             (
                 GarminActivityEvent,
                 "garmin_activity",
@@ -297,7 +307,7 @@ def build_snapshot(
                     "sport",
                     "title",
                     "elapsed_seconds",
-                    "distance_m",
+                    "distance_miles",
                     "average_heart_rate",
                     "maximum_heart_rate",
                 ),

@@ -31,7 +31,7 @@ The import recognizes only explicit source fields:
 | Steps | FIT HSA step data |
 | Intensity minutes | FIT monitoring moderate/vigorous minutes |
 | Sleep and score | Explicit FIT sleep-level bounds and optional assessment score |
-| Activity | FIT session, or activity CSV with explicit columns |
+| Activity | FIT session, or activity CSV with explicit columns; distance is stored in miles |
 
 A metric not present in the file remains missing. HealthCurve never creates a zero,
 estimates sleep bounds, assumes a distance unit, or manufactures an unavailable score.

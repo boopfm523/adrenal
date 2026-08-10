@@ -2140,6 +2140,302 @@
         "title": "EventTimeOut",
         "type": "object"
       },
+      "GarminDisconnectPreviewOut": {
+        "properties": {
+          "automatic_fact_rows": {
+            "title": "Automatic Fact Rows",
+            "type": "integer"
+          },
+          "delete_data_confirmation": {
+            "default": "DISCONNECT GARMIN AND DELETE DATA",
+            "title": "Delete Data Confirmation",
+            "type": "string"
+          },
+          "retain_data_confirmation": {
+            "default": "DISCONNECT GARMIN",
+            "title": "Retain Data Confirmation",
+            "type": "string"
+          },
+          "reviewed_import_fact_rows": {
+            "title": "Reviewed Import Fact Rows",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "sync_run_rows": {
+            "title": "Sync Run Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "automatic_fact_rows",
+          "reviewed_import_fact_rows",
+          "sync_run_rows"
+        ],
+        "title": "GarminDisconnectPreviewOut",
+        "type": "object"
+      },
+      "GarminRecordOut": {
+        "properties": {
+          "activity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Type"
+          },
+          "awakenings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Awakenings"
+          },
+          "distance_miles": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Miles"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "duration_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Source"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "daily",
+              "sleep",
+              "activity"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "metric_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric Type"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceOut"
+          },
+          "sleep_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sleep Score"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/EventTimeOut"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "summary",
+          "time",
+          "provenance"
+        ],
+        "title": "GarminRecordOut",
+        "type": "object"
+      },
+      "GarminRecordsOut": {
+        "properties": {
+          "notice": {
+            "default": "Garmin observations are recorded facts, not diagnoses or medication guidance. Unavailable provider values remain missing rather than zero.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/GarminRecordOut"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "GarminRecordsOut",
+        "type": "object"
+      },
+      "GarminStatusOut": {
+        "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "checkpoint_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Date"
+          },
+          "client_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Version"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "latest_sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Sync Status"
+          },
+          "latest_sync_warning_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Latest Sync Warning Codes",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "state"
+        ],
+        "title": "GarminStatusOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2532,6 +2828,18 @@
       },
       "IntegrationDeletionRequest": {
         "properties": {
+          "confirmation": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          },
           "delete_data": {
             "default": true,
             "title": "Delete Data",
@@ -2559,6 +2867,11 @@
           "data_rows_deleted": {
             "title": "Data Rows Deleted",
             "type": "integer"
+          },
+          "disconnect_requested": {
+            "default": false,
+            "title": "Disconnect Requested",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7360,6 +7673,55 @@
         ]
       }
     },
+    "/api/v1/integrations/garmin/disconnect-preview": {
+      "get": {
+        "operationId": "disconnect_preview_api_v1_integrations_garmin_disconnect_preview_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminDisconnectPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect Preview",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
     "/api/v1/integrations/garmin/imports/confirm": {
       "post": {
         "description": "Reparse and confirm an unchanged preview as immutable recorded facts.",
@@ -7511,6 +7873,218 @@
           }
         },
         "summary": "Preview Import",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/integrations/garmin/records": {
+      "get": {
+        "operationId": "records_api_v1_integrations_garmin_records_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminRecordsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Records",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/integrations/garmin/status": {
+      "get": {
+        "operationId": "connection_status_api_v1_integrations_garmin_status_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connection Status",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/integrations/garmin/sync": {
+      "post": {
+        "operationId": "request_sync_api_v1_integrations_garmin_sync_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Request Sync Api V1 Integrations Garmin Sync Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Sync",
         "tags": [
           "garmin"
         ]

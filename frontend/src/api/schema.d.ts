@@ -403,6 +403,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/garmin/disconnect-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Disconnect Preview */
+        get: operations["disconnect_preview_api_v1_integrations_garmin_disconnect_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/garmin/imports/confirm": {
         parameters: {
             query?: never;
@@ -437,6 +454,57 @@ export interface paths {
          * @description Parse locally and return candidates; this endpoint creates no facts.
          */
         post: operations["preview_import_api_v1_integrations_garmin_imports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/garmin/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Records */
+        get: operations["records_api_v1_integrations_garmin_records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/garmin/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connection Status */
+        get: operations["connection_status_api_v1_integrations_garmin_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/garmin/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Sync */
+        post: operations["request_sync_api_v1_integrations_garmin_sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1820,6 +1888,97 @@ export interface components {
             /** Utc Offset Minutes */
             utc_offset_minutes: number;
         };
+        /** GarminDisconnectPreviewOut */
+        GarminDisconnectPreviewOut: {
+            /** Automatic Fact Rows */
+            automatic_fact_rows: number;
+            /**
+             * Delete Data Confirmation
+             * @default DISCONNECT GARMIN AND DELETE DATA
+             */
+            delete_data_confirmation: string;
+            /**
+             * Retain Data Confirmation
+             * @default DISCONNECT GARMIN
+             */
+            retain_data_confirmation: string;
+            /** Reviewed Import Fact Rows */
+            reviewed_import_fact_rows: number;
+            /** State */
+            state: string;
+            /** Sync Run Rows */
+            sync_run_rows: number;
+        };
+        /** GarminRecordOut */
+        GarminRecordOut: {
+            /** Activity Type */
+            activity_type?: string | null;
+            /** Awakenings */
+            awakenings?: number | null;
+            /** Distance Miles */
+            distance_miles?: string | null;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Duration Source */
+            duration_source?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "daily" | "sleep" | "activity";
+            /** Metric Type */
+            metric_type?: string | null;
+            provenance: components["schemas"]["ProvenanceOut"];
+            /** Sleep Score */
+            sleep_score?: number | null;
+            /** Summary */
+            summary: string;
+            time: components["schemas"]["EventTimeOut"];
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value?: string | null;
+        };
+        /** GarminRecordsOut */
+        GarminRecordsOut: {
+            /**
+             * Notice
+             * @default Garmin observations are recorded facts, not diagnoses or medication guidance. Unavailable provider values remain missing rather than zero.
+             */
+            notice: string;
+            /** Records */
+            records: components["schemas"]["GarminRecordOut"][];
+        };
+        /** GarminStatusOut */
+        GarminStatusOut: {
+            /** Capabilities */
+            capabilities?: {
+                [key: string]: string;
+            };
+            /** Checkpoint Date */
+            checkpoint_date?: string | null;
+            /** Client Version */
+            client_version?: string | null;
+            /** Configured */
+            configured: boolean;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Success At */
+            last_success_at?: string | null;
+            /** Latest Sync Status */
+            latest_sync_status?: string | null;
+            /** Latest Sync Warning Codes */
+            latest_sync_warning_codes?: string[];
+            /** State */
+            state: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1955,6 +2114,8 @@ export interface components {
         };
         /** IntegrationDeletionRequest */
         IntegrationDeletionRequest: {
+            /** Confirmation */
+            confirmation?: string | null;
             /**
              * Delete Data
              * @default true
@@ -1969,6 +2130,11 @@ export interface components {
             credentials_deleted: number;
             /** Data Rows Deleted */
             data_rows_deleted: number;
+            /**
+             * Disconnect Requested
+             * @default false
+             */
+            disconnect_requested: boolean;
         };
         /** LabDeletionAcceptedOut */
         LabDeletionAcceptedOut: {
@@ -3876,6 +4042,37 @@ export interface operations {
             };
         };
     };
+    disconnect_preview_api_v1_integrations_garmin_disconnect_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarminDisconnectPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_import_route_api_v1_integrations_garmin_imports_confirm_post: {
         parameters: {
             query?: never;
@@ -3940,6 +4137,107 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    records_api_v1_integrations_garmin_records_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarminRecordsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connection_status_api_v1_integrations_garmin_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarminStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_sync_api_v1_integrations_garmin_sync_post: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
                     };
                 };
             };

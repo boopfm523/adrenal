@@ -40,11 +40,20 @@ from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner
 from healthcurve.identity.recovery import recover_owner_access
+from healthcurve.integrations.garmin.connect_jobs import (
+    GARMIN_DISCONNECT_TASK,
+    make_disconnect_handler,
+)
+from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day
+from healthcurve.integrations.garmin.connect_sync import FetchedWindow, persist_window
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
+    GarminConnection,
+    GarminConnectionState,
     GarminImportBatch,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSyncRun,
 )
 from healthcurve.labs.cleanup_jobs import (
     LAB_DOCUMENT_CLEANUP_TASK,
@@ -1006,6 +1015,257 @@ def test_garmin_preview_then_confirm_is_idempotent_and_preserves_provenance(
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == 2
         assert session.scalar(select(func.count()).select_from(GarminActivityEvent)) == 2
+
+
+def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
+    client: TestClient, engine: Engine, settings: Settings
+) -> None:
+    email = "garmin-owner@example.com"
+    observed_at = datetime(2026, 1, 10, 12, tzinfo=UTC)
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email=email,
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(owner)
+        session.flush()
+        owner_id = owner.id
+        session.add(
+            GarminConnection(
+                owner_id=owner_id,
+                state=GarminConnectionState.CONNECTED,
+                connected_at=observed_at,
+                capabilities={},
+                client_version="synthetic",
+            )
+        )
+
+    def fetched(steps: int) -> FetchedWindow:
+        daily = map_day(
+            day=date(2026, 1, 10),
+            stats={"totalSteps": steps},
+            sleep={},
+            timezone="UTC",
+        )
+        activities, activity_warnings = map_activities(
+            [
+                {
+                    "activityId": 9001,
+                    "activityType": {"typeKey": "walking"},
+                    "activityName": "Synthetic walk",
+                    "startTimeGMT": "2026-01-10T08:00:00Z",
+                    "startTimeLocal": "2026-01-10T08:00:00",
+                    "timeZoneId": "UTC",
+                    "elapsedDuration": 1_800,
+                    "distance": 1_609.344,
+                }
+            ],
+            timezone="UTC",
+        )
+        return FetchedWindow(
+            start_date=date(2026, 1, 10),
+            end_date=date(2026, 1, 10),
+            timezone="UTC",
+            metrics=daily.metrics,
+            sleeps=(),
+            activities=activities,
+            warnings=tuple(sorted({*daily.warnings, *activity_warnings})),
+            capabilities={**daily.capabilities, "activities": "available"},
+            started_at=observed_at,
+            finished_at=observed_at + timedelta(seconds=1),
+        )
+
+    with Session(engine) as session, session.begin():
+        first = persist_window(session, owner_id=owner_id, fetched=fetched(100))
+        assert (first.created, first.corrected, first.unchanged) == (2, 0, 0)
+    with Session(engine) as session, session.begin():
+        duplicate = persist_window(session, owner_id=owner_id, fetched=fetched(100))
+        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 2)
+    with Session(engine) as session, session.begin():
+        corrected = persist_window(session, owner_id=owner_id, fetched=fetched(120))
+        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 1, 1)
+
+    with Session(engine) as session:
+        metrics = list(
+            session.scalars(select(GarminMetricEvent).where(GarminMetricEvent.owner_id == owner_id))
+        )
+        current = events.current_only(session, GarminMetricEvent, metrics)
+        assert len(metrics) == 2
+        assert len(current) == 1
+        assert current[0].value == Decimal(120)
+        assert current[0].supersedes_id is not None
+        assert current[0].garmin_sync_run_id is not None
+        activity = session.scalar(
+            select(GarminActivityEvent).where(GarminActivityEvent.owner_id == owner_id)
+        )
+        assert activity is not None
+        assert activity.distance_miles == Decimal(1)
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminSyncRun)
+                .where(GarminSyncRun.owner_id == owner_id)
+            )
+            == 3
+        )
+
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert login.status_code == 200
+    headers = {auth.CSRF_HEADER_NAME: login.json()["csrf_token"]}
+    records = client.get("/api/v1/integrations/garmin/records")
+    assert records.status_code == 200
+    assert {row["kind"] for row in records.json()["records"]} == {"daily", "activity"}
+    assert any(row["distance_miles"] == "1.0000" for row in records.json()["records"])
+    secondary_record_ids = {row["id"] for row in records.json()["records"]}
+    status_response = client.get("/api/v1/integrations/garmin/status")
+    assert status_response.status_code == 200
+    assert status_response.json()["state"] == "connected"
+    assert status_response.json()["last_success_at"] is not None
+    garmin_timeline = client.get(
+        "/api/v1/timeline?types=garmin_daily,garmin_activity&sort_order=asc"
+    )
+    assert garmin_timeline.status_code == 200
+    assert [item["event_type"] for item in garmin_timeline.json()["items"]] == [
+        "garmin_daily",
+        "garmin_activity",
+    ]
+    assert all(
+        item["summary"].startswith("Garmin-recorded") for item in garmin_timeline.json()["items"]
+    )
+    quality = client.get("/api/v1/data-quality")
+    assert quality.status_code == 200
+    assert any(
+        finding["finding_kind"] == "genuine_absence" and "no zero" in finding["detail"]
+        for finding in quality.json()["findings"]
+    )
+    private_export = client.post(
+        "/api/v1/privacy/export", headers=headers, json={"password": PASSWORD}
+    )
+    assert private_export.status_code == 200
+    garmin_export = private_export.json()["integrations"]["garmin"]
+    assert len(garmin_export["connection_state"]) == 1
+    assert len(garmin_export["sync_runs"]) == 3
+    assert "credentials" not in garmin_export
+
+    disabled_sync = client.post(
+        "/api/v1/integrations/garmin/sync",
+        headers={**headers, "Idempotency-Key": "synthetic-disabled"},
+    )
+    assert disabled_sync.status_code == 409
+    settings.garmin_enabled = True
+    try:
+        future_sync = client.post(
+            "/api/v1/integrations/garmin/sync?date_from=2030-01-01&date_to=2030-01-02",
+            headers={**headers, "Idempotency-Key": "synthetic-future"},
+        )
+        assert future_sync.status_code == 422
+        requested_sync = client.post(
+            "/api/v1/integrations/garmin/sync?date_from=2026-01-10&date_to=2026-01-11",
+            headers={**headers, "Idempotency-Key": "synthetic-manual-sync"},
+        )
+        duplicate_sync = client.post(
+            "/api/v1/integrations/garmin/sync?date_from=2026-01-10&date_to=2026-01-11",
+            headers={**headers, "Idempotency-Key": "synthetic-manual-sync"},
+        )
+        assert requested_sync.status_code == 202
+        assert duplicate_sync.status_code == 202
+        assert requested_sync.json()["job_id"] == duplicate_sync.json()["job_id"]
+    finally:
+        settings.garmin_enabled = False
+
+    invalid = client.request(
+        "DELETE",
+        "/api/v1/privacy/integrations/garmin",
+        headers=headers,
+        json={
+            "password": PASSWORD,
+            "delete_data": True,
+            "confirmation": "DISCONNECT GARMIN",
+        },
+    )
+    assert invalid.status_code == 422
+    deleted = client.request(
+        "DELETE",
+        "/api/v1/privacy/integrations/garmin",
+        headers=headers,
+        json={
+            "password": PASSWORD,
+            "delete_data": True,
+            "confirmation": "DISCONNECT GARMIN AND DELETE DATA",
+        },
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["disconnect_requested"] is True
+    assert deleted.json()["data_rows_deleted"] == 6
+
+    class LogoutClient:
+        logged_out = False
+
+        def login(self) -> None:
+            raise AssertionError("disconnect must not log in")
+
+        def get_stats(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_sleep_data(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            raise AssertionError("disconnect must not read data")
+
+        def logout(self) -> None:
+            self.logged_out = True
+
+    logout_client = LogoutClient()
+    handler = make_disconnect_handler(settings, client_factory=lambda: logout_client)
+    with Session(engine) as session, session.begin():
+        job = session.scalar(
+            select(Job).where(
+                Job.task == GARMIN_DISCONNECT_TASK,
+                Job.payload["owner_id"].as_string() == str(owner_id),
+            )
+        )
+        assert job is not None
+        handler(session, job.payload)
+    assert logout_client.logged_out
+
+    with Session(engine) as session:
+        connection = session.scalar(
+            select(GarminConnection).where(GarminConnection.owner_id == owner_id)
+        )
+        assert connection is not None
+        assert connection.state is GarminConnectionState.DISCONNECTED
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminMetricEvent)
+                .where(GarminMetricEvent.owner_id == owner_id)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminActivityEvent)
+                .where(GarminActivityEvent.owner_id == owner_id)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminSyncRun)
+                .where(GarminSyncRun.owner_id == owner_id)
+            )
+            == 0
+        )
+
+    primary_login = client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert primary_login.status_code == 200
+    primary_records = client.get("/api/v1/integrations/garmin/records")
+    assert primary_records.status_code == 200
+    assert secondary_record_ids.isdisjoint(row["id"] for row in primary_records.json()["records"])
 
 
 def test_lab_csv_preview_flags_unknowns_then_confirm_is_idempotent(

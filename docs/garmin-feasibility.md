@@ -118,6 +118,10 @@ must not use scraped or reverse-engineered Garmin Connect endpoints.
 
 ## Recommendation
 
+> **Superseded in part:** ADR-0012 records the owner's later explicit decision to use
+> an isolated, read-only `python-garminconnect` adapter. The official-API facts and
+> reviewed-export fallback below remain valid; the direct-client prohibition does not.
+
 ### Direct API: conditional no-go
 
 Do not implement the cloud adapter yet. Apply only if Garmin confirms that a private,

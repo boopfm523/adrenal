@@ -10,7 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.models import DraftState, ExtractionDraft
-from healthcurve.integrations.garmin.models import GarminImportBatch
+from healthcurve.integrations.garmin.models import (
+    GarminConnection,
+    GarminConnectionState,
+    GarminImportBatch,
+    GarminSyncRun,
+)
 from healthcurve.labs.models import LabDocument, LabDocumentStatus
 from healthcurve.operations.jobs import dead_letters
 
@@ -102,6 +107,85 @@ def findings_for_owner(session: Session, owner_id: uuid.UUID) -> list[Finding]:
                     action_label="Review Garmin settings",
                 )
             )
+
+    connection = session.scalar(
+        select(GarminConnection).where(GarminConnection.owner_id == owner_id)
+    )
+    if connection is not None:
+        if connection.state is GarminConnectionState.REAUTHENTICATION_REQUIRED:
+            findings.append(
+                Finding(
+                    id=f"garmin-connection:{connection.id}:reauthentication",
+                    finding_kind="problem",
+                    severity="warning",
+                    source="Garmin Connect",
+                    title="Garmin sign-in needs attention",
+                    detail=(
+                        "Automatic sync is paused. Reconnect locally; no missing value "
+                        "has been inferred as zero."
+                    ),
+                    record_id=connection.id,
+                    href="/settings#garmin-connection",
+                    action_label="Review Garmin connection",
+                )
+            )
+        elif (
+            connection.state is GarminConnectionState.CONNECTED
+            and connection.last_success_at is None
+        ):
+            findings.append(
+                Finding(
+                    id=f"garmin-connection:{connection.id}:never-synced",
+                    finding_kind="problem",
+                    severity="attention",
+                    source="Garmin Connect",
+                    title="Garmin has not completed its first sync",
+                    detail="The connection exists, but no successful automatic sync is recorded.",
+                    record_id=connection.id,
+                    href="/settings#garmin-connection",
+                    action_label="Review Garmin connection",
+                )
+            )
+        for metric, availability in sorted(connection.capabilities.items()):
+            if availability != "unavailable":
+                continue
+            findings.append(
+                Finding(
+                    id=f"garmin-capability:{connection.id}:{metric}",
+                    finding_kind="genuine_absence",
+                    severity="attention",
+                    source="Garmin Connect",
+                    title=f"{metric.replace('_', ' ').title()} unavailable",
+                    detail=(
+                        "The latest automatic sync did not supply this metric; no zero "
+                        "value was inferred."
+                    ),
+                    record_id=connection.id,
+                    href="/settings#garmin-connection",
+                    action_label="Review Garmin connection",
+                )
+            )
+        latest_sync = session.scalar(
+            select(GarminSyncRun)
+            .where(GarminSyncRun.owner_id == owner_id)
+            .order_by(GarminSyncRun.finished_at.desc(), GarminSyncRun.id.desc())
+            .limit(1)
+        )
+        if latest_sync is not None:
+            for warning in latest_sync.warning_codes:
+                findings.append(
+                    Finding(
+                        id=f"garmin-sync:{latest_sync.id}:{warning}",
+                        finding_kind="problem",
+                        severity="attention",
+                        source="Garmin Connect",
+                        title="Garmin supplied a partial or changed response",
+                        detail=f"Safe reason code: {warning}.",
+                        record_id=latest_sync.id,
+                        href="/settings#garmin-connection",
+                        action_label="Review Garmin sync status",
+                    )
+                )
 
     for job in dead_letters(session):
         findings.append(

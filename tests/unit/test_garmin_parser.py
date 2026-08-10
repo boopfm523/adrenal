@@ -61,7 +61,7 @@ def test_official_sdk_fit_maps_only_explicit_metrics_and_attribution() -> None:
         candidate for candidate in parsed.candidates if isinstance(candidate, ActivityCandidate)
     )
     assert activity.sport == "running"
-    assert activity.distance_m == Decimal("10000.0")
+    assert activity.distance_miles == Decimal("10000.0") / Decimal("1609.344")
 
 
 def test_activity_csv_requires_explicit_distance_units() -> None:
@@ -69,7 +69,7 @@ def test_activity_csv_requires_explicit_distance_units() -> None:
     activity = next(
         candidate for candidate in explicit.candidates if isinstance(candidate, ActivityCandidate)
     )
-    assert activity.distance_m == Decimal("25500.0")
+    assert activity.distance_miles == Decimal("25.5") / Decimal("1.609344")
 
     ambiguous = parse_upload(
         "activities.csv",
@@ -79,7 +79,7 @@ def test_activity_csv_requires_explicit_distance_units() -> None:
     activity = next(
         candidate for candidate in ambiguous.candidates if isinstance(candidate, ActivityCandidate)
     )
-    assert activity.distance_m is None
+    assert activity.distance_miles is None
     assert "distance:unit_missing" in ambiguous.warnings
 
 

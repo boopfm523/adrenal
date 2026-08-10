@@ -11,6 +11,7 @@ from healthcurve import privacy
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.routers.exports import create_export
 from healthcurve.identity import service as auth
+from healthcurve.integrations.garmin.connect_jobs import enqueue_disconnect
 
 router = APIRouter(prefix="/privacy", tags=["privacy"])
 
@@ -21,6 +22,7 @@ class ReauthenticatedRequest(BaseModel):
 
 class IntegrationDeletionRequest(ReauthenticatedRequest):
     delete_data: bool = True
+    confirmation: str | None = Field(default=None, max_length=80)
 
 
 class AccountDeletionRequest(ReauthenticatedRequest):
@@ -30,6 +32,7 @@ class AccountDeletionRequest(ReauthenticatedRequest):
 class IntegrationDeletionResponse(BaseModel):
     credentials_deleted: int
     data_rows_deleted: int
+    disconnect_requested: bool = False
 
 
 class PrivateExportRequest(ReauthenticatedRequest):
@@ -96,6 +99,12 @@ def delete_integration(
     settings: AppSettings,
 ) -> IntegrationDeletionResponse:
     _reauthenticate(owner, payload.password)
+    if provider == "garmin":
+        expected = (
+            "DISCONNECT GARMIN AND DELETE DATA" if payload.delete_data else "DISCONNECT GARMIN"
+        )
+        if payload.confirmation != expected:
+            raise HTTPException(status_code=422, detail="confirmation phrase does not match")
     try:
         result = privacy.delete_integration(
             session,
@@ -106,8 +115,16 @@ def delete_integration(
         )
     except privacy.DeletionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result.disconnect_requested:
+        enqueue_disconnect(
+            session,
+            owner_id=owner.id,
+            idempotency_key=f"disconnect:{owner.id}:{uuid.uuid4()}",
+        )
     return IntegrationDeletionResponse(
-        credentials_deleted=result.credentials, data_rows_deleted=result.data_rows
+        credentials_deleted=result.credentials,
+        data_rows_deleted=result.data_rows,
+        disconnect_requested=result.disconnect_requested,
     )
 
 
@@ -126,11 +143,14 @@ def delete_account(
     _reauthenticate(owner, payload.password)
     if payload.confirmation != "DELETE MY HEALTHCURVE ACCOUNT":
         raise HTTPException(status_code=422, detail="confirmation phrase does not match")
-    privacy.delete_account(
-        session,
-        owner=owner,
-        uploads_dir=settings.uploads_dir,
-        telegram_chat_id=settings.telegram_allowed_chat_id,
-        report_artifacts_dir=settings.report_artifacts_dir,
-    )
+    try:
+        privacy.delete_account(
+            session,
+            owner=owner,
+            uploads_dir=settings.uploads_dir,
+            telegram_chat_id=settings.telegram_allowed_chat_id,
+            report_artifacts_dir=settings.report_artifacts_dir,
+        )
+    except privacy.DeletionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     response.delete_cookie(auth.SESSION_COOKIE_NAME, path="/")

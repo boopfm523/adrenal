@@ -17,7 +17,15 @@ from healthcurve.events.base import EventMixin
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.integrations.credentials import IntegrationCredential
-from healthcurve.integrations.garmin.models import GarminImportBatch
+from healthcurve.integrations.garmin.models import (
+    GarminActivityEvent,
+    GarminConnection,
+    GarminConnectionState,
+    GarminImportBatch,
+    GarminMetricEvent,
+    GarminSleepEvent,
+    GarminSyncRun,
+)
 from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
 from healthcurve.labs.documents import DocumentLayout, mark_deleted
 from healthcurve.labs.models import LabDocument, LabPanel, LabResult
@@ -64,6 +72,7 @@ DELETABLE_RECORDS: dict[str, type] = {
 class IntegrationDeletion:
     credentials: int
     data_rows: int
+    disconnect_requested: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,10 +235,23 @@ def delete_integration(
         ),
     )
     data_rows = 0
+    disconnect_requested = False
     if delete_data and provider == "garmin":
-        data_rows = _delete_count(
+        for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent):
+            data_rows += _delete_event_chains(session, model, owner_id)
+        data_rows += _delete_count(
             session, delete(GarminImportBatch).where(GarminImportBatch.owner_id == owner_id)
         )
+        data_rows += _delete_count(
+            session, delete(GarminSyncRun).where(GarminSyncRun.owner_id == owner_id)
+        )
+    if provider == "garmin":
+        connection = session.scalar(
+            select(GarminConnection).where(GarminConnection.owner_id == owner_id).with_for_update()
+        )
+        if connection is not None and connection.state is not GarminConnectionState.DISCONNECTED:
+            connection.state = GarminConnectionState.DISCONNECT_PENDING
+            disconnect_requested = True
     if delete_data and provider == "telegram":
         data_rows += _delete_count(
             session,
@@ -271,7 +293,7 @@ def delete_integration(
         target_type="integration",
         change_summary=f"provider={provider};data_deleted={delete_data}",
     )
-    return IntegrationDeletion(credentials, data_rows)
+    return IntegrationDeletion(credentials, data_rows, disconnect_requested)
 
 
 def delete_account(
@@ -283,6 +305,16 @@ def delete_account(
     report_artifacts_dir: Path | None = None,
 ) -> None:
     owner_id = owner.id
+    garmin_connection = session.scalar(
+        select(GarminConnection).where(GarminConnection.owner_id == owner_id)
+    )
+    if (
+        garmin_connection is not None
+        and garmin_connection.state is not GarminConnectionState.DISCONNECTED
+    ):
+        raise DeletionError(
+            "disconnect Garmin and wait for local token removal before deleting the account"
+        )
     document_ids = list(
         session.scalars(select(LabDocument.id).where(LabDocument.owner_id == owner_id))
     )
@@ -295,7 +327,11 @@ def delete_account(
     # lab results, regimen children, and Garmin facts from their owning parent rows.
     for model in (AIAnalysis, ExtractionDraft, LabPanel, LabDocument, ReportSnapshot):
         session.execute(delete(model).where(model.owner_id == owner_id))
+    for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent):
+        _delete_event_chains(session, model, owner_id)
     session.execute(delete(GarminImportBatch).where(GarminImportBatch.owner_id == owner_id))
+    session.execute(delete(GarminSyncRun).where(GarminSyncRun.owner_id == owner_id))
+    session.execute(delete(GarminConnection).where(GarminConnection.owner_id == owner_id))
     for model in (
         EmergencyInjectionEvent,
         ContextEvent,
@@ -331,3 +367,21 @@ def delete_account(
 def _delete_count(session: Session, statement: object) -> int:
     result = session.execute(statement)  # type: ignore[arg-type]
     return max(result.rowcount or 0, 0)  # type: ignore[attr-defined]
+
+
+def _delete_event_chains(session: Session, model: type[EventMixin], owner_id: uuid.UUID) -> int:
+    """Delete complete owner-scoped correction chains from newest to oldest."""
+    rows = list(session.scalars(select(model).where(model.owner_id == owner_id)))
+    remaining = {row.id: row for row in rows}
+    while remaining:
+        superseded_ids = {
+            row.supersedes_id for row in remaining.values() if row.supersedes_id is not None
+        }
+        leaves = [row for row in remaining.values() if row.id not in superseded_ids]
+        if not leaves:
+            raise DeletionError("correction history is cyclic and cannot be safely deleted")
+        for row in leaves:
+            session.delete(row)
+            remaining.pop(row.id)
+        session.flush()
+    return len(rows)

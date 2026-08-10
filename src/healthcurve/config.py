@@ -141,6 +141,13 @@ class Settings(BaseSettings):
     # --- Time ---
     default_timezone: str = "UTC"
 
+    # --- Garmin Connect (ADR-0012; disabled unless explicitly enabled) ---
+    garmin_enabled: bool = False
+    garmin_email: SecretStr | None = None
+    garmin_password: SecretStr | None = None
+    garmin_token_store: Path | None = None
+    garmin_sync_lookback_days: int = Field(default=7, ge=1, le=31)
+
     # --- Durable worker queue (ADR-0004) ---
     job_poll_interval_s: float = Field(default=2.0, gt=0, le=60)
 
@@ -253,6 +260,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "HC_CREDENTIAL_KEY_FILE is required when Telegram is enabled in production"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_garmin_configuration(self) -> Self:
+        # The API needs the feature flag to expose status/manual-sync controls but
+        # never mounts the password-equivalent token directory. Only the isolated
+        # CLI/worker require the path; if a process receives one, it must be absolute.
+        if self.garmin_token_store is not None and not self.garmin_token_store.is_absolute():
+            raise ValueError("HC_GARMIN_TOKEN_STORE must be an absolute non-repository path")
         return self
 
     @model_validator(mode="after")

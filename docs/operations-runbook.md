@@ -12,7 +12,7 @@ alert must never delay emergency care or replace the physician-approved plan.
 Two independent paths are required:
 
 1. The **on-host monitor** evaluates database queue age/dead letters, rolling request,
-   authentication and model failures, Garmin import age when enabled, backup age,
+   authentication and model failures, Garmin data age when enabled, backup age,
    Ollama availability, and disk free space. It sends transition alerts and six-hour
    reminders to the owner's Telegram account using the encrypted bot credential.
 2. The **off-host probe** runs on a different physical host that is an explicitly
@@ -80,7 +80,8 @@ Beads, or shell history.
 | `model_unavailable` / `model_failures_repeated` | Ollama is down or repeatedly failing | Keep using deterministic Telegram commands; check the private Ollama listener and model availability. |
 | `queue_stalled` / `queue_dead_letter` | Due work is old or permanently failed | Check worker health and safe reason codes; do not replay a job until its idempotency behavior is understood. |
 | `lab_document_cleanup_failed` / `report_artifact_cleanup_failed` | An authorized privacy deletion committed, but tombstoned private-file cleanup is retrying or exhausted | Keep the database deletion intact; inspect the isolated `cleanup-worker`, storage mount availability, and permissions using opaque IDs only. Restore the mount and allow the idempotent job to retry. Never recreate the deleted database rows or manually remove broad directories. |
-| `garmin_import_stopped` | No confirmed import inside the configured interval | Verify the expected schedule and source export; missing data stays missing, never zero. |
+| `garmin_sync_stopped` | Enabled automatic Garmin sync has no recent successful result | Check the isolated worker and safe connection status; reauthenticate locally if required. Missing data stays missing, never zero. |
+| `garmin_import_stopped` | No automatic sync or confirmed reviewed import inside the configured interval | Verify the expected schedule or source export; missing data stays missing, never zero. |
 | `backup_missing` / `backup_age_warning` / `backup_integrity_failed` / `backup_job_failed` | Backup absent, stale, damaged, or failed | Follow `backup-runbook.md`; do not delete the last known-good set. |
 | `disk_space_low` | Free space is at or below the configured percentage | Stop nonessential imports, locate growth using metadata only, and add capacity. Never delete health data or backups casually. |
 
@@ -150,7 +151,7 @@ Run quarterly and after monitoring changes:
 - enqueue a synthetic overdue job and verify `queue_stalled`;
 - point the test monitor at an empty synthetic backup directory;
 - use an injected disk-usage fixture in automated tests (never fill a real disk);
-- configure an old synthetic Garmin import and verify lag alerting;
+- configure an old synthetic Garmin sync/import and verify lag alerting;
 - run `python -m healthcurve.monitor --once` and archive only its operational output.
 
 Record date, receiver, delivery latency, and result. Do not record notification URLs,

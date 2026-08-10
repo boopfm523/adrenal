@@ -23,9 +23,11 @@ from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
+    GarminConnection,
     GarminImportBatch,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSyncRun,
 )
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
@@ -137,6 +139,16 @@ def create_export(
             "garmin_metrics": _rows(session, GarminMetricEvent, owner.id),
             "garmin_sleep": _rows(session, GarminSleepEvent, owner.id),
             "garmin_activities": _rows(session, GarminActivityEvent, owner.id),
+        },
+        "integrations": {
+            "garmin": {
+                "connection_state": _rows(session, GarminConnection, owner.id),
+                "sync_runs": _rows(session, GarminSyncRun, owner.id),
+                "notice": (
+                    "This section contains non-secret sync provenance only. Garmin "
+                    "credentials, refresh tokens, and raw provider responses are excluded."
+                ),
+            }
         },
         "ai": {} if not include_ai else {"note": "AI analysis included at your request"},
         "reports": _report_export(session, owner.id, include_ai=include_ai),

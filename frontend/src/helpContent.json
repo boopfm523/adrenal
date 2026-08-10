@@ -242,13 +242,16 @@
     },
     {
       "id": "garmin-file",
-      "title": "Import an exported Garmin FIT, CSV, or ZIP file",
-      "availability": "API preview and confirm—Garmin account sync is not implemented",
-      "instructions": "Upload a provider export for a preview, inspect observed and genuinely missing metrics, then confirm the exact preview.",
+      "title": "Sync Garmin Connect or import an exported file",
+      "availability": "Settings, Health data, and API",
+      "instructions": "After the local one-time Garmin connection, Settings shows safe status and can queue a bounded read-only sync; Health data shows the recorded observations. The fallback accepts a provider FIT, CSV, or ZIP export for preview and explicit confirmation.",
       "example": "Synthetic file name: synthetic-garmin-export.zip",
       "result": "Preview, then provider-recorded facts",
       "confirmation": "Preview writes no Garmin facts. Confirm is explicit and idempotent; unavailable metrics remain missing, never zero.",
       "endpoints": [
+        { "method": "GET", "path": "/api/v1/integrations/garmin/status" },
+        { "method": "POST", "path": "/api/v1/integrations/garmin/sync" },
+        { "method": "GET", "path": "/api/v1/integrations/garmin/records" },
         { "method": "POST", "path": "/api/v1/integrations/garmin/imports/preview" },
         { "method": "POST", "path": "/api/v1/integrations/garmin/imports/confirm" }
       ]

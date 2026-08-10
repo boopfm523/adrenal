@@ -25,7 +25,8 @@ does not depend on JavaScript.
 | Load your medications | `python -m healthcurve.cli load-medications` |
 | See everything recorded | `GET /api/v1/timeline` |
 | Get all your data out | `POST /api/v1/exports` |
-| Import an exported Garmin FIT/CSV/ZIP | Preview then confirm through the API; see [Garmin import](garmin-import.md) |
+| Sync Garmin Connect | Connect once locally, then review status/sync in Settings and observations in Health data; see [Garmin Connect](garmin-connect.md) |
+| Import an exported Garmin FIT/CSV/ZIP | Preview then confirm through the API as a durable fallback; see [Garmin import](garmin-import.md) |
 | Check encrypted backups | `python -m healthcurve.backup_status` in `backup-worker` |
 | Answer a question the API can't | SQL — see [Analytics](#analytics) |
 | Show someone what to do in a crisis | `http://localhost:8080/emergency` |
@@ -501,8 +502,9 @@ So you don't go looking for it:
 - **No configured offsite backup or passing restore drill.** Encrypted local backup is
   implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
   not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
-- **No automatic Garmin sync or weather enrichment.** Reviewed Garmin FIT/CSV/ZIP
-  import and manual context recording are implemented. Direct Garmin API access
+- **No official Garmin Health API or automatic weather enrichment.** Isolated
+  read-only personal Garmin Connect sync, reviewed Garmin FIT/CSV/ZIP import, and
+  manual context recording are implemented. Official Garmin Developer API access
   remains gated by vendor approval, and external weather requires an owner-approved
   provider and location-sharing decision.
 - **Deletion is available from Settings & privacy.** Eligible individual records,

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from healthcurve.ai.ollama import OllamaClient
 from healthcurve.config import Settings
-from healthcurve.integrations.garmin.models import GarminImportBatch
+from healthcurve.integrations.garmin.models import GarminConnection, GarminImportBatch
 from healthcurve.operations.backup_jobs import backup_health
 from healthcurve.operations.jobs import queue_metrics
 from healthcurve.operations.telemetry import (
@@ -184,9 +184,12 @@ def collect_snapshot(
     )
 
     if settings.monitor_garmin_age_limit_h is None:
-        signals.append(OperationalSignal("garmin_import_age", "disabled", None, None, "hours"))
+        signals.append(OperationalSignal("garmin_data_age", "disabled", None, None, "hours"))
     else:
-        latest = session.scalar(select(func.max(GarminImportBatch.confirmed_at)))
+        latest_import = session.scalar(select(func.max(GarminImportBatch.confirmed_at)))
+        latest_sync = session.scalar(select(func.max(GarminConnection.last_success_at)))
+        candidates = [value for value in (latest_import, latest_sync) if value is not None]
+        latest = max(candidates) if candidates else None
         age = (
             max(0.0, (measured_at - latest.astimezone(UTC)).total_seconds() / 3600)
             if latest is not None
@@ -195,9 +198,15 @@ def collect_snapshot(
         stale = age is None or age >= settings.monitor_garmin_age_limit_h
         signals.append(
             OperationalSignal(
-                "garmin_import_age",
+                "garmin_data_age",
                 "alert" if stale else "healthy",
-                "garmin_import_stopped" if stale else None,
+                (
+                    "garmin_sync_stopped"
+                    if stale and settings.garmin_enabled
+                    else "garmin_import_stopped"
+                    if stale
+                    else None
+                ),
                 round(age, 3) if age is not None else None,
                 "hours",
             )

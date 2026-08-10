@@ -37,6 +37,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/telegram-setup.md](docs/telegram-setup.md) | Step-by-step guide to connecting the Telegram bot |
 | [docs/credential-encryption.md](docs/credential-encryption.md) | Store, rotate, and recover integration encryption keys |
 | [docs/garmin-import.md](docs/garmin-import.md) | Review and import owner-exported Garmin FIT/CSV data |
+| [docs/garmin-connect.md](docs/garmin-connect.md) | Configure isolated read-only automatic Garmin sync |
 | [docs/backup-runbook.md](docs/backup-runbook.md) | Encrypted backup setup, monitoring, retention, and recovery operations |
 
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work, and

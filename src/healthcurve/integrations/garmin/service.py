@@ -109,6 +109,11 @@ def confirm_import(
                 ended_at=candidate.ended_at,
                 overall_sleep_score=candidate.overall_sleep_score,
                 stage_count=candidate.stage_count,
+                duration_seconds=int(
+                    (candidate.ended_at - candidate.time.occurred_at).total_seconds()
+                ),
+                garmin_duration_source="calculated_from_bounds",
+                awakenings=None,
             )
             sleep_count += 1
         else:
@@ -125,7 +130,7 @@ def confirm_import(
                 sub_sport=candidate.sub_sport,
                 title=candidate.title,
                 elapsed_seconds=candidate.elapsed_seconds,
-                distance_m=candidate.distance_m,
+                distance_miles=candidate.distance_miles,
                 calories=candidate.calories,
                 average_heart_rate=candidate.average_heart_rate,
                 maximum_heart_rate=candidate.maximum_heart_rate,
@@ -185,6 +190,7 @@ def _event_fields(
         "import_batch_id": batch_id,
         "confirmation_state": ConfirmationState.CONFIRMED_FROM_DRAFT,
         "garmin_import_batch_id": batch_id,
+        "garmin_sync_run_id": None,
         "garmin_source_member": source.member_name,
         "garmin_manufacturer": source.device.manufacturer,
         "garmin_product_name": source.device.product_name,

@@ -29,7 +29,7 @@ Before closing anything: `make check` must exit 0.
 | **P1 Trusted record** | **Done.** Auth, plans, doses, events, episodes, corrections, audit, timeline, export, emergency page |
 | **P2 Telegram + AI** | In progress. Capture, long polling, safe fallback, and live local extraction work; draft editing, expiry, and evaluation remain |
 | **P3 Dashboard, labs, reports** | Complete. Today, timeline, plan, episode, symptom/diary, analytics/chart, data-quality, settings/privacy, and report-builder views are live with immutable local PDF/CSV/JSON snapshots |
-| **P4 Integrations** | Garmin export ingestion is complete; direct provider API work remains conditional |
+| **P4 Integrations** | Garmin export ingestion and isolated read-only personal sync are implemented; official provider API access remains conditional |
 | **P5 Production** | In progress. Hosting, credential, and local backup foundations exist; launch controls remain |
 | **P6 Hardening** | Not started |
 

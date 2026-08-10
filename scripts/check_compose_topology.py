@@ -108,6 +108,44 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
     if "hc-cleanup" not in postgres_network_names:
         errors.append("postgres must join hc-cleanup for cleanup-worker database access")
 
+    garmin = services.get("garmin-worker")
+    if isinstance(garmin, dict):
+        if garmin.get("read_only") is not True:
+            errors.append("garmin-worker must be read-only")
+        if "ALL" not in garmin.get("cap_drop", []):
+            errors.append("garmin-worker must drop all capabilities")
+        if "no-new-privileges:true" not in garmin.get("security_opt", []):
+            errors.append("garmin-worker must set no-new-privileges")
+        garmin_networks = garmin.get("networks", {})
+        garmin_network_names = (
+            set(garmin_networks) if isinstance(garmin_networks, (dict, list)) else set()
+        )
+        if garmin_network_names != {"hc-garmin"}:
+            errors.append("garmin-worker must use only hc-garmin")
+        garmin_targets = {
+            mount.get("target") for mount in garmin.get("volumes", []) if isinstance(mount, dict)
+        }
+        if garmin_targets != {"/run/secrets/garmin"}:
+            errors.append("garmin-worker may mount only its token directory")
+        garmin_environment = garmin.get("environment", {})
+        for forbidden in (
+            "HC_AI_DATABASE_URL",
+            "HC_BEADS_OUTBOX_DIR",
+            "HC_CREDENTIAL_KEY_FILE",
+            "HC_GARMIN_EMAIL",
+            "HC_GARMIN_PASSWORD",
+            "HC_OLLAMA_BASE_URL",
+            "HC_REDIS_URL",
+            "HC_REPORT_ARTIFACTS_DIR",
+            "HC_TELEGRAM_BOT_TOKEN",
+            "HC_TELEGRAM_WEBHOOK_SECRET",
+            "HC_UPLOADS_DIR",
+        ):
+            if forbidden in garmin_environment:
+                errors.append(f"garmin-worker must not receive {forbidden}")
+        if "hc-garmin" not in postgres_network_names:
+            errors.append("postgres must join hc-garmin for Garmin worker database access")
+
     if production:
         for name in ("api", "worker", "cleanup-worker"):
             environment = services.get(name, {}).get("environment", {})

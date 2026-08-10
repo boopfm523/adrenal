@@ -13,6 +13,15 @@ const provenance = { recorded_at: "2026-08-09T12:16:00Z", source_type: "telegram
 const pressure = { id: "11111111-1111-4111-8111-111111111111", category: "fact", systolic_mmhg: 118, diastolic_mmhg: 76, pulse_bpm: 62, time, provenance, notes: null };
 const weight = { id: "22222222-2222-4222-8222-222222222222", category: "fact", value: "180.0000", unit: "lb", normalized_kg: "81.6466", display_lb: "180.0", time, provenance, notes: null };
 const kgWeight = { ...weight, id: "44444444-4444-4444-8444-444444444444", value: "83.1000", unit: "kg", normalized_kg: "83.1000", display_lb: "183.2", time: { ...time, occurred_at: "2026-08-10T12:15:00Z", local_time: "2026-08-10T08:15:00" } };
+const garminProvenance = { ...provenance, source_type: "provider", confirmation_state: "provider_imported" };
+const garminRecords = {
+  notice: "Unavailable provider values remain missing rather than zero.",
+  records: [
+    { id: "55555555-5555-4555-8555-555555555555", kind: "daily", summary: "Steps", time, provenance: garminProvenance, metric_type: "steps", value: "8765.0000", unit: "steps", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
+    { id: "66666666-6666-4666-8666-666666666666", kind: "sleep", summary: "Sleep", time: { ...time, occurred_at: "2026-08-10T04:00:00Z", local_time: "2026-08-10T00:00:00" }, provenance: garminProvenance, metric_type: null, value: null, unit: null, ended_at: "2026-08-10T12:00:00Z", duration_seconds: 28800, duration_source: "provider", awakenings: 2, sleep_score: 82, activity_type: null, distance_miles: null },
+    { id: "77777777-7777-4777-8777-777777777777", kind: "activity", summary: "Walking", time: { ...time, occurred_at: "2026-08-10T14:00:00Z", local_time: "2026-08-10T10:00:00" }, provenance: garminProvenance, metric_type: null, value: null, unit: null, ended_at: "2026-08-10T14:30:00Z", duration_seconds: 1800, duration_source: null, awakenings: null, sleep_score: null, activity_type: "walking", distance_miles: "3.1000" },
+  ],
+};
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
@@ -41,6 +50,7 @@ describe("Health data page", () => {
         writes.push({ url, body: JSON.parse(rawBody) as unknown, csrf: new Headers(init.headers).get("X-CSRF-Token") });
         return Promise.resolve(json(url.endsWith("/weight") ? weight : pressure, 201));
       }
+      if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ records: [], notice: "Synthetic" }));
       return Promise.resolve(json(url.includes("blood-pressure") ? [pressure] : [weight]));
     });
     renderPage();
@@ -64,6 +74,7 @@ describe("Health data page", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.endsWith(`/blood-pressure/${corrected.id}/correct`) && init?.method === "POST") return Promise.resolve(json({ ...corrected, diastolic_mmhg: 77 }, 201));
+      if (url.includes("/integrations/garmin/records")) return Promise.resolve(json(garminRecords));
       return Promise.resolve(json(url.includes("blood-pressure") ? [corrected, pressure] : [kgWeight, weight]));
     });
     renderPage();
@@ -78,6 +89,11 @@ describe("Health data page", () => {
     expect(within(weightTable).getByText("83.1000 kg normalized")).toBeVisible();
     expect(screen.getByText("Corrected · Synthetic correction")).toBeVisible();
     expect(screen.getAllByText(/Source: telegram · confirmed from draft/)).toHaveLength(2);
+    const garminTable = screen.getByRole("region", { name: "Garmin recorded observations table" });
+    expect(within(garminTable).getByRole("cell", { name: /8765\.0000 steps/ })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: /Sleep score: 82/ })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: /Distance: 3\.1000 mi/ })).toBeVisible();
+    expect(within(garminTable).getAllByText(/Garmin · provider · provider imported/)).toHaveLength(3);
     await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/118\/76 mmHg/)).toBeVisible();
 

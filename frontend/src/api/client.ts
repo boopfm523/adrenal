@@ -38,6 +38,10 @@ export type Weight = components["schemas"]["WeightOut"];
 export type WeightInput = components["schemas"]["WeightIn"];
 export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
 export type LabResult = components["schemas"]["LabResultOut"];
+export type GarminStatus = components["schemas"]["GarminStatusOut"];
+export type GarminRecord = components["schemas"]["GarminRecordOut"];
+export type GarminRecords = components["schemas"]["GarminRecordsOut"];
+export type GarminDisconnectPreview = components["schemas"]["GarminDisconnectPreviewOut"];
 
 export interface LabDocument {
   document_id: string;
@@ -479,6 +483,25 @@ export function getDataQuality(): Promise<DataQuality> {
   return apiRequest<DataQuality>("/data-quality");
 }
 
+export function getGarminStatus(): Promise<GarminStatus> {
+  return apiRequest<GarminStatus>("/integrations/garmin/status");
+}
+
+export function getGarminRecords(): Promise<GarminRecords> {
+  return apiRequest<GarminRecords>("/integrations/garmin/records");
+}
+
+export function getGarminDisconnectPreview(): Promise<GarminDisconnectPreview> {
+  return apiRequest<GarminDisconnectPreview>("/integrations/garmin/disconnect-preview");
+}
+
+export function requestGarminSync(idempotencyKey: string): Promise<{ job_id: string; status: string }> {
+  return apiRequest<{ job_id: string; status: string }>("/integrations/garmin/sync", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+  });
+}
+
 export function getReports(): Promise<ReportSummary[]> {
   return apiRequest<ReportSummary[]>("/reports");
 }
@@ -491,10 +514,10 @@ export function createReport(payload: ReportCreate): Promise<ReportSummary> {
   return apiRequest<ReportSummary>("/reports", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export interface IntegrationDeletionResult { credentials_deleted: number; data_rows_deleted: number; }
+export type IntegrationDeletionResult = components["schemas"]["IntegrationDeletionResponse"];
 
-export function disconnectIntegration(provider: "garmin" | "telegram" | "weather", password: string, deleteData: boolean): Promise<IntegrationDeletionResult> {
-  return apiRequest<IntegrationDeletionResult>(`/privacy/integrations/${provider}`, { method: "DELETE", body: JSON.stringify({ password, delete_data: deleteData }) });
+export function disconnectIntegration(provider: "garmin" | "telegram" | "weather", password: string, deleteData: boolean, confirmation?: string): Promise<IntegrationDeletionResult> {
+  return apiRequest<IntegrationDeletionResult>(`/privacy/integrations/${provider}`, { method: "DELETE", body: JSON.stringify({ password, delete_data: deleteData, confirmation }) });
 }
 
 export async function revokeAllSessions(): Promise<void> {

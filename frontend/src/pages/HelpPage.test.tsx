@@ -63,7 +63,7 @@ describe("Help page", () => {
     expect(within(doseCard).getByRole("status")).toHaveTextContent("Copied");
   });
 
-  it("labels API-only and planned capabilities while documenting implemented backlog capture", () => {
+  it("labels API-only and implemented capabilities while documenting backlog capture", () => {
     renderHelp();
 
     expect(screen.getByText("API only—no complete web create form yet")).toBeVisible();
@@ -71,8 +71,9 @@ describe("Help page", () => {
     expect(screen.getByText(/original PDF remains attachment-only/i)).toBeVisible();
     expect(screen.getByText(/permanent deletion first shows the exact linked drafts/i)).toBeVisible();
     expect(screen.queryByText(/fact-confirmation UI is planned/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Garmin account connection:/)).toBeVisible();
-    expect(screen.getByText(/automatic provider sync is not implemented/)).toBeVisible();
+    expect(screen.getByText("Settings, Health data, and API")).toBeVisible();
+    expect(screen.getByText(/local one-time Garmin connection/)).toBeVisible();
+    expect(screen.queryByText(/automatic provider sync is not implemented/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "/beads-add" })).toBeVisible();
     expect(screen.getByText(/no agent, shell command, or implementation starts/i)).toBeVisible();
     expect(screen.getByText(/never falls back to copying the directive/)).toBeVisible();

@@ -92,3 +92,32 @@ def test_rejects_cleanup_worker_external_access_or_credential_expansion() -> Non
     assert "cleanup-worker must not receive HC_TELEGRAM_BOT_TOKEN" in errors
     assert "hc-cleanup network must be internal-only" in errors
     assert "postgres must join hc-cleanup for cleanup-worker database access" in errors
+
+
+def test_accepts_isolated_garmin_worker_and_rejects_secret_expansion() -> None:
+    config = deepcopy(_config(production=False))
+    config["services"]["garmin-worker"] = {
+        "environment": {
+            "HC_DATABASE_URL": "synthetic-placeholder",
+            "HC_GARMIN_ENABLED": "true",
+            "HC_GARMIN_TOKEN_STORE": "/run/secrets/garmin",
+        },
+        "networks": {"hc-garmin": None},
+        "read_only": True,
+        "cap_drop": ["ALL"],
+        "security_opt": ["no-new-privileges:true"],
+        "volumes": [{"target": "/run/secrets/garmin"}],
+    }
+    config["services"]["postgres"]["networks"]["hc-garmin"] = None
+    config["networks"]["hc-garmin"] = {}
+    assert validate(config, production=False) == []
+
+    config["services"]["garmin-worker"]["environment"]["HC_TELEGRAM_BOT_TOKEN"] = (
+        "synthetic-placeholder"
+    )
+    config["services"]["garmin-worker"]["networks"] = {"hc-internal": None}
+    config["services"]["garmin-worker"]["volumes"].append({"target": "/data/uploads"})
+    errors = validate(config, production=False)
+    assert "garmin-worker must use only hc-garmin" in errors
+    assert "garmin-worker may mount only its token directory" in errors
+    assert "garmin-worker must not receive HC_TELEGRAM_BOT_TOKEN" in errors

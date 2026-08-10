@@ -18,7 +18,7 @@ describe("Settings and privacy page", () => {
   it("discloses retention and sends reauthenticated privacy actions", async () => {
     const submittedPassword = ["synthetic", "password"].join("-");
     const requests: { url: string; method: string; body: unknown }[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); requests.push({ url, method: init?.method ?? "GET", body: init?.body === undefined ? null : JSON.parse(init.body as string) }); if (url.endsWith("/privacy/export")) return Promise.resolve(new Response("{}", { headers: { "Content-Type": "application/json" } })); if (url.includes("/integrations/")) return Promise.resolve(new Response(JSON.stringify({ credentials_deleted: 1, data_rows_deleted: 2 }), { headers: { "Content-Type": "application/json" } })); return Promise.resolve(new Response(null, { status: 204 })); });
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); requests.push({ url, method: init?.method ?? "GET", body: init?.body === undefined ? null : JSON.parse(init.body as string) }); if (url.endsWith("/integrations/garmin/status")) return Promise.resolve(new Response(JSON.stringify({ configured: true, state: "connected", last_success_at: "2026-08-10T12:00:00Z", checkpoint_date: "2026-08-10", capabilities: { steps: "available", stress: "unavailable" }, last_error_code: null, client_version: "synthetic", latest_sync_status: "completed", latest_sync_warning_codes: [] }), { headers: { "Content-Type": "application/json" } })); if (url.endsWith("/integrations/garmin/disconnect-preview")) return Promise.resolve(new Response(JSON.stringify({ state: "connected", automatic_fact_rows: 5, reviewed_import_fact_rows: 2, sync_run_rows: 1, delete_data_confirmation: "DISCONNECT GARMIN AND DELETE DATA", retain_data_confirmation: "DISCONNECT GARMIN" }), { headers: { "Content-Type": "application/json" } })); if (url.endsWith("/integrations/garmin/sync")) return Promise.resolve(new Response(JSON.stringify({ job_id: "synthetic-job", status: "queued" }), { status: 202, headers: { "Content-Type": "application/json" } })); if (url.endsWith("/privacy/export")) return Promise.resolve(new Response("{}", { headers: { "Content-Type": "application/json" } })); if (url.includes("/privacy/integrations/")) return Promise.resolve(new Response(JSON.stringify({ credentials_deleted: 1, data_rows_deleted: 2, disconnect_requested: url.endsWith("/garmin") }), { headers: { "Content-Type": "application/json" } })); return Promise.resolve(new Response(null, { status: 204 })); });
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:synthetic") });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
@@ -32,14 +32,26 @@ describe("Settings and privacy page", () => {
     expect(screen.getByText(/Exact location is opt-in per record/)).toBeVisible();
 
     expect(screen.getByText(/only rounded 0.1-degree coordinates and fixed/)).toBeVisible();
-    for (const provider of ["garmin", "telegram", "weather"] as const) {
+    expect(await screen.findByText("connected")).toBeVisible();
+    expect(screen.getByText("5 automatic fact row(s), 2 reviewed import fact row(s), and 1 sync provenance row(s) are currently recorded.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Sync Garmin now" }));
+    await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/integrations/garmin/sync") && request.method === "POST")).toBe(true); });
+
+    for (const provider of ["telegram", "weather"] as const) {
       const button = screen.getByRole("button", { name: `Disconnect ${provider}` });
       const form = button.closest("form");
       if (form === null) throw new Error("integration form missing");
       fireEvent.change(within(form).getByLabelText("Current password"), { target: { value: submittedPassword } });
       fireEvent.click(button);
     }
+    const garminButton = screen.getByRole("button", { name: "Disconnect Garmin" });
+    const garminForm = garminButton.closest("form");
+    if (garminForm === null) throw new Error("Garmin disconnect form missing");
+    fireEvent.change(within(garminForm).getByLabelText("Current password"), { target: { value: submittedPassword } });
+    fireEvent.change(within(garminForm).getByLabelText("Type DISCONNECT GARMIN AND DELETE DATA"), { target: { value: "DISCONNECT GARMIN AND DELETE DATA" } });
+    fireEvent.click(garminButton);
     await waitFor(() => { expect(requests.filter((request) => request.url.includes("/privacy/integrations/")).length).toBe(3); });
+    expect(requests.find((request) => request.url.endsWith("/privacy/integrations/garmin"))?.body).toMatchObject({ delete_data: true, confirmation: "DISCONNECT GARMIN AND DELETE DATA" });
 
     const exportButton = screen.getByRole("button", { name: "Download private export" });
     const exportForm = exportButton.closest("form");

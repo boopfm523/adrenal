@@ -30,6 +30,11 @@ from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.integrations.garmin.models import (
+    GarminActivityEvent,
+    GarminMetricEvent,
+    GarminSleepEvent,
+)
 from healthcurve.medications.models import DoseEvent
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
@@ -263,6 +268,9 @@ _TIMELINE_TYPES: tuple[tuple[type[EventMixin], str], ...] = (
     (ContextEvent, "context"),
     (BloodPressureEvent, "blood_pressure"),
     (WeightEvent, "weight"),
+    (GarminMetricEvent, "garmin_daily"),
+    (GarminSleepEvent, "garmin_sleep"),
+    (GarminActivityEvent, "garmin_activity"),
 )
 
 
@@ -385,6 +393,24 @@ def _summarize(row: EventMixin, type_name: str) -> str:
                 else ""
             )
             return f"Weight {pounds} lb{entered}"
+        case "garmin_daily":
+            metric = row.metric_type.value.replace("_", " ").title()  # type: ignore[attr-defined]
+            return f"Garmin-recorded {metric}: {row.value} {row.unit}"  # type: ignore[attr-defined]
+        case "garmin_sleep":
+            duration = row.duration_seconds  # type: ignore[attr-defined]
+            duration_text = (
+                "duration unavailable"
+                if duration is None
+                else f"{duration // 3600}h {(duration % 3600) // 60}m"
+            )
+            score = row.overall_sleep_score  # type: ignore[attr-defined]
+            score_text = "score unavailable" if score is None else f"score {score}"
+            return f"Garmin-recorded sleep: {duration_text}; {score_text}"
+        case "garmin_activity":
+            sport = row.sport.replace("_", " ").title()  # type: ignore[attr-defined]
+            distance = row.distance_miles  # type: ignore[attr-defined]
+            distance_text = "distance unavailable" if distance is None else f"{distance} mi"
+            return f"Garmin-recorded activity: {sport}; {distance_text}"
         case _:  # pragma: no cover
             return type_name
 

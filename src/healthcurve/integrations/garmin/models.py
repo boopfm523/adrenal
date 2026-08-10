@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -23,7 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declarative_mixin, mapped_column
 
-from healthcurve.db import FACT_SCHEMA, FactBase, StrEnumType
+from healthcurve.db import FACT_SCHEMA, OPS_SCHEMA, FactBase, OpsBase, StrEnumType
 from healthcurve.events.base import EventMixin, event_table_args
 
 
@@ -36,6 +37,72 @@ class GarminMetricType(StrEnum):
     STEPS = "steps"
     MODERATE_INTENSITY_MINUTES = "moderate_intensity_minutes"
     VIGOROUS_INTENSITY_MINUTES = "vigorous_intensity_minutes"
+
+
+class GarminConnectionState(StrEnum):
+    CONNECTED = "connected"
+    REAUTHENTICATION_REQUIRED = "reauthentication_required"
+    DISCONNECT_PENDING = "disconnect_pending"
+    DISCONNECTED = "disconnected"
+
+
+class GarminSyncStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
+
+
+class GarminConnection(OpsBase):
+    """Non-secret owner-scoped state for the opt-in automatic integration."""
+
+    __tablename__ = "garmin_connection"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    state: Mapped[GarminConnectionState] = mapped_column(
+        StrEnumType(GarminConnectionState, 40), nullable=False
+    )
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checkpoint_date: Mapped[date | None] = mapped_column(Date)
+    capabilities: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False, default=dict)
+    client_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (OPS_SCHEMA,)
+
+
+class GarminSyncRun(OpsBase):
+    """Privacy-safe provenance for one bounded provider fetch."""
+
+    __tablename__ = "garmin_sync_run"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    requested_start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    requested_end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[GarminSyncStatus] = mapped_column(
+        StrEnumType(GarminSyncStatus, 32), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False, default=dict)
+    warning_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    client_version: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "requested_end_date >= requested_start_date", name="garmin_sync_date_ordered"
+        ),
+        CheckConstraint("finished_at >= started_at", name="garmin_sync_time_ordered"),
+        OPS_SCHEMA,
+    )
 
 
 class GarminImportBatch(FactBase):
@@ -78,8 +145,11 @@ class GarminImportBatch(FactBase):
 class GarminSourceMixin:
     """Attribution copied onto every fact so it survives detached exports."""
 
-    garmin_import_batch_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("fact.garmin_import_batch.id", ondelete="CASCADE"), nullable=False, index=True
+    garmin_import_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("fact.garmin_import_batch.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    garmin_sync_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ops.garmin_sync_run.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     garmin_source_member: Mapped[str] = mapped_column(String(500), nullable=False)
     garmin_manufacturer: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -104,6 +174,11 @@ class GarminMetricEvent(GarminSourceMixin, EventMixin, FactBase):
             "period_end_at IS NULL OR period_end_at >= occurred_at", name="period_ordered"
         ),
         CheckConstraint("value >= 0", name="metric_nonnegative"),
+        CheckConstraint(
+            "(garmin_import_batch_id IS NOT NULL AND garmin_sync_run_id IS NULL) OR "
+            "(garmin_import_batch_id IS NULL AND garmin_sync_run_id IS NOT NULL)",
+            name="garmin_metric_exactly_one_source",
+        ),
         *event_table_args("garmin_metric_event"),
     )
 
@@ -114,6 +189,9 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
     ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     overall_sleep_score: Mapped[int | None] = mapped_column()
     stage_count: Mapped[int] = mapped_column(nullable=False)
+    duration_seconds: Mapped[int | None] = mapped_column()
+    garmin_duration_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    awakenings: Mapped[int | None] = mapped_column()
 
     __table_args__ = (
         CheckConstraint("ended_at > occurred_at", name="sleep_interval_ordered"),
@@ -121,7 +199,20 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
             "overall_sleep_score IS NULL OR overall_sleep_score BETWEEN 0 AND 100",
             name="sleep_score_range",
         ),
-        CheckConstraint("stage_count >= 2", name="sleep_has_explicit_bounds"),
+        CheckConstraint("stage_count >= 0", name="sleep_stage_count_nonnegative"),
+        CheckConstraint(
+            "duration_seconds IS NULL OR duration_seconds >= 0", name="sleep_duration_nonnegative"
+        ),
+        CheckConstraint(
+            "garmin_duration_source IN ('provider', 'calculated_from_bounds')",
+            name="sleep_duration_source_valid",
+        ),
+        CheckConstraint("awakenings IS NULL OR awakenings >= 0", name="awakenings_nonnegative"),
+        CheckConstraint(
+            "(garmin_import_batch_id IS NOT NULL AND garmin_sync_run_id IS NULL) OR "
+            "(garmin_import_batch_id IS NULL AND garmin_sync_run_id IS NOT NULL)",
+            name="garmin_sleep_exactly_one_source",
+        ),
         *event_table_args("garmin_sleep_event"),
     )
 
@@ -134,7 +225,7 @@ class GarminActivityEvent(GarminSourceMixin, EventMixin, FactBase):
     sub_sport: Mapped[str | None] = mapped_column(String(80))
     title: Mapped[str | None] = mapped_column(String(300))
     elapsed_seconds: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
-    distance_m: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    distance_miles: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
     calories: Mapped[int | None] = mapped_column()
     average_heart_rate: Mapped[int | None] = mapped_column()
     maximum_heart_rate: Mapped[int | None] = mapped_column()
@@ -145,7 +236,9 @@ class GarminActivityEvent(GarminSourceMixin, EventMixin, FactBase):
         CheckConstraint(
             "elapsed_seconds IS NULL OR elapsed_seconds >= 0", name="elapsed_nonnegative"
         ),
-        CheckConstraint("distance_m IS NULL OR distance_m >= 0", name="distance_nonnegative"),
+        CheckConstraint(
+            "distance_miles IS NULL OR distance_miles >= 0", name="distance_nonnegative"
+        ),
         CheckConstraint("calories IS NULL OR calories >= 0", name="calories_nonnegative"),
         CheckConstraint(
             "average_heart_rate IS NULL OR average_heart_rate BETWEEN 20 AND 260",
@@ -156,5 +249,10 @@ class GarminActivityEvent(GarminSourceMixin, EventMixin, FactBase):
             name="maximum_hr_plausible",
         ),
         Index("ix_garmin_activity_sport_time", "sport", "occurred_at"),
+        CheckConstraint(
+            "(garmin_import_batch_id IS NOT NULL AND garmin_sync_run_id IS NULL) OR "
+            "(garmin_import_batch_id IS NULL AND garmin_sync_run_id IS NOT NULL)",
+            name="garmin_activity_exactly_one_source",
+        ),
         *event_table_args("garmin_activity_event"),
     )

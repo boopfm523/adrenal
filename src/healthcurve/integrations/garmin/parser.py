@@ -31,6 +31,7 @@ MAX_COMPRESSION_RATIO: Final = 100
 MAX_CANDIDATES: Final = 100_000
 MAX_CSV_ROWS: Final = 50_000
 MAX_ARCHIVE_DEPTH: Final = 2
+METERS_PER_MILE: Final = Decimal("1609.344")
 
 _PROFILE_VERSION: Any = Profile["version"]
 SDK_PROFILE_VERSION: Final = (
@@ -110,7 +111,7 @@ class ActivityCandidate:
     sub_sport: str | None = None
     title: str | None = None
     elapsed_seconds: Decimal | None = None
-    distance_m: Decimal | None = None
+    distance_miles: Decimal | None = None
     calories: int | None = None
     average_heart_rate: int | None = None
     maximum_heart_rate: int | None = None
@@ -542,7 +543,7 @@ def _fit_activities(
                 sub_sport=_optional_text(message.get("sub_sport")),
                 title=_optional_text(message.get("sport_profile_name")),
                 elapsed_seconds=elapsed,
-                distance_m=_optional_decimal(message.get("total_distance")),
+                distance_miles=_meters_to_miles(_optional_decimal(message.get("total_distance"))),
                 calories=_bounded_int(message.get("total_calories"), 0, 1_000_000),
                 average_heart_rate=_bounded_int(message.get("avg_heart_rate"), 20, 260),
                 maximum_heart_rate=_bounded_int(message.get("max_heart_rate"), 20, 260),
@@ -625,7 +626,7 @@ def _parse_activity_csv(
                 sport=sport.casefold().replace(" ", "_"),
                 title=_optional_text(row.get(title_header)) if title_header else None,
                 elapsed_seconds=elapsed,
-                distance_m=distance,
+                distance_miles=distance,
                 calories=(
                     _bounded_int(_clean_number(row.get(calories_header)), 0, 1_000_000)
                     if calories_header
@@ -748,12 +749,16 @@ def _distance_header(headers: dict[str, str]) -> tuple[str | None, Decimal]:
         if not normalized.startswith("distance"):
             continue
         if normalized in {"distance_km", "distance_kilometers"}:
-            return original, Decimal(1000)
+            return original, Decimal(1000) / METERS_PER_MILE
         if normalized in {"distance_mi", "distance_miles"}:
-            return original, Decimal("1609.344")
-        if normalized in {"distance_m", "distance_meters"}:
             return original, Decimal(1)
+        if normalized in {"distance_m", "distance_meters"}:
+            return original, Decimal(1) / METERS_PER_MILE
     return None, Decimal(1)
+
+
+def _meters_to_miles(value: Decimal | None) -> Decimal | None:
+    return None if value is None else value / METERS_PER_MILE
 
 
 def _normal_header(value: str) -> str:

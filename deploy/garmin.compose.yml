@@ -1,0 +1,83 @@
+# Opt-in, outbound-only Garmin Connect worker (ADR-0012).
+# Run with: docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
+#   --profile garmin up -d garmin-worker
+
+services:
+  garmin-worker:
+    profiles: [garmin]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    user: "10001:10001"
+    command: ["python", "-m", "healthcurve.garmin_worker"]
+    environment:
+      HC_ENVIRONMENT: ${HC_ENVIRONMENT:-dev}
+      HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
+      HC_MFA_REQUIRED: ${HC_MFA_REQUIRED:-false}
+      HC_JOB_POLL_INTERVAL_S: ${HC_JOB_POLL_INTERVAL_S:-2}
+      HC_GARMIN_ENABLED: ${HC_GARMIN_ENABLED:-false}
+      HC_GARMIN_TOKEN_STORE: /run/secrets/garmin
+      HC_GARMIN_SYNC_LOOKBACK_DAYS: ${HC_GARMIN_SYNC_LOOKBACK_DAYS:-7}
+    volumes:
+      - type: bind
+        source: ${HC_GARMIN_TOKEN_STORE_HOST:?set HC_GARMIN_TOKEN_STORE_HOST}
+        target: /run/secrets/garmin
+    networks: [hc-garmin]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 384m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot interactive login. Credentials and MFA are available only here; after
+  # successful token creation remove HC_GARMIN_EMAIL/PASSWORD from the host .env.
+  garmin-connect:
+    profiles: [garmin-connect]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    user: "10001:10001"
+    command: ["python", "-m", "healthcurve.garmin_cli", "connect"]
+    environment:
+      HC_ENVIRONMENT: ${HC_ENVIRONMENT:-dev}
+      HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
+      HC_OLLAMA_BASE_URL: http://127.0.0.1:11434
+      HC_GARMIN_ENABLED: "true"
+      HC_GARMIN_EMAIL: ${HC_GARMIN_EMAIL:?set HC_GARMIN_EMAIL for one-time login}
+      HC_GARMIN_PASSWORD: ${HC_GARMIN_PASSWORD:?set HC_GARMIN_PASSWORD for one-time login}
+      HC_GARMIN_TOKEN_STORE: /run/secrets/garmin
+    volumes:
+      - type: bind
+        source: ${HC_GARMIN_TOKEN_STORE_HOST:?set HC_GARMIN_TOKEN_STORE_HOST}
+        target: /run/secrets/garmin
+    networks: [hc-garmin]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 384m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    restart: "no"
+
+  postgres:
+    networks: [hc-internal, hc-cleanup, hc-garmin]
+
+networks:
+  hc-garmin:
+    driver: bridge

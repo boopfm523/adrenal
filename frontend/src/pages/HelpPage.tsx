@@ -176,7 +176,6 @@ export function HelpPage(): React.JSX.Element {
       <section id="planned" className="help-section help-planned anchor-target" aria-labelledby="planned-title">
         <h2 id="planned-title">Clearly not available yet</h2>
         <ul>
-          <li><strong>Garmin account connection:</strong> automatic provider sync is not implemented. Only owner-supplied FIT, CSV, or ZIP preview/confirm is available.</li>
           <li><strong>Offsite backup assurance:</strong> encrypted local backup exists, but production readiness still requires an offsite copy and a successful isolated restore drill.</li>
         </ul>
       </section>

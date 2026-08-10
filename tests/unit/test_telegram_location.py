@@ -208,7 +208,9 @@ def test_decline_and_expiry_clear_even_rounded_location() -> None:
 
 def test_dispatch_accepts_location_only_from_the_allowed_private_chat() -> None:
     session, mocked = _session()
-    request = _request()
+    # Dispatch intentionally uses the real current clock. Keep this request active
+    # regardless of when the deterministic 2026 fixture suite is executed.
+    request = _request(expires_at=datetime.max.replace(tzinfo=UTC))
     draft = _draft()
     mocked.scalar.side_effect = [None, _owner(), request, draft]
     mocked.get.return_value = draft

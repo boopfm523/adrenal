@@ -7,10 +7,12 @@ import {
   createBloodPressure,
   createWeight,
   getBloodPressure,
+  getGarminRecords,
   getWeight,
   type BloodPressure,
   type BloodPressureCorrectionInput,
   type BloodPressureInput,
+  type GarminRecord,
   type Weight,
   type WeightCorrectionInput,
   type WeightInput,
@@ -47,8 +49,32 @@ function historyFor<T extends { id: string; provenance: { supersedes_id?: string
   return history;
 }
 
-function source(record: BloodPressure | Weight): string {
+function source(record: { provenance: { source_type: string; confirmation_state: string } }): string {
   return `${record.provenance.source_type.replaceAll("_", " ")} · ${record.provenance.confirmation_state.replaceAll("_", " ")}`;
+}
+
+function duration(seconds: number | null | undefined): string {
+  if (seconds == null) return "Unavailable";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours.toString()}h ${minutes.toString()}m`;
+}
+
+function GarminRecordsTable({ records }: { records: GarminRecord[] }): React.JSX.Element {
+  const ordered = [...records].sort((left, right) => left.time.occurred_at.localeCompare(right.time.occurred_at));
+  return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Garmin recorded observations table">
+    <table className="vital-table garmin-table">
+      <caption>Garmin-recorded observations in experienced-time order. Unavailable provider values are shown as unavailable, never zero. Activity distance is miles only.</caption>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Observation</th><th scope="col">Recorded value</th><th scope="col">Duration and details</th><th scope="col">Source and provenance</th></tr></thead>
+      <tbody>{ordered.map((record) => <tr key={record.id} data-category="fact">
+        <td className="timeline-time">{displayTime(record.time.local_time)}<span>{record.time.timezone}</span></td>
+        <td><strong>{record.kind === "daily" ? record.metric_type?.replaceAll("_", " ") : record.kind === "sleep" ? "sleep" : record.activity_type?.replaceAll("_", " ")}</strong><span>Garmin recorded observation</span></td>
+        <td>{record.kind === "daily" ? <>{record.value ?? <span className="missing-value">Unavailable</span>} {record.unit ?? ""}</> : record.kind === "sleep" ? <>Sleep score: {record.sleep_score ?? <span className="missing-value">Unavailable</span>}</> : <>Distance: {record.distance_miles == null ? <span className="missing-value">Unavailable</span> : `${record.distance_miles} mi`}</>}</td>
+        <td>{record.kind === "daily" ? <span className="missing-value">Daily summary</span> : <>{duration(record.duration_seconds)}{record.kind === "sleep" ? <><span>Awakenings: {record.awakenings ?? "Unavailable"}</span><span>Duration source: {record.duration_source?.replaceAll("_", " ") ?? "Unavailable"}</span></> : null}</>}</td>
+        <td><span>Garmin · {source(record)}</span><span>{record.provenance.is_correction ? `Provider correction · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original provider record"}</span></td>
+      </tr>)}</tbody>
+    </table>
+  </div>;
 }
 
 function dateRange(records: (BloodPressure | Weight)[]): string {
@@ -210,18 +236,20 @@ export function HealthDataPage(): React.JSX.Element {
   const [editing, setEditing] = useState<string | null>(null);
   const bp = useQuery({ queryKey: ["blood-pressure", "with-history"], queryFn: () => getBloodPressure(true) });
   const weight = useQuery({ queryKey: ["weight", "with-history"], queryFn: () => getWeight(true) });
+  const garmin = useQuery({ queryKey: ["garmin-records"], queryFn: getGarminRecords });
   const currentBp = currentOnly(bp.data ?? []);
   const currentWeight = currentOnly(weight.data ?? []);
   const bpById = new Map((bp.data ?? []).map((record) => [record.id, record]));
   const weightById = new Map((weight.data ?? []).map((record) => [record.id, record]));
-  return <Page title="Health data" description="Record and review blood pressure and weight as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
+  return <Page title="Health data" description="Record and review blood pressure, weight, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
     <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /></div></section>
-    {bp.isPending || weight.isPending ? <p role="status">Loading recorded vitals…</p> : null}
-    {bp.isError || weight.isError ? <p className="error-summary" role="alert">Some vital records could not be loaded.</p> : null}
+    {bp.isPending || weight.isPending || garmin.isPending ? <p role="status">Loading recorded health data…</p> : null}
+    {bp.isError || weight.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded.</p> : null}
     <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
       {currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <AccessibleLineChart title="Blood pressure" summary="Current recorded systolic and diastolic measurements over experienced time." unit="mmHg" timezone={timezone} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} series={bpSeries(currentBp)} />}
       {currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <AccessibleLineChart title="Weight" summary="Current recorded weight measurements shown on one consistent pounds scale." unit="lb" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The original entered value and unit remain in the records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} series={weightSeries(currentWeight)} />}
     </section>
+    <section aria-labelledby="garmin-records-heading"><h2 id="garmin-records-heading">Garmin recorded observations</h2><p className="privacy-note">These are provider-imported facts, separate from physician-approved plans and AI analysis. Scores and missing values are not interpreted as medical conclusions.</p>{garmin.data?.records.length === 0 ? <p>No Garmin observations recorded.</p> : garmin.data === undefined ? null : <GarminRecordsTable records={garmin.data.records} />}</section>
     <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>
       {currentBp.map((record) => { const history = historyFor(record, bpById); return <FactCard key={record.id} title={`${record.systolic_mmhg.toString()}/${record.diastolic_mmhg.toString()} mmHg${record.pulse_bpm === null ? "" : ` · pulse ${record.pulse_bpm.toString()} bpm`}`} metadata={<span>{record.provenance.is_correction ? `Corrected · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>}><p>{displayTime(record.time.local_time)} · {record.time.timezone}</p><p>Source: {source(record)}</p>{record.notes === null ? null : <p>Notes: {record.notes}</p>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct blood pressure"}</button>{editing === record.id ? <BloodPressureCorrection record={record} close={() => { setEditing(null); }} /> : null}{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p>{prior.systolic_mmhg}/{prior.diastolic_mmhg} mmHg{prior.pulse_bpm === null ? "" : ` · pulse ${prior.pulse_bpm.toString()} bpm`} · {displayTime(prior.time.local_time)} · {prior.time.timezone}</p><p>Source: {source(prior)}</p></article>)}</details>}</FactCard>; })}
     </section>
