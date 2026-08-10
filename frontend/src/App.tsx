@@ -16,6 +16,7 @@ import { DataQualityPage } from "./pages/DataQualityPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { HelpPage } from "./pages/HelpPage";
 import { HealthDataPage } from "./pages/HealthDataPage";
+import { LabsPage } from "./pages/LabsPage";
 
 export function App(): React.JSX.Element {
   return (
@@ -36,6 +37,7 @@ export function App(): React.JSX.Element {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/health-data" element={<HealthDataPage />} />
+          <Route path="/labs" element={<LabsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

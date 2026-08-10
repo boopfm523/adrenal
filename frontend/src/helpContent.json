@@ -207,9 +207,9 @@
       "availability": "API only—web review form is planned",
       "instructions": "Submit original analyte labels, values, units, ranges, specimen time, and source metadata without normalizing them yourself.",
       "example": "Synthetic panel: sodium 140 mmol/L, source range 135–145, collected 2026-08-01 08:00 America/New_York.",
-      "result": "Recorded lab facts",
-      "confirmation": "Manual API entry is direct. Preserve the source report wording and do not infer missing ranges or collection times.",
-      "endpoints": [{ "method": "POST", "path": "/api/v1/labs/manual" }]
+      "result": "Recorded lab facts, with optional separate curated derivations visible on Labs",
+      "confirmation": "Manual API entry is direct. Preserve the source report wording and do not infer missing ranges or collection times. HealthCurve derives only allow-listed CBC, acute chemistry, and cortisol values; it never overwrites the source.",
+      "endpoints": [{ "method": "POST", "path": "/api/v1/labs/manual" }, { "method": "GET", "path": "/api/v1/labs/results" }]
     },
     {
       "id": "lab-csv",

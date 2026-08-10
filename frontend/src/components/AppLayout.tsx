@@ -10,6 +10,7 @@ const navigation = [
   ["Episodes", "/episodes"],
   ["Symptoms & diary", "/symptoms-diary"],
   ["Health data", "/health-data"],
+  ["Labs", "/labs"],
   ["Analytics", "/analytics"],
   ["Reports", "/reports"],
   ["Data quality", "/data-quality"],

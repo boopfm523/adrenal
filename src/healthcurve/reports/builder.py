@@ -250,6 +250,7 @@ def build_snapshot(
                     **_base_event(panel),
                     "record_type": "lab_panel",
                     "laboratory_name": panel.laboratory_name,
+                    "specimen_type": panel.specimen_type,
                     "reported_at": panel.reported_at,
                     "report_status": panel.report_status,
                     "results": [
@@ -261,6 +262,10 @@ def build_snapshot(
                             "original_unit": result.original_unit,
                             "original_reference_range": result.original_reference_range,
                             "abnormal_flag": result.abnormal_flag,
+                            "normalized_analyte_code": result.normalized_analyte_code,
+                            "normalized_value": result.normalized_value,
+                            "normalized_unit": result.normalized_unit,
+                            "normalization_method": result.normalization_method,
                         }
                         for result in panel.results
                     ],

@@ -153,6 +153,11 @@ export function HelpPage(): React.JSX.Element {
             <Link to="/health-data">Open Health data</Link>
           </article>
           <article className="help-workflow">
+            <h3>Review laboratory facts and trends</h3>
+            <p>Labs keeps report wording, units, ranges, collection time, specimen type, and provenance visible beside any versioned derived value. Trend charts include equivalent tables and never combine incompatible specimen types or units. Cortisol is descriptive only.</p>
+            <Link to="/labs">Open Labs</Link>
+          </article>
+          <article className="help-workflow">
             <h3>Create a physician report</h3>
             <p>Select a date range and sections. Facts, approved plan, patient notes, and optional AI remain visibly separated. AI and sensitive notes are off by default.</p>
             <CopyableExample label="Synthetic report range" value="2026-07-01 through 2026-07-31 · America/New_York · AI off" />
@@ -170,7 +175,6 @@ export function HelpPage(): React.JSX.Element {
       <section id="planned" className="help-section help-planned anchor-target" aria-labelledby="planned-title">
         <h2 id="planned-title">Clearly not available yet</h2>
         <ul>
-          <li><strong>Curated CBC, acute chemistry, and cortisol trends:</strong> normalization and accessible trends are planned. Original lab values can already be entered or imported.</li>
           <li><strong>Garmin account connection:</strong> automatic provider sync is not implemented. Only owner-supplied FIT, CSV, or ZIP preview/confirm is available.</li>
           <li><strong>Lab PDF fact confirmation:</strong> private upload and local candidate extraction exist; the complete review-and-confirm web workflow is not yet available.</li>
           <li><strong>Offsite backup assurance:</strong> encrypted local backup exists, but production readiness still requires an offsite copy and a successful isolated restore drill.</li>

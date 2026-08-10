@@ -2568,6 +2568,194 @@
         "title": "IntegrationDeletionResponse",
         "type": "object"
       },
+      "LabResultOut": {
+        "additionalProperties": false,
+        "properties": {
+          "abnormal_flag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abnormal Flag"
+          },
+          "analyte_name": {
+            "title": "Analyte Name",
+            "type": "string"
+          },
+          "category": {
+            "const": "fact",
+            "default": "fact",
+            "title": "Category",
+            "type": "string"
+          },
+          "confirmation_state": {
+            "$ref": "#/components/schemas/ConfirmationState"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "laboratory_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Laboratory Name"
+          },
+          "normalization_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalization Method"
+          },
+          "normalized_analyte_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Analyte Code"
+          },
+          "normalized_analyte_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Analyte Name"
+          },
+          "normalized_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Unit"
+          },
+          "normalized_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Value"
+          },
+          "original_reference_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Reference Range"
+          },
+          "original_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Unit"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Value"
+          },
+          "panel_id": {
+            "format": "uuid",
+            "title": "Panel Id",
+            "type": "string"
+          },
+          "qualitative_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualitative Result"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceType"
+          },
+          "specimen_time": {
+            "$ref": "#/components/schemas/EventTimeOut"
+          },
+          "specimen_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Type"
+          }
+        },
+        "required": [
+          "id",
+          "panel_id",
+          "analyte_name",
+          "original_value",
+          "qualitative_result",
+          "original_unit",
+          "original_reference_range",
+          "abnormal_flag",
+          "normalized_analyte_code",
+          "normalized_analyte_name",
+          "normalized_value",
+          "normalized_unit",
+          "normalization_method",
+          "specimen_time",
+          "specimen_type",
+          "laboratory_name",
+          "source_type",
+          "confirmation_state"
+        ],
+        "title": "LabResultOut",
+        "type": "object"
+      },
       "LifeEventCategory": {
         "description": "Context that helps explain a pattern without asserting it caused anything.",
         "enum": [
@@ -7508,6 +7696,60 @@
           }
         },
         "summary": "Create Manual Lab",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/results": {
+      "get": {
+        "description": "Return source facts and derived values together, never conflated.",
+        "operationId": "list_lab_results_api_v1_labs_results_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LabResultOut"
+                  },
+                  "title": "Response List Lab Results Api V1 Labs Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Lab Results",
         "tags": [
           "labs"
         ]

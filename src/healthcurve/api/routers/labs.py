@@ -25,7 +25,7 @@ from healthcurve.api.deps import (
     require_csrf,
 )
 from healthcurve.api.routers.doses import resolve_time
-from healthcurve.api.schemas import ApiModel, EventTimeIn
+from healthcurve.api.schemas import ApiModel, EventTimeIn, LabResultOut
 from healthcurve.config import Settings
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.labs.documents import (
@@ -37,7 +37,8 @@ from healthcurve.labs.documents import (
     store_pdf_upload,
 )
 from healthcurve.labs.imports import MAX_CSV_BYTES, LabImportError, parse_csv_import
-from healthcurve.labs.models import LabDocument, LabDocumentStatus
+from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
+from healthcurve.labs.normalization import analyte_definition
 from healthcurve.labs.service import (
     LabConfirmationError,
     confirm_csv,
@@ -48,6 +49,45 @@ from healthcurve.operations import audit
 from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/labs", tags=["labs"])
+
+
+@router.get("/results", response_model=list[LabResultOut])
+def list_lab_results(session: DbSession, owner: CurrentOwner) -> list[LabResultOut]:
+    """Return source facts and derived values together, never conflated."""
+    rows = session.execute(
+        select(LabResult, LabPanel)
+        .join(LabPanel, LabPanel.id == LabResult.panel_id)
+        .where(LabResult.owner_id == owner.id, LabPanel.owner_id == owner.id)
+        .order_by(LabPanel.occurred_at, LabResult.source_row_index, LabResult.id)
+    ).all()
+    payload: list[LabResultOut] = []
+    for result, panel in rows:
+        definition = analyte_definition(result.normalized_analyte_code)
+        payload.append(
+            LabResultOut(
+                id=result.id,
+                panel_id=panel.id,
+                analyte_name=result.analyte_name,
+                original_value=result.original_value,
+                qualitative_result=result.qualitative_result,
+                original_unit=result.original_unit,
+                original_reference_range=result.original_reference_range,
+                abnormal_flag=result.abnormal_flag,
+                normalized_analyte_code=result.normalized_analyte_code,
+                normalized_analyte_name=(
+                    definition.display_name if definition is not None else None
+                ),
+                normalized_value=result.normalized_value,
+                normalized_unit=result.normalized_unit,
+                normalization_method=result.normalization_method,
+                specimen_time=panel.event_time,
+                specimen_type=panel.specimen_type,
+                laboratory_name=panel.laboratory_name,
+                source_type=panel.source_type,
+                confirmation_state=panel.confirmation_state,
+            )
+        )
+    return payload
 
 
 def _owned_document(session: DbSession, owner: CurrentOwner, document_id: uuid.UUID) -> LabDocument:

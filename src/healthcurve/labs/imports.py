@@ -8,11 +8,13 @@ import io
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Final
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from healthcurve.events.timekeeping import EventTime, resolve_event_time
+from healthcurve.labs.normalization import normalize_lab_value
 
 MAX_CSV_BYTES: Final = 2 * 1024 * 1024
 MAX_CSV_ROWS: Final = 1_000
@@ -52,6 +54,9 @@ class LabCandidate(BaseModel):
     original_reference_range: str | None = None
     abnormal_flag: str | None = None
     normalized_analyte_code: str | None = None
+    normalized_value: Decimal | None = None
+    normalized_unit: str | None = None
+    normalization_method: str | None = None
     flags: list[str] = Field(default_factory=list)
 
 
@@ -126,6 +131,19 @@ def parse_csv_import(
             normalized_analyte_code=next(iter(codes)) if len(codes) == 1 else None,
             flags=flags,
         )
+        normalized = normalize_lab_value(
+            candidate.analyte_name, candidate.original_value, candidate.original_unit
+        )
+        if normalized is not None:
+            candidate.normalized_analyte_code = normalized.analyte_code
+            candidate.normalized_value = normalized.value
+            candidate.normalized_unit = normalized.unit
+            candidate.normalization_method = normalized.method
+            candidate.flags = [
+                flag
+                for flag in candidate.flags
+                if flag not in {"unrecognized_analyte", "ambiguous_analyte"}
+            ]
         if candidate.original_value is None and candidate.qualitative_result is None:
             candidate.flags.append("missing_result")
         candidates.append(candidate)

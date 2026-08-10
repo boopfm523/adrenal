@@ -553,6 +553,18 @@ def mfa_enroll(args: argparse.Namespace) -> int:
     return 0
 
 
+def normalize_labs(args: argparse.Namespace) -> int:
+    """Backfill reproducible derived lab fields without altering source strings."""
+    from healthcurve.labs.service import backfill_normalizations
+
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        count = backfill_normalizations(session, owner_id=owner.id)
+    print(f"Recomputed derived normalization for {count} lab result(s); source facts unchanged.")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -647,6 +659,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("draft-expiry-status", help="Check automatic draft expiry")
     p.set_defaults(func=draft_expiry_status)
+
+    p = sub.add_parser(
+        "normalize-labs", help="Recompute versioned derived fields for existing lab facts"
+    )
+    p.set_defaults(func=normalize_labs)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

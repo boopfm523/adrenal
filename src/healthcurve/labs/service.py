@@ -15,6 +15,7 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import EventTime
 from healthcurve.labs.imports import LabCandidate, ParsedLabImport
 from healthcurve.labs.models import LabPanel, LabResult
+from healthcurve.labs.normalization import NORMALIZATION_VERSION, normalize_lab_value
 from healthcurve.operations import audit
 
 
@@ -71,6 +72,9 @@ def create_panel(
     session.add(panel)
     session.flush([panel])
     for candidate in candidates:
+        normalized = normalize_lab_value(
+            candidate.analyte_name, candidate.original_value, candidate.original_unit
+        )
         session.add(
             LabResult(
                 owner_id=owner_id,
@@ -82,7 +86,14 @@ def create_panel(
                 original_unit=candidate.original_unit,
                 original_reference_range=candidate.original_reference_range,
                 abnormal_flag=candidate.abnormal_flag,
-                normalized_analyte_code=candidate.normalized_analyte_code,
+                normalized_analyte_code=(
+                    normalized.analyte_code
+                    if normalized is not None
+                    else candidate.normalized_analyte_code
+                ),
+                normalized_value=normalized.value if normalized is not None else None,
+                normalized_unit=normalized.unit if normalized is not None else None,
+                normalization_method=normalized.method if normalized is not None else None,
             )
         )
     audit.record(
@@ -127,6 +138,51 @@ def confirm_csv(
     return LabConfirmResult(panel, True, len(parsed.candidates))
 
 
+def backfill_normalizations(session: Session, *, owner_id: uuid.UUID) -> int:
+    """Recompute only derived fields for existing source facts under the current version."""
+    changed = 0
+    for result in session.scalars(
+        select(LabResult).where(LabResult.owner_id == owner_id).order_by(LabResult.id)
+    ):
+        normalized = normalize_lab_value(
+            result.analyte_name, result.original_value, result.original_unit
+        )
+        if normalized is None:
+            continue
+        desired = (
+            normalized.analyte_code,
+            normalized.value,
+            normalized.unit,
+            normalized.method,
+        )
+        current = (
+            result.normalized_analyte_code,
+            result.normalized_value,
+            result.normalized_unit,
+            result.normalization_method,
+        )
+        if current == desired:
+            continue
+        (
+            result.normalized_analyte_code,
+            result.normalized_value,
+            result.normalized_unit,
+            result.normalization_method,
+        ) = desired
+        changed += 1
+    if changed:
+        audit.record(
+            session,
+            actor="system",
+            action=audit.AuditAction.RECORD_CORRECTED,
+            target_type="lab_normalization_derivation",
+            target_id=owner_id,
+            change_summary=f"derived_fields_recomputed;version={NORMALIZATION_VERSION};count={changed}",
+        )
+    session.flush()
+    return changed
+
+
 def manual_candidate(
     *,
     analyte_name: str,
@@ -139,11 +195,11 @@ def manual_candidate(
     normalized_value: Decimal | None = None,
     normalized_unit: str | None = None,
 ) -> LabCandidate:
-    # Manual normalized values are deliberately not accepted yet: a conversion needs
-    # a named deterministic method, which belongs in a later normalization service.
+    # Caller-supplied derived values remain forbidden. The deterministic registry runs
+    # below and again at the fact-confirmation boundary.
     if normalized_value is not None or normalized_unit is not None:
         raise LabConfirmationError("manual_normalization_unsupported")
-    return LabCandidate(
+    candidate = LabCandidate(
         source_row_index=0,
         analyte_name=analyte_name,
         original_value=original_value,
@@ -153,3 +209,10 @@ def manual_candidate(
         abnormal_flag=abnormal_flag,
         normalized_analyte_code=normalized_analyte_code,
     )
+    normalized = normalize_lab_value(analyte_name, original_value, original_unit)
+    if normalized is not None:
+        candidate.normalized_analyte_code = normalized.analyte_code
+        candidate.normalized_value = normalized.value
+        candidate.normalized_unit = normalized.unit
+        candidate.normalization_method = normalized.method
+    return candidate

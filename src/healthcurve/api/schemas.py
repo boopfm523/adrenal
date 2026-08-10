@@ -374,6 +374,36 @@ class WeightCorrectionIn(ApiModel):
 
 
 # ---------------------------------------------------------------------------
+# Laboratory results (fact plus explicitly derived normalization)
+# ---------------------------------------------------------------------------
+
+
+class LabResultOut(FactResource):
+    id: uuid.UUID
+    panel_id: uuid.UUID
+    analyte_name: str
+    original_value: str | None
+    qualitative_result: str | None
+    original_unit: str | None
+    original_reference_range: str | None
+    abnormal_flag: str | None
+    normalized_analyte_code: str | None
+    normalized_analyte_name: str | None
+    normalized_value: Decimal | None
+    normalized_unit: str | None
+    normalization_method: str | None
+    specimen_time: EventTimeOut
+    specimen_type: str | None
+    laboratory_name: str | None
+    source_type: SourceType
+    confirmation_state: ConfirmationState
+
+    @field_serializer("normalized_value")
+    def _normalized_value(self, value: Decimal | None) -> str | None:
+        return None if value is None else format(value, "f")
+
+
+# ---------------------------------------------------------------------------
 # Other events (fact)
 # ---------------------------------------------------------------------------
 

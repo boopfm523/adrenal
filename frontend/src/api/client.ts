@@ -33,6 +33,7 @@ export type BloodPressureCorrectionInput = components["schemas"]["BloodPressureC
 export type Weight = components["schemas"]["WeightOut"];
 export type WeightInput = components["schemas"]["WeightIn"];
 export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
+export type LabResult = components["schemas"]["LabResultOut"];
 
 interface ApiErrorBody {
   detail?: string;
@@ -244,6 +245,10 @@ export function correctBloodPressure(id: string, payload: BloodPressureCorrectio
 
 export function getWeight(includeSuperseded = false): Promise<Weight[]> {
   return apiRequest<Weight[]>(`/weight${includeSuperseded ? "?include_superseded=true" : ""}`);
+}
+
+export function getLabResults(): Promise<LabResult[]> {
+  return apiRequest<LabResult[]>("/labs/results");
 }
 
 export function createWeight(payload: WeightInput): Promise<Weight> {

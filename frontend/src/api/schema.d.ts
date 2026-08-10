@@ -566,6 +566,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/labs/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Lab Results
+         * @description Return source facts and derived values together, never conflated.
+         */
+        get: operations["list_lab_results_api_v1_labs_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/life-events": {
         parameters: {
             query?: never;
@@ -1862,6 +1882,54 @@ export interface components {
             credentials_deleted: number;
             /** Data Rows Deleted */
             data_rows_deleted: number;
+        };
+        /** LabResultOut */
+        LabResultOut: {
+            /** Abnormal Flag */
+            abnormal_flag: string | null;
+            /** Analyte Name */
+            analyte_name: string;
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            confirmation_state: components["schemas"]["ConfirmationState"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Laboratory Name */
+            laboratory_name: string | null;
+            /** Normalization Method */
+            normalization_method: string | null;
+            /** Normalized Analyte Code */
+            normalized_analyte_code: string | null;
+            /** Normalized Analyte Name */
+            normalized_analyte_name: string | null;
+            /** Normalized Unit */
+            normalized_unit: string | null;
+            /** Normalized Value */
+            normalized_value: string | null;
+            /** Original Reference Range */
+            original_reference_range: string | null;
+            /** Original Unit */
+            original_unit: string | null;
+            /** Original Value */
+            original_value: string | null;
+            /**
+             * Panel Id
+             * Format: uuid
+             */
+            panel_id: string;
+            /** Qualitative Result */
+            qualitative_result: string | null;
+            source_type: components["schemas"]["SourceType"];
+            specimen_time: components["schemas"]["EventTimeOut"];
+            /** Specimen Type */
+            specimen_type: string | null;
         };
         /**
          * LifeEventCategory
@@ -3957,6 +4025,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_lab_results_api_v1_labs_results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabResultOut"][];
                 };
             };
             /** @description Validation Error */

@@ -43,6 +43,7 @@ from healthcurve.integrations.garmin.models import (
 )
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
+from healthcurve.labs.service import backfill_normalizations
 from healthcurve.medications.models import DoseUnit, Medication, Route
 from healthcurve.operations.audit import AuditAction, AuditEntry
 from healthcurve.operations.jobs import Job, JobStatus
@@ -169,6 +170,7 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/doses",
         "/api/v1/timeline",
         "/api/v1/medications",
+        "/api/v1/labs/results",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
         "/api/v1/reports",
         "/api/v1/context-events",
@@ -1096,6 +1098,90 @@ def test_manual_qualitative_lab_entry_is_a_direct_fact(
         assert panel.confirmation_state.value == "direct"
         assert panel.results[0].qualitative_result == "Not detected (verbatim)"
         assert panel.results[0].abnormal_flag == "Lab supplied flag"
+
+
+def test_curated_lab_normalization_preserves_source_and_cortisol_context(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    created = client.post(
+        "/api/v1/labs/manual",
+        headers=logged_in,
+        json={
+            "specimen_time": {
+                "local_time": "2026-08-08T07:45:00",
+                "timezone": "America/New_York",
+            },
+            "report_time": {
+                "local_time": "2026-08-08T09:30:00",
+                "timezone": "America/New_York",
+            },
+            "laboratory_name": "Synthetic laboratory",
+            "specimen_type": "Serum",
+            "results": [
+                {
+                    "analyte_name": "Cortisol AM",
+                    "original_value": "10",
+                    "original_unit": "mcg/dL",
+                    "original_reference_range": "6-18 source range",
+                },
+                {
+                    "analyte_name": "Synthetic out-of-scope marker",
+                    "original_value": "42",
+                    "original_unit": "widgets",
+                },
+            ],
+        },
+    )
+    assert created.status_code == 201, created.text
+    panel_id = uuid.UUID(created.json()["panel_id"])
+
+    listed = client.get("/api/v1/labs/results")
+    assert listed.status_code == 200, listed.text
+    rows = [row for row in listed.json() if row["panel_id"] == str(panel_id)]
+    assert len(rows) == 2
+    cortisol = rows[0]
+    assert cortisol["category"] == "fact"
+    assert cortisol["analyte_name"] == "Cortisol AM"
+    assert cortisol["original_value"] == "10"
+    assert cortisol["original_unit"] == "mcg/dL"
+    assert cortisol["original_reference_range"] == "6-18 source range"
+    assert cortisol["normalized_analyte_code"] == "cortisol"
+    assert cortisol["normalized_value"] == "276.0000000000"
+    assert cortisol["normalized_unit"] == "nmol/L"
+    assert cortisol["normalization_method"].startswith("hc-lab-normalization-v1")
+    assert cortisol["specimen_type"] == "Serum"
+    assert cortisol["specimen_time"]["local_time"] == "2026-08-08T07:45:00"
+    assert cortisol["specimen_time"]["timezone"] == "America/New_York"
+    assert rows[1]["normalized_analyte_code"] is None
+    assert rows[1]["normalized_value"] is None
+
+    with Session(engine) as session:
+        panel = session.get(LabPanel, panel_id)
+        assert panel is not None
+        assert panel.results[0].original_value == "10"
+        assert panel.results[0].normalized_value == Decimal("276.0000000000")
+        panel.results[0].normalized_analyte_code = None
+        panel.results[0].normalized_value = None
+        panel.results[0].normalized_unit = None
+        panel.results[0].normalization_method = None
+        session.commit()
+
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        assert backfill_normalizations(session, owner_id=owner_id) == 1
+    with Session(engine) as session:
+        panel = session.get(LabPanel, panel_id)
+        assert panel is not None
+        assert panel.results[0].original_value == "10"
+        assert panel.results[0].original_unit == "mcg/dL"
+        assert panel.results[0].normalized_value == Decimal("276.0000000000")
+        entries = session.scalars(
+            select(AuditEntry).where(AuditEntry.target_type == "lab_normalization_derivation")
+        ).all()
+        assert entries[-1].change_summary == (
+            "derived_fields_recomputed;version=hc-lab-normalization-v1;count=1"
+        )
 
 
 def test_pdf_upload_is_quarantined_validated_downloaded_as_attachment_and_deleted(
