@@ -298,11 +298,6 @@ circle.chart-series { fill: white; }
 .healthcurve-hover-tooltip-card p, .healthcurve-hover-tooltip-card ul { margin: 0; }
 .healthcurve-hover-tooltip-card ul { padding-left: 1rem; }
 .healthcurve-hover-tooltip-card li + li { margin-top: 0.35rem; }
-.healthcurve-time-explorer { display: grid; gap: 0.35rem; margin-block: 0.8rem; font-weight: 700; }
-.healthcurve-time-explorer input { width: 100%; }
-.healthcurve-readout { min-height: 4.5rem; padding: 0.8rem; border: 1px solid #ccd4ce; border-radius: 0.45rem; background: #f4f7f5; }
-.healthcurve-readout p, .healthcurve-readout ul { margin-block: 0.4rem 0; }
-.healthcurve-readout li span { color: #47554f; }
 .curve-series-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.5rem 1rem; margin-block: 1rem; }
 .curve-series-summary p { margin: 0; padding: 0.6rem; background: #f4f7f5; }
 .analytics-history { margin-top: 2.5rem; padding-top: 1rem; border-top: 0.2rem solid #174c3c; }

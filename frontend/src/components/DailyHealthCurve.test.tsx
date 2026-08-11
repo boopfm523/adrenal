@@ -22,6 +22,7 @@ function data(overrides: Partial<DailyHealthCurveData> = {}): DailyHealthCurveDa
       dose_markers: [],
       samples: [
         { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "0" },
+        { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "5.509920038" },
         { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, theoretical_exposure_reu: "0" },
       ],
       supported_dose_count: 0,
@@ -51,6 +52,15 @@ function sample(index: number): GarminRecord {
   };
 }
 
+function hoverAt(minute: number): { target: SVGRectElement; tooltip: HTMLElement } {
+  const target = document.querySelector<SVGRectElement>(".healthcurve-pointer-target");
+  if (target === null) throw new Error("pointer target missing");
+  vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ left: 0, width: 1_380 } as DOMRect);
+  fireEvent.pointerEnter(target);
+  fireEvent.pointerMove(target, { clientX: minute });
+  return { target, tooltip: screen.getByRole("tooltip") };
+}
+
 describe("Daily HealthCurve", () => {
   it("uses one interactive overlay and exposes exact native values at the explored time", () => {
     render(<DailyHealthCurve data={data({ garmin: [sample(60)] })} />);
@@ -73,30 +83,23 @@ describe("Daily HealthCurve", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Heart rate" }));
     expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
 
-    fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "60" } });
-    const readout = screen.getByRole("status");
-    expect(within(readout).getByText("Heart rate:")).toBeVisible();
-    expect(readout).toHaveTextContent("Heart rate: 80 bpm");
-    expect(readout.textContent.match(/GMT-5/g)).toHaveLength(1);
-
-    const pointerTarget = document.querySelector<SVGRectElement>(".healthcurve-pointer-target");
-    if (pointerTarget === null) throw new Error("pointer target missing");
-    vi.spyOn(pointerTarget, "getBoundingClientRect").mockReturnValue({ left: 0, width: 1_380 } as DOMRect);
-    fireEvent.pointerEnter(pointerTarget);
-    fireEvent.pointerMove(pointerTarget, { clientX: 60 });
-    const tooltip = screen.getByRole("tooltip");
+    expect(screen.queryByRole("slider", { name: "Explore daily HealthCurve by time" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    const { target: pointerTarget, tooltip } = hoverAt(60);
     expect(tooltip).toHaveTextContent("Heart rate: 80 bpm");
+    expect(tooltip).toHaveTextContent("Theoretical exposure: 5.510 REU");
     expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(tooltip).not.toHaveTextContent(/at 2026-/);
     expect(tooltip).not.toHaveTextContent(/hc-exposure-v1|provider_imported|observed cadence/i);
-    expect(screen.getByRole("status")).toHaveTextContent("provider_imported");
-    expect(within(screen.getByRole("region", { name: "Daily HealthCurve exact values" })).getAllByText(/provider_imported/).length).toBeGreaterThan(0);
+    const exactValues = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
+    expect(within(exactValues).getAllByText(/provider_imported/).length).toBeGreaterThan(0);
+    expect(within(exactValues).getByText("5.509920038 REU")).toBeInTheDocument();
     expect(screen.getByRole("img").querySelector(":scope > title")).toBeNull();
     const tickLabels = [...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent);
     expect(tickLabels.every((label) => /^\d{2}:\d{2}$/.test(label))).toBe(true);
     expect(tickLabels.join(" ")).not.toMatch(/AM|PM|GMT/);
     fireEvent.pointerMove(pointerTarget, { clientX: 690 });
-    expect(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" })).toHaveValue("690");
+    expect(tooltip).toHaveTextContent("No exact observation at this time");
     fireEvent.pointerLeave(pointerTarget);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
@@ -144,17 +147,16 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelector(".healthcurve-point--systolic")).not.toBeNull();
     expect(document.querySelector(".healthcurve-point--diastolic")).not.toBeNull();
     expect(screen.getByRole("img")).toHaveTextContent("Blood pressure 121/81 mmHg");
-    fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "660" } });
-    const readout = screen.getByRole("status");
-    expect(readout).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
-    expect(readout).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
-    expect(readout).not.toHaveTextContent("88 bpm");
+    const { tooltip } = hoverAt(660);
+    expect(tooltip).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
+    expect(tooltip).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
+    expect(tooltip).not.toHaveTextContent("88 bpm");
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(table).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
     expect(table).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Blood-pressure pulse: 88 bpm");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Blood-pressure pulse: 88 bpm");
   });
 
   it("shows a daily Garmin summary as untimed context without inventing a chart point", () => {
@@ -208,7 +210,7 @@ describe("Daily HealthCurve", () => {
     expect(context).toHaveTextContent("Nightly average HRV41 msUntimed · previous night");
     expect(context).toHaveTextContent("Average waking respiration14.2 breaths/minUntimed · waking period");
     expect(context).toHaveTextContent("no exact intraday observation time");
-    expect(screen.getByRole("status")).not.toHaveTextContent("Garmin stress: 31 score");
+    expect(hoverAt(0).tooltip).not.toHaveTextContent("Garmin stress: 31 score");
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(table).toHaveTextContent("2026-03-08 · untimed aggregate");
     expect(table).toHaveTextContent("Garmin provider imported; untimed daily summary");
@@ -301,10 +303,9 @@ describe("Daily HealthCurve", () => {
     expect(symptomList).toHaveTextContent("Synthetic dizziness — severity not recorded");
     const summary = within(screen.getByLabelText("Visible series sample counts")).getByText(/Symptoms:/).parentElement;
     expect(summary).toHaveTextContent("2 recorded events; 0 with recorded severity; 2 without severity");
-    fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "660" } });
-    const readout = screen.getByRole("status");
-    expect(readout).toHaveTextContent("Synthetic fatigue: severity missing");
-    expect(readout).toHaveTextContent("Synthetic dizziness: severity missing");
+    const { tooltip } = hoverAt(660);
+    expect(tooltip).toHaveTextContent("Synthetic fatigue: severity missing");
+    expect(tooltip).toHaveTextContent("Synthetic dizziness: severity missing");
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(within(table).getByText("Synthetic fatigue: severity missing")).toBeInTheDocument();
     expect(within(table).getByText("Synthetic dizziness: severity missing")).toBeInTheDocument();
