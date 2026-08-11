@@ -110,7 +110,7 @@ describe("Daily HealthCurve", () => {
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
-    expect(screen.getByLabelText("Visible series sample counts")).toHaveTextContent("Dense sample dots are hidden");
+    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("Dense sample dots are hidden");
   });
 
   it("calms the respiration line without changing exact samples or bridging gaps", () => {
@@ -132,7 +132,7 @@ describe("Daily HealthCurve", () => {
     expect(paths[0]).toHaveAttribute("d", expect.stringContaining("236.25"));
     expect(paths[0]).not.toHaveAttribute("d", expect.stringContaining("112.50"));
     expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("calmer 5-sample median line");
-    expect(screen.getByLabelText("Visible series sample counts")).toHaveTextContent("fixed 0–40 breaths/min display domain");
+    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("fixed 0–40 breaths/min display domain");
 
     const { tooltip } = hoverAt(2);
     expect(tooltip).toHaveTextContent("Respiration: 30 breaths/min");
@@ -283,7 +283,7 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByText("23 hours")).toBeVisible();
     expect(screen.getAllByText(/GMT-5/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/GMT-4/).length).toBeGreaterThan(0);
-    const summaries = screen.getByLabelText("Visible series sample counts");
+    const summaries = screen.getByLabelText("Series sample counts");
     expect(within(summaries).getByText(/Garmin stress:/).parentElement).toHaveTextContent("0 exact point");
     expect(screen.getByText(/expected missing counts are not invented/)).toBeVisible();
   });
@@ -331,8 +331,15 @@ describe("Daily HealthCurve", () => {
     expect(chart.compareDocumentPosition(symptomList as Node) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(symptomList).toHaveTextContent("Synthetic fatigue — severity not recorded");
     expect(symptomList).toHaveTextContent("Synthetic dizziness — severity not recorded");
-    const summary = within(screen.getByLabelText("Visible series sample counts")).getByText(/Symptoms:/).parentElement;
+    const summaryCards = screen.getByLabelText("Series sample counts");
+    const summary = within(summaryCards).getByText(/Symptoms:/).parentElement;
     expect(summary).toHaveTextContent("2 recorded events; 0 with recorded severity; 2 without severity");
+    const summaryCount = summaryCards.children.length;
+    fireEvent.click(screen.getByRole("checkbox", { name: "Symptoms" }));
+    expect(document.querySelectorAll(".healthcurve-unscored-symptom-marker")).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "Recorded symptoms" })).toBeVisible();
+    expect(summaryCards.children).toHaveLength(summaryCount);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Symptoms" }));
     const { tooltip } = hoverAt(660);
     expect(tooltip).toHaveTextContent("Synthetic fatigue: severity missing");
     expect(tooltip).toHaveTextContent("Synthetic dizziness: severity missing");
