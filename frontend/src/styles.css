@@ -178,12 +178,18 @@ th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; v
 .series-key { width: 2rem; border-top: 0.25rem solid #174c3c; }
 .series-key--1 { border-color: #6b3f82; border-top-style: dashed; }
 .series-key--2 { border-color: #a14c12; border-top-style: dotted; }
-.line-chart { display: block; width: 100%; min-height: 12rem; background: #fbfcfb; }
+.chart-axis-description { margin-block: 0.75rem 0.35rem; font-weight: 700; }
+.chart-plot-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #dce2dd; background: #fbfcfb; }
+.line-chart { display: block; width: 100%; min-width: 38rem; min-height: 17rem; background: #fbfcfb; }
 .chart-axis { stroke: #68756f; stroke-width: 1.5; }
+.chart-grid-line { stroke: #dce2dd; stroke-width: 1; }
+.chart-x-tick text, .chart-y-tick text { fill: #26322d; font-size: 12px; font-weight: 650; }
+.chart-axis-title { fill: #26322d; font-size: 13px; font-weight: 800; }
 .chart-series { fill: none; stroke: #174c3c; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .chart-series--1 { stroke: #6b3f82; stroke-dasharray: 10 7; }
 .chart-series--2 { stroke: #a14c12; stroke-dasharray: 2 7; }
 circle.chart-series { fill: white; }
+.chart-unit-warning { border-left: 0.35rem solid #a86712; padding: 0.8rem; background: #fff7e8; }
 .chart-table { margin-top: 1rem; }
 .chart-table summary { cursor: pointer; font-weight: 750; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(16rem, 1fr)); gap: 1rem; }

@@ -1,8 +1,9 @@
 import { useId } from "react";
 
-interface ChartValue {
+export interface ChartValue {
   label: string;
   value: string | null;
+  unit?: string | null;
 }
 
 export interface ChartSeries {
@@ -21,18 +22,87 @@ interface AccessibleLineChartProps {
   sampleCount: number;
   missingCount: number;
   series: ChartSeries[];
+  xAxisLabel?: string;
+  yAxisLabel?: string;
+  includeZero?: boolean;
 }
 
 interface Point {
   x: number;
   y: number;
+  item: ChartValue;
+}
+
+interface Scale {
+  minimum: number;
+  maximum: number;
+  step: number;
+  ticks: number[];
 }
 
 const WIDTH = 720;
-const HEIGHT = 260;
-const PADDING = 35;
+const HEIGHT = 320;
+const LEFT = 82;
+const RIGHT = 24;
+const TOP = 20;
+const BOTTOM = 70;
+const PLOT_WIDTH = WIDTH - LEFT - RIGHT;
+const PLOT_HEIGHT = HEIGHT - TOP - BOTTOM;
+const PLOT_BOTTOM = HEIGHT - BOTTOM;
 
-function plottedSegments(values: ChartValue[], maximum: number): Point[][] {
+function niceStep(range: number): number {
+  if (!Number.isFinite(range) || range <= 0) return 1;
+  const roughStep = range / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const fraction = roughStep / magnitude;
+  const niceFraction = fraction <= 1.5 ? 1 : fraction <= 3 ? 2 : fraction <= 7 ? 5 : 10;
+  return niceFraction * magnitude;
+}
+
+function chartScale(values: number[], includeZero = false): Scale {
+  let minimum = Math.min(...values);
+  let maximum = Math.max(...values);
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return { minimum: 0, maximum: 1, step: 0.2, ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] };
+  if (includeZero) {
+    minimum = Math.min(0, minimum);
+    maximum = Math.max(0, maximum);
+  }
+  if (minimum === maximum) {
+    const padding = Math.abs(minimum) * 0.1 || 1;
+    minimum = includeZero && minimum >= 0 ? 0 : minimum - padding;
+    maximum += padding;
+  }
+  const step = niceStep(maximum - minimum);
+  const scaleMinimum = includeZero && minimum >= 0 ? 0 : Math.floor(minimum / step) * step;
+  const scaleMaximum = Math.ceil(maximum / step) * step;
+  const ticks: number[] = [];
+  const count = Math.round((scaleMaximum - scaleMinimum) / step);
+  for (let index = 0; index <= count; index += 1) ticks.push(scaleMinimum + index * step);
+  return { minimum: scaleMinimum, maximum: scaleMaximum, step, ticks };
+}
+
+function decimalPlaces(step: number): number {
+  if (step >= 1) return 0;
+  return Math.min(6, Math.max(0, Math.ceil(-Math.log10(step))));
+}
+
+function formatTick(value: number, step: number): string {
+  const normalized = Math.abs(value) < step / 1_000_000 ? 0 : value;
+  return normalized.toFixed(decimalPlaces(step));
+}
+
+function formatXAxisTick(label: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(label)) return label.slice(5);
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(label)) return `${label.slice(5, 10)} ${label.slice(11, 16)}`;
+  return label.length > 18 ? `${label.slice(0, 17)}…` : label;
+}
+
+function xTickIndices(length: number): number[] {
+  if (length <= 5) return Array.from({ length }, (_, index) => index);
+  return [...new Set(Array.from({ length: 5 }, (_, index) => Math.round(index * (length - 1) / 4)))];
+}
+
+function plottedSegments(values: ChartValue[], scale: Scale): Point[][] {
   const segments: Point[][] = [];
   let current: Point[] = [];
   values.forEach((item, index) => {
@@ -43,7 +113,11 @@ function plottedSegments(values: ChartValue[], maximum: number): Point[][] {
       return;
     }
     const denominator = Math.max(values.length - 1, 1);
-    current.push({ x: PADDING + index / denominator * (WIDTH - PADDING * 2), y: HEIGHT - PADDING - numeric / maximum * (HEIGHT - PADDING * 2) });
+    current.push({
+      x: LEFT + index / denominator * PLOT_WIDTH,
+      y: TOP + (scale.maximum - numeric) / (scale.maximum - scale.minimum) * PLOT_HEIGHT,
+      item,
+    });
   });
   if (current.length > 0) segments.push(current);
   return segments;
@@ -53,15 +127,72 @@ function path(points: Point[]): string {
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
 }
 
-export function AccessibleLineChart({ title, summary, unit, timezone, dateRange, definition, sampleCount, missingCount, series }: AccessibleLineChartProps): React.JSX.Element {
+function valueUnits(series: ChartSeries[], fallbackUnit: string): Set<string> {
+  return new Set(series.flatMap((item) => item.values.flatMap((value) => {
+    if (value.value === null || !Number.isFinite(Number(value.value))) return [];
+    return [value.unit ?? fallbackUnit];
+  })));
+}
+
+function tableValue(value: ChartValue | undefined, mixedUnits: boolean, fallbackUnit: string): string {
+  if (value?.value == null) return "Gap—no value";
+  return mixedUnits ? `${value.value} ${value.unit ?? fallbackUnit}` : value.value;
+}
+
+export function AccessibleLineChart({
+  title,
+  summary,
+  unit,
+  timezone,
+  dateRange,
+  definition,
+  sampleCount,
+  missingCount,
+  series,
+  xAxisLabel = "Experienced date / time",
+  yAxisLabel = title,
+  includeZero = false,
+}: AccessibleLineChartProps): React.JSX.Element {
   const headingId = useId();
-  const maximum = Math.max(1, ...series.flatMap((item) => item.values.map((value) => value.value === null ? 0 : Number(value.value))).filter(Number.isFinite));
+  const numericValues = series.flatMap((item) => item.values.flatMap((value) => value.value === null ? [] : [Number(value.value)])).filter(Number.isFinite);
+  const units = valueUnits(series, unit);
+  const mixedUnits = units.size > 1;
+  const effectiveUnit = mixedUnits ? "Mixed units—see table" : [...units][0] ?? unit;
+  const scale = chartScale(numericValues, includeZero);
   const labels = series[0]?.values.map((value) => value.label) ?? [];
-  return <section className="metric-card chart-card" aria-labelledby={headingId}><h2 id={headingId}>{title}</h2><p>{summary}</p><dl className="metric-metadata"><div><dt>Unit</dt><dd>{unit}</dd></div><div><dt>Timezone</dt><dd>{timezone}</dd></div><div><dt>Date range</dt><dd>{dateRange}</dd></div><div><dt>Sample count</dt><dd>{sampleCount}</dd></div><div><dt>Missing values</dt><dd>{missingCount}</dd></div></dl>
+  const tickIndices = xTickIndices(labels.length);
+  const axisDescription = `X axis: ${xAxisLabel} (${timezone}). Y axis: ${yAxisLabel} (${effectiveUnit}).`;
+
+  return <section className="metric-card chart-card" aria-labelledby={headingId}>
+    <h2 id={headingId}>{title}</h2>
+    <p>{summary}</p>
+    <dl className="metric-metadata"><div><dt>Unit</dt><dd>{effectiveUnit}</dd></div><div><dt>Timezone</dt><dd>{timezone}</dd></div><div><dt>Date range</dt><dd>{dateRange}</dd></div><div><dt>Sample count</dt><dd>{sampleCount}</dd></div><div><dt>Missing values</dt><dd>{missingCount}</dd></div></dl>
     {series.length > 1 ? <aside className="association-caution"><strong>Association does not establish causation.</strong> Overlaid series share a time axis for comparison only.</aside> : null}
     <div className="chart-legend" aria-label="Chart series">{series.map((item, index) => <span key={item.name}><i className={`series-key series-key--${(index % 3).toString()}`} aria-hidden="true" />{item.name} · source: {item.source}</span>)}</div>
-    <svg className="line-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`${title}. ${summary}`}><title>{title}. {summary}</title><line x1={PADDING} y1={HEIGHT - PADDING} x2={WIDTH - PADDING} y2={HEIGHT - PADDING} className="chart-axis" /><line x1={PADDING} y1={PADDING} x2={PADDING} y2={HEIGHT - PADDING} className="chart-axis" />{series.map((item, seriesIndex) => plottedSegments(item.values, maximum).flatMap((segment, segmentIndex) => segment.length === 1 ? <circle key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} cx={segment[0]?.x} cy={segment[0]?.y} r="4" className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} /> : <path key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} d={path(segment)} className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} />))}</svg>
-    <details className="chart-table"><summary>View data table</summary><div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} data table`}><table><thead><tr><th scope="col">Date</th>{series.map((item) => <th scope="col" key={item.name}>{item.name} ({unit})</th>)}</tr></thead><tbody>{labels.map((label, index) => <tr key={label}><th scope="row">{label}</th>{series.map((item) => <td key={item.name}>{item.values[index]?.value ?? "Gap—no value"}</td>)}</tr>)}</tbody></table></div></details>
+    <p className="chart-axis-description">{axisDescription}</p>
+    {mixedUnits ? <p className="chart-unit-warning" role="status"><strong>Graph not plotted:</strong> these values use different units and cannot share one reliable Y-axis. Use the exact-value table below.</p> : <div className="chart-plot-scroll" tabIndex={0} role="region" aria-label={`${title} scrollable graph`}>
+      <svg className="line-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`${title}. ${summary} ${axisDescription}`}>
+        <title>{title}. {summary} {axisDescription}</title>
+        {scale.ticks.map((tick) => {
+          const y = TOP + (scale.maximum - tick) / (scale.maximum - scale.minimum) * PLOT_HEIGHT;
+          return <g key={tick} className="chart-y-tick"><line x1={LEFT} y1={y} x2={WIDTH - RIGHT} y2={y} className="chart-grid-line" /><text x={LEFT - 10} y={y} dy="0.35em" textAnchor="end">{formatTick(tick, scale.step)}</text></g>;
+        })}
+        {tickIndices.map((index) => {
+          const x = LEFT + index / Math.max(labels.length - 1, 1) * PLOT_WIDTH;
+          const anchor = index === 0 ? "start" : index === labels.length - 1 ? "end" : "middle";
+          return <g key={`${labels[index] ?? ""}-${index.toString()}`} className="chart-x-tick"><line x1={x} y1={PLOT_BOTTOM} x2={x} y2={PLOT_BOTTOM + 6} className="chart-axis" /><text x={x} y={PLOT_BOTTOM + 23} textAnchor={anchor}>{formatXAxisTick(labels[index] ?? "")}</text></g>;
+        })}
+        <line x1={LEFT} y1={PLOT_BOTTOM} x2={WIDTH - RIGHT} y2={PLOT_BOTTOM} className="chart-axis" />
+        <line x1={LEFT} y1={TOP} x2={LEFT} y2={PLOT_BOTTOM} className="chart-axis" />
+        <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezone})</text>
+        <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({effectiveUnit})</text>
+        {series.map((item, seriesIndex) => {
+          const segments = plottedSegments(item.values, scale);
+          return <g key={item.name} aria-hidden="true">{segments.map((segment, segmentIndex) => segment.length > 1 ? <path key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} d={path(segment)} className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} /> : null)}{segments.flat().map((point, pointIndex) => <circle key={`${item.name}-point-${pointIndex.toString()}`} data-point-series={item.name} cx={point.x} cy={point.y} r="4" className={`chart-series chart-series--${(seriesIndex % 3).toString()}`}><title>{point.item.label}: {point.item.value} {point.item.unit ?? effectiveUnit}</title></circle>)}</g>;
+        })}
+      </svg>
+    </div>}
+    <details className="chart-table"><summary>View data table</summary><div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} data table`}><table><thead><tr><th scope="col">Date / time</th>{series.map((item) => <th scope="col" key={item.name}>{item.name} ({mixedUnits ? "unit shown per value" : effectiveUnit})</th>)}</tr></thead><tbody>{labels.map((label, index) => <tr key={label}><th scope="row">{label}</th>{series.map((item) => <td key={item.name}>{tableValue(item.values[index], mixedUnits, unit)}</td>)}</tr>)}</tbody></table></div></details>
     <details className="metric-definition"><summary>Metric definition</summary><p>{definition}</p></details>
   </section>;
 }

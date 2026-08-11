@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "../auth/context";
@@ -21,7 +21,8 @@ describe("Analytics page", () => {
     expect(screen.getAllByText("Gap—no value")).toHaveLength(2);
     expect(screen.getByText(/actual Missing—no dose facts/)).toBeInTheDocument();
     expect(screen.getByText(/planned Missing—no approved plan/)).toBeInTheDocument();
-    expect(screen.getAllByText("20")).toHaveLength(2);
+    expect(screen.getByText("X axis: Date (Europe/London). Y axis: Daily dose total (mg).")).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "Daily medication totals versus plan data table" })).getAllByRole("cell", { name: "20" })).toHaveLength(2);
     expect(screen.getAllByText("Metric definition")).toHaveLength(4);
     expect(screen.getAllByText("Missing—no resolved durations")).toHaveLength(2);
     expect(screen.getByText("Missing—no severity values")).toBeVisible();

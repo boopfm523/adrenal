@@ -79,6 +79,10 @@ describe("Health data page", () => {
     });
     renderPage();
     expect(await screen.findByRole("img", { name: /Blood pressure/ })).toBeVisible();
+    expect(screen.getByText("X axis: Experienced date / time (America/New_York). Y axis: Blood pressure (mmHg).")).toBeVisible();
+    expect(screen.getByText("X axis: Experienced date / time (America/New_York). Y axis: Weight (lb).")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Blood pressure scrollable graph" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Weight scrollable graph" })).toBeVisible();
     expect(screen.getAllByText("Missing values")[0]).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Systolic (mmHg)" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Weight (lb)" })).toHaveLength(2);

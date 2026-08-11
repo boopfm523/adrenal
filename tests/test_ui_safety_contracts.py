@@ -90,3 +90,31 @@ def test_vitals_accessibility_safety_and_responsive_contracts_stay_under_ui_test
     mobile = styles[styles.index("@media (max-width: 720px)") :]
     assert ".vital-entry-grid" in mobile
     assert ".vital-entry-form" in mobile
+
+
+@pytest.mark.safety("SAFE-25")
+def test_chart_axes_accessibility_and_phone_readability_stay_under_ui_test() -> None:
+    chart = CHART.read_text(encoding="utf-8")
+    test = CHART_TEST.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+    for semantic in (
+        "chart-axis-description",
+        "chart-x-tick",
+        "chart-y-tick",
+        "Graph not plotted:",
+    ):
+        assert semantic in chart
+    for tested_behavior in (
+        "X axis:",
+        "scrollable graph",
+        "data table",
+        "different units",
+        "Gap—no value",
+    ):
+        assert tested_behavior in test
+    for visual_contract in (
+        ".chart-plot-scroll { max-width: 100%; overflow-x: auto;",
+        ".line-chart { display: block; width: 100%; min-width: 38rem;",
+        ".chart-x-tick text, .chart-y-tick text { fill: #26322d; font-size: 12px;",
+    ):
+        assert visual_contract in styles
