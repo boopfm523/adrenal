@@ -12,6 +12,8 @@ from collections.abc import Iterator
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+from statistics import median
+from time import perf_counter
 from typing import Any, cast
 from unittest import mock
 
@@ -21,7 +23,7 @@ from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy import Engine, create_engine, func, insert, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
@@ -33,6 +35,7 @@ from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, Extracti
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
+from healthcurve.api.routers import events as events_router
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
 from healthcurve.development_cleanup import (
@@ -44,6 +47,7 @@ from healthcurve.document_worker import process_available, validate_one
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.events.models import DiaryEvent, SymptomEvent
 from healthcurve.events.timekeeping import from_instant, resolve_event_time
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import AuthSession, Owner
@@ -4538,3 +4542,194 @@ def _a_draft_regimen(client: TestClient, headers: dict[str, str]) -> str:
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
+
+
+def test_common_views_meet_latency_targets_on_six_year_synthetic_volume(
+    engine: Engine,
+) -> None:
+    """Warmed medians stay below the private single-owner UI latency budgets."""
+
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        session = Session(bind=connection, expire_on_commit=False)
+        try:
+            owner = Owner(
+                email=f"performance-{uuid.uuid4()}@example.test",
+                password_hash="synthetic-non-login-hash",
+                default_timezone="UTC",
+            )
+            medication = Medication(
+                owner_id=owner.id,
+                name="Synthetic performance medicine",
+                normalized_name=f"synthetic-performance-{uuid.uuid4()}",
+                formulation="tablet",
+                strength=Decimal("10"),
+                strength_unit="mg",
+                default_unit=DoseUnit.MG,
+                default_route=Route.ORAL,
+            )
+            session.add(owner)
+            session.flush()
+            medication.owner_id = owner.id
+            session.add(medication)
+            session.flush()
+
+            versions: list[RegimenVersion] = []
+            for year in range(2020, 2026):
+                start = datetime(year, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+                end = datetime(year + 1, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+                version = medication_service.create_draft(
+                    session,
+                    owner_id=owner.id,
+                    version_label=f"Synthetic performance plan {year}",
+                    effective_from=start,
+                    effective_to=end,
+                )
+                for order, scheduled in enumerate((time(7), time(12), time(17), time(22))):
+                    session.add(
+                        RegimenDoseSlot(
+                            regimen_version_id=version.id,
+                            medication_id=medication.id,
+                            scheduled_local_time=scheduled,
+                            amount=Decimal("10") + Decimal(year - 2020) / Decimal("10"),
+                            unit=DoseUnit.MG,
+                            route=Route.ORAL,
+                            sort_order=order,
+                        )
+                    )
+                medication_service.approve_version(
+                    session,
+                    version,
+                    approved_by="Dr Synthetic Performance",
+                    approval_source="synthetic performance fixture",
+                    approved_at=datetime(year, 1, 1, tzinfo=UTC),
+                )
+                if year < 2025:
+                    medication_service.retire_version(
+                        session, version, retired_at=datetime(year + 1, 1, 1, tzinfo=UTC)
+                    )
+                versions.append(version)
+            session.flush()
+
+            start_at = datetime(2020, 1, 1, tzinfo=UTC)
+            dose_rows: list[dict[str, Any]] = []
+            symptom_rows: list[dict[str, Any]] = []
+            diary_rows: list[dict[str, Any]] = []
+            for day_offset in range(365 * 6):
+                day_start = start_at + timedelta(days=day_offset)
+                for hour in (7, 12, 17, 22):
+                    occurred = day_start.replace(hour=hour)
+                    dose_rows.append(
+                        {
+                            "id": uuid.uuid4(),
+                            "owner_id": owner.id,
+                            "occurred_at": occurred,
+                            "local_time": occurred.replace(tzinfo=None),
+                            "timezone": "UTC",
+                            "utc_offset_minutes": 0,
+                            "recorded_at": occurred + timedelta(minutes=1),
+                            "source_type": SourceType.WEB,
+                            "confirmation_state": ConfirmationState.DIRECT,
+                            "medication_id": medication.id,
+                            "amount": Decimal("10"),
+                            "unit": DoseUnit.MG,
+                            "route": Route.ORAL,
+                            "category": DoseCategory.SCHEDULED,
+                        }
+                    )
+                if day_offset % 3 == 0:
+                    symptom_rows.append(
+                        {
+                            "id": uuid.uuid4(),
+                            "owner_id": owner.id,
+                            "occurred_at": day_start.replace(hour=18),
+                            "local_time": day_start.replace(hour=18, tzinfo=None),
+                            "timezone": "UTC",
+                            "utc_offset_minutes": 0,
+                            "recorded_at": day_start.replace(hour=18, minute=1),
+                            "source_type": SourceType.WEB,
+                            "confirmation_state": ConfirmationState.DIRECT,
+                            "name": "Synthetic performance symptom",
+                            "severity": day_offset % 11,
+                        }
+                    )
+                if day_offset % 7 == 0:
+                    diary_rows.append(
+                        {
+                            "id": uuid.uuid4(),
+                            "owner_id": owner.id,
+                            "occurred_at": day_start.replace(hour=20),
+                            "local_time": day_start.replace(hour=20, tzinfo=None),
+                            "timezone": "UTC",
+                            "utc_offset_minutes": 0,
+                            "recorded_at": day_start.replace(hour=20, minute=1),
+                            "source_type": SourceType.WEB,
+                            "confirmation_state": ConfirmationState.DIRECT,
+                            "text": "Synthetic performance diary entry",
+                            "is_sensitive": False,
+                        }
+                    )
+            session.execute(insert(DoseEvent), dose_rows)
+            session.execute(insert(SymptomEvent), symptom_rows)
+            session.execute(insert(DiaryEvent), diary_rows)
+            session.flush()
+
+            comparison_day = date(2025, 6, 15)
+
+            def timeline_view() -> object:
+                session.expire_all()
+                return events_router.timeline(
+                    session=session,
+                    owner=owner,
+                    date_from=None,
+                    date_to=None,
+                    types=None,
+                    timezone="UTC",
+                    local_date_from=None,
+                    local_date_to=None,
+                    include_sensitive=False,
+                    sort_order="desc",
+                    limit=200,
+                )
+
+            def today_view() -> object:
+                session.expire_all()
+                return medication_service.compare_day(
+                    session, owner_id=owner.id, day=comparison_day, timezone="UTC"
+                )
+
+            def plan_diff_view() -> object:
+                session.expire_all()
+                older = session.get(RegimenVersion, versions[0].id)
+                newer = session.get(RegimenVersion, versions[-1].id)
+                assert older is not None and newer is not None
+                return medication_service.diff_versions(older, newer)
+
+            def warmed_median(operation: Any) -> float:
+                operation()
+                samples = []
+                for _ in range(7):
+                    started = perf_counter()
+                    operation()
+                    samples.append((perf_counter() - started) * 1000)
+                return median(samples)
+
+            timeline_ms = warmed_median(timeline_view)
+            today_ms = warmed_median(today_view)
+            plan_diff_ms = warmed_median(plan_diff_view)
+
+            assert timeline_ms <= 750, f"Timeline median {timeline_ms:.1f} ms exceeds 750 ms"
+            assert today_ms <= 250, f"Today median {today_ms:.1f} ms exceeds 250 ms"
+            assert plan_diff_ms <= 100, f"plan diff median {plan_diff_ms:.1f} ms exceeds 100 ms"
+
+            plan = connection.execute(
+                text(
+                    "EXPLAIN (FORMAT JSON) SELECT id FROM fact.dose_event "
+                    "WHERE owner_id = :owner_id ORDER BY occurred_at DESC LIMIT 200"
+                ),
+                {"owner_id": owner.id},
+            ).scalar_one()
+            assert "Index" in str(plan), plan
+        finally:
+            session.close()
+            transaction.rollback()
