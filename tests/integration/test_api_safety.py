@@ -2642,6 +2642,55 @@ def test_timeline_orders_by_experienced_time_with_stable_ties(
     assert early_id not in {item["id"] for item in corrected_timeline}
 
 
+def test_timeline_has_bounded_pages_and_rejects_out_of_range_pages(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    created_ids: list[str] = []
+    for hour in range(21):
+        response = client.post(
+            "/api/v1/symptoms",
+            json={
+                "name": f"Synthetic paged symptom {hour}",
+                "severity": 1,
+                "time": {"local_time": f"2024-03-04T{hour:02d}:00:00", "timezone": "UTC"},
+            },
+            headers=logged_in,
+        )
+        assert response.status_code == 201, response.text
+        created_ids.append(response.json()["id"])
+
+    params = {
+        "types": "symptom",
+        "local_date_from": "2024-03-04",
+        "local_date_to": "2024-03-04",
+        "timezone": "UTC",
+        "page_size": 10,
+    }
+    first = client.get("/api/v1/timeline", params=params)
+    middle = client.get("/api/v1/timeline", params={**params, "page": 2})
+    last = client.get("/api/v1/timeline", params={**params, "page": 3})
+
+    assert first.status_code == middle.status_code == last.status_code == 200
+    assert first.json()["page"] == {
+        "page": 1,
+        "page_size": 10,
+        "total_items": 21,
+        "total_pages": 3,
+    }
+    assert middle.json()["page"]["page"] == 2
+    assert last.json()["page"]["page"] == 3
+    assert len(first.json()["items"]) == len(middle.json()["items"]) == 10
+    assert len(last.json()["items"]) == 1
+    assert [item["id"] for item in first.json()["items"]] == list(reversed(created_ids[-10:]))
+    assert last.json()["items"][0]["id"] == created_ids[0]
+
+    out_of_range = client.get("/api/v1/timeline", params={**params, "page": 4})
+    oversized = client.get("/api/v1/timeline", params={**params, "page_size": 101})
+    assert out_of_range.status_code == 422
+    assert out_of_range.json()["detail"]["code"] == "page_out_of_range"
+    assert oversized.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # Generated-analysis persistence boundaries
 # ---------------------------------------------------------------------------
@@ -4789,10 +4838,13 @@ def test_common_views_meet_latency_targets_on_six_year_synthetic_volume(
             comparison_day = date(2025, 6, 15)
 
             def timeline_view() -> object:
+                from healthcurve.api.pagination import PageRequest
+
                 session.expire_all()
                 return events_router.timeline(
                     session=session,
                     owner=owner,
+                    pagination=PageRequest(page=1, page_size=25),
                     date_from=None,
                     date_to=None,
                     types=None,
@@ -4801,7 +4853,6 @@ def test_common_views_meet_latency_targets_on_six_year_synthetic_volume(
                     local_date_to=None,
                     include_sensitive=False,
                     sort_order="desc",
-                    limit=200,
                 )
 
             def today_view() -> object:

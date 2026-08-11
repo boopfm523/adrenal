@@ -44,7 +44,7 @@ describe("Timeline page", () => {
   it("shows provenance and only requests sensitive entries after explicit reveal", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       timezone: "America/New_York",
-      next_cursor: null,
+      page: { page: 1, page_size: 25, total_items: 2, total_pages: 1 },
       items: [{
         id: "11111111-1111-4111-8111-111111111111",
         category: "fact",
@@ -135,7 +135,7 @@ describe("Timeline page", () => {
 
   it("hydrates shareable filter and oldest-first state from the URL", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      timezone: "America/Chicago", next_cursor: null, items: [],
+      timezone: "America/Chicago", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 }, items: [],
     }), { headers: { "Content-Type": "application/json" } }));
 
     renderPage("/timeline?types=symptom&local_date_from=2026-08-01&local_date_to=2026-08-02&timezone=America%2FChicago&include_sensitive=true&sort_order=asc");
@@ -153,7 +153,7 @@ describe("Timeline page", () => {
 
   it("distinguishes filtered-to-zero from a new record", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
-      timezone: "America/New_York", next_cursor: null, items: [],
+      timezone: "America/New_York", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 }, items: [],
     }), { headers: { "Content-Type": "application/json" } })));
     renderPage();
     expect(await screen.findByRole("heading", { name: "No records yet" })).toBeVisible();
@@ -165,7 +165,7 @@ describe("Timeline page", () => {
   it("labels environmental context separately from health facts and AI", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       timezone: "America/New_York",
-      next_cursor: null,
+      page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 },
       items: [{
         id: "22222222-2222-4222-8222-222222222222",
         category: "fact",
@@ -196,5 +196,53 @@ describe("Timeline page", () => {
     expect(within(row as HTMLElement).getByText("Environmental context", { exact: false })).toBeVisible();
     expect(within(row as HTMLElement).getByText(/not a symptom, dose, physician instruction, or AI conclusion/)).toBeVisible();
     expect(screen.getByRole("option", { name: "Environmental context" })).toHaveValue("context");
+  });
+
+  it("moves through bounded pages while preserving URL filter state", async () => {
+    const item = {
+      id: "11111111-1111-4111-8111-111111111111",
+      category: "fact",
+      event_type: "dose",
+      summary: "Synthetic medicine 5 mg",
+      is_sensitive: false,
+      time: {
+        occurred_at: "2026-08-09T11:00:00Z",
+        local_time: "2026-08-09T07:00:00",
+        timezone: "America/New_York",
+        utc_offset_minutes: -240,
+      },
+      provenance: {
+        recorded_at: "2026-08-09T11:01:00Z",
+        source_type: "web",
+        confirmation_state: "direct",
+        supersedes_id: null,
+        correction_reason: null,
+        is_correction: false,
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const secondPage = requestUrl(input).includes("page=2");
+      return Promise.resolve(new Response(JSON.stringify({
+        timezone: "America/New_York",
+        page: { page: secondPage ? 2 : 1, page_size: 25, total_items: 26, total_pages: 2 },
+        items: [item],
+      }), { headers: { "Content-Type": "application/json" } }));
+    });
+
+    renderPage("/timeline?types=dose&timezone=America%2FNew_York&sort_order=desc");
+
+    expect(await screen.findByText("Showing 1–25 of 26. Page 1 of 2.")).toBeVisible();
+    const pagination = screen.getByRole("navigation", { name: "Timeline records pagination" });
+    expect(within(pagination).getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("page=2"))).toBe(true);
+    });
+    expect(await screen.findByText("Showing 26–26 of 26. Page 2 of 2.")).toBeVisible();
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("types=dose");
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("page=2");
+    expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 });

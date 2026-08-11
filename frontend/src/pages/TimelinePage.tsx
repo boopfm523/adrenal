@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { getTimeline, type TimelineFilters } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 import { formatQuantitativeText } from "../format";
 
 const eventTypes = [
@@ -42,7 +43,7 @@ function categoryNote(category: "fact" | "plan" | "ai", eventType: string): stri
 }
 
 function defaultFilters(timezone: string): TimelineFilters {
-  return { type: "", dateFrom: "", dateTo: "", timezone, includeSensitive: false, sortOrder: "desc" };
+  return { type: "", dateFrom: "", dateTo: "", timezone, includeSensitive: false, sortOrder: "desc", page: 1 };
 }
 
 function filtersFromSearch(search: string, profileTimezone: string): TimelineFilters {
@@ -54,6 +55,7 @@ function filtersFromSearch(search: string, profileTimezone: string): TimelineFil
     timezone: params.get("timezone") ?? profileTimezone,
     includeSensitive: params.get("include_sensitive") === "true",
     sortOrder: params.get("sort_order") === "asc" ? "asc" : "desc",
+    page: /^\d+$/.test(params.get("page") ?? "") && Number(params.get("page")) >= 1 ? Number(params.get("page")) : 1,
   };
 }
 
@@ -65,6 +67,7 @@ function searchFromFilters(filters: TimelineFilters): URLSearchParams {
   params.set("timezone", filters.timezone);
   if (filters.includeSensitive) params.set("include_sensitive", "true");
   params.set("sort_order", filters.sortOrder);
+  if (filters.page > 1) params.set("page", filters.page.toString());
   return params;
 }
 
@@ -83,7 +86,7 @@ export function TimelinePage(): React.JSX.Element {
 
   return (
     <Page title="Timeline" description="The authoritative chronology of recorded facts, with source and correction provenance.">
-      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setSearchParams(searchFromFilters(draft)); }}>
+      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setSearchParams(searchFromFilters({ ...draft, page: 1 })); }}>
         <label>Record type
           <select value={draft.type} onChange={(event) => { setDraft({ ...draft, type: event.target.value }); }}>
             {eventTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -137,6 +140,7 @@ export function TimelinePage(): React.JSX.Element {
           </table>
         </div>
       )}
+      {timeline.data === undefined ? null : <PaginationControls label="Timeline records" metadata={timeline.data.page} onPageChange={(page) => { setSearchParams(searchFromFilters({ ...filters, page })); }} />}
     </Page>
   );
 }

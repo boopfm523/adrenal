@@ -102,6 +102,15 @@ class ProvenanceOut(ApiModel):
     is_correction: bool = False
 
 
+class PageMetadata(ApiModel):
+    """Shared bounded pagination state for growing owner-scoped collections."""
+
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total_items: int = Field(ge=0)
+    total_pages: int = Field(ge=1)
+
+
 # ---------------------------------------------------------------------------
 # Medications (plan)
 # ---------------------------------------------------------------------------
@@ -599,7 +608,7 @@ class TimelineItem(ApiModel):
 
 class TimelinePage(ApiModel):
     items: list[TimelineItem]
-    next_cursor: str | None = None
+    page: PageMetadata
     #: Stated so a reader knows which zone the day boundaries were drawn in (SAFE-27).
     timezone: str
 

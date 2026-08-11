@@ -12,6 +12,8 @@ CONTEXT_SETTINGS_TEST = REPO_ROOT / "frontend" / "src" / "pages" / "SettingsPage
 STYLES = REPO_ROOT / "frontend" / "src" / "styles.css"
 HEALTH_DATA = REPO_ROOT / "frontend" / "src" / "pages" / "HealthDataPage.tsx"
 HEALTH_DATA_TEST = REPO_ROOT / "frontend" / "src" / "pages" / "HealthDataPage.test.tsx"
+PAGINATION = REPO_ROOT / "frontend" / "src" / "components" / "PaginationControls.tsx"
+TIMELINE_TEST = REPO_ROOT / "frontend" / "src" / "pages" / "TimelinePage.test.tsx"
 
 
 @pytest.mark.safety("SAFE-25")
@@ -118,3 +120,16 @@ def test_chart_axes_accessibility_and_phone_readability_stay_under_ui_test() -> 
         ".chart-x-tick text, .chart-y-tick text { fill: #26322d; font-size: 12px;",
     ):
         assert visual_contract in styles
+
+
+def test_pagination_accessibility_and_phone_layout_stay_under_ui_test() -> None:
+    component = PAGINATION.read_text(encoding="utf-8")
+    timeline_test = TIMELINE_TEST.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+    for semantic in ('aria-live="polite"', 'role="status"', "Previous", "Next"):
+        assert semantic in component
+    for tested_semantic in ('getByRole("status")', "Previous", "Next"):
+        assert tested_semantic in timeline_test
+    mobile = styles[styles.index("@media (max-width: 720px)") :]
+    assert ".pagination { align-items: stretch; flex-direction: column; }" in mobile
+    assert ".pagination__actions button { flex: 1; }" in mobile

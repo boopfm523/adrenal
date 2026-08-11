@@ -54,6 +54,9 @@ jobs:
       - name: Environment example drift
         run: uv run python scripts/check_env_example.py
 
+      - name: Pagination inventory drift
+        run: uv run python scripts/check_pagination_inventory.py
+
   test:
     name: tests
     runs-on: ubuntu-latest

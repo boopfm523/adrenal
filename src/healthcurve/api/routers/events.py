@@ -8,9 +8,10 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, literal, select, union_all
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import (
     DiaryIn,
@@ -278,6 +279,7 @@ _TIMELINE_TYPES: tuple[tuple[type[EventMixin], str], ...] = (
 def timeline(
     session: DbSession,
     owner: CurrentOwner,
+    pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     types: str | None = Query(default=None, description="Comma-separated event types"),
@@ -289,7 +291,6 @@ def timeline(
         default="desc",
         description="Order by experienced event time: asc is earliest first, desc is latest first",
     ),
-    limit: int = Query(default=200, ge=1, le=1000),
 ):
     """The unified timeline.
 
@@ -311,13 +312,25 @@ def timeline(
     date_to_is_exclusive = local_date_to is not None
 
     wanted = {t.strip() for t in types.split(",")} if types else None
-    items: list[TimelineItem] = []
+    source_queries = []
 
     for model, type_name in _TIMELINE_TYPES:
         if wanted is not None and type_name not in wanted:
             continue
 
-        query = select(model).where(model.owner_id == owner.id)
+        query = select(
+            literal(type_name).label("event_type"),
+            model.id.label("event_id"),
+            model.occurred_at.label("occurred_at"),
+        ).where(
+            model.owner_id == owner.id,
+            model.id.not_in(
+                select(model.supersedes_id).where(
+                    model.owner_id == owner.id,
+                    model.supersedes_id.is_not(None),
+                )
+            ),
+        )
         if date_from:
             query = query.where(model.occurred_at >= date_from)
         if date_to:
@@ -327,34 +340,65 @@ def timeline(
                 else model.occurred_at <= date_to
             )
 
-        occurred_order = (
-            model.occurred_at.asc() if sort_order == "asc" else model.occurred_at.desc()
-        )
-        rows = list(session.scalars(query.order_by(occurred_order, model.id.asc()).limit(limit)))
-        for row in events.current_only(session, model, rows):
-            sensitive = bool(getattr(row, "is_sensitive", False))
-            if sensitive and not include_sensitive:
-                continue
-            items.append(
-                TimelineItem(
-                    id=row.id,
-                    category="fact",
-                    event_type=type_name,
-                    summary=_summarize(row, type_name),
-                    time=time_out(row),
-                    provenance=provenance_out(row),
-                    is_sensitive=sensitive,
-                )
-            )
+        if model is DiaryEvent and not include_sensitive:
+            query = query.where(DiaryEvent.is_sensitive.is_(False))
+        source_queries.append(query)
 
-    # The first stable sort supplies deterministic tie-breaking without making the
-    # secondary keys reverse when the requested time direction is descending.
-    items.sort(key=lambda item: (item.event_type, item.id.int))
-    items.sort(key=lambda item: item.time.occurred_at, reverse=sort_order == "desc")
+    if not source_queries:
+        return TimelinePage(
+            items=[],
+            timezone=zone_name,
+            page=page_metadata(0, pagination),
+        )
+
+    merged = (
+        source_queries[0].subquery()
+        if len(source_queries) == 1
+        else union_all(*source_queries).subquery()
+    )
+    total_items = session.scalar(select(func.count()).select_from(merged)) or 0
+    metadata = page_metadata(total_items, pagination)
+    occurred_order = (
+        merged.c.occurred_at.asc() if sort_order == "asc" else merged.c.occurred_at.desc()
+    )
+    keys = session.execute(
+        select(merged.c.event_type, merged.c.event_id)
+        .order_by(occurred_order, merged.c.event_type.asc(), merged.c.event_id.asc())
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    ).all()
+
+    models_by_type: dict[str, type[EventMixin]] = {
+        type_name: model for model, type_name in _TIMELINE_TYPES
+    }
+    selected: dict[tuple[str, uuid.UUID], EventMixin] = {}
+    for type_name in {str(row.event_type) for row in keys}:
+        model = models_by_type[type_name]
+        ids = [row.event_id for row in keys if row.event_type == type_name]
+        rows = session.scalars(select(model).where(model.owner_id == owner.id, model.id.in_(ids)))
+        selected.update(((type_name, row.id), row) for row in rows)
+
+    items = [
+        _timeline_item(selected[(str(key.event_type), key.event_id)], str(key.event_type))
+        for key in keys
+    ]
     return TimelinePage(
-        items=items[:limit],
+        items=items,
         timezone=zone_name,
-        next_cursor=None,
+        page=metadata,
+    )
+
+
+def _timeline_item(row: EventMixin, type_name: str) -> TimelineItem:
+    sensitive = bool(getattr(row, "is_sensitive", False))
+    return TimelineItem(
+        id=row.id,
+        category="fact",
+        event_type=type_name,
+        summary=_summarize(row, type_name),
+        time=time_out(row),
+        provenance=provenance_out(row),
+        is_sensitive=sensitive,
     )
 
 

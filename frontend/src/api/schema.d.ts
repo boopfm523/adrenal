@@ -2353,6 +2353,20 @@ export interface components {
             /** Strength Unit */
             strength_unit: string | null;
         };
+        /**
+         * PageMetadata
+         * @description Shared bounded pagination state for growing owner-scoped collections.
+         */
+        PageMetadata: {
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total Items */
+            total_items: number;
+            /** Total Pages */
+            total_pages: number;
+        };
         /** PasswordChange */
         PasswordChange: {
             /** Current Password */
@@ -2871,8 +2885,7 @@ export interface components {
         TimelinePage: {
             /** Items */
             items: components["schemas"]["TimelineItem"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
+            page: components["schemas"]["PageMetadata"];
             /** Timezone */
             timezone: string;
         };
@@ -5401,7 +5414,8 @@ export interface operations {
                 include_sensitive?: boolean;
                 /** @description Order by experienced event time: asc is earliest first, desc is latest first */
                 sort_order?: "asc" | "desc";
-                limit?: number;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;

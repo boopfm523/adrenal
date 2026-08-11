@@ -173,6 +173,9 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; vertical-align: top; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; border-top: 1px solid #ccd4ce; padding-top: 1rem; }
+.pagination__status { margin: 0; font-weight: 700; }
+.pagination__actions { display: flex; gap: 0.75rem; }
 .analytics-range { font-size: 1.05rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .association-caution { margin-block: 0.75rem; border-left: 0.3rem solid #684a76; padding: 0.75rem; background: #f7f1fa; }
@@ -340,4 +343,6 @@ circle.chart-series { fill: white; }
   .copy-example button { width: 100%; }
   .copy-status { grid-column: auto; }
   .report-range label:last-child { grid-column: auto; }
+  .pagination { align-items: stretch; flex-direction: column; }
+  .pagination__actions button { flex: 1; }
 }

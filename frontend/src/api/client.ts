@@ -272,6 +272,7 @@ export interface TimelineFilters {
   timezone: string;
   includeSensitive: boolean;
   sortOrder: "asc" | "desc";
+  page: number;
 }
 
 export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
@@ -281,6 +282,7 @@ export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
   if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
   if (filters.includeSensitive) params.set("include_sensitive", "true");
   params.set("sort_order", filters.sortOrder);
+  params.set("page", filters.page.toString());
   return apiRequest<Timeline>(`/timeline?${params.toString()}`);
 }
 
