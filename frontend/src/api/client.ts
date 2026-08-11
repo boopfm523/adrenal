@@ -18,6 +18,7 @@ export type DoseCorrectionInput = components["schemas"]["DoseCorrectionIn"];
 export type Timeline = components["schemas"]["TimelinePage"];
 export type Symptom = components["schemas"]["SymptomOut"];
 export type SymptomPage = components["schemas"]["SymptomPage"];
+export type SymptomInput = components["schemas"]["SymptomIn"];
 export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type DiaryPage = components["schemas"]["DiaryPage"];
@@ -445,6 +446,10 @@ export function getSymptoms(filters: SymptomsDiaryFilters, page = 1): Promise<Sy
   const params = symptomsDiaryQuery(filters, page);
   params.delete("include_sensitive");
   return apiRequest<SymptomPage>(`/symptoms?${params.toString()}`);
+}
+
+export function createSymptom(payload: SymptomInput): Promise<Symptom> {
+  return apiRequest<Symptom>("/symptoms", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function correctSymptom(id: string, payload: SymptomCorrectionInput): Promise<Symptom> {

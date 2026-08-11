@@ -2,13 +2,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { correctSymptom, getDiaryEntries, getLifeEvents, getSymptoms, type Symptom, type SymptomCorrectionInput, type SymptomsDiaryFilters } from "../api/client";
+import { correctSymptom, createSymptom, getDiaryEntries, getLifeEvents, getSymptoms, type Symptom, type SymptomCorrectionInput, type SymptomInput, type SymptomsDiaryFilters } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { timezoneAbbreviation } from "../time";
 
 function localTime(value: string): string { return value.replace("T", " ").slice(0, 16); }
+
+function nowLocal(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 
 function words(value: string): string { return value.replaceAll("_", " "); }
 
@@ -84,6 +89,57 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
   </form>;
 }
 
+function SymptomCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const initial = { name: "", severity: "", bodyArea: "", localTime: nowLocal(), timezone, notes: "" };
+  const [form, setForm] = useState(initial);
+  const [validation, setValidation] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: (payload: SymptomInput) => createSymptom(payload),
+    onSuccess: async () => {
+      setForm({ ...initial, localTime: nowLocal() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["symptoms"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-healthcurve"] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+      ]);
+    },
+  });
+
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const name = form.name.trim();
+    const bodyArea = form.bodyArea.trim();
+    const notes = form.notes.trim();
+    if (name === "") { setValidation("Enter the symptom you experienced."); return; }
+    setValidation(null);
+    mutation.mutate({
+      name,
+      severity: form.severity === "" ? null : Number(form.severity),
+      body_area: bodyArea === "" ? null : bodyArea,
+      time: { local_time: form.localTime, timezone: form.timezone, fold: null },
+      ended_at: null,
+      episode_id: null,
+      notes: notes === "" ? null : notes,
+    });
+  }
+
+  return <form className="correction-form" aria-label="Record a symptom" onSubmit={submit}>
+    <p className="correction-warning"><strong>Record what you experienced.</strong> This creates a subjective health fact, not a diagnosis or an explanation of its cause.</p>
+    <div className="field-group"><label htmlFor="new-symptom-name">Symptom</label><input id="new-symptom-name" required maxLength={120} value={form.name} onChange={(event) => { setForm({ ...form, name: event.target.value }); }} aria-describedby="new-symptom-name-help" placeholder="For example: fatigue, dizziness, or nausea" /><small className="field-hint" id="new-symptom-name-help">Use a short description of what you felt. Record each distinct symptom separately.</small></div>
+    <div className="field-group"><label htmlFor="new-symptom-severity">Severity (0–10)</label><input id="new-symptom-severity" type="number" min="0" max="10" inputMode="numeric" value={form.severity} onChange={(event) => { setForm({ ...form, severity: event.target.value }); }} aria-describedby="new-symptom-severity-help" /><small className="field-hint" id="new-symptom-severity-help">Optional personal rating, where 0 is no noticeable impact and 10 is your most severe. Missing is kept as unknown, not zero.</small></div>
+    <div className="field-group"><label htmlFor="new-symptom-area">Body area</label><input id="new-symptom-area" maxLength={120} value={form.bodyArea} onChange={(event) => { setForm({ ...form, bodyArea: event.target.value }); }} aria-describedby="new-symptom-area-help" placeholder="Optional, such as head or abdomen" /><small className="field-hint" id="new-symptom-area-help">Where you noticed it, if a location is useful.</small></div>
+    <div className="field-group"><label htmlFor="new-symptom-time">Experienced local time</label><input id="new-symptom-time" required type="datetime-local" step="1" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} aria-describedby="new-symptom-time-help" /><small className="field-hint" id="new-symptom-time-help">When you experienced the symptom, using your best known local date and time.</small></div>
+    <div className="field-group"><label htmlFor="new-symptom-timezone">Symptom IANA timezone</label><input id="new-symptom-timezone" required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} aria-describedby="new-symptom-timezone-help" /><small className="field-hint" id="new-symptom-timezone-help">Usually leave your profile timezone. Change it only if this local time occurred in another region.</small></div>
+    <div className="field-group form-wide"><label htmlFor="new-symptom-notes">Notes</label><textarea id="new-symptom-notes" maxLength={2000} value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} aria-describedby="new-symptom-notes-help" /><small className="field-hint" id="new-symptom-notes-help">Optional observations you want preserved with this symptom fact.</small></div>
+    {validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}
+    {mutation.isError ? <p className="error-summary form-wide" role="alert">The symptom was not saved. Check the values, local time, and IANA timezone; your entries remain in the form.</p> : null}
+    {mutation.isSuccess ? <p className="success-summary form-wide" role="status">Symptom recorded.</p> : null}
+    <button disabled={mutation.isPending} type="submit">{mutation.isPending ? "Recording…" : "Record symptom"}</button>
+  </form>;
+}
+
 export function SymptomsDiaryPage(): React.JSX.Element {
   const { session } = useAuth();
   const profileTimezone = session?.user.defaultTimezone ?? "UTC";
@@ -121,6 +177,9 @@ export function SymptomsDiaryPage(): React.JSX.Element {
     {failed ? <p className="error-summary" role="alert">Some recorded facts could not be loaded.</p> : null}
 
     <section aria-labelledby="symptoms-heading"><h2 id="symptoms-heading">Symptoms</h2>
+      <h3>Record a symptom</h3>
+      <SymptomCreateForm timezone={profileTimezone} />
+      <h3>Recorded symptoms</h3>
       {symptoms.data?.page.total_items === 0 ? <p>No symptoms recorded.</p> : null}
       {currentSymptoms.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Symptom records table"><table className="symptom-records-table"><caption>Current symptom facts, latest experienced time first, with correction history.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Symptom</th><th scope="col">Severity and area</th><th scope="col">Source and status</th><th scope="col">Notes and actions</th></tr></thead><tbody>{currentSymptoms.flatMap((item) => { const history = historyFor(item); const row = <tr key={item.id}><td className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th scope="row">{item.name}</th><td>{item.severity === null ? "Not recorded" : `${item.severity.toString()}/10`}{item.body_area === null ? null : <span>{item.body_area}</span>}</td><td className="symptom-records-table__provenance"><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span><span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span></td><td className="symptom-records-table__actions"><span>{item.notes ?? <span className="missing-value">None</span>}</span><button type="button" onClick={() => { setEditing(editing === item.id ? null : item.id); }}>{editing === item.id ? "Close correction form" : "Correct recorded symptom"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><p>{prior.name}{prior.severity === null ? "" : ` · severity ${prior.severity.toString()}/10`} · {localTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p>{prior.body_area === null ? null : <p>Body area: {prior.body_area}</p>}{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</article>)}</details>}</td></tr>; return editing === item.id ? [row, <tr className="correction-table-row" key={`${item.id}-correction`}><td colSpan={5}><SymptomCorrectionForm symptom={item} close={() => { setEditing(null); }} /></td></tr>] : [row]; })}</tbody></table></div>}
       {symptoms.data === undefined ? null : <PaginationControls label="Symptom records" metadata={symptoms.data.page} onPageChange={(symptomPage) => { setEditing(null); setSearchParams(searchFromState({ ...view, symptomPage })); }} />}

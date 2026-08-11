@@ -29,6 +29,7 @@ describe("Symptoms and diary page", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.includes(`/symptoms/${current.id}/correct`) && init?.method === "POST") return Promise.resolve(response({ ...current, severity: 7 }, 201));
+      if (url.endsWith("/symptoms") && init?.method === "POST") return Promise.resolve(response({ ...current, id: "77777777-7777-4777-8777-777777777777", name: "Synthetic nausea", severity: 3 }, 201));
       if (url.includes("/symptoms")) { const pageNumber = Number(new URL(url, "http://healthcurve.test").searchParams.get("page") ?? "1"); return Promise.resolve(response({ items: [current], revisions: [prior], page: { page: pageNumber, page_size: 25, total_items: 50, total_pages: 2 } })); }
       if (url.includes("/diary-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicDiary, privateDiary] : [publicDiary])));
       if (url.includes("/life-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife])));
@@ -45,6 +46,19 @@ describe("Symptoms and diary page", () => {
     expect(screen.getByRole("region", { name: "Life event records table" })).toBeVisible();
     expect(screen.queryByText("Synthetic private note")).not.toBeInTheDocument();
     expect(screen.queryByText("Synthetic private event")).not.toBeInTheDocument();
+
+    const createForm = screen.getByRole("form", { name: "Record a symptom" });
+    await userEvent.type(within(createForm).getByLabelText("Symptom"), "Synthetic nausea");
+    await userEvent.type(within(createForm).getByLabelText("Severity (0–10)"), "3");
+    await userEvent.clear(within(createForm).getByLabelText("Experienced local time"));
+    await userEvent.type(within(createForm).getByLabelText("Experienced local time"), "2026-08-10T14:05");
+    await userEvent.type(within(createForm).getByLabelText("Notes"), "Synthetic web form test");
+    await userEvent.click(within(createForm).getByRole("button", { name: "Record symptom" }));
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input, init]) => requestUrl(input).endsWith("/symptoms") && init?.method === "POST")).toBe(true); });
+    const createWrite = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).endsWith("/symptoms") && init?.method === "POST");
+    expect(JSON.parse(typeof createWrite?.[1]?.body === "string" ? createWrite[1].body : "{}") as unknown).toEqual({ name: "Synthetic nausea", severity: 3, body_area: null, time: { local_time: "2026-08-10T14:05", timezone: "America/New_York", fold: null }, ended_at: null, episode_id: null, notes: "Synthetic web form test" });
+    expect(await screen.findByText("Symptom recorded.")).toBeVisible();
+    expect(within(createForm).getByLabelText("Symptom")).toHaveValue("");
     await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/severity 4\/10/)).toBeVisible();
 
