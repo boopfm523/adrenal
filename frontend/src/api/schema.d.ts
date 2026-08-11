@@ -1530,6 +1530,14 @@ export interface components {
             text: string;
             time: components["schemas"]["EventTimeOut"];
         };
+        /** DiaryPage */
+        DiaryPage: {
+            /** Items */
+            items: components["schemas"]["DiaryOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["DiaryOut"][];
+        };
         /**
          * DoseCategory
          * @description Why this dose was taken. Plan section 3.
@@ -1765,6 +1773,12 @@ export interface components {
             timezone: string;
             /** Trigger */
             trigger: string;
+        };
+        /** EpisodePage */
+        EpisodePage: {
+            /** Items */
+            items: components["schemas"]["EpisodeOut"][];
+            page: components["schemas"]["PageMetadata"];
         };
         /**
          * EpisodeSeverity
@@ -2030,6 +2044,14 @@ export interface components {
             /** Unit */
             unit: string;
         };
+        /** InjectionPage */
+        InjectionPage: {
+            /** Items */
+            items: components["schemas"]["InjectionOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["InjectionOut"][];
+        };
         /**
          * InstructionCategory
          * @enum {string}
@@ -2268,6 +2290,14 @@ export interface components {
             time: components["schemas"]["EventTimeOut"];
             /** Title */
             title: string;
+        };
+        /** LifeEventPage */
+        LifeEventPage: {
+            /** Items */
+            items: components["schemas"]["LifeEventOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["LifeEventOut"][];
         };
         /**
          * LocationPrecision
@@ -2656,6 +2686,12 @@ export interface components {
             /** Version Label */
             version_label: string;
         };
+        /** RegimenVersionPage */
+        RegimenVersionPage: {
+            /** Items */
+            items: components["schemas"]["RegimenVersionOut"][];
+            page: components["schemas"]["PageMetadata"];
+        };
         /** ReportArtifactOut */
         ReportArtifactOut: {
             /** Byte Size */
@@ -2732,6 +2768,12 @@ export interface components {
             selected_sections: string[];
             /** Timezone */
             timezone: string;
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Items */
+            items: components["schemas"]["ReportOut"][];
+            page: components["schemas"]["PageMetadata"];
         };
         /** ReportPreviewOut */
         ReportPreviewOut: {
@@ -3563,6 +3605,8 @@ export interface operations {
             query?: {
                 /** @description Sensitive entries are excluded from default views (T7). */
                 include_sensitive?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -3578,7 +3622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiaryOut"][];
+                    "application/json": components["schemas"]["DiaryPage"];
                 };
             };
             /** @description Validation Error */
@@ -3779,7 +3823,10 @@ export interface operations {
     };
     list_injections_api_v1_emergency_injections_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -3794,7 +3841,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InjectionOut"][];
+                    "application/json": components["schemas"]["InjectionPage"];
                 };
             };
             /** @description Validation Error */
@@ -4520,6 +4567,8 @@ export interface operations {
         parameters: {
             query?: {
                 include_sensitive?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -4535,7 +4584,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LifeEventOut"][];
+                    "application/json": components["schemas"]["LifeEventPage"];
                 };
             };
             /** @description Validation Error */
@@ -4809,6 +4858,8 @@ export interface operations {
         parameters: {
             query?: {
                 status_filter?: components["schemas"]["RegimenStatus"] | null;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -4824,7 +4875,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegimenVersionOut"][];
+                    "application/json": components["schemas"]["RegimenVersionPage"];
                 };
             };
             /** @description Validation Error */
@@ -5090,7 +5141,10 @@ export interface operations {
     };
     list_reports_api_v1_reports_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -5105,7 +5159,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReportOut"][];
+                    "application/json": components["schemas"]["ReportPage"];
                 };
             };
             /** @description Validation Error */
@@ -5226,7 +5280,10 @@ export interface operations {
     list_episodes_api_v1_stress_episodes_get: {
         parameters: {
             query?: {
+                status_filter?: components["schemas"]["EpisodeStatus"] | null;
                 open_only?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -5242,7 +5299,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EpisodeOut"][];
+                    "application/json": components["schemas"]["EpisodePage"];
                 };
             };
             /** @description Validation Error */

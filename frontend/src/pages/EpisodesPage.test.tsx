@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "../auth/context";
@@ -11,6 +11,7 @@ const auth: AuthContextValue = { status: "authenticated", session, signIn: vi.fn
 
 function requestUrl(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 function response(body: unknown): Response { return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } }); }
+function page(items: unknown[], current = 1, totalPages = 1): Record<string, unknown> { return { items, page: { page: current, page_size: 25, total_items: totalPages * 25, total_pages: totalPages } }; }
 function episode(status: "open" | "resolved") { return { id: "11111111-1111-4111-8111-111111111111", category: "fact", trigger: "Synthetic illness", status, severity: "moderate", started_at: "2026-08-09T09:00:00Z", ended_at: status === "resolved" ? "2026-08-09T12:00:00Z" : null, timezone: "Europe/London", highest_temperature_c: "38.2", illness_description: "Synthetic context", recovery_notes: null, outcome: null, notes: null, dose_count: 2, symptom_count: 1 }; }
 
 describe("Episodes page", () => {
@@ -23,7 +24,7 @@ describe("Episodes page", () => {
       const url = requestUrl(input);
       const method = init?.method ?? "GET";
       requests.push({ url, method, body: init?.body === undefined ? null : JSON.parse(init.body as string) });
-      if (method === "GET") return Promise.resolve(response([episode("open"), { ...episode("resolved"), id: "22222222-2222-4222-8222-222222222222" }]));
+      if (method === "GET") return Promise.resolve(response(url.includes("status_filter=open") ? page([episode("open")]) : page([{ ...episode("resolved"), id: "22222222-2222-4222-8222-222222222222" }], url.includes("page=2") ? 2 : 1, 2)));
       return Promise.resolve(response(episode(method === "PATCH" && (JSON.parse(init?.body as string) as { status?: string }).status === "resolved" ? "resolved" : "open")));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
@@ -44,5 +45,7 @@ describe("Episodes page", () => {
     await waitFor(() => { expect(requests.some((request) => request.method === "PATCH" && (request.body as { status?: string }).status === "resolved")).toBe(true); });
     const closed = requests.find((request) => request.method === "PATCH" && (request.body as { status?: string }).status === "resolved")?.body as { ended_at: { timezone: string } };
     expect(closed.ended_at.timezone).toBe("Europe/London");
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Episode history pagination" })).getByRole("button", { name: "Next" }));
+    await waitFor(() => { expect(requests.some((request) => request.url.includes("page=2&status_filter=resolved"))).toBe(true); });
   });
 });

@@ -73,6 +73,7 @@ def paginate_current_facts[E: EventMixin](
     owner_id: uuid.UUID,
     request: PageRequest,
     predicates: tuple[ColumnElement[bool], ...] = (),
+    include_revisions: bool = True,
 ) -> CurrentFactPage[E]:
     """Page current facts and fetch correction ancestors only for visible rows."""
     current = select(model).where(
@@ -96,6 +97,8 @@ def paginate_current_facts[E: EventMixin](
     )
 
     revisions: list[E] = []
+    if not include_revisions:
+        return CurrentFactPage(items=items, revisions=revisions, metadata=metadata)
     visited: set[uuid.UUID] = {row.id for row in items}
     pending = {row.supersedes_id for row in items if row.supersedes_id is not None}
     while pending:

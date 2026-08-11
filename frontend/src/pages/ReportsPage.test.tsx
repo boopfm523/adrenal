@@ -11,6 +11,7 @@ const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.tes
 function response(body: unknown, status = 200): Response { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
 function url(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 function report(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { id: "11111111-1111-4111-8111-111111111111", date_from: "2026-07-11", date_to: "2026-08-09", timezone: "Europe/London", selected_sections: ["metrics", "doses", "approved_plan"], include_ai: false, canonical_sha256: "a".repeat(64), render_version: "report-v1", created_at: "2026-08-09T12:00:00Z", artifacts: [{ format: "pdf", media_type: "application/pdf", sha256: "b".repeat(64), byte_size: 100, download_url: "/api/v1/reports/11111111-1111-4111-8111-111111111111/artifacts/pdf" }], ...overrides }; }
+function reportPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 function preview(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { ...report(), source_manifest: { fact: ["fact-1"], plan: ["plan-1"], patient_note: [], ai: [] }, metric_values: { dose_total: { definition: "Synthetic deterministic sum", timezone: "Europe/London", value: "10.0000" } }, snapshot_content: { fact: [{ id: "fact-1", amount: "10.0000" }], plan: [{ id: "plan-1", status: "approved" }], patient_note: [], ai: [] }, ...overrides }; }
 function renderPage(): void { sessionStore.set(session); render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><ReportsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
 
@@ -20,7 +21,7 @@ describe("Reports page", () => {
 
   it("generates with AI off by default and previews separated immutable categories", async () => {
     const requests: { method: string; body: Record<string, unknown> | null }[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const path = url(input); const method = init?.method ?? "GET"; requests.push({ method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null }); if (method === "POST") return Promise.resolve(response(report(), 201)); if (path.endsWith("11111111-1111-4111-8111-111111111111")) return Promise.resolve(response(preview())); return Promise.resolve(response([])); });
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const path = url(input); const method = init?.method ?? "GET"; requests.push({ method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null }); if (method === "POST") return Promise.resolve(response(report(), 201)); if (path.endsWith("11111111-1111-4111-8111-111111111111")) return Promise.resolve(response(preview())); return Promise.resolve(response(reportPage([]))); });
     renderPage();
     expect(screen.getByRole("status")).toHaveTextContent("Loading report history");
     expect(await screen.findByRole("heading", { name: "No report snapshots yet" })).toBeVisible();
@@ -40,7 +41,7 @@ describe("Reports page", () => {
   });
 
   it("warns on AI opt-in and renders opted-in AI separately", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const path = url(input); if (path.endsWith("11111111-1111-4111-8111-111111111111")) return Promise.resolve(response(preview({ include_ai: true, source_manifest: { fact: [], plan: [], patient_note: [], ai: ["ai-1"] }, snapshot_content: { fact: [], plan: [], patient_note: [], ai: [{ id: "ai-1", body: "Synthetic generated observation" }] } }))); return Promise.resolve(response([report({ include_ai: true })])); });
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const path = url(input); if (path.endsWith("11111111-1111-4111-8111-111111111111")) return Promise.resolve(response(preview({ include_ai: true, source_manifest: { fact: [], plan: [], patient_note: [], ai: ["ai-1"] }, snapshot_content: { fact: [], plan: [], patient_note: [], ai: [{ id: "ai-1", body: "Synthetic generated observation" }] } }))); return Promise.resolve(response(reportPage([report({ include_ai: true })]))); });
     renderPage();
     await userEvent.click(screen.getByLabelText("Include separately labeled AI-generated analysis"));
     expect(screen.getByText(/AI content is generated, may be wrong/)).toBeVisible();

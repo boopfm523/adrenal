@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement, formatQuantitativeText } from "../format";
 
 interface SlotDraft {
@@ -282,21 +283,24 @@ function PlanDeletionButton({ version, onDeleted }: { version: RegimenVersion; o
 }
 
 export function PlanPage(): React.JSX.Element {
+  const [historyPage, setHistoryPage] = useState(1);
   const active = useQuery({ queryKey: ["regimens", "active"], queryFn: getActiveRegimen });
-  const history = useQuery({ queryKey: ["regimens", "history"], queryFn: getRegimens });
+  const history = useQuery({ queryKey: ["regimens", "history", historyPage], queryFn: () => getRegimens(historyPage) });
   const medications = useQuery({ queryKey: ["medications"], queryFn: getMedications });
   const [olderId, setOlderId] = useState("");
   const [newerId, setNewerId] = useState("");
   const [editor, setEditor] = useState<{ source: RegimenVersion | null; edit: RegimenVersion | null } | null>(null);
   const [message, setMessage] = useState("");
   const [reviewDraftId, setReviewDraftId] = useState<string | null>(null);
-  const chronological = [...(history.data ?? [])].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  const versions = history.data?.items ?? [];
+  const chronological = [...versions].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
   const selectedOlderId = olderId !== "" ? olderId : (chronological[chronological.length - 2]?.id ?? "");
   const selectedNewerId = newerId !== "" ? newerId : (chronological[chronological.length - 1]?.id ?? "");
   const diff = useQuery({ queryKey: ["regimen-diff", selectedOlderId, selectedNewerId], queryFn: () => getRegimenDiff(selectedOlderId, selectedNewerId), enabled: selectedOlderId !== "" && selectedNewerId !== "" && selectedOlderId !== selectedNewerId });
   const complete = (nextMessage: string): void => { setEditor(null); setReviewDraftId(null); setMessage(nextMessage); };
   const completeDraft = (nextMessage: string, version: RegimenVersion): void => {
     setEditor(null);
+    setHistoryPage(1);
     setReviewDraftId(version.id);
     setMessage(`${nextMessage} Next, review it below and record physician approval if it matches a plan your physician actually approved.`);
   };
@@ -311,12 +315,13 @@ export function PlanPage(): React.JSX.Element {
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} /></PlanCard>}
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
-      {history.data?.length === 0 ? <p>No plan versions recorded.</p> : null}
-      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</article>)}</div>
+      {history.data?.page.total_items === 0 ? <p>No plan versions recorded.</p> : null}
+      <div className="version-history">{versions.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (historyPage > 1 && versions.length === 1) setHistoryPage((current) => current - 1); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</article>)}</div>
+      {history.data === undefined ? null : <PaginationControls label="Plan version history" metadata={history.data.page} onPageChange={(nextPage) => { setOlderId(""); setNewerId(""); setHistoryPage(nextPage); }} />}
     </section>
 
     <section aria-labelledby="diff-heading"><h2 id="diff-heading">Compare versions</h2>
-      {history.data !== undefined && history.data.length < 2 ? <p>At least two versions are needed for a comparison.</p> : <div className="diff-controls"><label>Older version<select value={selectedOlderId} onChange={(event) => { setOlderId(event.target.value); }}>{history.data?.map((version) => <option key={version.id} value={version.id}>{version.version_label}</option>)}</select></label><label>Newer version<select value={selectedNewerId} onChange={(event) => { setNewerId(event.target.value); }}>{history.data?.map((version) => <option key={version.id} value={version.id}>{version.version_label}</option>)}</select></label></div>}
+      {history.data !== undefined && versions.length < 2 ? <p>At least two versions on this history page are needed for a comparison.</p> : <div className="diff-controls"><label>Older version<select value={selectedOlderId} onChange={(event) => { setOlderId(event.target.value); }}>{versions.map((version) => <option key={version.id} value={version.id}>{version.version_label}</option>)}</select></label><label>Newer version<select value={selectedNewerId} onChange={(event) => { setNewerId(event.target.value); }}>{versions.map((version) => <option key={version.id} value={version.id}>{version.version_label}</option>)}</select></label></div>}
       {selectedOlderId === selectedNewerId && selectedOlderId !== "" ? <p className="error-summary" role="alert">Choose two different versions.</p> : null}
       {diff.isPending && diff.isFetching ? <p role="status">Calculating deterministic version diff…</p> : null}
       {diff.isError ? <p className="error-summary" role="alert">The version comparison could not be loaded.</p> : null}

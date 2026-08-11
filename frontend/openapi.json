@@ -1318,6 +1318,35 @@
         "title": "DiaryOut",
         "type": "object"
       },
+      "DiaryPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/DiaryOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "DiaryPage",
+        "type": "object"
+      },
       "DoseCategory": {
         "description": "Why this dose was taken. Plan section 3.",
         "enum": [
@@ -2045,6 +2074,27 @@
           "notes"
         ],
         "title": "EpisodeOut",
+        "type": "object"
+      },
+      "EpisodePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "EpisodePage",
         "type": "object"
       },
       "EpisodeSeverity": {
@@ -2870,6 +2920,35 @@
         "title": "InjectionOut",
         "type": "object"
       },
+      "InjectionPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InjectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/InjectionOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "InjectionPage",
+        "type": "object"
+      },
       "InstructionCategory": {
         "enum": [
           "illness",
@@ -3537,6 +3616,35 @@
           "provenance"
         ],
         "title": "LifeEventOut",
+        "type": "object"
+      },
+      "LifeEventPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LifeEventOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/LifeEventOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "LifeEventPage",
         "type": "object"
       },
       "LocationPrecision": {
@@ -4840,6 +4948,27 @@
         "title": "RegimenVersionOut",
         "type": "object"
       },
+      "RegimenVersionPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RegimenVersionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "RegimenVersionPage",
+        "type": "object"
+      },
       "ReportArtifactOut": {
         "properties": {
           "byte_size": {
@@ -5002,6 +5131,26 @@
           "artifacts"
         ],
         "title": "ReportOut",
+        "type": "object"
+      },
+      "ReportPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "ReportPage",
         "type": "object"
       },
       "ReportPreviewOut": {
@@ -7061,6 +7210,29 @@
             }
           },
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -7082,11 +7254,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DiaryOut"
-                  },
-                  "title": "Response List Diary Api V1 Diary Events Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/DiaryPage"
                 }
               }
             },
@@ -7532,6 +7700,29 @@
         "operationId": "list_injections_api_v1_emergency_injections_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -7553,11 +7744,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/InjectionOut"
-                  },
-                  "title": "Response List Injections Api V1 Emergency Injections Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/InjectionPage"
                 }
               }
             },
@@ -8966,6 +9153,29 @@
             }
           },
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -8987,11 +9197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/LifeEventOut"
-                  },
-                  "title": "Response List Life Events Api V1 Life Events Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/LifeEventPage"
                 }
               }
             },
@@ -9556,6 +9762,29 @@
             }
           },
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -9577,11 +9806,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/RegimenVersionOut"
-                  },
-                  "title": "Response List Regimens Api V1 Regimens Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/RegimenVersionPage"
                 }
               }
             },
@@ -10131,6 +10356,29 @@
         "operationId": "list_reports_api_v1_reports_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -10152,11 +10400,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ReportOut"
-                  },
-                  "title": "Response List Reports Api V1 Reports Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/ReportPage"
                 }
               }
             },
@@ -10388,12 +10632,51 @@
         "parameters": [
           {
             "in": "query",
+            "name": "status_filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EpisodeStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status Filter"
+            }
+          },
+          {
+            "in": "query",
             "name": "open_only",
             "required": false,
             "schema": {
               "default": false,
               "title": "Open Only",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -10418,11 +10701,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/EpisodeOut"
-                  },
-                  "title": "Response List Episodes Api V1 Stress Episodes Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/EpisodePage"
                 }
               }
             },

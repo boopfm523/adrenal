@@ -23,6 +23,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function episodePage(items: unknown[]): Record<string, unknown> {
+  return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } };
+}
+
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.href;
@@ -100,7 +104,7 @@ describe("Today page", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = requestUrl(input);
       if (url.includes("plan-comparison")) return Promise.resolve(jsonResponse(comparison()));
-      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse([]));
+      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse(episodePage([])));
       return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
     });
 
@@ -136,7 +140,7 @@ describe("Today page", () => {
         })));
       }
       if (url.includes("stress-episodes")) {
-        return Promise.resolve(jsonResponse([{
+        return Promise.resolve(jsonResponse(episodePage([{
           id: "55555555-5555-4555-8555-555555555555",
           trigger: "Synthetic illness",
           severity: "mild",
@@ -151,7 +155,7 @@ describe("Today page", () => {
           outcome: null,
           dose_count: 0,
           symptom_count: 1,
-        }]));
+        }])));
       }
       if (url.endsWith("/api/v1/doses") && init?.method === "POST") {
         recorded = true;
@@ -197,7 +201,7 @@ describe("Today page", () => {
         planned_total: "20.0000",
         missed_slots: 2,
       })));
-      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse([]));
+      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse(episodePage([])));
       return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
     });
 

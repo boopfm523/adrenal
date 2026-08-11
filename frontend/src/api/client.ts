@@ -6,6 +6,7 @@ type LoginResponse = components["schemas"]["LoginResponse"];
 type WhoAmI = components["schemas"]["WhoAmI"];
 export type PlanComparisonDay = components["schemas"]["PlanComparisonDay"];
 export type Episode = components["schemas"]["EpisodeOut"];
+export type EpisodePage = components["schemas"]["EpisodePage"];
 export type EpisodeInput = components["schemas"]["EpisodeIn"];
 export type EpisodeUpdate = components["schemas"]["EpisodeUpdate"];
 export type Dose = components["schemas"]["DoseOut"];
@@ -17,8 +18,11 @@ export type Symptom = components["schemas"]["SymptomOut"];
 export type SymptomPage = components["schemas"]["SymptomPage"];
 export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
 export type DiaryEntry = components["schemas"]["DiaryOut"];
+export type DiaryPage = components["schemas"]["DiaryPage"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
+export type LifeEventPage = components["schemas"]["LifeEventPage"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
+export type RegimenVersionPage = components["schemas"]["RegimenVersionPage"];
 export type RegimenInput = components["schemas"]["RegimenVersionIn"];
 export type RegimenApprovalInput = components["schemas"]["RegimenApprovalIn"];
 export type Medication = components["schemas"]["MedicationOut"];
@@ -26,6 +30,7 @@ export type MedicationInput = components["schemas"]["MedicationIn"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
 export type DataQuality = components["schemas"]["DataQualityOut"];
 export type ReportSummary = components["schemas"]["ReportOut"];
+export type ReportPage = components["schemas"]["ReportPage"];
 export type ReportPreview = components["schemas"]["ReportPreviewOut"];
 export type ReportCreate = components["schemas"]["ReportCreateRequest"];
 export type ContextEvent = components["schemas"]["ContextOut"];
@@ -233,12 +238,12 @@ export function getPlanComparison(day: string, timezone: string): Promise<PlanCo
   return apiRequest<PlanComparisonDay>(`/doses/plan-comparison?${params.toString()}`);
 }
 
-export function getOpenEpisodes(): Promise<Episode[]> {
-  return apiRequest<Episode[]>("/stress-episodes?open_only=true");
+export function getOpenEpisodes(): Promise<EpisodePage> {
+  return apiRequest<EpisodePage>("/stress-episodes?page=1&status_filter=open");
 }
 
-export function getEpisodes(): Promise<Episode[]> {
-  return apiRequest<Episode[]>("/stress-episodes");
+export function getEpisodes(page = 1, status?: "open" | "resolved"): Promise<EpisodePage> {
+  return apiRequest<EpisodePage>(`/stress-episodes?page=${page.toString()}${status === undefined ? "" : `&status_filter=${status}`}`);
 }
 
 export function createEpisode(payload: EpisodeInput): Promise<Episode> {
@@ -384,16 +389,16 @@ export function correctSymptom(id: string, payload: SymptomCorrectionInput): Pro
   return apiRequest<Symptom>(`/symptoms/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getDiaryEntries(includeSensitive = false): Promise<DiaryEntry[]> {
-  return apiRequest<DiaryEntry[]>(`/diary-events${includeSensitive ? "?include_sensitive=true" : ""}`);
+export function getDiaryEntries(page = 1, includeSensitive = false): Promise<DiaryPage> {
+  return apiRequest<DiaryPage>(`/diary-events?page=${page.toString()}${includeSensitive ? "&include_sensitive=true" : ""}`);
 }
 
-export function getLifeEvents(includeSensitive = false): Promise<LifeEvent[]> {
-  return apiRequest<LifeEvent[]>(`/life-events${includeSensitive ? "?include_sensitive=true" : ""}`);
+export function getLifeEvents(page = 1, includeSensitive = false): Promise<LifeEventPage> {
+  return apiRequest<LifeEventPage>(`/life-events?page=${page.toString()}${includeSensitive ? "&include_sensitive=true" : ""}`);
 }
 
-export function getRegimens(): Promise<RegimenVersion[]> {
-  return apiRequest<RegimenVersion[]>("/regimens");
+export function getRegimens(page = 1): Promise<RegimenVersionPage> {
+  return apiRequest<RegimenVersionPage>(`/regimens?page=${page.toString()}`);
 }
 
 export function getMedications(): Promise<Medication[]> {
@@ -471,8 +476,8 @@ export function requestGarminSync(idempotencyKey: string, refresh = false): Prom
   });
 }
 
-export function getReports(): Promise<ReportSummary[]> {
-  return apiRequest<ReportSummary[]>("/reports");
+export function getReports(page = 1): Promise<ReportPage> {
+  return apiRequest<ReportPage>(`/reports?page=${page.toString()}`);
 }
 
 export function getReport(id: string): Promise<ReportPreview> {

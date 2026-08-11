@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from healthcurve.api.deps import (
     AppRateLimiter,
@@ -19,6 +19,8 @@ from healthcurve.api.deps import (
     enforce_rate_limit,
     require_csrf,
 )
+from healthcurve.api.pagination import Pagination, page_metadata
+from healthcurve.api.schemas import PageMetadata
 from healthcurve.operations import audit
 from healthcurve.operations.rate_limit import RateLimitPolicy
 from healthcurve.reports import builder, rendering, storage
@@ -64,6 +66,11 @@ class ReportPreviewOut(ReportOut):
     source_manifest: dict[str, list[str]]
     metric_values: dict[str, object]
     snapshot_content: dict[str, object]
+
+
+class ReportPage(BaseModel):
+    items: list[ReportOut]
+    page: PageMetadata
 
 
 def _artifact_out(artifact: ReportArtifact) -> ReportArtifactOut:
@@ -193,18 +200,25 @@ def create_report(
     return _report_out(snapshot, artifacts)
 
 
-@router.get("", response_model=list[ReportOut])
-def list_reports(session: DbSession, owner: CurrentOwner) -> list[ReportOut]:
+@router.get("", response_model=ReportPage)
+def list_reports(session: DbSession, owner: CurrentOwner, pagination: Pagination) -> ReportPage:
+    query = select(ReportSnapshot).where(ReportSnapshot.owner_id == owner.id)
+    total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    metadata = page_metadata(total_items, pagination)
     snapshots = list(
         session.scalars(
-            select(ReportSnapshot)
-            .where(ReportSnapshot.owner_id == owner.id)
-            .order_by(ReportSnapshot.created_at.desc(), ReportSnapshot.id.desc())
+            query.order_by(ReportSnapshot.created_at.desc(), ReportSnapshot.id.desc())
+            .offset(pagination.offset)
+            .limit(pagination.page_size)
         )
     )
-    return [
-        _report_out(snapshot, _artifacts(session, owner.id, snapshot.id)) for snapshot in snapshots
-    ]
+    return ReportPage(
+        items=[
+            _report_out(snapshot, _artifacts(session, owner.id, snapshot.id))
+            for snapshot in snapshots
+        ],
+        page=metadata,
+    )
 
 
 @router.get("/{snapshot_id}", response_model=ReportPreviewOut)

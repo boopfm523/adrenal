@@ -847,7 +847,7 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
     remaining_ids = {row["id"] for row in client.get("/api/v1/context-events").json()["items"]}
     assert original["id"] not in remaining_ids
     assert replacement["id"] not in remaining_ids
-    assert diary_id in {row["id"] for row in client.get("/api/v1/diary-events").json()}
+    assert diary_id in {row["id"] for row in client.get("/api/v1/diary-events").json()["items"]}
     with Session(engine) as session:
         entry = session.scalar(
             select(AuditEntry).where(
@@ -878,11 +878,11 @@ def test_individual_deletion_requires_password_and_preserves_audit(
     path = f"/api/v1/privacy/records/diary/{record_id}"
     wrong = client.request("DELETE", path, headers=logged_in, json={"password": "wrong"})
     assert wrong.status_code == 403
-    assert any(row["id"] == record_id for row in client.get("/api/v1/diary-events").json())
+    assert any(row["id"] == record_id for row in client.get("/api/v1/diary-events").json()["items"])
 
     deleted = client.request("DELETE", path, headers=logged_in, json={"password": PASSWORD})
     assert deleted.status_code == 204, deleted.text
-    assert all(row["id"] != record_id for row in client.get("/api/v1/diary-events").json())
+    assert all(row["id"] != record_id for row in client.get("/api/v1/diary-events").json()["items"])
     with Session(engine) as session:
         entry = session.scalar(
             select(AuditEntry).where(
@@ -2541,15 +2541,23 @@ def test_sensitive_diary_and_life_events_require_explicit_reveal(
     ).json()
     assert private_life["is_sensitive"] is True
 
-    default_diary_ids = {row["id"] for row in client.get("/api/v1/diary-events").json()}
-    default_life_ids = {row["id"] for row in client.get("/api/v1/life-events").json()}
+    default_diary = client.get("/api/v1/diary-events").json()
+    default_life = client.get("/api/v1/life-events").json()
+    default_diary_ids = {row["id"] for row in default_diary["items"]}
+    default_life_ids = {row["id"] for row in default_life["items"]}
+    assert default_diary["revisions"] == []
+    assert default_life["revisions"] == []
     revealed_diary_ids = {
         row["id"]
-        for row in client.get("/api/v1/diary-events", params={"include_sensitive": True}).json()
+        for row in client.get("/api/v1/diary-events", params={"include_sensitive": True}).json()[
+            "items"
+        ]
     }
     revealed_life_ids = {
         row["id"]
-        for row in client.get("/api/v1/life-events", params={"include_sensitive": True}).json()
+        for row in client.get("/api/v1/life-events", params={"include_sensitive": True}).json()[
+            "items"
+        ]
     }
     assert private_diary["id"] not in default_diary_ids
     assert private_life["id"] not in default_life_ids
@@ -3038,7 +3046,7 @@ def test_development_plan_deletion_is_csrf_owner_scoped_and_disabled_in_producti
     try:
         listed = client.get("/api/v1/regimens")
         assert listed.status_code == 200
-        own_payload = next(row for row in listed.json() if row["id"] == str(own_id))
+        own_payload = next(row for row in listed.json()["items"] if row["id"] == str(own_id))
         assert own_payload["deletion_allowed"] is False
         refused = client.delete(f"/api/v1/regimens/{own_id}", headers=logged_in)
         assert refused.status_code == 403
@@ -3400,7 +3408,7 @@ def test_draft_plan_can_be_replaced_atomically_but_approved_plan_is_immutable(
     refused = client.put(f"/api/v1/regimens/{version_id}", json=impossible, headers=logged_in)
     assert refused.status_code == 422
     unchanged = next(
-        item for item in client.get("/api/v1/regimens").json() if item["id"] == version_id
+        item for item in client.get("/api/v1/regimens").json()["items"] if item["id"] == version_id
     )
     assert unchanged["version_label"] == "Synthetic revised draft"
     assert Decimal(unchanged["slots"][0]["amount"]) == Decimal("12.5")
@@ -3953,6 +3961,34 @@ def test_missing_doses_are_derived_not_stored(
     assert comparison.status_code == 200, comparison.text
     after = len(client.get("/api/v1/doses").json()["items"])
     assert before == after, "comparing a day must not create dose rows"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/diary-events",
+        "/api/v1/life-events",
+        "/api/v1/stress-episodes",
+        "/api/v1/emergency-injections",
+        "/api/v1/regimens",
+        "/api/v1/reports",
+    ],
+)
+def test_event_plan_and_report_histories_enforce_bounded_pages(
+    client: TestClient, path: str
+) -> None:
+    first = client.get(path, params={"page": 1, "page_size": 1})
+    assert first.status_code == 200, first.text
+    payload = first.json()
+    assert payload["page"]["page"] == 1
+    assert payload["page"]["page_size"] == 1
+    assert len(payload["items"]) <= 1
+
+    last_page = payload["page"]["total_pages"]
+    last = client.get(path, params={"page": last_page, "page_size": 1})
+    assert last.status_code == 200, last.text
+    assert last.json()["page"]["page"] == last_page
+    assert client.get(path, params={"page": last_page + 1, "page_size": 1}).status_code == 422
 
 
 @pytest.mark.safety("SAFE-27")

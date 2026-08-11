@@ -57,9 +57,11 @@ export function SymptomsDiaryPage(): React.JSX.Element {
   const [includeSensitive, setIncludeSensitive] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [symptomPage, setSymptomPage] = useState(1);
+  const [diaryPage, setDiaryPage] = useState(1);
+  const [lifePage, setLifePage] = useState(1);
   const symptoms = useQuery({ queryKey: ["symptoms", symptomPage], queryFn: () => getSymptoms(symptomPage) });
-  const diary = useQuery({ queryKey: ["diary", includeSensitive], queryFn: () => getDiaryEntries(includeSensitive) });
-  const life = useQuery({ queryKey: ["life-events", includeSensitive], queryFn: () => getLifeEvents(includeSensitive) });
+  const diary = useQuery({ queryKey: ["diary", includeSensitive, diaryPage], queryFn: () => getDiaryEntries(diaryPage, includeSensitive) });
+  const life = useQuery({ queryKey: ["life-events", includeSensitive, lifePage], queryFn: () => getLifeEvents(lifePage, includeSensitive) });
   const currentSymptoms = symptoms.data?.items ?? [];
   const symptomById = new Map([...currentSymptoms, ...(symptoms.data?.revisions ?? [])].map((item) => [item.id, item]));
 
@@ -68,7 +70,7 @@ export function SymptomsDiaryPage(): React.JSX.Element {
   const failed = symptoms.isError || diary.isError || life.isError;
 
   return <Page title="Symptoms & diary" description="Subjective symptoms, diary notes, and life events are recorded facts—not diagnoses or causal claims.">
-    <label className="privacy-toggle"><input type="checkbox" checked={includeSensitive} onChange={(event) => { setIncludeSensitive(event.target.checked); }} /> Reveal sensitive diary and life-event entries</label>
+    <label className="privacy-toggle"><input type="checkbox" checked={includeSensitive} onChange={(event) => { setIncludeSensitive(event.target.checked); setDiaryPage(1); setLifePage(1); }} /> Reveal sensitive diary and life-event entries</label>
     <p className="privacy-note">Sensitive text is hidden by default and appears only while this control is selected.</p>
     {loading ? <p role="status">Loading recorded symptoms and notes…</p> : null}
     {failed ? <p className="error-summary" role="alert">Some recorded facts could not be loaded.</p> : null}
@@ -85,13 +87,15 @@ export function SymptomsDiaryPage(): React.JSX.Element {
     </section>
 
     <section aria-labelledby="diary-heading"><h2 id="diary-heading">Diary</h2>
-      {diary.data?.length === 0 ? <p>No {includeSensitive ? "" : "non-sensitive "}diary entries recorded.</p> : null}
-      {diary.data?.map((item) => <FactCard key={item.id} title={item.is_sensitive ? "Sensitive diary entry" : "Diary entry"} metadata={<span>{item.provenance.source_type.replace("_", " ")} · {item.provenance.confirmation_state.replace("_", " ")}</span>}><p>{item.text}</p><p>{localTime(item.time.local_time)} · {item.time.timezone}</p></FactCard>)}
+      {diary.data?.page.total_items === 0 ? <p>No {includeSensitive ? "" : "non-sensitive "}diary entries recorded.</p> : null}
+      {diary.data?.items.map((item) => <FactCard key={item.id} title={item.is_sensitive ? "Sensitive diary entry" : "Diary entry"} metadata={<span>{item.provenance.source_type.replace("_", " ")} · {item.provenance.confirmation_state.replace("_", " ")}</span>}><p>{item.text}</p><p>{localTime(item.time.local_time)} · {item.time.timezone}</p></FactCard>)}
+      {diary.data === undefined ? null : <PaginationControls label="Diary records" metadata={diary.data.page} onPageChange={setDiaryPage} />}
     </section>
 
     <section aria-labelledby="life-heading"><h2 id="life-heading">Life events</h2>
-      {life.data?.length === 0 ? <p>No {includeSensitive ? "" : "non-sensitive "}life events recorded.</p> : null}
-      {life.data?.map((item) => <FactCard key={item.id} title={item.title} metadata={<span>{item.provenance.source_type.replace("_", " ")} · {item.provenance.confirmation_state.replace("_", " ")}</span>}><p>{item.life_category.replace("_", " ")}</p>{item.description === null ? null : <p>{item.description}</p>}<p>{localTime(item.time.local_time)} · {item.time.timezone}</p></FactCard>)}
+      {life.data?.page.total_items === 0 ? <p>No {includeSensitive ? "" : "non-sensitive "}life events recorded.</p> : null}
+      {life.data?.items.map((item) => <FactCard key={item.id} title={item.title} metadata={<span>{item.provenance.source_type.replace("_", " ")} · {item.provenance.confirmation_state.replace("_", " ")}</span>}><p>{item.life_category.replace("_", " ")}</p>{item.description === null ? null : <p>{item.description}</p>}<p>{localTime(item.time.local_time)} · {item.time.timezone}</p></FactCard>)}
+      {life.data === undefined ? null : <PaginationControls label="Life event records" metadata={life.data.page} onPageChange={setLifePage} />}
     </section>
   </Page>;
 }

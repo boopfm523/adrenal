@@ -91,7 +91,7 @@ export function TodayPage(): React.JSX.Element {
   const unplannedDoses = comparison.data?.slots.filter((slot) => slot.slot_id === null) ?? [];
   const planVersions = comparison.data?.regimen_versions ?? [];
   const hasRecordedDose = comparison.data?.slots.some((slot) => slot.dose_id !== null) ?? false;
-  const openEpisode = episodes.data?.[0];
+  const openEpisode = episodes.data?.items[0];
 
   return (
     <Page title="Today" description="Recorded facts and your physician-approved plan remain separate.">

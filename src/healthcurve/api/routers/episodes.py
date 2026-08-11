@@ -9,14 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.routers.events import provenance_out, time_out
 from healthcurve.api.schemas import (
     EpisodeIn,
     EpisodeOut,
+    EpisodePage,
     EpisodeUpdate,
     InjectionIn,
     InjectionOut,
+    InjectionPage,
 )
 from healthcurve.episodes.models import (
     EmergencyInjectionEvent,
@@ -57,13 +60,27 @@ def create_episode(payload: EpisodeIn, session: DbSession, owner: CurrentOwner):
     return _episode_out(session, episode)
 
 
-@router.get("/stress-episodes", response_model=list[EpisodeOut])
-def list_episodes(session: DbSession, owner: CurrentOwner, open_only: bool = False):
+@router.get("/stress-episodes", response_model=EpisodePage)
+def list_episodes(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    status_filter: EpisodeStatus | None = None,
+    open_only: bool = False,
+) -> EpisodePage:
     query = select(StressEpisode).where(StressEpisode.owner_id == owner.id)
-    if open_only:
+    if status_filter is not None:
+        query = query.where(StressEpisode.status == status_filter)
+    elif open_only:
         query = query.where(StressEpisode.status == EpisodeStatus.OPEN)
-    rows = session.scalars(query.order_by(StressEpisode.started_at.desc()))
-    return [_episode_out(session, e) for e in rows]
+    total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    metadata = page_metadata(total_items, pagination)
+    rows = session.scalars(
+        query.order_by(StressEpisode.started_at.desc(), StressEpisode.id.asc())
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    )
+    return EpisodePage(items=[_episode_out(session, row) for row in rows], page=metadata)
 
 
 @router.patch(
@@ -138,16 +155,21 @@ def log_injection(payload: InjectionIn, session: DbSession, owner: CurrentOwner)
     return _injection_out(injection)
 
 
-@router.get("/emergency-injections", response_model=list[InjectionOut])
-def list_injections(session: DbSession, owner: CurrentOwner):
-    rows = list(
-        session.scalars(
-            select(EmergencyInjectionEvent)
-            .where(EmergencyInjectionEvent.owner_id == owner.id)
-            .order_by(EmergencyInjectionEvent.occurred_at.desc())
-        )
+@router.get("/emergency-injections", response_model=InjectionPage)
+def list_injections(
+    session: DbSession, owner: CurrentOwner, pagination: Pagination
+) -> InjectionPage:
+    page = paginate_current_facts(
+        session,
+        EmergencyInjectionEvent,
+        owner_id=owner.id,
+        request=pagination,
     )
-    return [_injection_out(e) for e in events.current_only(session, EmergencyInjectionEvent, rows)]
+    return InjectionPage(
+        items=[_injection_out(row) for row in page.items],
+        revisions=[_injection_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 def _owned_episode(session: DbSession, owner_id: uuid.UUID, episode_id: uuid.UUID) -> StressEpisode:

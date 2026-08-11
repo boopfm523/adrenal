@@ -226,6 +226,11 @@ class RegimenVersionOut(PlanResource):
     instructions: list[InstructionOut] = Field(default_factory=list)
 
 
+class RegimenVersionPage(ApiModel):
+    items: list[RegimenVersionOut]
+    page: PageMetadata
+
+
 # ---------------------------------------------------------------------------
 # Doses (fact)
 # ---------------------------------------------------------------------------
@@ -509,6 +514,12 @@ class DiaryOut(FactResource):
     provenance: ProvenanceOut
 
 
+class DiaryPage(ApiModel):
+    items: list[DiaryOut]
+    revisions: list[DiaryOut]
+    page: PageMetadata
+
+
 class LifeEventIn(ApiModel):
     title: str = Field(min_length=1, max_length=200)
     category: LifeEventCategory
@@ -526,6 +537,12 @@ class LifeEventOut(FactResource):
     is_sensitive: bool
     time: EventTimeOut
     provenance: ProvenanceOut
+
+
+class LifeEventPage(ApiModel):
+    items: list[LifeEventOut]
+    revisions: list[LifeEventOut]
+    page: PageMetadata
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +587,11 @@ class EpisodeOut(FactResource):
     symptom_count: int = 0
 
 
+class EpisodePage(ApiModel):
+    items: list[EpisodeOut]
+    page: PageMetadata
+
+
 class InjectionIn(ApiModel):
     """Emergency injection. Only the clinical essentials are required (SAFE-23)."""
 
@@ -607,6 +629,12 @@ class InjectionOut(FactResource):
     @field_serializer("amount")
     def _amount(self, value: Decimal) -> str:
         return str(value)
+
+
+class InjectionPage(ApiModel):
+    items: list[InjectionOut]
+    revisions: list[InjectionOut]
+    page: PageMetadata
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { createEpisode, getEpisodes, updateEpisode, type Episode } from "../api/
 import { useAuth } from "../auth/context";
 import { FactCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 import { formatDecimal } from "../format";
 
 function nowLocal(): string {
@@ -67,8 +68,11 @@ export function EpisodesPage(): React.JSX.Element {
   const auth = useAuth();
   const timezone = auth.session?.user.defaultTimezone ?? "UTC";
   const queryClient = useQueryClient();
-  const episodes = useQuery({ queryKey: ["episodes"], queryFn: getEpisodes });
-  const create = useMutation({ mutationFn: createEpisode, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["episodes"] }); } });
+  const [openPage, setOpenPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const openEpisodes = useQuery({ queryKey: ["episodes", "open", openPage], queryFn: () => getEpisodes(openPage, "open") });
+  const historyEpisodes = useQuery({ queryKey: ["episodes", "resolved", historyPage], queryFn: () => getEpisodes(historyPage, "resolved") });
+  const create = useMutation({ mutationFn: createEpisode, onSuccess: async () => { setOpenPage(1); await queryClient.invalidateQueries({ queryKey: ["episodes"] }); } });
 
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -77,13 +81,13 @@ export function EpisodesPage(): React.JSX.Element {
     create.mutate({ trigger: data.get("trigger") as string, severity: optional(data.get("severity")) as Episode["severity"], time: { local_time: data.get("started_at") as string, timezone: data.get("timezone") as string, fold: null }, highest_temperature_c: optional(data.get("temperature")), illness_description: optional(data.get("illness")), notes: optional(data.get("notes")) }, { onSuccess: () => { form.reset(); } });
   }
 
-  const open = episodes.data?.filter((episode) => episode.status === "open") ?? [];
-  const history = episodes.data?.filter((episode) => episode.status !== "open") ?? [];
+  const open = openEpisodes.data?.items ?? [];
+  const history = historyEpisodes.data?.items ?? [];
   return <Page title="Stress episodes" description="Group recorded symptoms, doses, and context for review without making causal claims.">
     <aside className="safety-note"><strong>Recorded facts, not dosing instructions.</strong> A dose linked to an episode records what happened; it is not part of your physician-approved medication plan. Follow your approved emergency instructions and seek urgent care when appropriate.</aside>
     <section aria-labelledby="open-episode-heading"><h2 id="open-episode-heading">Open a new episode</h2><form className="correction-form" onSubmit={submit}><label>Trigger<input name="trigger" required maxLength={200} /></label><label>Severity<select name="severity" defaultValue=""><option value="">Not recorded</option><option value="mild">Mild</option><option value="moderate">Moderate</option><option value="severe">Severe</option></select></label><label>Start time<input name="started_at" type="datetime-local" required defaultValue={nowLocal()} /></label><label>IANA timezone<input name="timezone" required defaultValue={timezone} /></label><label>Highest temperature (°C)<input name="temperature" type="number" min="25" max="45" step="0.1" /></label><label className="form-wide">Illness or stress context<textarea name="illness" /></label><label className="form-wide">Notes<textarea name="notes" /></label><button disabled={create.isPending} type="submit">Open episode</button></form>{create.isError ? <p className="error-summary" role="alert">The episode could not be opened. Check the local time and IANA timezone.</p> : null}</section>
-    {episodes.isPending ? <p role="status">Loading episodes…</p> : null}{episodes.isError ? <p className="error-summary" role="alert">Episodes could not be loaded.</p> : null}
-    <section aria-labelledby="active-heading"><h2 id="active-heading">Open episodes</h2>{open.length === 0 && !episodes.isPending ? <p>No episodes are currently open.</p> : open.map((episode) => <EpisodeCard key={episode.id} episode={episode} />)}</section>
-    <section aria-labelledby="history-heading"><h2 id="history-heading">Episode history</h2>{history.length === 0 && !episodes.isPending ? <p>No closed episodes recorded.</p> : history.map((episode) => <EpisodeCard key={episode.id} episode={episode} />)}</section>
+    {openEpisodes.isPending || historyEpisodes.isPending ? <p role="status">Loading episodes…</p> : null}{openEpisodes.isError || historyEpisodes.isError ? <p className="error-summary" role="alert">Episodes could not be loaded.</p> : null}
+    <section aria-labelledby="active-heading"><h2 id="active-heading">Open episodes</h2>{open.length === 0 && !openEpisodes.isPending ? <p>No episodes are currently open.</p> : open.map((episode) => <EpisodeCard key={episode.id} episode={episode} />)}{openEpisodes.data === undefined ? null : <PaginationControls label="Open episodes" metadata={openEpisodes.data.page} onPageChange={setOpenPage} />}</section>
+    <section aria-labelledby="history-heading"><h2 id="history-heading">Episode history</h2>{history.length === 0 && !historyEpisodes.isPending ? <p>No closed episodes recorded.</p> : history.map((episode) => <EpisodeCard key={episode.id} episode={episode} />)}{historyEpisodes.data === undefined ? null : <PaginationControls label="Episode history" metadata={historyEpisodes.data.page} onPageChange={setHistoryPage} />}</section>
   </Page>;
 }

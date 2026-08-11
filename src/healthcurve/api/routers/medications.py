@@ -9,10 +9,11 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from healthcurve import privacy
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.schemas import (
     DoseSlotOut,
     InstructionOut,
@@ -21,6 +22,7 @@ from healthcurve.api.schemas import (
     RegimenApprovalIn,
     RegimenVersionIn,
     RegimenVersionOut,
+    RegimenVersionPage,
 )
 from healthcurve.config import Environment
 from healthcurve.medications import service
@@ -99,21 +101,31 @@ def _medication_out(m: Medication) -> MedicationOut:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/regimens", response_model=list[RegimenVersionOut])
+@router.get("/regimens", response_model=RegimenVersionPage)
 def list_regimens(
     session: DbSession,
     owner: CurrentOwner,
     settings: AppSettings,
+    pagination: Pagination,
     status_filter: RegimenStatus | None = None,
-):
+) -> RegimenVersionPage:
     query = select(RegimenVersion).where(RegimenVersion.owner_id == owner.id)
     if status_filter is not None:
         query = query.where(RegimenVersion.status == status_filter)
-    query = query.order_by(RegimenVersion.effective_from.desc())
-    return [
-        _regimen_out(v, deletion_allowed=settings.environment is Environment.DEV)
-        for v in session.scalars(query)
-    ]
+    total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    metadata = page_metadata(total_items, pagination)
+    rows = session.scalars(
+        query.order_by(RegimenVersion.effective_from.desc(), RegimenVersion.id.asc())
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    )
+    return RegimenVersionPage(
+        items=[
+            _regimen_out(row, deletion_allowed=settings.environment is Environment.DEV)
+            for row in rows
+        ],
+        page=metadata,
+    )
 
 
 @router.get("/regimens/active", response_model=RegimenVersionOut | None)

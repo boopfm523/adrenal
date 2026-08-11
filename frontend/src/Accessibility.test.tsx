@@ -53,7 +53,7 @@ describe("automated accessibility audit", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.endsWith("/regimens/active")) return Promise.resolve(json(null));
-      if (url.endsWith("/regimens")) return Promise.resolve(json([draft]));
+      if (url.includes("/regimens?")) return Promise.resolve(json({ items: [draft], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }));
       if (url.endsWith("/medications")) return Promise.resolve(json([]));
       return Promise.resolve(json({ detail: "not found" }));
     });

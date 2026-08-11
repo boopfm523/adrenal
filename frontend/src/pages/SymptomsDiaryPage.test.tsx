@@ -11,6 +11,7 @@ const provenance = { recorded_at: "2026-08-09T13:01:00Z", source_type: "web", co
 
 function requestUrl(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 function response(body: unknown, status = 200): Response { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
+function factPage(items: unknown[]): Record<string, unknown> { return { items, revisions: [], page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
 describe("Symptoms and diary page", () => {
   afterEach(() => { sessionStore.clear(); });
@@ -27,8 +28,8 @@ describe("Symptoms and diary page", () => {
       const url = requestUrl(input);
       if (url.includes(`/symptoms/${current.id}/correct`) && init?.method === "POST") return Promise.resolve(response({ ...current, severity: 7 }, 201));
       if (url.includes("/symptoms")) return Promise.resolve(response({ items: [current], revisions: [prior], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }));
-      if (url.includes("/diary-events")) return Promise.resolve(response(url.includes("include_sensitive=true") ? [publicDiary, privateDiary] : [publicDiary]));
-      if (url.includes("/life-events")) return Promise.resolve(response(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife]));
+      if (url.includes("/diary-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicDiary, privateDiary] : [publicDiary])));
+      if (url.includes("/life-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife])));
       return Promise.resolve(response({ detail: "not found" }, 404));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><SymptomsDiaryPage /></MemoryRouter></QueryClientProvider>);

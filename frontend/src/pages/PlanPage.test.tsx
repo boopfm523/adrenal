@@ -21,6 +21,7 @@ function version(id: string, label: string, status: "draft" | "approved" | "reti
 
 function requestUrl(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 function response(body: unknown): Response { return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } }); }
+function versionPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
 describe("Medication plan page", () => {
   it("keeps approval provenance visible, distinguishes drafts, and renders a deterministic diff", async () => {
@@ -31,7 +32,7 @@ describe("Medication plan page", () => {
       const url = requestUrl(input);
       if (url.endsWith("/regimens/active")) return Promise.resolve(response(approved));
       if (url.includes("/diff/")) return Promise.resolve(response({ added: ["Synthetic medicine 12.0000 mg at 07:00:00"], removed: [], changed: ["Synthetic medicine at 07:00:00: 10.0000 mg -> 12.0000 mg"] }));
-      if (url.endsWith("/regimens")) return Promise.resolve(response([draft, approved, retired]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([draft, approved, retired])));
       return Promise.resolve(response({ detail: "not found" }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
@@ -65,7 +66,7 @@ describe("Medication plan page", () => {
         removed = true;
         return Promise.resolve(new Response(null, { status: 204 }));
       }
-      if (url.endsWith("/regimens")) return Promise.resolve(response(removed ? [approved, retired] : [draft, approved, retired]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage(removed ? [approved, retired] : [draft, approved, retired])));
       if (url.includes("/diff/")) return Promise.resolve(response({ added: [], removed: [], changed: [] }));
       return Promise.resolve(response({ detail: "not found" }));
     });
@@ -80,7 +81,7 @@ describe("Medication plan page", () => {
 
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Disposable synthetic draft"));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Recorded doses stay in HealthCurve"));
-    expect(await screen.findByRole("status")).toHaveTextContent("selected development plan was permanently deleted");
+    expect(await screen.findByText(/selected development plan was permanently deleted/)).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Disposable synthetic draft" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Approved synthetic plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Retired synthetic plan" })).toBeVisible();
@@ -100,7 +101,7 @@ describe("Medication plan page", () => {
       const url = requestUrl(input);
       if (init?.method === "DELETE") requests.push(url);
       if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
-      if (url.endsWith("/regimens")) return Promise.resolve(response([draft]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([draft])));
       return Promise.resolve(response({ detail: "not found" }));
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -115,7 +116,7 @@ describe("Medication plan page", () => {
       const url = requestUrl(input);
       if (init?.method === "DELETE") requests.push(url);
       if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
-      if (url.endsWith("/regimens")) return Promise.resolve(response([developmentDraft]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([developmentDraft])));
       return Promise.resolve(response({ detail: "not found" }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
@@ -142,7 +143,7 @@ describe("Medication plan page", () => {
         createdDraft = version("33333333-3333-4333-8333-333333333333", "My real plan", "draft", "2026-08-15T07:00:00");
         return Promise.resolve(response(createdDraft));
       }
-      if (url.endsWith("/regimens")) return Promise.resolve(response(createdDraft === null ? [] : [createdDraft]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage(createdDraft === null ? [] : [createdDraft])));
       return Promise.resolve(response({ added: [], removed: [], changed: [] }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
@@ -171,7 +172,7 @@ describe("Medication plan page", () => {
     expect(scheduledAmount).toBeValid();
     await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Next, review it below and record physician approval");
+    expect(await screen.findByText(/Next, review it below and record physician approval/)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Next step: review and record physician approval" })).toHaveFocus();
     expect(screen.getByText(/Required provenance: the approving clinician or role and the source of approval/i)).toBeVisible();
     expect(screen.getByText(/A future-dated plan will wait until that time/i)).toBeVisible();
@@ -200,7 +201,7 @@ describe("Medication plan page", () => {
       const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
       requests.push({ url, method, body });
       if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
-      if (url.endsWith("/regimens")) return Promise.resolve(response([]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([])));
       if (url.endsWith("/medications") && method === "POST") {
         medications = [createdMedication];
         return Promise.resolve(response(createdMedication));
@@ -252,7 +253,7 @@ describe("Medication plan page", () => {
         isApproved = true;
         return Promise.resolve(response(approved));
       }
-      if (url.endsWith("/regimens")) return Promise.resolve(response([isApproved ? approved : draft]));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([isApproved ? approved : draft])));
       return Promise.resolve(response({ detail: "not found" }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
@@ -267,7 +268,7 @@ describe("Medication plan page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Check provenance and overlapping effective dates");
     await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("applies this plan according to its effective dates");
+    expect(await screen.findByText(/applies this plan according to its effective dates/)).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Reviewed synthetic draft · currently in force" })).toBeVisible();
     expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
     const approval = requests.filter((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST").at(-1);

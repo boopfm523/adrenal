@@ -16,9 +16,11 @@ from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import (
     DiaryIn,
     DiaryOut,
+    DiaryPage,
     EventTimeOut,
     LifeEventIn,
     LifeEventOut,
+    LifeEventPage,
     ProvenanceOut,
     SymptomCorrectionIn,
     SymptomIn,
@@ -188,19 +190,29 @@ def create_diary(payload: DiaryIn, session: DbSession, owner: CurrentOwner):
     return _diary_out(event)
 
 
-@router.get("/diary-events", response_model=list[DiaryOut])
+@router.get("/diary-events", response_model=DiaryPage)
 def list_diary(
     session: DbSession,
     owner: CurrentOwner,
+    pagination: Pagination,
     include_sensitive: bool = Query(
         default=False, description="Sensitive entries are excluded from default views (T7)."
     ),
-):
-    query = select(DiaryEvent).where(DiaryEvent.owner_id == owner.id)
-    if not include_sensitive:
-        query = query.where(DiaryEvent.is_sensitive.is_(False))
-    rows = list(session.scalars(query.order_by(DiaryEvent.occurred_at.desc())))
-    return [_diary_out(e) for e in events.current_only(session, DiaryEvent, rows)]
+) -> DiaryPage:
+    predicates = () if include_sensitive else (DiaryEvent.is_sensitive.is_(False),)
+    page = paginate_current_facts(
+        session,
+        DiaryEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=predicates,
+        include_revisions=False,
+    )
+    return DiaryPage(
+        items=[_diary_out(row) for row in page.items],
+        revisions=[_diary_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 def _diary_out(e: DiaryEvent) -> DiaryOut:
@@ -242,13 +254,27 @@ def create_life_event(payload: LifeEventIn, session: DbSession, owner: CurrentOw
     return _life_out(event)
 
 
-@router.get("/life-events", response_model=list[LifeEventOut])
-def list_life_events(session: DbSession, owner: CurrentOwner, include_sensitive: bool = False):
-    query = select(LifeEvent).where(LifeEvent.owner_id == owner.id)
-    if not include_sensitive:
-        query = query.where(LifeEvent.is_sensitive.is_(False))
-    rows = list(session.scalars(query.order_by(LifeEvent.occurred_at.desc())))
-    return [_life_out(e) for e in events.current_only(session, LifeEvent, rows)]
+@router.get("/life-events", response_model=LifeEventPage)
+def list_life_events(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    include_sensitive: bool = False,
+) -> LifeEventPage:
+    predicates = () if include_sensitive else (LifeEvent.is_sensitive.is_(False),)
+    page = paginate_current_facts(
+        session,
+        LifeEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=predicates,
+        include_revisions=False,
+    )
+    return LifeEventPage(
+        items=[_life_out(row) for row in page.items],
+        revisions=[_life_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 def _life_out(e: LifeEvent) -> LifeEventOut:
