@@ -64,14 +64,13 @@ function GarminRecordsTable({ records }: { records: GarminRecord[] }): React.JSX
   const ordered = [...records].sort((left, right) => left.time.occurred_at.localeCompare(right.time.occurred_at));
   return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Garmin recorded observations table">
     <table className="vital-table garmin-table">
-      <caption>Garmin-recorded observations in experienced-time order. Unavailable provider values are shown as unavailable, never zero. Activity distance is miles only.</caption>
-      <thead><tr><th scope="col">Experienced time</th><th scope="col">Observation</th><th scope="col">Recorded value</th><th scope="col">Duration and details</th><th scope="col">Source and provenance</th></tr></thead>
+      <caption>Garmin provider-imported recorded facts in experienced-time order. Unavailable provider values are shown as unavailable, never zero. Activity distance is miles only.</caption>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Observation</th><th scope="col">Recorded value</th><th scope="col">Duration and details</th></tr></thead>
       <tbody>{ordered.map((record) => <tr key={record.id} data-category="fact">
         <td className="timeline-time">{displayTime(record.time.local_time)}<span>{record.time.timezone}</span></td>
-        <td><strong>{record.kind === "daily" ? record.metric_type?.replaceAll("_", " ") : record.kind === "sleep" ? "sleep" : record.activity_type?.replaceAll("_", " ")}</strong><span>Garmin recorded observation</span></td>
+        <td><strong>{record.kind === "daily" ? record.metric_type?.replaceAll("_", " ") : record.kind === "sleep" ? "sleep" : record.activity_type?.replaceAll("_", " ")}</strong>{record.provenance.is_correction ? <span>{`Provider correction · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}</td>
         <td>{record.kind === "daily" ? <>{record.value ?? <span className="missing-value">Unavailable</span>} {record.unit ?? ""}</> : record.kind === "sleep" ? <>Sleep score: {record.sleep_score ?? <span className="missing-value">Unavailable</span>}</> : <>Distance: {record.distance_miles == null ? <span className="missing-value">Unavailable</span> : `${record.distance_miles} mi`}</>}</td>
         <td>{record.kind === "daily" ? <span className="missing-value">Daily summary</span> : <>{duration(record.duration_seconds)}{record.kind === "sleep" ? <><span>Awakenings: {record.awakenings ?? "Unavailable"}</span><span>Duration source: {record.duration_source?.replaceAll("_", " ") ?? "Unavailable"}</span></> : null}</>}</td>
-        <td><span>Garmin · {source(record)}</span><span>{record.provenance.is_correction ? `Provider correction · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original provider record"}</span></td>
       </tr>)}</tbody>
     </table>
   </div>;
