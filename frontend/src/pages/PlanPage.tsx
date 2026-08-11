@@ -192,6 +192,7 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
   return <section className="plan-editor" aria-labelledby="plan-editor-heading">
     <h2 id="plan-editor-heading" ref={headingRef} tabIndex={-1}>{editDraft === null ? (source === null ? "Create your first plan draft" : "Create a new plan version") : "Edit unapproved plan draft"}</h2>
     <p className="draft-warning"><strong>This form creates an unapproved draft.</strong> Saving it does not make it your physician-approved plan and does not record any doses as taken.</p>
+    <MedicationCreator onCreated={(medication) => { setSelectedNewMedication(medication); setSlots((items) => items.map((item, index) => index === items.length - 1 && item.medication_id === "" ? { ...item, medication_id: medication.id } : item)); }} />
     <form onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
@@ -223,7 +224,6 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
           <button type="button" className="secondary-button" onClick={() => { setSlots((items) => items.filter((_, itemIndex) => itemIndex !== index)); }}>Remove slot</button>
         </div>)}
         <button type="button" className="secondary-button" onClick={() => { setSlots((items) => [...items, blankSlot(available[0]?.id)]); }}>Add scheduled slot</button>
-        <MedicationCreator onCreated={(medication) => { setSelectedNewMedication(medication); setSlots((items) => items.map((item, index) => index === items.length - 1 && item.medication_id === "" ? { ...item, medication_id: medication.id } : item)); }} />
       </fieldset>
 
       <fieldset><legend>Physician-authored instructions</legend>

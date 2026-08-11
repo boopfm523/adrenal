@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -183,6 +183,54 @@ describe("Medication plan page", () => {
       instructions: [],
     });
     expect(requests.some((request) => request.url.includes("/approve"))).toBe(false);
+  });
+
+  it("creates a medication in an independent, keyboard-operable form", async () => {
+    const createdMedication = {
+      id: "88888888-8888-4888-8888-888888888888", category: "plan", name: "Synthetic independent medicine",
+      formulation: "tablet", strength: "5", strength_unit: "mg", default_unit: "mg", default_route: "oral",
+      active_from: null, active_to: null, notes: null,
+    };
+    const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    let medications: typeof createdMedication[] = [];
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/regimens")) return Promise.resolve(response([]));
+      if (url.endsWith("/medications") && method === "POST") {
+        medications = [createdMedication];
+        return Promise.resolve(response(createdMedication));
+      }
+      if (url.endsWith("/medications")) return Promise.resolve(response(medications));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    const view = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
+    expect(view.container.querySelector("form form")).toBeNull();
+    expect(view.container.querySelectorAll("form")).toHaveLength(2);
+    await userEvent.click(screen.getByText("Add a medication to the list"));
+    const name = screen.getByLabelText("Name");
+    name.focus();
+    await userEvent.keyboard("Synthetic independent medicine");
+    await userEvent.tab();
+    expect(screen.getByLabelText("Formulation")).toHaveFocus();
+    await userEvent.keyboard("tablet");
+    await userEvent.tab();
+    await userEvent.keyboard("5");
+    await userEvent.tab();
+    await userEvent.keyboard("mg");
+    screen.getByRole("button", { name: "Save medication" }).focus();
+    await userEvent.keyboard("[Enter]");
+
+    await waitFor(() => { expect(screen.getByLabelText("Medication and formulation")).toHaveValue(createdMedication.id); });
+    expect(requests.filter((request) => request.method === "POST" && request.url.endsWith("/medications"))).toHaveLength(1);
+    expect(requests.some((request) => request.method === "POST" && request.url.endsWith("/regimens"))).toBe(false);
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/form cannot be a descendant of form|nested form/i);
   });
 
   it("requires explicit provenance and acknowledgement before approving a draft", async () => {
