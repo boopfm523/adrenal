@@ -35,6 +35,10 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+function page(items: unknown[], revisions: unknown[] = []) {
+  return { items, revisions, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } };
+}
+
 function renderPage(): void {
   sessionStore.set(session);
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><HealthDataPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
@@ -53,7 +57,7 @@ describe("Health data page", () => {
         return Promise.resolve(json(url.endsWith("/weight") ? weight : pressure, 201));
       }
       if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ records: [], notice: "Synthetic" }));
-      return Promise.resolve(json(url.includes("blood-pressure") ? [pressure] : [weight]));
+      return Promise.resolve(json(url.includes("blood-pressure") ? page([pressure]) : page([weight])));
     });
     renderPage();
     expect(await screen.findByRole("rowheader", { name: "118/76 mmHg" })).toBeVisible();
@@ -78,7 +82,7 @@ describe("Health data page", () => {
       const url = requestUrl(input);
       if (url.endsWith(`/blood-pressure/${corrected.id}/correct`) && init?.method === "POST") return Promise.resolve(json({ ...corrected, diastolic_mmhg: 77 }, 201));
       if (url.includes("/integrations/garmin/records")) return Promise.resolve(json(garminRecords));
-      return Promise.resolve(json(url.includes("blood-pressure") ? [withoutPulse, pressure, corrected] : [kgWeight, weight]));
+      return Promise.resolve(json(url.includes("blood-pressure") ? page([corrected, withoutPulse], [pressure]) : page([kgWeight, weight])));
     });
     renderPage();
     expect(await screen.findByRole("img", { name: /Blood pressure/ })).toBeVisible();

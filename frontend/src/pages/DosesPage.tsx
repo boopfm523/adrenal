@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { correctDose, getDoses, type Dose, type DoseCorrectionInput } from "../api/client";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement } from "../format";
 
 interface FormValues {
@@ -96,14 +97,11 @@ function CorrectionForm({ dose, onCancel }: { dose: Dose; onCancel: () => void }
 }
 
 export function DosesPage(): React.JSX.Element {
-  const doses = useQuery({ queryKey: ["doses", "with-history"], queryFn: () => getDoses(true) });
+  const [page, setPage] = useState(1);
+  const doses = useQuery({ queryKey: ["doses", page], queryFn: () => getDoses(page) });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const byId = new Map(doses.data?.map((dose) => [dose.id, dose]) ?? []);
-  const supersededIds = new Set(doses.data?.flatMap((dose) => dose.provenance.supersedes_id === null ? [] : [dose.provenance.supersedes_id]) ?? []);
-  const current = (doses.data?.filter((dose) => !supersededIds.has(dose.id)) ?? []).sort((left, right) => {
-    const timeOrder = left.time.occurred_at.localeCompare(right.time.occurred_at);
-    return timeOrder === 0 ? left.id.localeCompare(right.id) : timeOrder;
-  });
+  const byId = new Map([...(doses.data?.items ?? []), ...(doses.data?.revisions ?? [])].map((dose) => [dose.id, dose]));
+  const current = doses.data?.items ?? [];
 
   function historyFor(dose: Dose): Dose[] {
     const history: Dose[] = [];
@@ -121,10 +119,10 @@ export function DosesPage(): React.JSX.Element {
     <Page title="Doses" description="Actual recorded doses and their immutable correction history—not the physician-approved schedule.">
       {doses.isPending ? <p role="status">Loading recorded doses…</p> : null}
       {doses.isError ? <p className="error-summary" role="alert">Recorded doses could not be loaded.</p> : null}
-      {doses.data?.length === 0 ? <section className="empty-state"><h2>No doses recorded</h2><p>A missing record is not a recorded zero dose.</p></section> : null}
+      {doses.data?.page.total_items === 0 ? <section className="empty-state"><h2>No doses recorded</h2><p>A missing record is not a recorded zero dose.</p></section> : null}
       {current.length === 0 ? null : <div className="table-scroll dose-table-region" tabIndex={0} role="region" aria-label="Recorded doses table">
         <table className="dose-table">
-          <caption>Current recorded dose facts ordered by experienced time, earliest first. Correction history is preserved.</caption>
+          <caption>Current recorded dose facts ordered by experienced time, latest first. Correction history is preserved.</caption>
           <thead><tr><th scope="col">Experienced time</th><th scope="col">Medication and amount</th><th scope="col">Category and route</th><th scope="col">Source and confirmation</th><th scope="col">Provenance and actions</th></tr></thead>
           <tbody>{current.flatMap((dose) => {
             const history = historyFor(dose);
@@ -139,6 +137,7 @@ export function DosesPage(): React.JSX.Element {
           })}</tbody>
         </table>
       </div>}
+      {doses.data === undefined ? null : <PaginationControls label="Recorded doses" metadata={doses.data.page} onPageChange={(nextPage) => { setEditingId(null); setPage(nextPage); }} />}
     </Page>
   );
 }

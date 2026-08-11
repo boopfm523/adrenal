@@ -26,7 +26,7 @@ describe("Symptoms and diary page", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.includes(`/symptoms/${current.id}/correct`) && init?.method === "POST") return Promise.resolve(response({ ...current, severity: 7 }, 201));
-      if (url.includes("/symptoms")) return Promise.resolve(response([current, prior]));
+      if (url.includes("/symptoms")) return Promise.resolve(response({ items: [current], revisions: [prior], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }));
       if (url.includes("/diary-events")) return Promise.resolve(response(url.includes("include_sensitive=true") ? [publicDiary, privateDiary] : [publicDiary]));
       if (url.includes("/life-events")) return Promise.resolve(response(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife]));
       return Promise.resolve(response({ detail: "not found" }, 404));
@@ -37,7 +37,7 @@ describe("Symptoms and diary page", () => {
     expect(screen.getByText("Synthetic public event")).toBeVisible();
     expect(screen.queryByText("Synthetic private note")).not.toBeInTheDocument();
     expect(screen.queryByText("Synthetic private event")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByText("Show superseded value"));
+    await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/severity 4\/10/)).toBeVisible();
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Reveal sensitive diary and life-event entries" }));

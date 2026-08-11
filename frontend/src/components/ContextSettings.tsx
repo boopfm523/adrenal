@@ -11,6 +11,7 @@ import {
 import { useAuth } from "../auth/context";
 import { formatDecimal, formatMeasurement } from "../format";
 import { ContextCard } from "./CategoryCards";
+import { PaginationControls } from "./PaginationControls";
 
 type Precision = ContextInput["location_precision"];
 
@@ -55,7 +56,8 @@ export function ContextSettings(): React.JSX.Element {
   const [precision, setPrecision] = useState<Precision>("coarse");
   const [exactConsent, setExactConsent] = useState(false);
   const [includeWeather, setIncludeWeather] = useState(false);
-  const contexts = useQuery({ queryKey: ["context-events"], queryFn: getContextEvents });
+  const [page, setPage] = useState(1);
+  const contexts = useQuery({ queryKey: ["context-events", page], queryFn: () => getContextEvents(page) });
   const create = useMutation({
     mutationFn: createContextEvent,
     onSuccess: () => {
@@ -70,6 +72,7 @@ export function ContextSettings(): React.JSX.Element {
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       deleteContextEvent(id, password),
     onSuccess: () => {
+      if (page > 1 && contexts.data?.items.length === 1) setPage((current) => current - 1);
       void queryClient.invalidateQueries({ queryKey: ["context-events"] });
       void queryClient.invalidateQueries({ queryKey: ["timeline"] });
     },
@@ -162,8 +165,8 @@ export function ContextSettings(): React.JSX.Element {
         <h3>Recorded context</h3>
         {contexts.isPending ? <p role="status">Loading recorded context…</p> : null}
         {contexts.isError ? <p className="error-summary" role="alert">Recorded context could not be loaded.</p> : null}
-        {contexts.data?.length === 0 ? <p className="empty-state">No context has been recorded. This is optional.</p> : null}
-        {contexts.data?.map((item) => <ContextCard key={item.id} headingLevel={4} title={contextTitle(item)} metadata={<span>{item.provenance.is_correction ? "Corrected record" : "Original record"} · {item.time.local_time.replace("T", " ").slice(0, 16)} · {item.time.timezone}</span>}>
+        {contexts.data?.page.total_items === 0 ? <p className="empty-state">No context has been recorded. This is optional.</p> : null}
+        {contexts.data?.items.map((item) => <ContextCard key={item.id} headingLevel={4} title={contextTitle(item)} metadata={<span>{item.provenance.is_correction ? "Corrected record" : "Original record"} · {item.time.local_time.replace("T", " ").slice(0, 16)} · {item.time.timezone}</span>}>
           <dl className="provenance-grid">
             <div><dt>Precision</dt><dd>{item.location_precision}</dd></div>
             <div><dt>Location</dt><dd>{item.location_precision === "exact" ? `${item.latitude ?? "Unavailable"}, ${item.longitude ?? "Unavailable"}` : item.coarse_location_label ?? "Not recorded"}</dd></div>
@@ -175,6 +178,7 @@ export function ContextSettings(): React.JSX.Element {
           </form>
           {remove.isError && remove.variables.id === item.id ? <p className="error-summary" role="alert">Context was not deleted. Check your password.</p> : null}
         </ContextCard>)}
+        {contexts.data === undefined ? null : <PaginationControls label="Context records" metadata={contexts.data.page} onPageChange={setPage} />}
       </div>
     </section>
   );

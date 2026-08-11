@@ -665,12 +665,9 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
 
     current_bp = client.get("/api/v1/blood-pressure").json()
     current_weight = client.get("/api/v1/weight").json()
-    assert {row["id"] for row in current_bp} == {corrected_bp["id"]}
-    assert {row["id"] for row in current_weight} == {corrected_weight["id"]}
-    assert {
-        row["id"]
-        for row in client.get("/api/v1/blood-pressure", params={"include_superseded": True}).json()
-    } == {bp["id"], corrected_bp["id"]}
+    assert {row["id"] for row in current_bp["items"]} == {corrected_bp["id"]}
+    assert {row["id"] for row in current_weight["items"]} == {corrected_weight["id"]}
+    assert {row["id"] for row in current_bp["revisions"]} == {bp["id"]}
 
     timeline = client.get("/api/v1/timeline", params={"types": "blood_pressure,weight"})
     assert timeline.status_code == 200, timeline.text
@@ -832,11 +829,10 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
     assert "35.676200" not in context_item["summary"]
 
     current = client.get("/api/v1/context-events").json()
-    history = client.get("/api/v1/context-events", params={"include_superseded": True}).json()
-    assert replacement["id"] in {row["id"] for row in current}
-    assert str(hidden_id) not in {row["id"] for row in current}
-    assert original["id"] not in {row["id"] for row in current}
-    assert {original["id"], replacement["id"]} <= {row["id"] for row in history}
+    assert replacement["id"] in {row["id"] for row in current["items"]}
+    assert str(hidden_id) not in {row["id"] for row in current["items"]}
+    assert original["id"] not in {row["id"] for row in current["items"]}
+    assert {row["id"] for row in current["revisions"]} == {original["id"]}
     with Session(engine) as session:
         original_row = session.get(ContextEvent, uuid.UUID(original["id"]))
         assert original_row is not None
@@ -848,7 +844,7 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
     assert wrong.status_code == 403
     deleted = client.request("DELETE", path, headers=logged_in, json={"password": PASSWORD})
     assert deleted.status_code == 204, deleted.text
-    remaining_ids = {row["id"] for row in client.get("/api/v1/context-events").json()}
+    remaining_ids = {row["id"] for row in client.get("/api/v1/context-events").json()["items"]}
     assert original["id"] not in remaining_ids
     assert replacement["id"] not in remaining_ids
     assert diary_id in {row["id"] for row in client.get("/api/v1/diary-events").json()}
@@ -2437,9 +2433,8 @@ def test_dose_correction_is_typed_and_preserves_superseded_fact(
     assert body["provenance"]["correction_reason"] == "Synthetic transcription correction"
 
     current = client.get("/api/v1/doses").json()
-    history = client.get("/api/v1/doses", params={"include_superseded": True}).json()
-    current_ids = {row["id"] for row in current}
-    history_ids = {row["id"] for row in history}
+    current_ids = {row["id"] for row in current["items"]}
+    history_ids = {row["id"] for row in [*current["items"], *current["revisions"]]}
     assert body["id"] in current_ids
     assert original["id"] not in current_ids
     assert {original["id"], body["id"]} <= history_ids
@@ -2471,7 +2466,7 @@ def test_symptom_correction_preserves_typed_history(
         json={
             "name": "Synthetic fatigue",
             "severity": 4,
-            "time": {"local_time": "2026-05-03T09:00:00", "timezone": "Europe/London"},
+            "time": {"local_time": "2021-05-03T09:00:00", "timezone": "Europe/London"},
         },
         headers=logged_in,
     ).json()
@@ -2487,14 +2482,42 @@ def test_symptom_correction_preserves_typed_history(
     corrected = response.json()
     assert corrected["severity"] == 6
     assert corrected["provenance"]["supersedes_id"] == original["id"]
-    current_ids = {row["id"] for row in client.get("/api/v1/symptoms").json()}
-    history_ids = {
-        row["id"]
-        for row in client.get("/api/v1/symptoms", params={"include_superseded": True}).json()
-    }
+    symptom_page = client.get("/api/v1/symptoms").json()
+    current_ids = {row["id"] for row in symptom_page["items"]}
+    history_ids = {row["id"] for row in [*symptom_page["items"], *symptom_page["revisions"]]}
     assert corrected["id"] in current_ids
     assert original["id"] not in current_ids
     assert {original["id"], corrected["id"]} <= history_ids
+
+    extra = client.post(
+        "/api/v1/symptoms",
+        json={
+            "name": "Synthetic second paged symptom",
+            "severity": 2,
+            "time": {"local_time": "2021-05-04T09:00:00", "timezone": "Europe/London"},
+        },
+        headers=logged_in,
+    ).json()
+    page_params = {
+        "page_size": 1,
+        "date_from": "2021-05-03T00:00:00Z",
+        "date_to": "2021-05-05T00:00:00Z",
+    }
+    first = client.get("/api/v1/symptoms", params=page_params).json()
+    second = client.get("/api/v1/symptoms", params={**page_params, "page": 2}).json()
+    assert first["page"] == {
+        "page": 1,
+        "page_size": 1,
+        "total_items": 2,
+        "total_pages": 2,
+    }
+    assert second["page"]["page"] == 2
+    assert {first["items"][0]["id"], second["items"][0]["id"]} == {
+        corrected["id"],
+        extra["id"],
+    }
+    assert {row["id"] for row in [*first["revisions"], *second["revisions"]]} == {original["id"]}
+    assert client.get("/api/v1/symptoms", params={**page_params, "page": 3}).status_code == 422
 
 
 def test_sensitive_diary_and_life_events_require_explicit_reveal(
@@ -3922,13 +3945,13 @@ def test_report_validation_and_owner_boundary(
 def test_missing_doses_are_derived_not_stored(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:
-    before = len(client.get("/api/v1/doses").json())
+    before = len(client.get("/api/v1/doses").json()["items"])
     comparison = client.get(
         "/api/v1/doses/plan-comparison",
         params={"day": "2026-05-02", "timezone": "Europe/London"},
     )
     assert comparison.status_code == 200, comparison.text
-    after = len(client.get("/api/v1/doses").json())
+    after = len(client.get("/api/v1/doses").json()["items"])
     assert before == after, "comparing a day must not create dose rows"
 
 

@@ -31,6 +31,10 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function page(items: unknown[], revisions: unknown[] = [], currentPage = 1, totalItems = items.length, totalPages = 1) {
+  return { items, revisions, page: { page: currentPage, page_size: 25, total_items: totalItems, total_pages: totalPages } };
+}
+
 describe("Doses page", () => {
   afterEach(() => { sessionStore.clear(); });
 
@@ -43,7 +47,7 @@ describe("Doses page", () => {
       if (url.endsWith(`/doses/${current.id}/correct`) && init?.method === "POST") {
         return Promise.resolve(new Response(JSON.stringify(dose("44444444-4444-4444-8444-444444444444", "10.2500", current.id, "Synthetic second correction")), { status: 201, headers: { "Content-Type": "application/json" } }));
       }
-      return Promise.resolve(new Response(JSON.stringify([current, original]), { headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(new Response(JSON.stringify(page([current], [original])), { headers: { "Content-Type": "application/json" } }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
 
@@ -76,23 +80,40 @@ describe("Doses page", () => {
     const later = dose("33333333-3333-4333-8333-333333333333", "3.0000", null, null, "2026-08-09T12:00:00Z", "Later medicine");
     const equalSecond = dose("22222222-2222-4222-8222-222222222222", "2.0000", null, null, "2026-08-09T10:00:00Z", "Equal second");
     const equalFirst = dose("11111111-1111-4111-8111-111111111111", "1.0000", null, null, "2026-08-09T10:00:00Z", "Equal first");
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([later, equalSecond, equalFirst]), { headers: { "Content-Type": "application/json" } }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(page([later, equalFirst, equalSecond])), { headers: { "Content-Type": "application/json" } }));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
 
     const rows = within(await screen.findByRole("table")).getAllByRole("row").slice(1);
     expect(rows.map((row) => within(row).getByRole("rowheader").textContent)).toEqual([
+      "Later medicine3 mg",
       "Equal first1 mg",
       "Equal second2 mg",
-      "Later medicine3 mg",
     ]);
   });
 
   it("shows a safe empty state without a table", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]", { headers: { "Content-Type": "application/json" } }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(page([])), { headers: { "Content-Type": "application/json" } }));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
 
     expect(await screen.findByRole("heading", { name: "No doses recorded" })).toBeVisible();
     expect(screen.getByText("A missing record is not a recorded zero dose.")).toBeVisible();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("requests the next bounded page through accessible controls", async () => {
+    const first = dose("11111111-1111-4111-8111-111111111111", "1.0000", null, null);
+    const last = dose("22222222-2222-4222-8222-222222222222", "2.0000", null, null);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const secondPage = requestUrl(input).includes("page=2");
+      return Promise.resolve(new Response(JSON.stringify(secondPage ? page([last], [], 2, 26, 2) : page([first], [], 1, 26, 2)), { headers: { "Content-Type": "application/json" } }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
+
+    expect(await screen.findByText("Showing 1–25 of 26. Page 1 of 2.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/doses?page=2"))).toBe(true); });
+    expect(await screen.findByText("Showing 26–26 of 26. Page 2 of 2.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 });

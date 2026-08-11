@@ -20,6 +20,7 @@ import {
 import { useAuth } from "../auth/context";
 import { AccessibleLineChart, type ChartSeries } from "../components/AccessibleLineChart";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 import {
   formatDecimal,
   formatGarminDailyValue,
@@ -35,11 +36,6 @@ function localNow(): string {
 
 function displayTime(value: string): string {
   return value.replace("T", " ").slice(0, 16);
-}
-
-function currentOnly<T extends { id: string; provenance: { supersedes_id?: string | null } }>(rows: T[]): T[] {
-  const superseded = new Set(rows.flatMap((row) => row.provenance.supersedes_id == null ? [] : [row.provenance.supersedes_id]));
-  return rows.filter((row) => !superseded.has(row.id));
 }
 
 function historyFor<T extends { id: string; provenance: { supersedes_id?: string | null } }>(record: T, byId: Map<string, T>): T[] {
@@ -266,23 +262,25 @@ export function HealthDataPage(): React.JSX.Element {
   const { session } = useAuth();
   const timezone = session?.user.defaultTimezone ?? "UTC";
   const [editing, setEditing] = useState<string | null>(null);
-  const bp = useQuery({ queryKey: ["blood-pressure", "with-history"], queryFn: () => getBloodPressure(true) });
-  const weight = useQuery({ queryKey: ["weight", "with-history"], queryFn: () => getWeight(true) });
+  const [bpPage, setBpPage] = useState(1);
+  const [weightPage, setWeightPage] = useState(1);
+  const bp = useQuery({ queryKey: ["blood-pressure", bpPage], queryFn: () => getBloodPressure(bpPage) });
+  const weight = useQuery({ queryKey: ["weight", weightPage], queryFn: () => getWeight(weightPage) });
   const garmin = useQuery({ queryKey: ["garmin-records"], queryFn: getGarminRecords });
-  const currentBp = currentOnly(bp.data ?? []);
-  const currentWeight = currentOnly(weight.data ?? []);
-  const bpById = new Map((bp.data ?? []).map((record) => [record.id, record]));
-  const weightById = new Map((weight.data ?? []).map((record) => [record.id, record]));
+  const currentBp = bp.data?.items ?? [];
+  const currentWeight = weight.data?.items ?? [];
+  const bpById = new Map([...currentBp, ...(bp.data?.revisions ?? [])].map((record) => [record.id, record]));
+  const weightById = new Map([...currentWeight, ...(weight.data?.revisions ?? [])].map((record) => [record.id, record]));
   return <Page title="Health data" description="Record and review blood pressure, weight, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
     <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /></div></section>
     {bp.isPending || weight.isPending || garmin.isPending ? <p role="status">Loading recorded health data…</p> : null}
     {bp.isError || weight.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded.</p> : null}
     <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
-      {currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <AccessibleLineChart title="Blood pressure" summary="Current recorded systolic and diastolic measurements over experienced time." unit="mmHg" timezone={timezone} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Blood pressure" series={bpSeries(currentBp)} />}
-      {currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <AccessibleLineChart title="Weight" summary="Current recorded weight measurements shown on one consistent pounds scale." unit="lb" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The chart adds one pound of visual padding above and below the observed range; exact values remain in the chart points and records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Weight" yPadding={1} compactPlot series={weightSeries(currentWeight)} />}
+      {currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <AccessibleLineChart title="Blood pressure" summary="Systolic and diastolic measurements on the visible records page." unit="mmHg" timezone={timezone} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact on the visible records page. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Blood pressure" series={bpSeries(currentBp)} />}
+      {currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <AccessibleLineChart title="Weight" summary="Weight measurements on the visible records page, shown on one consistent pounds scale." unit="lb" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact on the visible records page, converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The chart adds one pound of visual padding above and below the observed range; exact values remain in the chart points and records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Weight" yPadding={1} compactPlot series={weightSeries(currentWeight)} />}
     </section>
     <section aria-labelledby="garmin-records-heading"><h2 id="garmin-records-heading">Garmin recorded observations</h2><p className="privacy-note">These are provider-imported facts, separate from physician-approved plans and AI analysis. Scores and missing values are not interpreted as medical conclusions.</p>{garmin.data?.records.length === 0 ? <p>No Garmin observations recorded.</p> : garmin.data === undefined ? null : <GarminRecordsTable records={garmin.data.records} />}</section>
-    <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>{currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <BloodPressureHistoryTable records={currentBp} byId={bpById} editing={editing} setEditing={setEditing} />}</section>
-    <section aria-labelledby="weight-records-heading"><h2 id="weight-records-heading">Weight records and provenance</h2>{currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <WeightHistoryTable records={currentWeight} byId={weightById} editing={editing} setEditing={setEditing} />}</section>
+    <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>{currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <BloodPressureHistoryTable records={currentBp} byId={bpById} editing={editing} setEditing={setEditing} />}{bp.data === undefined ? null : <PaginationControls label="Blood pressure records" metadata={bp.data.page} onPageChange={(nextPage) => { setEditing(null); setBpPage(nextPage); }} />}</section>
+    <section aria-labelledby="weight-records-heading"><h2 id="weight-records-heading">Weight records and provenance</h2>{currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <WeightHistoryTable records={currentWeight} byId={weightById} editing={editing} setEditing={setEditing} />}{weight.data === undefined ? null : <PaginationControls label="Weight records" metadata={weight.data.page} onPageChange={(nextPage) => { setEditing(null); setWeightPage(nextPage); }} />}</section>
   </Page>;
 }

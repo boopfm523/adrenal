@@ -8,9 +8,10 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy.sql.elements import ColumnElement
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, paginate_current_facts
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.routers.events import provenance_out, time_out
 from healthcurve.api.schemas import (
@@ -18,10 +19,12 @@ from healthcurve.api.schemas import (
     BloodPressureCorrectionIn,
     BloodPressureIn,
     BloodPressureOut,
+    BloodPressurePage,
     WeightCorrectionChanges,
     WeightCorrectionIn,
     WeightIn,
     WeightOut,
+    WeightPage,
 )
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
@@ -54,18 +57,27 @@ def create_blood_pressure(payload: BloodPressureIn, session: DbSession, owner: C
     return _blood_pressure_out(row)
 
 
-@router.get("/blood-pressure", response_model=list[BloodPressureOut])
+@router.get("/blood-pressure", response_model=BloodPressurePage)
 def list_blood_pressure(
     session: DbSession,
     owner: CurrentOwner,
+    pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    include_superseded: bool = False,
 ):
-    rows = _list_rows(session, BloodPressureEvent, owner.id, date_from, date_to)
-    if not include_superseded:
-        rows = events.current_only(session, BloodPressureEvent, rows)
-    return [_blood_pressure_out(row) for row in rows]
+    predicates = _date_predicates(BloodPressureEvent, date_from, date_to)
+    page = paginate_current_facts(
+        session,
+        BloodPressureEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=predicates,
+    )
+    return BloodPressurePage(
+        items=[_blood_pressure_out(row) for row in page.items],
+        revisions=[_blood_pressure_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 @router.post(
@@ -107,18 +119,27 @@ def create_weight(payload: WeightIn, session: DbSession, owner: CurrentOwner):
     return _weight_out(row)
 
 
-@router.get("/weight", response_model=list[WeightOut])
+@router.get("/weight", response_model=WeightPage)
 def list_weight(
     session: DbSession,
     owner: CurrentOwner,
+    pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    include_superseded: bool = False,
 ):
-    rows = _list_rows(session, WeightEvent, owner.id, date_from, date_to)
-    if not include_superseded:
-        rows = events.current_only(session, WeightEvent, rows)
-    return [_weight_out(row) for row in rows]
+    predicates = _date_predicates(WeightEvent, date_from, date_to)
+    page = paginate_current_facts(
+        session,
+        WeightEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=predicates,
+    )
+    return WeightPage(
+        items=[_weight_out(row) for row in page.items],
+        revisions=[_weight_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 @router.post(
@@ -150,19 +171,17 @@ def correct_weight(
     return _weight_out(row)
 
 
-def _list_rows[VitalEvent: (BloodPressureEvent, WeightEvent)](
-    session: DbSession,
+def _date_predicates[VitalEvent: (BloodPressureEvent, WeightEvent)](
     model: type[VitalEvent],
-    owner_id: uuid.UUID,
     start: datetime | None,
     end: datetime | None,
-) -> list[VitalEvent]:
-    query = select(model).where(model.owner_id == owner_id)
+) -> tuple[ColumnElement[bool], ...]:
+    predicates: list[ColumnElement[bool]] = []
     if start is not None:
-        query = query.where(model.occurred_at >= start)
+        predicates.append(model.occurred_at >= start)
     if end is not None:
-        query = query.where(model.occurred_at <= end)
-    return list(session.scalars(query.order_by(model.occurred_at.desc())))
+        predicates.append(model.occurred_at <= end)
+    return tuple(predicates)
 
 
 def _owned[VitalEvent: (BloodPressureEvent, WeightEvent)](

@@ -1213,6 +1213,14 @@ export interface components {
             systolic_mmhg: number;
             time: components["schemas"]["EventTimeOut"];
         };
+        /** BloodPressurePage */
+        BloodPressurePage: {
+            /** Items */
+            items: components["schemas"]["BloodPressureOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["BloodPressureOut"][];
+        };
         /** Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post */
         Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post: {
             /**
@@ -1415,6 +1423,14 @@ export interface components {
             /** Weather Provider */
             weather_provider?: string | null;
         };
+        /** ContextPage */
+        ContextPage: {
+            /** Items */
+            items: components["schemas"]["ContextOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["ContextOut"][];
+        };
         /** DailyDoseMetric */
         DailyDoseMetric: {
             /** Days Without Approved Plan */
@@ -1600,6 +1616,14 @@ export interface components {
             slot_id: string | null;
             time: components["schemas"]["EventTimeOut"];
             unit: components["schemas"]["DoseUnit"];
+        };
+        /** DosePage */
+        DosePage: {
+            /** Items */
+            items: components["schemas"]["DoseOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["DoseOut"][];
         };
         /** DoseSlotIn */
         DoseSlotIn: {
@@ -2846,6 +2870,14 @@ export interface components {
             severity: number | null;
             time: components["schemas"]["EventTimeOut"];
         };
+        /** SymptomPage */
+        SymptomPage: {
+            /** Items */
+            items: components["schemas"]["SymptomOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["SymptomOut"][];
+        };
         /**
          * TemperatureUnit
          * @enum {string}
@@ -3006,6 +3038,14 @@ export interface components {
             unit: components["schemas"]["WeightUnit"];
             /** Value */
             value: string;
+        };
+        /** WeightPage */
+        WeightPage: {
+            /** Items */
+            items: components["schemas"]["WeightOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["WeightOut"][];
         };
         /**
          * WeightUnit
@@ -3233,7 +3273,8 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
-                include_superseded?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -3249,7 +3290,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BloodPressureOut"][];
+                    "application/json": components["schemas"]["BloodPressurePage"];
                 };
             };
             /** @description Validation Error */
@@ -3342,7 +3383,8 @@ export interface operations {
     list_context_api_v1_context_events_get: {
         parameters: {
             query?: {
-                include_superseded?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -3358,7 +3400,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContextOut"][];
+                    "application/json": components["schemas"]["ContextPage"];
                 };
             };
             /** @description Validation Error */
@@ -3592,8 +3634,8 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
-                /** @description Include corrected-away versions. Off by default so totals are correct. */
-                include_superseded?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -3609,7 +3651,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DoseOut"][];
+                    "application/json": components["schemas"]["DosePage"];
                 };
             };
             /** @description Validation Error */
@@ -5295,7 +5337,8 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
-                include_superseded?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -5311,7 +5354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SymptomOut"][];
+                    "application/json": components["schemas"]["SymptomPage"];
                 };
             };
             /** @description Validation Error */
@@ -5450,7 +5493,8 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
-                include_superseded?: boolean;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -5466,7 +5510,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WeightOut"][];
+                    "application/json": components["schemas"]["WeightPage"];
                 };
             };
             /** @description Validation Error */

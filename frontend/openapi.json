@@ -266,6 +266,35 @@
         "title": "BloodPressureOut",
         "type": "object"
       },
+      "BloodPressurePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BloodPressureOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/BloodPressureOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "BloodPressurePage",
+        "type": "object"
+      },
       "Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post": {
         "properties": {
           "analyte_map_json": {
@@ -984,6 +1013,35 @@
         "title": "ContextOut",
         "type": "object"
       },
+      "ContextPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContextOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/ContextOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "ContextPage",
+        "type": "object"
+      },
       "DailyDoseMetric": {
         "additionalProperties": false,
         "properties": {
@@ -1559,6 +1617,35 @@
           "notes"
         ],
         "title": "DoseOut",
+        "type": "object"
+      },
+      "DosePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DoseOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/DoseOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "DosePage",
         "type": "object"
       },
       "DoseSlotIn": {
@@ -5339,6 +5426,35 @@
         "title": "SymptomOut",
         "type": "object"
       },
+      "SymptomPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SymptomOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/SymptomOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "SymptomPage",
+        "type": "object"
+      },
       "TemperatureUnit": {
         "enum": [
           "c",
@@ -5867,6 +5983,35 @@
         "title": "WeightOut",
         "type": "object"
       },
+      "WeightPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WeightOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/WeightOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "WeightPage",
+        "type": "object"
+      },
       "WeightUnit": {
         "enum": [
           "kg",
@@ -6318,12 +6463,25 @@
           },
           {
             "in": "query",
-            "name": "include_superseded",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Include Superseded",
-              "type": "boolean"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -6348,11 +6506,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/BloodPressureOut"
-                  },
-                  "title": "Response List Blood Pressure Api V1 Blood Pressure Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/BloodPressurePage"
                 }
               }
             },
@@ -6539,12 +6693,25 @@
         "parameters": [
           {
             "in": "query",
-            "name": "include_superseded",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Include Superseded",
-              "type": "boolean"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -6569,11 +6736,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ContextOut"
-                  },
-                  "title": "Response List Context Api V1 Context Events Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/ContextPage"
                 }
               }
             },
@@ -7058,15 +7221,26 @@
             }
           },
           {
-            "description": "Include corrected-away versions. Off by default so totals are correct.",
             "in": "query",
-            "name": "include_superseded",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": false,
-              "description": "Include corrected-away versions. Off by default so totals are correct.",
-              "title": "Include Superseded",
-              "type": "boolean"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -7091,11 +7265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DoseOut"
-                  },
-                  "title": "Response List Doses Api V1 Doses Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/DosePage"
                 }
               }
             },
@@ -10474,12 +10644,25 @@
           },
           {
             "in": "query",
-            "name": "include_superseded",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Include Superseded",
-              "type": "boolean"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -10504,11 +10687,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/SymptomOut"
-                  },
-                  "title": "Response List Symptoms Api V1 Symptoms Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/SymptomPage"
                 }
               }
             },
@@ -10930,12 +11109,25 @@
           },
           {
             "in": "query",
-            "name": "include_superseded",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Include Superseded",
-              "type": "boolean"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -10960,11 +11152,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/WeightOut"
-                  },
-                  "title": "Response List Weight Api V1 Weight Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/WeightPage"
                 }
               }
             },

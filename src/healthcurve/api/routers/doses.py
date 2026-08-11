@@ -6,13 +6,14 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, paginate_current_facts
 from healthcurve.api.schemas import (
     DoseCorrectionIn,
     DoseIn,
     DoseOut,
+    DosePage,
     EventTimeOut,
     PlanComparisonDay,
     PlanComparisonRegimen,
@@ -69,27 +70,31 @@ def create_dose(payload: DoseIn, session: DbSession, owner: CurrentOwner):
     return _dose_out(dose, medication)
 
 
-@router.get("/doses", response_model=list[DoseOut])
+@router.get("/doses", response_model=DosePage)
 def list_doses(
     session: DbSession,
     owner: CurrentOwner,
+    pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    include_superseded: bool = Query(
-        default=False,
-        description="Include corrected-away versions. Off by default so totals are correct.",
-    ),
 ):
-    query = select(DoseEvent).where(DoseEvent.owner_id == owner.id)
+    predicates = []
     if date_from is not None:
-        query = query.where(DoseEvent.occurred_at >= date_from)
+        predicates.append(DoseEvent.occurred_at >= date_from)
     if date_to is not None:
-        query = query.where(DoseEvent.occurred_at <= date_to)
-
-    rows = list(session.scalars(query.order_by(DoseEvent.occurred_at.desc())))
-    if not include_superseded:
-        rows = events.current_only(session, DoseEvent, rows)
-    return [_dose_out(d, d.medication) for d in rows]
+        predicates.append(DoseEvent.occurred_at <= date_to)
+    page = paginate_current_facts(
+        session,
+        DoseEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=tuple(predicates),
+    )
+    return DosePage(
+        items=[_dose_out(dose, dose.medication) for dose in page.items],
+        revisions=[_dose_out(dose, dose.medication) for dose in page.revisions],
+        page=page.metadata,
+    )
 
 
 @router.post(

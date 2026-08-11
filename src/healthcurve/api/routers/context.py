@@ -12,8 +12,16 @@ from pydantic import Field, model_validator
 from sqlalchemy import select
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, paginate_current_facts
 from healthcurve.api.routers.events import provenance_out, resolve_time, time_out
-from healthcurve.api.schemas import ApiModel, EventTimeIn, EventTimeOut, FactResource, ProvenanceOut
+from healthcurve.api.schemas import (
+    ApiModel,
+    EventTimeIn,
+    EventTimeOut,
+    FactResource,
+    PageMetadata,
+    ProvenanceOut,
+)
 from healthcurve.context.models import (
     ContextEvent,
     LocationPrecision,
@@ -125,6 +133,12 @@ class ContextOut(FactResource, ContextFields):
     provenance: ProvenanceOut
 
 
+class ContextPage(ApiModel):
+    items: list[ContextOut]
+    revisions: list[ContextOut]
+    page: PageMetadata
+
+
 def _fields(payload: ContextFields) -> dict[str, Any]:
     return payload.model_dump(exclude={"time"})
 
@@ -164,20 +178,23 @@ def create_context(payload: ContextIn, session: DbSession, owner: CurrentOwner) 
     return _out(row)
 
 
-@router.get("", response_model=list[ContextOut])
+@router.get("", response_model=ContextPage)
 def list_context(
-    session: DbSession, owner: CurrentOwner, include_superseded: bool = False
-) -> list[ContextOut]:
-    rows = list(
-        session.scalars(
-            select(ContextEvent)
-            .where(ContextEvent.owner_id == owner.id)
-            .order_by(ContextEvent.occurred_at.desc())
-        )
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+) -> ContextPage:
+    page = paginate_current_facts(
+        session,
+        ContextEvent,
+        owner_id=owner.id,
+        request=pagination,
     )
-    if not include_superseded:
-        rows = events.current_only(session, ContextEvent, rows)
-    return [_out(row) for row in rows]
+    return ContextPage(
+        items=[_out(row) for row in page.items],
+        revisions=[_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 @router.post(

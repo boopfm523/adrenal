@@ -91,7 +91,7 @@ describe("Settings and privacy page", () => {
       const method = init?.method ?? "GET";
       const body = init?.body === undefined ? null : JSON.parse(init.body as string);
       requests.push({ url, method, body });
-      if (url.endsWith("/context-events") && method === "GET") return Promise.resolve(new Response(JSON.stringify(recorded), { headers: { "Content-Type": "application/json" } }));
+      if (url.includes("/context-events?") && method === "GET") return Promise.resolve(new Response(JSON.stringify({ items: recorded, revisions: [], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }), { headers: { "Content-Type": "application/json" } }));
       if (url.endsWith("/context-events") && method === "POST") return Promise.resolve(new Response(JSON.stringify(recorded[0]), { status: 201, headers: { "Content-Type": "application/json" } }));
       return Promise.resolve(new Response(null, { status: 204 }));
     });

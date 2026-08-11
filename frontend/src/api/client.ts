@@ -9,10 +9,12 @@ export type Episode = components["schemas"]["EpisodeOut"];
 export type EpisodeInput = components["schemas"]["EpisodeIn"];
 export type EpisodeUpdate = components["schemas"]["EpisodeUpdate"];
 export type Dose = components["schemas"]["DoseOut"];
+export type DosePage = components["schemas"]["DosePage"];
 export type DoseInput = components["schemas"]["DoseIn"];
 export type DoseCorrectionInput = components["schemas"]["DoseCorrectionIn"];
 export type Timeline = components["schemas"]["TimelinePage"];
 export type Symptom = components["schemas"]["SymptomOut"];
+export type SymptomPage = components["schemas"]["SymptomPage"];
 export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
@@ -27,11 +29,14 @@ export type ReportSummary = components["schemas"]["ReportOut"];
 export type ReportPreview = components["schemas"]["ReportPreviewOut"];
 export type ReportCreate = components["schemas"]["ReportCreateRequest"];
 export type ContextEvent = components["schemas"]["ContextOut"];
+export type ContextPage = components["schemas"]["ContextPage"];
 export type ContextInput = components["schemas"]["ContextIn"];
 export type BloodPressure = components["schemas"]["BloodPressureOut"];
+export type BloodPressurePage = components["schemas"]["BloodPressurePage"];
 export type BloodPressureInput = components["schemas"]["BloodPressureIn"];
 export type BloodPressureCorrectionInput = components["schemas"]["BloodPressureCorrectionIn"];
 export type Weight = components["schemas"]["WeightOut"];
+export type WeightPage = components["schemas"]["WeightPage"];
 export type WeightInput = components["schemas"]["WeightIn"];
 export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
 export type LabResult = components["schemas"]["LabResultOut"];
@@ -251,11 +256,8 @@ export function recordDose(payload: DoseInput): Promise<Dose> {
   });
 }
 
-export function getDoses(includeSuperseded = false): Promise<Dose[]> {
-  const params = new URLSearchParams();
-  if (includeSuperseded) params.set("include_superseded", "true");
-  const query = params.size === 0 ? "" : `?${params.toString()}`;
-  return apiRequest<Dose[]>(`/doses${query}`);
+export function getDoses(page = 1): Promise<DosePage> {
+  return apiRequest<DosePage>(`/doses?page=${page.toString()}`);
 }
 
 export function correctDose(doseId: string, payload: DoseCorrectionInput): Promise<Dose> {
@@ -286,8 +288,8 @@ export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
   return apiRequest<Timeline>(`/timeline?${params.toString()}`);
 }
 
-export function getContextEvents(): Promise<ContextEvent[]> {
-  return apiRequest<ContextEvent[]>("/context-events");
+export function getContextEvents(page = 1): Promise<ContextPage> {
+  return apiRequest<ContextPage>(`/context-events?page=${page.toString()}`);
 }
 
 export function createContextEvent(payload: ContextInput): Promise<ContextEvent> {
@@ -297,8 +299,8 @@ export function createContextEvent(payload: ContextInput): Promise<ContextEvent>
   });
 }
 
-export function getBloodPressure(includeSuperseded = false): Promise<BloodPressure[]> {
-  return apiRequest<BloodPressure[]>(`/blood-pressure${includeSuperseded ? "?include_superseded=true" : ""}`);
+export function getBloodPressure(page = 1): Promise<BloodPressurePage> {
+  return apiRequest<BloodPressurePage>(`/blood-pressure?page=${page.toString()}`);
 }
 
 export function createBloodPressure(payload: BloodPressureInput): Promise<BloodPressure> {
@@ -309,8 +311,8 @@ export function correctBloodPressure(id: string, payload: BloodPressureCorrectio
   return apiRequest<BloodPressure>(`/blood-pressure/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getWeight(includeSuperseded = false): Promise<Weight[]> {
-  return apiRequest<Weight[]>(`/weight${includeSuperseded ? "?include_superseded=true" : ""}`);
+export function getWeight(page = 1): Promise<WeightPage> {
+  return apiRequest<WeightPage>(`/weight?page=${page.toString()}`);
 }
 
 export function getLabResults(): Promise<LabResult[]> {
@@ -374,8 +376,8 @@ export async function deleteContextEvent(id: string, password: string): Promise<
   });
 }
 
-export function getSymptoms(includeSuperseded = false): Promise<Symptom[]> {
-  return apiRequest<Symptom[]>(`/symptoms${includeSuperseded ? "?include_superseded=true" : ""}`);
+export function getSymptoms(page = 1): Promise<SymptomPage> {
+  return apiRequest<SymptomPage>(`/symptoms?page=${page.toString()}`);
 }
 
 export function correctSymptom(id: string, payload: SymptomCorrectionInput): Promise<Symptom> {

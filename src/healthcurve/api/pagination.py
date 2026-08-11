@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from healthcurve.api.schemas import PageMetadata
+from healthcurve.events.base import EventMixin
 
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
@@ -52,3 +57,56 @@ def page_metadata(total_items: int, request: PageRequest) -> PageMetadata:
         total_items=total_items,
         total_pages=total_pages,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentFactPage[E: EventMixin]:
+    items: list[E]
+    revisions: list[E]
+    metadata: PageMetadata
+
+
+def paginate_current_facts[E: EventMixin](
+    session: Session,
+    model: type[E],
+    *,
+    owner_id: uuid.UUID,
+    request: PageRequest,
+    predicates: tuple[ColumnElement[bool], ...] = (),
+) -> CurrentFactPage[E]:
+    """Page current facts and fetch correction ancestors only for visible rows."""
+    current = select(model).where(
+        model.owner_id == owner_id,
+        model.id.not_in(
+            select(model.supersedes_id).where(
+                model.owner_id == owner_id,
+                model.supersedes_id.is_not(None),
+            )
+        ),
+        *predicates,
+    )
+    total_items = session.scalar(select(func.count()).select_from(current.subquery())) or 0
+    metadata = page_metadata(total_items, request)
+    items = list(
+        session.scalars(
+            current.order_by(model.occurred_at.desc(), model.id.asc())
+            .offset(request.offset)
+            .limit(request.page_size)
+        )
+    )
+
+    revisions: list[E] = []
+    visited: set[uuid.UUID] = {row.id for row in items}
+    pending = {row.supersedes_id for row in items if row.supersedes_id is not None}
+    while pending:
+        prior_rows = list(
+            session.scalars(select(model).where(model.owner_id == owner_id, model.id.in_(pending)))
+        )
+        revisions.extend(prior_rows)
+        visited.update(row.id for row in prior_rows)
+        pending = {
+            row.supersedes_id
+            for row in prior_rows
+            if row.supersedes_id is not None and row.supersedes_id not in visited
+        }
+    return CurrentFactPage(items=items, revisions=revisions, metadata=metadata)

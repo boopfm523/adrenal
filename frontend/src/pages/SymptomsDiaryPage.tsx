@@ -4,6 +4,7 @@ import { useState } from "react";
 import { correctSymptom, getDiaryEntries, getLifeEvents, getSymptoms, type Symptom, type SymptomCorrectionInput } from "../api/client";
 import { FactCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 
 function localTime(value: string): string { return value.replace("T", " ").slice(0, 16); }
 
@@ -55,14 +56,14 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
 export function SymptomsDiaryPage(): React.JSX.Element {
   const [includeSensitive, setIncludeSensitive] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const symptoms = useQuery({ queryKey: ["symptoms", "with-history"], queryFn: () => getSymptoms(true) });
+  const [symptomPage, setSymptomPage] = useState(1);
+  const symptoms = useQuery({ queryKey: ["symptoms", symptomPage], queryFn: () => getSymptoms(symptomPage) });
   const diary = useQuery({ queryKey: ["diary", includeSensitive], queryFn: () => getDiaryEntries(includeSensitive) });
   const life = useQuery({ queryKey: ["life-events", includeSensitive], queryFn: () => getLifeEvents(includeSensitive) });
-  const symptomById = new Map(symptoms.data?.map((item) => [item.id, item]) ?? []);
-  const superseded = new Set(symptoms.data?.flatMap((item) => item.provenance.supersedes_id == null ? [] : [item.provenance.supersedes_id]) ?? []);
-  const currentSymptoms = symptoms.data?.filter((item) => !superseded.has(item.id)) ?? [];
+  const currentSymptoms = symptoms.data?.items ?? [];
+  const symptomById = new Map([...currentSymptoms, ...(symptoms.data?.revisions ?? [])].map((item) => [item.id, item]));
 
-  function priorFor(item: Symptom): Symptom | undefined { const id = item.provenance.supersedes_id; return id == null ? undefined : symptomById.get(id); }
+  function historyFor(item: Symptom): Symptom[] { const history: Symptom[] = []; let id = item.provenance.supersedes_id ?? null; while (id !== null) { const prior = symptomById.get(id); if (prior === undefined) break; history.push(prior); id = prior.provenance.supersedes_id ?? null; } return history; }
   const loading = symptoms.isPending || diary.isPending || life.isPending;
   const failed = symptoms.isError || diary.isError || life.isError;
 
@@ -73,13 +74,14 @@ export function SymptomsDiaryPage(): React.JSX.Element {
     {failed ? <p className="error-summary" role="alert">Some recorded facts could not be loaded.</p> : null}
 
     <section aria-labelledby="symptoms-heading"><h2 id="symptoms-heading">Symptoms</h2>
-      {symptoms.data !== undefined && currentSymptoms.length === 0 ? <p>No symptoms recorded.</p> : null}
-      {currentSymptoms.map((item) => { const prior = priorFor(item); return <FactCard key={item.id} title={`${item.name}${item.severity === null ? "" : ` · severity ${item.severity.toString()}/10`}`} metadata={<span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>}>
+      {symptoms.data?.page.total_items === 0 ? <p>No symptoms recorded.</p> : null}
+      {currentSymptoms.map((item) => { const history = historyFor(item); return <FactCard key={item.id} title={`${item.name}${item.severity === null ? "" : ` · severity ${item.severity.toString()}/10`}`} metadata={<span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>}>
         <Provenance record={item} />
         <button type="button" onClick={() => { setEditing(editing === item.id ? null : item.id); }}>{editing === item.id ? "Close correction form" : "Correct recorded symptom"}</button>
         {editing === item.id ? <SymptomCorrectionForm symptom={item} close={() => { setEditing(null); }} /> : null}
-        {prior === undefined ? null : <details className="revision-history"><summary>Show superseded value</summary><p>{prior.name}{prior.severity === null ? "" : ` · severity ${prior.severity.toString()}/10`} · {localTime(prior.time.local_time)} · {prior.time.timezone}</p>{prior.body_area === null ? null : <p>Body area: {prior.body_area}</p>}{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</details>}
+        {history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><p>{prior.name}{prior.severity === null ? "" : ` · severity ${prior.severity.toString()}/10`} · {localTime(prior.time.local_time)} · {prior.time.timezone}</p>{prior.body_area === null ? null : <p>Body area: {prior.body_area}</p>}{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</article>)}</details>}
       </FactCard>; })}
+      {symptoms.data === undefined ? null : <PaginationControls label="Symptom records" metadata={symptoms.data.page} onPageChange={(nextPage) => { setEditing(null); setSymptomPage(nextPage); }} />}
     </section>
 
     <section aria-labelledby="diary-heading"><h2 id="diary-heading">Diary</h2>

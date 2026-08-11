@@ -1,13 +1,13 @@
 {
   "api_collections": {
-    "routers/context.py:": { "status": "pending", "issue": "hc-inbox.10.2" },
+    "routers/context.py:": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "routers/data_quality.py:/data-quality": { "status": "pending", "issue": "hc-inbox.10.4" },
-    "routers/doses.py:/doses": { "status": "pending", "issue": "hc-inbox.10.2" },
+    "routers/doses.py:/doses": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "routers/episodes.py:/emergency-injections": { "status": "pending", "issue": "hc-inbox.10.3" },
     "routers/episodes.py:/stress-episodes": { "status": "pending", "issue": "hc-inbox.10.3" },
     "routers/events.py:/diary-events": { "status": "pending", "issue": "hc-inbox.10.3" },
     "routers/events.py:/life-events": { "status": "pending", "issue": "hc-inbox.10.3" },
-    "routers/events.py:/symptoms": { "status": "pending", "issue": "hc-inbox.10.2" },
+    "routers/events.py:/symptoms": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "routers/events.py:/timeline": { "status": "paginated", "issue": "hc-inbox.10.1" },
     "routers/garmin.py:/records": { "status": "pending", "issue": "hc-inbox.10.4" },
     "routers/labs.py:/documents": { "status": "pending", "issue": "hc-inbox.10.4" },
@@ -15,25 +15,25 @@
     "routers/medications.py:/medications": { "status": "bounded_reference", "reason": "Owner medication catalog used to populate plan and dose selectors; not rendered as history." },
     "routers/medications.py:/regimens": { "status": "pending", "issue": "hc-inbox.10.3" },
     "routers/reports.py:": { "status": "pending", "issue": "hc-inbox.10.3" },
-    "routers/vitals.py:/blood-pressure": { "status": "pending", "issue": "hc-inbox.10.2" },
-    "routers/vitals.py:/weight": { "status": "pending", "issue": "hc-inbox.10.2" }
+    "routers/vitals.py:/blood-pressure": { "status": "paginated", "issue": "hc-inbox.10.2" },
+    "routers/vitals.py:/weight": { "status": "paginated", "issue": "hc-inbox.10.2" }
   },
   "frontend_tables": {
     "frontend/src/components/AccessibleLineChart.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/AnalyticsPage.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
-    "frontend/src/pages/DosesPage.tsx": { "status": "pending", "issue": "hc-inbox.10.2" },
-    "frontend/src/pages/HealthDataPage.tsx": { "status": "pending", "issue": "hc-inbox.10.2,hc-inbox.10.4" },
+    "frontend/src/pages/DosesPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.2" },
+    "frontend/src/pages/HealthDataPage.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/LabsPage.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/TimelinePage.tsx": { "status": "paginated", "issue": "hc-inbox.10.1" }
   },
   "additional_ui_collections": {
-    "context history": { "status": "pending", "issue": "hc-inbox.10.2" },
+    "context history": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "data-quality findings": { "status": "pending", "issue": "hc-inbox.10.4" },
     "diary and life-event history": { "status": "pending", "issue": "hc-inbox.10.3" },
     "lab document history": { "status": "pending", "issue": "hc-inbox.10.4" },
     "plan-version history": { "status": "pending", "issue": "hc-inbox.10.3" },
     "report snapshot history": { "status": "pending", "issue": "hc-inbox.10.3" },
     "stress-episode history": { "status": "pending", "issue": "hc-inbox.10.3" },
-    "symptom history": { "status": "pending", "issue": "hc-inbox.10.2" }
+    "symptom history": { "status": "paginated", "issue": "hc-inbox.10.2" }
   }
 }

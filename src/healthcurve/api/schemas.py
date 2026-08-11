@@ -446,6 +446,30 @@ class SymptomOut(FactResource):
     notes: str | None
 
 
+class DosePage(ApiModel):
+    items: list[DoseOut]
+    revisions: list[DoseOut]
+    page: PageMetadata
+
+
+class BloodPressurePage(ApiModel):
+    items: list[BloodPressureOut]
+    revisions: list[BloodPressureOut]
+    page: PageMetadata
+
+
+class WeightPage(ApiModel):
+    items: list[WeightOut]
+    revisions: list[WeightOut]
+    page: PageMetadata
+
+
+class SymptomPage(ApiModel):
+    items: list[SymptomOut]
+    revisions: list[SymptomOut]
+    page: PageMetadata
+
+
 class SymptomCorrectionChanges(ApiModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     severity: int | None = Field(default=None, ge=0, le=10)

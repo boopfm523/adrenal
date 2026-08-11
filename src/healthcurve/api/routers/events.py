@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, literal, select, union_all
 
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
-from healthcurve.api.pagination import Pagination, page_metadata
+from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import (
     DiaryIn,
@@ -23,6 +23,7 @@ from healthcurve.api.schemas import (
     SymptomCorrectionIn,
     SymptomIn,
     SymptomOut,
+    SymptomPage,
     TimelineItem,
     TimelinePage,
 )
@@ -92,23 +93,31 @@ def create_symptom(payload: SymptomIn, session: DbSession, owner: CurrentOwner):
     return _symptom_out(event)
 
 
-@router.get("/symptoms", response_model=list[SymptomOut])
+@router.get("/symptoms", response_model=SymptomPage)
 def list_symptoms(
     session: DbSession,
     owner: CurrentOwner,
+    pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    include_superseded: bool = False,
 ):
-    query = select(SymptomEvent).where(SymptomEvent.owner_id == owner.id)
+    predicates = []
     if date_from:
-        query = query.where(SymptomEvent.occurred_at >= date_from)
+        predicates.append(SymptomEvent.occurred_at >= date_from)
     if date_to:
-        query = query.where(SymptomEvent.occurred_at <= date_to)
-    rows = list(session.scalars(query.order_by(SymptomEvent.occurred_at.desc())))
-    if not include_superseded:
-        rows = events.current_only(session, SymptomEvent, rows)
-    return [_symptom_out(e) for e in rows]
+        predicates.append(SymptomEvent.occurred_at <= date_to)
+    page = paginate_current_facts(
+        session,
+        SymptomEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=tuple(predicates),
+    )
+    return SymptomPage(
+        items=[_symptom_out(row) for row in page.items],
+        revisions=[_symptom_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
 
 
 @router.post(
