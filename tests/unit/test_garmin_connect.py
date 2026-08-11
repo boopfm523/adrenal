@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from healthcurve.integrations.garmin.connect_client import (
     PythonGarminReadClient,
     validate_token_store_path,
 )
+from healthcurve.integrations.garmin.connect_intraday import map_intraday_day
 from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day
 from healthcurve.integrations.garmin.connect_sync import fetch_window
 from healthcurve.integrations.garmin.models import GarminMetricType
@@ -231,3 +233,147 @@ def test_provider_exception_text_is_never_returned(
     with pytest.raises(GarminProviderError, match=r"^garmin_client_failed$") as caught:
         client.get_stats("2026-01-01")
     assert "synthetic-secret" not in str(caught.value)
+
+
+def test_read_only_adapter_exposes_approved_intraday_methods(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token_store = tmp_path / "garmin"
+    token_store.mkdir(mode=0o700)
+
+    class FakeGarmin:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            pass
+
+        def login(self, path: str) -> tuple[None, None]:
+            token_file = Path(path) / "garmin_tokens.json"
+            token_file.write_text("{}")
+            os.chmod(token_file, 0o600)
+            return None, None
+
+        def get_heart_rates(self, day: str) -> dict[str, Any]:
+            return {"method": "heart_rate", "day": day}
+
+        def get_stress_data(self, day: str) -> dict[str, Any]:
+            return {"method": "stress", "day": day}
+
+        def get_respiration_data(self, day: str) -> dict[str, Any]:
+            return {"method": "respiration", "day": day}
+
+        def get_hrv_data(self, day: str) -> None:
+            return None
+
+    monkeypatch.setattr("healthcurve.integrations.garmin.connect_client.Garmin", FakeGarmin)
+    client = PythonGarminReadClient(email=None, password=None, token_store=token_store)
+    client.login()
+
+    assert client.get_heart_rates("2026-01-09")["method"] == "heart_rate"
+    assert client.get_stress_data("2026-01-09")["method"] == "stress"
+    assert client.get_respiration_data("2026-01-09")["method"] == "respiration"
+    assert client.get_hrv_data("2026-01-09") == {}
+
+
+def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -> None:
+    start = _milliseconds(datetime(2026, 1, 9, 5, 0, tzinfo=UTC))
+    mapped = map_intraday_day(
+        heart_rate={
+            "heartRateValueDescriptors": [
+                {"index": 1, "key": "heartrate"},
+                {"index": 0, "key": "timestamp"},
+            ],
+            "heartRateValues": [[start, 72], [start + 120_000, None]],
+        },
+        stress={
+            "stressValueDescriptorsDTOList": [
+                {"index": 0, "key": "timestamp"},
+                {"index": 1, "key": "stressLevel"},
+            ],
+            # Negative provider sentinels are missing; zero is a valid stress score.
+            "stressValuesArray": [
+                [start, -1],
+                [start + 180_000, 0],
+                [start + 360_000, 44],
+            ],
+        },
+        respiration={
+            "respirationValueDescriptorsDTOList": [
+                {"index": 0, "key": "timestamp"},
+                {"index": 1, "key": "respiration"},
+            ],
+            "respirationValuesArray": [[start, -2], [start + 120_000, 14.5]],
+        },
+        hrv={
+            "hrvSummary": {"lastNightAvg": 45},
+            "hrvReadings": [
+                {"readingTimeGMT": "2026-01-09T05:00:00Z", "hrvValue": 40},
+                {"readingTimeGMT": "2026-01-09T05:05:00Z", "hrvValue": 42},
+            ],
+        },
+        timezone="America/New_York",
+    )
+
+    values = [(item.metric_type, item.value) for item in mapped.observations]
+    assert values == [
+        (GarminMetricType.HEART_RATE, 72),
+        (GarminMetricType.HRV, 40),
+        (GarminMetricType.RESPIRATION_RATE, Decimal("14.5")),
+        (GarminMetricType.STRESS, 0),
+        (GarminMetricType.HRV, 42),
+        (GarminMetricType.STRESS, 44),
+    ]
+    assert all(item.event_time.timezone == "America/New_York" for item in mapped.observations)
+    assert all(item.provider_id.startswith("intraday:") for item in mapped.observations)
+    assert mapped.capabilities == {
+        "intraday_heart_rate": "available",
+        "intraday_stress": "available",
+        "intraday_respiration_rate": "available",
+        "intraday_hrv": "available",
+    }
+    assert "intraday_heart_rate_missing_or_invalid" in mapped.warnings
+    assert "intraday_stress_missing_or_invalid" in mapped.warnings
+    assert "intraday_respiration_rate_missing_or_invalid" in mapped.warnings
+
+
+def test_intraday_contract_is_deterministic_and_rejects_ambiguous_duplicates() -> None:
+    start = _milliseconds(datetime(2026, 11, 1, 5, 30, tzinfo=UTC))
+    heart_rate = {
+        "heartRateValueDescriptors": [
+            {"index": 0, "key": "timestamp"},
+            {"index": 1, "key": "heartrate"},
+        ],
+        "heartRateValues": [[start, 70], [start, 71]],
+    }
+    first = map_intraday_day(
+        heart_rate=heart_rate,
+        stress={},
+        respiration={},
+        hrv={},
+        timezone="America/New_York",
+    )
+    second = map_intraday_day(
+        heart_rate=heart_rate,
+        stress={},
+        respiration={},
+        hrv={},
+        timezone="America/New_York",
+    )
+
+    assert first == second
+    assert len(first.observations) == 1
+    assert first.observations[0].event_time.utc_offset_minutes == -240
+    assert "intraday_heart_rate_duplicate_timestamp" in first.warnings
+    assert first.capabilities["intraday_hrv"] == "unavailable"
+
+
+def test_intraday_contract_requires_provider_descriptors() -> None:
+    mapped = map_intraday_day(
+        heart_rate={"heartRateValues": [[1_767_938_400_000, 70]]},
+        stress={},
+        respiration={},
+        hrv={"hrvReadings": "not-a-list"},
+        timezone="UTC",
+    )
+
+    assert mapped.observations == ()
+    assert "intraday_heart_rate_shape_invalid" in mapped.warnings
+    assert "intraday_hrv_shape_invalid" in mapped.warnings

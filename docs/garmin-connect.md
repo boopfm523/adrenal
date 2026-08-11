@@ -8,9 +8,9 @@ Health API. Garmin can change or block it without notice. Reviewed FIT/CSV/ZIP i
 remains the durable fallback described in [garmin-import.md](garmin-import.md).
 
 The integration is read-only. HealthCurve's adapter exposes only daily statistics,
-sleep, and activity-list reads; it cannot create, update, or delete anything in the
-Garmin account. HealthCurve is not interpreting these observations as diagnoses,
-causes, adrenal conclusions, or medication advice.
+sleep, activity-list, heart-rate, stress, respiration, and HRV reads; it cannot create,
+update, or delete anything in the Garmin account. HealthCurve is not interpreting
+these observations as diagnoses, causes, adrenal conclusions, or medication advice.
 
 ## Data included in the first release
 
@@ -22,10 +22,26 @@ HealthCurve stores only these fields when Garmin supplies them:
 - sleep start, wake time, duration, duration source, number of awakenings, and sleep
   score.
 
-Missing stays missing. HealthCurve never substitutes zero. Continuous heart-rate
-samples, intensity minutes, HRV, Body Battery, Pulse Ox, respiration, calories, Garmin
-weight, sleep stages, GPS routes, and every other provider field are deferred unless a
-later Bead explicitly adds them.
+Missing stays missing. HealthCurve never substitutes zero. Intensity minutes, Body
+Battery, Pulse Ox, calories, Garmin weight, sleep stages, GPS routes, and every other
+provider field are deferred unless a later Bead explicitly adds them.
+
+## Verified intraday contract (implementation in progress)
+
+The isolated client can read timestamped heart rate, stress, respiration, and nightly
+HRV. A privacy-safe configured-account probe verified predominant sample spacing of 2,
+3, 2, and 5 minutes respectively; gaps are expected and cadence is not guaranteed.
+Heart rate is bpm, respiration is breaths/min, HRV is ms, and stress is Garmin's 0–100
+score. Negative stress/respiration sentinels and null values mean missing; stress zero
+is a valid reading.
+
+Garmin supplies no stable sample ID, revision token, or per-sample IANA timezone for
+these responses. [ADR-0014](adr/0014-garmin-intraday-read-contract.md) therefore defines
+deterministic metric-plus-UTC-timestamp identities, content revisions, timezone
+handling, bounded parsing, and separation between timestamped readings and daily or
+nightly aggregates. The current automatic-sync release still stores the first-release
+fields above; intraday persistence and chart exposure are delivered by the dependent
+HealthCurve analytics Beads.
 
 ## Security boundary
 

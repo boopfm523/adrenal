@@ -1,6 +1,6 @@
 # ADR-0012: Isolated read-only use of the unofficial Garmin Connect client
 
-**Status:** Accepted — 2026-08-10
+**Status:** Superseded by ADR-0014 — 2026-08-11
 
 ## Context
 

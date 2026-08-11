@@ -32,6 +32,7 @@ class GarminMetricType(StrEnum):
     HEART_RATE = "heart_rate"
     RESTING_HEART_RATE = "resting_heart_rate"
     HRV = "hrv"
+    RESPIRATION_RATE = "respiration_rate"
     STRESS = "stress"
     BODY_BATTERY = "body_battery"
     STEPS = "steps"

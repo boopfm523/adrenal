@@ -17,7 +17,7 @@ from garminconnect.exceptions import (
 
 
 class GarminReadClient(Protocol):
-    """Only provider operations HealthCurve is permitted to invoke (ADR-0012)."""
+    """Initial provider operations used by the daily sync (ADR-0012)."""
 
     def login(self) -> None: ...
 
@@ -28,6 +28,18 @@ class GarminReadClient(Protocol):
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]: ...
 
     def logout(self) -> None: ...
+
+
+class GarminIntradayReadClient(GarminReadClient, Protocol):
+    """Expanded read-only operations approved for intraday sync by ADR-0014."""
+
+    def get_heart_rates(self, day: str) -> dict[str, Any]: ...
+
+    def get_stress_data(self, day: str) -> dict[str, Any]: ...
+
+    def get_respiration_data(self, day: str) -> dict[str, Any]: ...
+
+    def get_hrv_data(self, day: str) -> dict[str, Any]: ...
 
 
 class GarminProviderError(RuntimeError):
@@ -82,6 +94,27 @@ class PythonGarminReadClient:
 
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
         return self._read(lambda: self._client.get_activities_by_date(start, end), list)
+
+    def get_heart_rates(self, day: str) -> dict[str, Any]:
+        return self._read(lambda: self._client.get_heart_rates(day), dict)
+
+    def get_stress_data(self, day: str) -> dict[str, Any]:
+        return self._read(lambda: self._client.get_stress_data(day), dict)
+
+    def get_respiration_data(self, day: str) -> dict[str, Any]:
+        return self._read(lambda: self._client.get_respiration_data(day), dict)
+
+    def get_hrv_data(self, day: str) -> dict[str, Any]:
+        # Garmin legitimately returns null when the device has no HRV data for a day.
+        try:
+            value: Any = self._client.get_hrv_data(day)
+        except Exception as exc:
+            raise _safe_error(exc) from None
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise GarminProviderError("garmin_response_shape_changed", retryable=False)
+        return value
 
     def logout(self) -> None:
         try:
