@@ -113,6 +113,10 @@ jobs:
           npm run test
           npm run build
 
+      - name: Accessibility audit and keyboard journey
+        working-directory: frontend
+        run: npm run test:a11y
+
       - name: Frontend dependency vulnerabilities
         working-directory: frontend
         run: npm audit --audit-level=high
