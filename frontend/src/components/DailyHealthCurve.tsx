@@ -40,13 +40,6 @@ interface Lane {
   points: Point[];
 }
 
-interface TableRow {
-  time: string | null;
-  series: string;
-  value: string;
-  source: string;
-}
-
 interface SymptomObservation {
   id: string;
   time: string;
@@ -320,79 +313,6 @@ function nearbySymptomObservations(
   );
 }
 
-function tableRows(data: DailyHealthCurveData, visible: Record<LaneKey, boolean>): TableRow[] {
-  const rows: TableRow[] = lanes(data).flatMap((lane) => visible[lane.key] ? lane.points.map((point) => ({
-    time: point.time,
-    series: lane.label,
-    value: point.label,
-    source: point.source,
-  })) : []);
-  rows.push(...data.garmin.flatMap((record) => {
-    if (record.kind !== "daily") return [];
-    const lane = METRIC_LANES.find((definition) => definition.metric === record.metric_type);
-    if (lane === undefined || !visible[lane.key]) return [];
-    return [{
-      time: null,
-      series: record.measurement_label ?? garminMetricLabel(record.metric_type),
-      value: formatGarminDailyValue(record.metric_type, record.value, record.unit),
-      source: `Garmin ${record.provenance.confirmation_state.replaceAll("_", " ")}; untimed ${record.aggregation?.replaceAll("_", " ") ?? "aggregate"}`,
-    }];
-  }));
-  if (visible.episodes) {
-    rows.push(...data.episodes.map((episode) => ({
-      time: episode.started_at,
-      series: "Stress episode",
-      value: `${episode.trigger}; ${episode.severity ?? "severity missing"}; ${episode.status}`,
-      source: "recorded fact",
-    })));
-  }
-  if (visible.symptoms) {
-    rows.push(...data.symptoms.flatMap((symptom) => symptom.severity == null ? [{
-      time: symptom.time.occurred_at,
-      series: "Symptoms",
-      value: `${symptom.name}: severity missing`,
-      source: `${symptom.provenance.source_type}; ${symptom.provenance.confirmation_state}`,
-    }] : []));
-  }
-  if (visible.exposure) {
-    rows.push(...data.exposure.dose_markers.map((dose) => ({
-      time: dose.occurred_at,
-      series: "Actual dose marker",
-      value: `${dose.medication_name}: ${formatMeasurement(dose.amount, dose.unit)}${dose.supported ? "" : `; excluded: ${dose.exclusion_reason ?? "unsupported"}`}`,
-      source: `${dose.source_type}; ${dose.confirmation_state}`,
-    })));
-  }
-  rows.push(...data.garmin.flatMap((record) => {
-    if (record.kind !== "sleep" || record.ended_at == null) return [];
-    const source = `Garmin ${record.provenance.confirmation_state.replaceAll("_", " ")}`;
-    const sleepRows: TableRow[] = [{
-      time: record.time.occurred_at,
-      series: "Sleep start",
-      value: "Garmin-recorded sleep session started",
-      source,
-    }];
-    sleepRows.push(...(record.sleep_intervals ?? []).map((interval) => ({
-      time: interval.started_at,
-      series: "Awake interval",
-      value: `Awake through ${experiencedTime(interval.ended_at, data.exposure.timezone)}`,
-      source,
-    })));
-    sleepRows.push({
-      time: record.ended_at,
-      series: "Wake / sleep end",
-      value: "Garmin-recorded sleep session ended",
-      source,
-    });
-    return sleepRows;
-  }));
-  return rows.sort((left, right) => {
-    if (left.time === null && right.time !== null) return -1;
-    if (left.time !== null && right.time === null) return 1;
-    if (left.time === null || right.time === null) return left.series.localeCompare(right.series);
-    return Date.parse(left.time) - Date.parse(right.time) || left.series.localeCompare(right.series);
-  });
-}
-
 export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): React.JSX.Element {
   const [visible, setVisible] = useState(DEFAULT_VISIBLE);
   const start = Date.parse(data.exposure.day_start);
@@ -403,7 +323,6 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
   const allLanes = useMemo(() => lanes(data), [data]);
   const shownLanes = allLanes.filter((lane) => visible[lane.key]);
   const ticks = timeTicks(start, end, data.exposure.timezone);
-  const rows = useMemo(() => tableRows(data, visible), [data, visible]);
   const dailyAggregates = data.garmin.filter((record) => {
     if (record.kind !== "daily") return false;
     const lane = METRIC_LANES.find((definition) => definition.metric === record.metric_type);
@@ -457,7 +376,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
   return <section className="metric-card healthcurve-card" aria-labelledby="daily-healthcurve-title">
     <h2 id="daily-healthcurve-title">Your daily HealthCurve</h2>
     <p>{data.exposure.safety_label}</p>
-    <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the hover tooltip and table. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
+    <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
     {dailyAggregates.length === 0 ? null : <section className="garmin-aggregate-context" aria-labelledby="garmin-aggregate-context-title"><h3 id="garmin-aggregate-context-title">Garmin aggregate context</h3><p>These values summarize a provider-defined period. They have no exact intraday observation time, so they are not positioned on or connected within the chart.</p><dl>{dailyAggregates.map((record) => <div key={record.id}><dt>{record.measurement_label ?? garminMetricLabel(record.metric_type)}</dt><dd><strong>{formatGarminDailyValue(record.metric_type, record.value, record.unit)}</strong><span>{record.period_label === null || record.period_label === undefined ? "Untimed aggregate" : `Untimed · ${record.period_label}`} · Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</span></dd></div>)}</dl></section>}
     <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
@@ -547,8 +466,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       </svg>
     </div>
     {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
-    <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => lane.key === "symptoms" ? <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p> : <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and table.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and table." : ""}</p>)}</div>
-    <details className="chart-table"><summary>View exact values and provenance</summary><div className="table-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve exact values"><table><caption>Current recorded facts and deterministic model samples shown in the selected lanes. Timestamped rows sort by experienced instant; aggregates are explicitly untimed.</caption><thead><tr><th scope="col">Local date / time or period</th><th scope="col">Series</th><th scope="col">Exact value</th><th scope="col">Source / provenance</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.time ?? "aggregate"}-${row.series}-${index.toString()}`}><th scope="row">{row.time === null ? `${data.exposure.date} · untimed aggregate` : experiencedTime(row.time, data.exposure.timezone)}</th><td>{row.series}</td><td>{row.value}</td><td>{row.source}</td></tr>)}</tbody></table></div></details>
+    <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => lane.key === "symptoms" ? <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p> : <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and Timeline.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and Timeline." : ""}</p>)}</div>
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
       <h3>Exact implemented exposure formula</h3>
@@ -562,7 +480,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>
       <ul>{REQUIREMENT_EVIDENCE.map((source) => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>{` — ${source.use}.`}</li>)}</ul>
       <h3>Overlay display formula</h3>
-      <p>For every non-stress, non-symptom, non-respiration numeric lane, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment; values outside the display domain are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and table. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
+      <p>For every non-stress, non-symptom, non-respiration numeric lane, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment; values outside the display domain are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and authoritative Timeline. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
     </details>
   </section>;
 }

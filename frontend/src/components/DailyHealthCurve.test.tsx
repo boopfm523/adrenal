@@ -91,9 +91,7 @@ describe("Daily HealthCurve", () => {
     expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(tooltip).not.toHaveTextContent(/at 2026-/);
     expect(tooltip).not.toHaveTextContent(/hc-exposure-v1|provider_imported|observed cadence/i);
-    const exactValues = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(within(exactValues).getAllByText(/provider_imported/).length).toBeGreaterThan(0);
-    expect(within(exactValues).getByText("5.509920038 REU")).toBeInTheDocument();
+    expect(screen.queryByText("View exact values and provenance")).not.toBeInTheDocument();
     expect(screen.getByRole("img").querySelector(":scope > title")).toBeNull();
     const tickLabels = [...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent);
     expect(tickLabels.every((label) => /^\d{2}:\d{2}$/.test(label))).toBe(true);
@@ -136,8 +134,6 @@ describe("Daily HealthCurve", () => {
 
     const { tooltip } = hoverAt(2);
     expect(tooltip).toHaveTextContent("Respiration: 30 breaths/min");
-    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(within(table).getByText("30 breaths/min")).toBeInTheDocument();
   });
 
   it("publishes the executable formula, evidence, and absence of a needed-value model", () => {
@@ -179,10 +175,6 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("Blood pressure: 121/81 mmHg");
     expect(tooltip).not.toHaveTextContent(/systolic point|diastolic point/);
     expect(tooltip).not.toHaveTextContent("88 bpm");
-    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(table).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
-    expect(table).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
-
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(screen.getByRole("tooltip")).toHaveTextContent("Blood-pressure pulse: 88 bpm");
   });
@@ -239,9 +231,6 @@ describe("Daily HealthCurve", () => {
     expect(context).toHaveTextContent("Average waking respiration14.2 breaths/minUntimed · waking period");
     expect(context).toHaveTextContent("no exact intraday observation time");
     expect(hoverAt(0).tooltip).not.toHaveTextContent("Garmin stress: 31 score");
-    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(table).toHaveTextContent("2026-03-08 · untimed aggregate");
-    expect(table).toHaveTextContent("Garmin provider imported; untimed daily summary");
   });
 
   it("shows explicit sleep bounds and awake intervals without inferring wake timing", () => {
@@ -266,10 +255,7 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll(".healthcurve-sleep-marker--end")).toHaveLength(1);
     expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(1);
     expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Sleep session");
-    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(table).toHaveTextContent("Sleep start");
-    expect(table).toHaveTextContent("Awake interval");
-    expect(table).toHaveTextContent("Wake / sleep end");
+    expect(screen.getByRole("img")).toHaveTextContent("explicit Garmin awake interval");
     expect(screen.queryByText(/Garmin reported one or more awakenings without their exact times/)).not.toBeInTheDocument();
 
     view.rerender(<DailyHealthCurve data={data({ garmin: [{ ...sleep, id: "50000000-0000-4000-8000-000000000002", sleep_intervals: [] }] })} />);
@@ -281,22 +267,18 @@ describe("Daily HealthCurve", () => {
     render(<DailyHealthCurve data={data()} />);
 
     expect(screen.getByText("23 hours")).toBeVisible();
-    expect(screen.getAllByText(/GMT-5/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/GMT-4/).length).toBeGreaterThan(0);
     const summaries = screen.getByLabelText("Series sample counts");
     expect(within(summaries).getByText(/Garmin stress:/).parentElement).toHaveTextContent("0 exact point");
     expect(screen.getByText(/expected missing counts are not invented/)).toBeVisible();
   });
 
-  it("keeps a large sampled day available in the chart and exact-value table", () => {
+  it("keeps a large sampled day available in the chart", () => {
     const garmin = Array.from({ length: 1_000 }, (_, index) => sample(index));
     render(<DailyHealthCurve data={data({ garmin })} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate").length).toBeGreaterThan(0);
-    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(within(table).getAllByText("Heart rate")).toHaveLength(1_000);
   });
 
   it("shows close unscored symptoms as timed events without inventing severity", () => {
@@ -343,8 +325,5 @@ describe("Daily HealthCurve", () => {
     const { tooltip } = hoverAt(660);
     expect(tooltip).toHaveTextContent("Synthetic fatigue: severity missing");
     expect(tooltip).toHaveTextContent("Synthetic dizziness: severity missing");
-    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(within(table).getByText("Synthetic fatigue: severity missing")).toBeInTheDocument();
-    expect(within(table).getByText("Synthetic dizziness: severity missing")).toBeInTheDocument();
   });
 });
