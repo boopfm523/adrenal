@@ -143,6 +143,7 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .approval-form input:not([type="checkbox"]) { width: 100%; min-width: 0; max-width: 100%; }
 .plan-form-grid, .repeatable-row { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 0.8rem; }
 .field-group label, .field-hint { display: block; }
+.field-group input, .field-group select, .field-group textarea { width: 100%; box-sizing: border-box; }
 .field-hint { margin-top: 0.35rem; color: #48554f; font-weight: 400; line-height: 1.35; }
 .repeatable-row { min-width: 0; margin: 0.8rem 0; padding: 0.8rem; border: 1px solid #ccd4ce; border-radius: 0.5rem; background: white; }
 .wide-field { grid-column: 1 / -1; }

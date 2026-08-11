@@ -36,6 +36,13 @@ describe("Episodes page", () => {
     expect(screen.getByRole("region", { name: "Open episode records table" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Resolved episode records table" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Emergency injection records table" })).toBeVisible();
+    expect(screen.getByLabelText("Trigger")).toHaveAccessibleDescription(/event or circumstance.*not a symptom or dosing instruction/i);
+    expect(screen.getByLabelText("Severity")).toHaveAccessibleDescription(/not a clinical triage score/i);
+    expect(screen.getByLabelText("Start time")).toHaveAccessibleDescription(/when the episode began/i);
+    expect(screen.getByLabelText("IANA timezone")).toHaveAccessibleDescription(/leave your profile timezone/i);
+    expect(screen.getByLabelText("Highest temperature (°C)")).toHaveAccessibleDescription(/degrees Celsius/i);
+    expect(screen.getByLabelText("Illness or stress context")).toHaveAccessibleDescription(/illness, injury, procedure, exertion, travel, or emotional stress/i);
+    expect(screen.getByLabelText("Notes")).toHaveAccessibleDescription(/record doses and symptoms in their own forms/i);
     const injectionRegion = screen.getByRole("region", { name: "Emergency injection records table" });
     expect(within(injectionRegion).getByText("100 mg")).toBeVisible();
     expect(within(injectionRegion).getByText("intramuscular")).toBeVisible();
