@@ -107,6 +107,12 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
     )
     if "hc-cleanup" not in postgres_network_names:
         errors.append("postgres must join hc-cleanup for cleanup-worker database access")
+    if "hc-garmin" not in compose.get("networks", {}):
+        errors.append("base topology must declare hc-garmin")
+    if "hc-garmin" not in postgres_network_names:
+        errors.append(
+            "postgres must always join hc-garmin so routine updates preserve worker access"
+        )
 
     garmin = services.get("garmin-worker")
     if isinstance(garmin, dict):
@@ -143,9 +149,6 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
         ):
             if forbidden in garmin_environment:
                 errors.append(f"garmin-worker must not receive {forbidden}")
-        if "hc-garmin" not in postgres_network_names:
-            errors.append("postgres must join hc-garmin for Garmin worker database access")
-
     if production:
         for name in ("api", "worker", "cleanup-worker"):
             environment = services.get(name, {}).get("environment", {})

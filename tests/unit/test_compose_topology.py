@@ -33,7 +33,7 @@ def _config(*, production: bool) -> dict[str, Any]:
                     {"target": "/data/reports"},
                 ],
             },
-            "postgres": {"networks": {"hc-internal": None, "hc-cleanup": None}},
+            "postgres": {"networks": {"hc-internal": None, "hc-cleanup": None, "hc-garmin": None}},
             "redis": {},
             "ollama": {},
             "document-worker": {
@@ -43,13 +43,25 @@ def _config(*, production: bool) -> dict[str, Any]:
                 "security_opt": ["no-new-privileges:true"],
             },
         },
-        "networks": {"hc-cleanup": {"internal": True}},
+        "networks": {"hc-cleanup": {"internal": True}, "hc-garmin": {}},
     }
 
 
 def test_accepts_loopback_development_and_tailnet_production() -> None:
     assert validate(_config(production=False), production=False) == []
     assert validate(_config(production=True), production=True) == []
+
+
+def test_base_topology_preserves_the_garmin_database_path_without_the_worker() -> None:
+    config = _config(production=False)
+    assert "garmin-worker" not in config["services"]
+    assert validate(config, production=False) == []
+
+    config["services"]["postgres"]["networks"].pop("hc-garmin")
+    assert (
+        "postgres must always join hc-garmin so routine updates preserve worker access"
+        in validate(config, production=False)
+    )
 
 
 def test_rejects_public_or_lan_production_binding() -> None:
@@ -103,8 +115,6 @@ def test_accepts_isolated_garmin_worker_and_rejects_secret_expansion() -> None:
         "security_opt": ["no-new-privileges:true"],
         "volumes": [{"target": "/run/secrets/garmin"}],
     }
-    config["services"]["postgres"]["networks"]["hc-garmin"] = None
-    config["networks"]["hc-garmin"] = {}
     assert validate(config, production=False) == []
 
     config["services"]["garmin-worker"]["environment"]["HC_TELEGRAM_BOT_TOKEN"] = (

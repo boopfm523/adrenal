@@ -77,10 +77,3 @@ services:
     stdin_open: true
     tty: true
     restart: "no"
-
-  postgres:
-    networks: [hc-internal, hc-cleanup, hc-garmin]
-
-networks:
-  hc-garmin:
-    driver: bridge

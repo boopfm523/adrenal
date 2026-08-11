@@ -89,15 +89,15 @@ commit, Bead, screenshot, or chat.
    again without both real credentials, it exits with
    `garmin_credentials_not_configured` and does not access the database or Garmin.
 
-6. Start or rebuild the API and isolated worker:
+6. Start or rebuild the API, web frontend, and isolated worker through one rendered
+   topology:
 
    ```bash
-   docker compose up -d --build api caddy
    docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
-     --profile garmin up -d --build garmin-worker
+     --profile garmin up -d --build api caddy garmin-worker
    ```
 
-   The same credential-free boundary applies to routine operations:
+   Use that same base-plus-overlay prefix for routine Garmin operations:
 
    ```bash
    docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
@@ -105,6 +105,12 @@ commit, Bead, screenshot, or chat.
    docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
      --profile garmin ps garmin-worker
    ```
+
+   PostgreSQL's unpublished `hc-garmin` network membership is deliberately part of
+   the base Compose topology. This means an ordinary base-file update such as
+   `docker compose up -d caddy` cannot remove the database path from an already-running
+   Garmin worker. The overlay adds only the opt-in worker and its protected token
+   mount; it no longer owns the database network attachment.
 
 The Settings page shows safe connection state, last success, capability availability,
 latest warning codes, a manual-sync button, and an impact preview. Health data shows a

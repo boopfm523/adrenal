@@ -197,7 +197,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
-    networks: [hc-internal, hc-cleanup]
+    # hc-garmin is declared in the base topology even when its opt-in worker is
+    # stopped. Otherwise a routine base-file update (for example rebuilding Caddy)
+    # recreates PostgreSQL without the overlay-only network and silently strands the
+    # already-running Garmin worker. No database port is published on this network.
+    networks: [hc-internal, hc-cleanup, hc-garmin]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U healthcurve -d healthcurve"]
       interval: 5s
@@ -238,6 +242,8 @@ networks:
   hc-cleanup:
     driver: bridge
     internal: true
+  hc-garmin:
+    driver: bridge
 
 volumes:
   postgres_data:
