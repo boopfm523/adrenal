@@ -425,6 +425,11 @@ class LabResultOut(FactResource):
         return None if value is None else format(value, "f")
 
 
+class LabResultPage(ApiModel):
+    items: list[LabResultOut]
+    page: PageMetadata
+
+
 # ---------------------------------------------------------------------------
 # Other events (fact)
 # ---------------------------------------------------------------------------

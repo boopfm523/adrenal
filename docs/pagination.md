@@ -32,3 +32,8 @@ surface. `uv run python scripts/check_pagination_inventory.py` fails when a new 
 route or table appears without a classification, when a pending surface lacks its Beads
 issue, or when a stale classification remains. `pending` entries are required work for
 `hc-inbox.10`; they are not accepted as complete pagination.
+
+Chart exact-value tables inherit a documented bound from their data source. Vitals and
+lab charts use only the current visible API page. Analytics charts use the selected date
+range, which the API caps at 366 days. They never fetch a separate unbounded history for
+the table alternative.

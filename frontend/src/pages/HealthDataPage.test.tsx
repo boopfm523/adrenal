@@ -17,6 +17,7 @@ const garminProvenance = { ...provenance, source_type: "provider", confirmation_
 const correctedGarminProvenance = { ...garminProvenance, supersedes_id: "88888888-8888-4888-8888-888888888888", correction_reason: "Synthetic provider revision", is_correction: true };
 const garminRecords = {
   notice: "Unavailable provider values remain missing rather than zero.",
+  page: { page: 1, page_size: 25, total_items: 4, total_pages: 1 },
   records: [
     { id: "55555555-5555-4555-8555-555555555555", kind: "daily", summary: "Steps", time, provenance: garminProvenance, metric_type: "steps", value: "8765.0000", unit: "steps", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
     { id: "99999999-9999-4999-8999-999999999999", kind: "daily", summary: "Stress", time: { ...time, occurred_at: "2026-08-09T13:00:00Z", local_time: "2026-08-09T09:00:00" }, provenance: garminProvenance, metric_type: "stress", value: "28.0000", unit: "garmin_score", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
@@ -56,7 +57,7 @@ describe("Health data page", () => {
         writes.push({ url, body: JSON.parse(rawBody) as unknown, csrf: new Headers(init.headers).get("X-CSRF-Token") });
         return Promise.resolve(json(url.endsWith("/weight") ? weight : pressure, 201));
       }
-      if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ records: [], notice: "Synthetic" }));
+      if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ records: [], notice: "Synthetic", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 } }));
       return Promise.resolve(json(url.includes("blood-pressure") ? page([pressure]) : page([weight])));
     });
     renderPage();

@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import Field, model_validator
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from starlette.concurrency import run_in_threadpool
 
 from healthcurve.ai.models import DraftState, ExtractionDraft
@@ -29,8 +29,9 @@ from healthcurve.api.lab_deletion import (
     delete_lab_report_unit,
     preview_lab_report_deletion,
 )
+from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.routers.doses import resolve_time
-from healthcurve.api.schemas import ApiModel, EventTimeIn, LabResultOut
+from healthcurve.api.schemas import ApiModel, EventTimeIn, LabResultOut, LabResultPage, PageMetadata
 from healthcurve.config import Settings
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity import service as auth
@@ -60,14 +61,22 @@ from healthcurve.operations.rate_limit import RateLimitPolicy
 router = APIRouter(prefix="/labs", tags=["labs"])
 
 
-@router.get("/results", response_model=list[LabResultOut])
-def list_lab_results(session: DbSession, owner: CurrentOwner) -> list[LabResultOut]:
+@router.get("/results", response_model=LabResultPage)
+def list_lab_results(
+    session: DbSession, owner: CurrentOwner, pagination: Pagination
+) -> LabResultPage:
     """Return source facts and derived values together, never conflated."""
-    rows = session.execute(
+    query = (
         select(LabResult, LabPanel)
         .join(LabPanel, LabPanel.id == LabResult.panel_id)
         .where(LabResult.owner_id == owner.id, LabPanel.owner_id == owner.id)
-        .order_by(LabPanel.occurred_at, LabResult.source_row_index, LabResult.id)
+    )
+    total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    metadata = page_metadata(total_items, pagination)
+    rows = session.execute(
+        query.order_by(LabPanel.occurred_at.desc(), LabResult.source_row_index, LabResult.id)
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
     ).all()
     payload: list[LabResultOut] = []
     for result, panel in rows:
@@ -98,7 +107,7 @@ def list_lab_results(session: DbSession, owner: CurrentOwner) -> list[LabResultO
                 confirmation_state=panel.confirmation_state,
             )
         )
-    return payload
+    return LabResultPage(items=payload, page=metadata)
 
 
 def _owned_document(
@@ -303,28 +312,38 @@ async def upload_lab_document(
     return _document_payload(document)
 
 
-@router.get("/documents")
+class LabDocumentPage(ApiModel):
+    items: list[dict[str, Any]]
+    page: PageMetadata
+
+
+@router.get("/documents", response_model=LabDocumentPage)
 def list_lab_documents(
-    session: DbSession, owner: CurrentOwner, settings: AppSettings
-) -> list[dict[str, Any]]:
+    session: DbSession, owner: CurrentOwner, settings: AppSettings, pagination: Pagination
+) -> LabDocumentPage:
     """List owner documents without starting model work for every historical file."""
     layout = DocumentLayout(settings.uploads_dir)
+    query = select(LabDocument).where(
+        LabDocument.owner_id == owner.id,
+        LabDocument.status != LabDocumentStatus.DELETED,
+    )
+    total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    metadata = page_metadata(total_items, pagination)
     documents = list(
         session.scalars(
-            select(LabDocument)
-            .where(
-                LabDocument.owner_id == owner.id,
-                LabDocument.status != LabDocumentStatus.DELETED,
-            )
-            .order_by(LabDocument.created_at.desc(), LabDocument.id)
+            query.order_by(LabDocument.created_at.desc(), LabDocument.id)
+            .offset(pagination.offset)
+            .limit(pagination.page_size)
         )
     )
+    document_ids = {str(document.id) for document in documents}
     drafts = {
         draft.provider_message_id: draft
         for draft in session.scalars(
             select(ExtractionDraft).where(
                 ExtractionDraft.owner_id == owner.id,
                 ExtractionDraft.source == "lab_pdf",
+                ExtractionDraft.provider_message_id.in_(document_ids),
             )
         )
     }
@@ -337,7 +356,7 @@ def list_lab_documents(
         item["extraction_draft_id"] = str(draft.id) if draft is not None else None
         item["draft_state"] = draft.state.value if draft is not None else None
         payload.append(item)
-    return payload
+    return LabDocumentPage(items=payload, page=metadata)
 
 
 @router.get("/documents/{document_id}")

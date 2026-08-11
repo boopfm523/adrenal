@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getDataQuality, type DataQuality } from "../api/client";
 import { Page } from "../components/Page";
+import { PaginationControls } from "../components/PaginationControls";
 
 type Finding = DataQuality["findings"][number];
 
@@ -19,7 +21,8 @@ function FindingCard({ finding, absence = false }: { finding: Finding; absence?:
 }
 
 export function DataQualityPage(): React.JSX.Element {
-  const query = useQuery({ queryKey: ["data-quality"], queryFn: getDataQuality });
+  const [page, setPage] = useState(1);
+  const query = useQuery({ queryKey: ["data-quality", page], queryFn: () => getDataQuality(page) });
 
   if (query.isPending) return <Page title="Data quality" description="Review drafts, import failures, integration gaps, and operational failures."><p role="status">Checking data quality…</p></Page>;
   if (query.isError) return <Page title="Data quality" description="Review drafts, import failures, integration gaps, and operational failures."><p className="error-summary" role="alert">Data-quality findings could not be loaded. No conclusion about record completeness can be made.</p></Page>;
@@ -43,6 +46,7 @@ export function DataQualityPage(): React.JSX.Element {
         <p>These metrics were not supplied by the source. Missing means unavailable: it is not a recorded value of zero and is not automatically an error.</p>
         {absences.length === 0 ? <p>No known provider-reported metric absences.</p> : <div className="quality-grid">{absences.map((finding) => <FindingCard key={finding.id} finding={finding} absence />)}</div>}
       </section>
+      <PaginationControls label="Data-quality findings" metadata={query.data.page} onPageChange={setPage} />
     </Page>
   );
 }

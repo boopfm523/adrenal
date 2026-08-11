@@ -1,7 +1,7 @@
 {
   "api_collections": {
     "routers/context.py:": { "status": "paginated", "issue": "hc-inbox.10.2" },
-    "routers/data_quality.py:/data-quality": { "status": "pending", "issue": "hc-inbox.10.4" },
+    "routers/data_quality.py:/data-quality": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "routers/doses.py:/doses": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "routers/episodes.py:/emergency-injections": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "routers/episodes.py:/stress-episodes": { "status": "paginated", "issue": "hc-inbox.10.3" },
@@ -9,9 +9,9 @@
     "routers/events.py:/life-events": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "routers/events.py:/symptoms": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "routers/events.py:/timeline": { "status": "paginated", "issue": "hc-inbox.10.1" },
-    "routers/garmin.py:/records": { "status": "pending", "issue": "hc-inbox.10.4" },
-    "routers/labs.py:/documents": { "status": "pending", "issue": "hc-inbox.10.4" },
-    "routers/labs.py:/results": { "status": "pending", "issue": "hc-inbox.10.4" },
+    "routers/garmin.py:/records": { "status": "paginated", "issue": "hc-inbox.10.4" },
+    "routers/labs.py:/documents": { "status": "paginated", "issue": "hc-inbox.10.4" },
+    "routers/labs.py:/results": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "routers/medications.py:/medications": { "status": "bounded_reference", "reason": "Owner medication catalog used to populate plan and dose selectors; not rendered as history." },
     "routers/medications.py:/regimens": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "routers/reports.py:": { "status": "paginated", "issue": "hc-inbox.10.3" },
@@ -19,18 +19,18 @@
     "routers/vitals.py:/weight": { "status": "paginated", "issue": "hc-inbox.10.2" }
   },
   "frontend_tables": {
-    "frontend/src/components/AccessibleLineChart.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
-    "frontend/src/pages/AnalyticsPage.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
+    "frontend/src/components/AccessibleLineChart.tsx": { "status": "bounded_reference", "reason": "Exact-value tables render only bounded parent data: a visible record page or the analytics API's enforced 366-day range." },
+    "frontend/src/pages/AnalyticsPage.tsx": { "status": "bounded_reference", "reason": "The analytics API rejects ranges longer than 366 days, bounding every chart and exact-value table." },
     "frontend/src/pages/DosesPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.2" },
-    "frontend/src/pages/HealthDataPage.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
-    "frontend/src/pages/LabsPage.tsx": { "status": "pending", "issue": "hc-inbox.10.4" },
+    "frontend/src/pages/HealthDataPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.4" },
+    "frontend/src/pages/LabsPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/TimelinePage.tsx": { "status": "paginated", "issue": "hc-inbox.10.1" }
   },
   "additional_ui_collections": {
     "context history": { "status": "paginated", "issue": "hc-inbox.10.2" },
-    "data-quality findings": { "status": "pending", "issue": "hc-inbox.10.4" },
+    "data-quality findings": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "diary and life-event history": { "status": "paginated", "issue": "hc-inbox.10.3" },
-    "lab document history": { "status": "pending", "issue": "hc-inbox.10.4" },
+    "lab document history": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "plan-version history": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "report snapshot history": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "stress-episode history": { "status": "paginated", "issue": "hc-inbox.10.3" },

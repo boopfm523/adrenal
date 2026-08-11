@@ -20,6 +20,7 @@ describe("Data quality page", () => {
         { id: "job:synthetic", finding_kind: "problem", severity: "high", source: "job queue", title: "Import stopped after retries", detail: "A synthetic import requires review.", record_id: "11111111-1111-4111-8111-111111111111", href: "/data-quality#operations", action_label: "Review failed operation" },
         { id: "garmin:synthetic:hrv", finding_kind: "genuine_absence", severity: "information", source: "Garmin", title: "HRV was not supplied", detail: "The provider did not supply HRV; no zero value was inferred.", record_id: "22222222-2222-4222-8222-222222222222", href: "/settings#integration-heading", action_label: "Review Garmin connection" },
       ],
+      page: { page: 1, page_size: 25, total_items: 2, total_pages: 1 },
     }));
     renderPage();
 
@@ -32,7 +33,7 @@ describe("Data quality page", () => {
   });
 
   it("shows a bounded empty state instead of claiming completeness", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ completeness_notice: "No known findings does not mean the health record is clinically complete.", findings: [] }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ completeness_notice: "No known findings does not mean the health record is clinically complete.", findings: [], page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 } }));
     renderPage();
     expect(await screen.findByRole("heading", { name: "No known data-quality findings" })).toBeVisible();
     expect(screen.getAllByText(/does not.*complete/i).length).toBeGreaterThan(0);

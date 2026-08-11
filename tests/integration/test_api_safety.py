@@ -1741,7 +1741,7 @@ def test_curated_lab_normalization_preserves_source_and_cortisol_context(
 
     listed = client.get("/api/v1/labs/results")
     assert listed.status_code == 200, listed.text
-    rows = [row for row in listed.json() if row["panel_id"] == str(panel_id)]
+    rows = [row for row in listed.json()["items"] if row["panel_id"] == str(panel_id)]
     assert len(rows) == 2
     cortisol = rows[0]
     assert cortisol["category"] == "fact"
@@ -2092,7 +2092,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
     assert len(parsed) == 1
     candidate_index, candidate = parsed[0]
 
-    before = client.get("/api/v1/labs/results").json()
+    before = client.get("/api/v1/labs/results").json()["items"]
     assert not any(row["source_document_id"] == str(document_id) for row in before)
     confirmation = {
         "specimen_time": {
@@ -2127,7 +2127,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
     assert missing_preview.json()["detail"]["code"] == "lab_source_preview_unavailable"
     assert not any(
         row["source_document_id"] == str(document_id)
-        for row in client.get("/api/v1/labs/results").json()
+        for row in client.get("/api/v1/labs/results").json()["items"]
     )
     process_available(layout, runner=QpdfRunner())
     assert layout.preview_path(document_id, 1).is_file()
@@ -2149,7 +2149,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
 
     rows = [
         row
-        for row in client.get("/api/v1/labs/results").json()
+        for row in client.get("/api/v1/labs/results").json()["items"]
         if row["source_document_id"] == str(document_id)
     ]
     assert len(rows) == 1
@@ -2274,7 +2274,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
     assert wrong_password.status_code == 403
     assert any(
         row["source_document_id"] == str(document_id)
-        for row in client.get("/api/v1/labs/results").json()
+        for row in client.get("/api/v1/labs/results").json()["items"]
     )
 
     deleted = client.request(
@@ -2287,7 +2287,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
     assert deleted.json()["cleanup_task_count"] == 2
     assert not any(
         row["source_document_id"] == str(document_id)
-        for row in client.get("/api/v1/labs/results").json()
+        for row in client.get("/api/v1/labs/results").json()["items"]
     )
     assert client.get(f"/api/v1/reports/{report_id}").status_code == 404
     assert client.get(f"/api/v1/labs/documents/{document_id}/download").status_code == 409
@@ -3972,17 +3972,21 @@ def test_missing_doses_are_derived_not_stored(
         "/api/v1/emergency-injections",
         "/api/v1/regimens",
         "/api/v1/reports",
+        "/api/v1/labs/results",
+        "/api/v1/labs/documents",
+        "/api/v1/integrations/garmin/records",
+        "/api/v1/data-quality",
     ],
 )
-def test_event_plan_and_report_histories_enforce_bounded_pages(
-    client: TestClient, path: str
-) -> None:
+def test_growing_history_endpoints_enforce_bounded_pages(client: TestClient, path: str) -> None:
     first = client.get(path, params={"page": 1, "page_size": 1})
     assert first.status_code == 200, first.text
     payload = first.json()
     assert payload["page"]["page"] == 1
     assert payload["page"]["page_size"] == 1
-    assert len(payload["items"]) <= 1
+    items = payload.get("items", payload.get("records", payload.get("findings")))
+    assert items is not None
+    assert len(items) <= 1
 
     last_page = payload["page"]["total_pages"]
     last = client.get(path, params={"page": last_page, "page_size": 1})

@@ -1494,6 +1494,7 @@ export interface components {
             completeness_notice: string;
             /** Findings */
             findings: components["schemas"]["DataQualityFindingOut"][];
+            page: components["schemas"]["PageMetadata"];
         };
         /** DiaryIn */
         DiaryIn: {
@@ -1910,6 +1911,7 @@ export interface components {
              * @default Garmin observations are recorded facts, not diagnoses or medication guidance. Unavailable provider values remain missing rather than zero.
              */
             notice: string;
+            page: components["schemas"]["PageMetadata"];
             /** Records */
             records: components["schemas"]["GarminRecordOut"][];
         };
@@ -2194,6 +2196,14 @@ export interface components {
             /** Trend Point Count */
             trend_point_count: number;
         };
+        /** LabDocumentPage */
+        LabDocumentPage: {
+            /** Items */
+            items: {
+                [key: string]: unknown;
+            }[];
+            page: components["schemas"]["PageMetadata"];
+        };
         /** LabResultOut */
         LabResultOut: {
             /** Abnormal Flag */
@@ -2245,6 +2255,12 @@ export interface components {
             specimen_time: components["schemas"]["EventTimeOut"];
             /** Specimen Type */
             specimen_type: string | null;
+        };
+        /** LabResultPage */
+        LabResultPage: {
+            /** Items */
+            items: components["schemas"]["LabResultOut"][];
+            page: components["schemas"]["PageMetadata"];
         };
         /**
          * LifeEventCategory
@@ -3571,7 +3587,10 @@ export interface operations {
     };
     data_quality_api_v1_data_quality_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -4003,7 +4022,10 @@ export interface operations {
     };
     records_api_v1_integrations_garmin_records_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -4103,7 +4125,10 @@ export interface operations {
     };
     list_lab_documents_api_v1_labs_documents_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -4118,9 +4143,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["LabDocumentPage"];
                 };
             };
             /** @description Validation Error */
@@ -4534,7 +4557,10 @@ export interface operations {
     };
     list_lab_results_api_v1_labs_results_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -4549,7 +4575,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LabResultOut"][];
+                    "application/json": components["schemas"]["LabResultPage"];
                 };
             };
             /** @description Validation Error */

@@ -45,6 +45,8 @@ export type WeightPage = components["schemas"]["WeightPage"];
 export type WeightInput = components["schemas"]["WeightIn"];
 export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
 export type LabResult = components["schemas"]["LabResultOut"];
+export type LabResultPage = components["schemas"]["LabResultPage"];
+export type PageMetadata = components["schemas"]["PageMetadata"];
 export type GarminStatus = components["schemas"]["GarminStatusOut"];
 export type GarminRecord = components["schemas"]["GarminRecordOut"];
 export type GarminRecords = components["schemas"]["GarminRecordsOut"];
@@ -64,6 +66,11 @@ export interface LabDocument {
   extraction_status: "pending" | "draft_ready";
   extraction_draft_id: string | null;
   draft_state?: "pending" | "edited" | "confirmed" | "cancelled" | "expired" | null;
+}
+
+export interface LabDocumentPage {
+  items: LabDocument[];
+  page: PageMetadata;
 }
 
 export interface LabDraftCandidate {
@@ -320,12 +327,12 @@ export function getWeight(page = 1): Promise<WeightPage> {
   return apiRequest<WeightPage>(`/weight?page=${page.toString()}`);
 }
 
-export function getLabResults(): Promise<LabResult[]> {
-  return apiRequest<LabResult[]>("/labs/results");
+export function getLabResults(page = 1): Promise<LabResultPage> {
+  return apiRequest<LabResultPage>(`/labs/results?page=${page.toString()}`);
 }
 
-export function getLabDocuments(): Promise<LabDocument[]> {
-  return apiRequest<LabDocument[]>("/labs/documents");
+export function getLabDocuments(page = 1): Promise<LabDocumentPage> {
+  return apiRequest<LabDocumentPage>(`/labs/documents?page=${page.toString()}`);
 }
 
 export function getLabDocument(documentId: string): Promise<LabDocument> {
@@ -444,16 +451,16 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
 }
 
-export function getDataQuality(): Promise<DataQuality> {
-  return apiRequest<DataQuality>("/data-quality");
+export function getDataQuality(page = 1): Promise<DataQuality> {
+  return apiRequest<DataQuality>(`/data-quality?page=${page.toString()}`);
 }
 
 export function getGarminStatus(): Promise<GarminStatus> {
   return apiRequest<GarminStatus>("/integrations/garmin/status");
 }
 
-export function getGarminRecords(): Promise<GarminRecords> {
-  return apiRequest<GarminRecords>("/integrations/garmin/records");
+export function getGarminRecords(page = 1): Promise<GarminRecords> {
+  return apiRequest<GarminRecords>(`/integrations/garmin/records?page=${page.toString()}`);
 }
 
 export function getGarminDisconnectPreview(): Promise<GarminDisconnectPreview> {

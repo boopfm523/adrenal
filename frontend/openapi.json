@@ -1222,10 +1222,14 @@
             },
             "title": "Findings",
             "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
           }
         },
         "required": [
-          "findings"
+          "findings",
+          "page"
         ],
         "title": "DataQualityOut",
         "type": "object"
@@ -2475,6 +2479,9 @@
             "title": "Notice",
             "type": "string"
           },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
           "records": {
             "items": {
               "$ref": "#/components/schemas/GarminRecordOut"
@@ -2484,7 +2491,8 @@
           }
         },
         "required": [
-          "records"
+          "records",
+          "page"
         ],
         "title": "GarminRecordsOut",
         "type": "object"
@@ -3283,6 +3291,28 @@
         "title": "LabDeletionPreviewOut",
         "type": "object"
       },
+      "LabDocumentPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "LabDocumentPage",
+        "type": "object"
+      },
       "LabResultOut": {
         "additionalProperties": false,
         "properties": {
@@ -3494,6 +3524,27 @@
           "confirmation_state"
         ],
         "title": "LabResultOut",
+        "type": "object"
+      },
+      "LabResultPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LabResultOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "LabResultPage",
         "type": "object"
       },
       "LifeEventCategory": {
@@ -7149,6 +7200,29 @@
         "operationId": "data_quality_api_v1_data_quality_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -8051,6 +8125,29 @@
         "operationId": "records_api_v1_integrations_garmin_records_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -8270,6 +8367,29 @@
         "operationId": "list_lab_documents_api_v1_labs_documents_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -8291,12 +8411,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response List Lab Documents Api V1 Labs Documents Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/LabDocumentPage"
                 }
               }
             },
@@ -9090,6 +9205,29 @@
         "operationId": "list_lab_results_api_v1_labs_results_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -9111,11 +9249,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/LabResultOut"
-                  },
-                  "title": "Response List Lab Results Api V1 Labs Results Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/LabResultPage"
                 }
               }
             },

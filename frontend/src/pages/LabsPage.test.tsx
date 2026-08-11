@@ -23,6 +23,7 @@ function requestUrl(input: RequestInfo | URL): string {
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
+function page(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
 function renderPage(): void {
   sessionStore.set(session);
@@ -34,7 +35,7 @@ describe("Labs page", () => {
 
   it("separates source and derived data and provides an equivalent trend table", async () => {
     const results = [base, { ...base, id: "33333333-3333-4333-8333-333333333333", specimen_time: { ...base.specimen_time, occurred_at: "2026-08-10T12:00:00Z", local_time: "2026-08-10T08:00:00" }, original_value: "11", normalized_value: "303.6000000000" }, { ...base, id: "44444444-4444-4444-8444-444444444444", specimen_type: "Saliva", original_unit: "unsupported", normalized_value: null, normalized_unit: null, normalization_method: null }];
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(requestUrl(input).endsWith("/labs/documents") ? [] : results)));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(requestUrl(input).includes("/labs/documents?") ? page([]) : page(results))));
     renderPage();
     expect(await screen.findByRole("heading", { name: "Cortisol — Serum" })).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Source result" })).toBeVisible();
@@ -49,7 +50,7 @@ describe("Labs page", () => {
 
   it("links each confirmed PDF result back to its exact source page", async () => {
     const linked = { ...base, source_document_id: documentId, source_page_number: 3, source_type: "file_import", confirmation_state: "confirmed_from_draft" };
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(requestUrl(input).endsWith("/labs/documents") ? [] : [linked])));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(requestUrl(input).includes("/labs/documents?") ? page([]) : page([linked]))));
     renderPage();
     const link = await screen.findByRole("link", { name: "View source page 3" });
     expect(link).toHaveAttribute("href", `/api/v1/labs/documents/${documentId}/pages/3/preview`);
@@ -70,8 +71,8 @@ describe("Labs page", () => {
       }
       if (url.endsWith(`/labs/documents/${documentId}/extraction`)) return Promise.resolve(json(extraction));
       if (url.endsWith(`/labs/documents/${documentId}`)) return Promise.resolve(json(document));
-      if (url.endsWith("/labs/documents")) return Promise.resolve(json([document]));
-      return Promise.resolve(json([]));
+      if (url.includes("/labs/documents?")) return Promise.resolve(json(page([document])));
+      return Promise.resolve(json(page([])));
     });
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: "Open review" }));
@@ -110,8 +111,8 @@ describe("Labs page", () => {
         return Promise.resolve(json({ status: "deletion_queued", document_id: documentId, cleanup_task_count: 2 }, 202));
       }
       if (url.endsWith(`/labs/documents/${documentId}/deletion-preview`)) return Promise.resolve(json(deletionPreview));
-      if (url.endsWith("/labs/documents")) return Promise.resolve(json([confirmedDocument]));
-      return Promise.resolve(json([linked]));
+      if (url.includes("/labs/documents?")) return Promise.resolve(json(page([confirmedDocument])));
+      return Promise.resolve(json(page([linked])));
     });
     renderPage();
 

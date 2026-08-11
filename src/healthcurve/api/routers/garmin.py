@@ -15,12 +15,12 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select, union_all
 
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
+from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.routers.events import provenance_out, time_out
-from healthcurve.api.schemas import EventTimeOut, ProvenanceOut
-from healthcurve.events import service as events
+from healthcurve.api.schemas import EventTimeOut, PageMetadata, ProvenanceOut
 from healthcurve.integrations.garmin.connect_jobs import GarminSyncDisposition, enqueue_sync
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -78,6 +78,7 @@ class GarminRecordOut(BaseModel):
 
 class GarminRecordsOut(BaseModel):
     records: list[GarminRecordOut]
+    page: PageMetadata
     notice: str = (
         "Garmin observations are recorded facts, not diagnoses or medication guidance. "
         "Unavailable provider values remain missing rather than zero."
@@ -182,62 +183,82 @@ def request_sync(
 
 
 @router.get("/records", response_model=GarminRecordsOut)
-def records(session: DbSession, owner: CurrentOwner) -> GarminRecordsOut:
-    output: list[GarminRecordOut] = []
-    for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent):
-        rows = list(session.scalars(select(model).where(model.owner_id == owner.id)))
-        for row in events.current_only(session, model, rows):
-            if isinstance(row, GarminMetricEvent):
-                output.append(
-                    GarminRecordOut(
-                        id=row.id,
-                        kind="daily",
-                        summary=(
-                            f"{row.metric_type.value.replace('_', ' ').title()}: "
-                            f"{row.value} {row.unit}"
-                        ),
-                        time=time_out(row),
-                        provenance=provenance_out(row),
-                        metric_type=row.metric_type.value,
-                        value=str(row.value),
-                        unit=row.unit,
-                    )
-                )
-            elif isinstance(row, GarminSleepEvent):
-                output.append(
-                    GarminRecordOut(
-                        id=row.id,
-                        kind="sleep",
-                        summary="Sleep interval recorded by Garmin",
-                        time=time_out(row),
-                        provenance=provenance_out(row),
-                        ended_at=row.ended_at,
-                        duration_seconds=row.duration_seconds,
-                        duration_source=row.garmin_duration_source,
-                        awakenings=row.awakenings,
-                        sleep_score=row.overall_sleep_score,
-                    )
-                )
-            else:
-                output.append(
-                    GarminRecordOut(
-                        id=row.id,
-                        kind="activity",
-                        summary=f"Garmin activity: {row.sport.replace('_', ' ')}",
-                        time=time_out(row),
-                        provenance=provenance_out(row),
-                        ended_at=row.ended_at,
-                        duration_seconds=(
-                            None if row.elapsed_seconds is None else int(row.elapsed_seconds)
-                        ),
-                        activity_type=row.sport,
-                        distance_miles=(
-                            None if row.distance_miles is None else str(row.distance_miles)
-                        ),
-                    )
-                )
-    output.sort(key=lambda row: (row.time.occurred_at, row.kind, str(row.id)))
-    return GarminRecordsOut(records=output)
+def records(session: DbSession, owner: CurrentOwner, pagination: Pagination) -> GarminRecordsOut:
+    models = (
+        ("daily", GarminMetricEvent),
+        ("sleep", GarminSleepEvent),
+        ("activity", GarminActivityEvent),
+    )
+    current = []
+    for kind, model in models:
+        superseded = select(model.supersedes_id).where(
+            model.owner_id == owner.id, model.supersedes_id.is_not(None)
+        )
+        current.append(
+            select(
+                literal(kind).label("kind"),
+                model.id.label("id"),
+                model.occurred_at.label("occurred_at"),
+            ).where(model.owner_id == owner.id, model.id.not_in(superseded))
+        )
+    combined = union_all(*current).subquery()
+    total_items = session.scalar(select(func.count()).select_from(combined)) or 0
+    metadata = page_metadata(total_items, pagination)
+    visible = session.execute(
+        select(combined.c.kind, combined.c.id, combined.c.occurred_at)
+        .order_by(combined.c.occurred_at.desc(), combined.c.kind, combined.c.id)
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    ).all()
+    ids_by_kind = {kind: {row.id for row in visible if row.kind == kind} for kind, _model in models}
+    records_by_key: dict[tuple[str, uuid.UUID], GarminRecordOut] = {}
+    for kind, model in models:
+        for row in session.scalars(select(model).where(model.id.in_(ids_by_kind[kind]))):
+            records_by_key[(kind, row.id)] = _garmin_record_out(row)
+    return GarminRecordsOut(
+        records=[records_by_key[(row.kind, row.id)] for row in visible],
+        page=metadata,
+    )
+
+
+def _garmin_record_out(
+    row: GarminMetricEvent | GarminSleepEvent | GarminActivityEvent,
+) -> GarminRecordOut:
+    if isinstance(row, GarminMetricEvent):
+        return GarminRecordOut(
+            id=row.id,
+            kind="daily",
+            summary=f"{row.metric_type.value.replace('_', ' ').title()}: {row.value} {row.unit}",
+            time=time_out(row),
+            provenance=provenance_out(row),
+            metric_type=row.metric_type.value,
+            value=str(row.value),
+            unit=row.unit,
+        )
+    if isinstance(row, GarminSleepEvent):
+        return GarminRecordOut(
+            id=row.id,
+            kind="sleep",
+            summary="Sleep interval recorded by Garmin",
+            time=time_out(row),
+            provenance=provenance_out(row),
+            ended_at=row.ended_at,
+            duration_seconds=row.duration_seconds,
+            duration_source=row.garmin_duration_source,
+            awakenings=row.awakenings,
+            sleep_score=row.overall_sleep_score,
+        )
+    return GarminRecordOut(
+        id=row.id,
+        kind="activity",
+        summary=f"Garmin activity: {row.sport.replace('_', ' ')}",
+        time=time_out(row),
+        provenance=provenance_out(row),
+        ended_at=row.ended_at,
+        duration_seconds=None if row.elapsed_seconds is None else int(row.elapsed_seconds),
+        activity_type=row.sport,
+        distance_miles=None if row.distance_miles is None else str(row.distance_miles),
+    )
 
 
 @router.get("/disconnect-preview", response_model=GarminDisconnectPreviewOut)
