@@ -364,11 +364,19 @@ markers with a reason and do not silently borrow parameters. The series is in re
 exposure units (REU), not serum cortisol, biological effect, clinical coverage, or
 dosing advice. See [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
 
-The planned selected-day overlay keeps symptoms, stress episodes, Garmin stress/HRV/
-respiration/heart rate, and blood pressure in separate recorded-context lanes. These
-observations do not alter the actual-dose exposure trace and are not converted into a
-cortisol requirement, medication-demand multiplier, or adequacy/shortfall judgment.
-Missing measurements remain visible gaps. See
+The selected-day HealthCurve overlays the actual-dose exposure shape, Garmin stress/
+HRV/respiration/heart rate, blood pressure, discrete symptom markers, dose markers,
+and stress-episode windows on one local-time graph. Hovering over the graph or using
+its keyboard/mobile time control shows exact nearby observations with their original
+units and timestamps. Continuous shapes use a clearly labeled relative 0–100 display
+position so unlike units can be compared in time without implying that their values
+are equivalent. Lines connect only samples with an observed contiguous cadence;
+unknown and interrupted intervals remain gaps. The exact-value/provenance table is
+authoritative.
+
+These observations do not alter the actual-dose exposure trace and are not converted
+into a cortisol requirement, medication-demand multiplier, or adequacy/shortfall
+judgment. See
 [ADR-0015](adr/0015-recorded-context-not-cortisol-demand.md).
 
 `GET /api/v1/analytics/daily-patterns?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&timezone=Area%2FCity`

@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { vi } from "vitest";
 
 import type { GarminRecord } from "../api/client";
 import { DailyHealthCurve, type DailyHealthCurveData } from "./DailyHealthCurve";
@@ -51,6 +52,34 @@ function sample(index: number): GarminRecord {
 }
 
 describe("Daily HealthCurve", () => {
+  it("uses one interactive overlay and exposes exact native values at the explored time", () => {
+    render(<DailyHealthCurve data={data({ garmin: [sample(60)] })} />);
+
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+    expect(screen.getByRole("img")).toHaveAccessibleName(/interactive selected-day HealthCurve overlay/i);
+    expect(document.querySelectorAll("[data-series='exposure']")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
+
+    fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "60" } });
+    const readout = screen.getByRole("status");
+    expect(within(readout).getByText("Heart rate:")).toBeVisible();
+    expect(readout).toHaveTextContent("Heart rate: 80 bpm");
+    expect(readout).toHaveTextContent(/GMT-5/);
+
+    const pointerTarget = document.querySelector<SVGRectElement>(".healthcurve-pointer-target");
+    if (pointerTarget === null) throw new Error("pointer target missing");
+    vi.spyOn(pointerTarget, "getBoundingClientRect").mockReturnValue({ left: 0, width: 100 } as DOMRect);
+    fireEvent.pointerMove(pointerTarget, { clientX: 50 });
+    expect(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" })).toHaveValue("690");
+  });
+
+  it("breaks recorded curves across missing cadence intervals", () => {
+    render(<DailyHealthCurve data={data({ garmin: [sample(0), sample(1), sample(10), sample(11)] })} />);
+
+    expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
+    expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(4);
+  });
+
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
     render(<DailyHealthCurve data={data()} />);
 

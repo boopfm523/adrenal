@@ -39,7 +39,7 @@ describe("Analytics page", () => {
     expect(screen.getByText(/Association does not establish causation/)).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Daily HealthCurve synchronized chart" })).toBeVisible();
-    expect(screen.getByText(/Shared time, separate meanings/)).toBeVisible();
+    expect(screen.getByText(/One time axis, relative display scales/)).toBeVisible();
     expect(screen.getByLabelText("Garmin stress")).toBeChecked();
     const seriesSummary = screen.getByLabelText("Visible series sample counts");
     expect(within(seriesSummary).getByText(/Garmin stress:/).parentElement).toHaveTextContent("1 exact point");

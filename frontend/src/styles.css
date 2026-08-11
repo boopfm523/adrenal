@@ -210,6 +210,24 @@ circle.chart-series { fill: white; }
 .healthcurve-chart { display: block; min-width: 52rem; width: 100%; height: auto; }
 .healthcurve-time-grid { stroke: #dce2dd; stroke-width: 1; }
 .healthcurve-time-label, .healthcurve-scale-label { fill: #47554f; font-size: 12px; }
+.healthcurve-overlay-bg { fill: #fbfcfb; }
+.healthcurve-relative-grid { stroke: #dce2dd; stroke-width: 1; }
+.healthcurve-axis-title { fill: #26332e; font-size: 12px; font-weight: 700; }
+.healthcurve-legend { display: flex; flex-wrap: wrap; gap: 0.55rem 1rem; margin-block: 0.8rem; }
+.healthcurve-legend span { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; }
+.healthcurve-key { display: inline-block; width: 1.6rem; border-top: 0.24rem solid #153cc1; }
+.healthcurve-key--stress { border-color: #a14c12; border-top-style: dashed; }
+.healthcurve-key--heart_rate { border-color: #a32038; }
+.healthcurve-key--hrv { border-color: #6b3f82; border-top-style: dashed; }
+.healthcurve-key--respiration_rate { border-color: #25677a; }
+.healthcurve-key--blood_pressure { border-color: #1c5a34; border-top-style: dotted; }
+.healthcurve-key--symptoms { border-color: #bd2f6b; border-top-style: dotted; }
+.healthcurve-series { fill: none; stroke: #153cc1; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.healthcurve-series--stress { stroke: #a14c12; stroke-dasharray: 8 4; }
+.healthcurve-series--heart_rate { stroke: #a32038; }
+.healthcurve-series--hrv { stroke: #6b3f82; stroke-dasharray: 4 3; }
+.healthcurve-series--respiration_rate { stroke: #25677a; }
+.healthcurve-series--blood_pressure { stroke: #1c5a34; stroke-dasharray: 2 3; }
 .healthcurve-lane-bg { fill: rgb(238 243 239 / 55%); stroke: #dce2dd; }
 .healthcurve-lane-title { fill: #17221e; font-size: 14px; font-weight: 800; }
 .healthcurve-lane-unit, .healthcurve-lane-range { fill: #47554f; font-size: 11px; }
@@ -223,7 +241,14 @@ circle.chart-series { fill: white; }
 .healthcurve-point--respiration_rate { fill: #25677a; }
 .healthcurve-point--blood_pressure { fill: #1c5a34; }
 .healthcurve-point--symptoms { fill: #bd2f6b; }
-.healthcurve-episode { fill: rgb(199 121 45 / 45%); stroke: #8a4c0e; stroke-width: 1.5; }
+.healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
+.healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
+.healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }
+.healthcurve-time-explorer { display: grid; gap: 0.35rem; margin-block: 0.8rem; font-weight: 700; }
+.healthcurve-time-explorer input { width: 100%; }
+.healthcurve-readout { min-height: 4.5rem; padding: 0.8rem; border: 1px solid #ccd4ce; border-radius: 0.45rem; background: #f4f7f5; }
+.healthcurve-readout p, .healthcurve-readout ul { margin-block: 0.4rem 0; }
+.healthcurve-readout li span { color: #47554f; }
 .curve-series-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.5rem 1rem; margin-block: 1rem; }
 .curve-series-summary p { margin: 0; padding: 0.6rem; background: #f4f7f5; }
 .analytics-history { margin-top: 2.5rem; padding-top: 1rem; border-top: 0.2rem solid #174c3c; }
