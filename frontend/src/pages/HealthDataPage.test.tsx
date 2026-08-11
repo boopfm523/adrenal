@@ -56,7 +56,7 @@ describe("Health data page", () => {
       return Promise.resolve(json(url.includes("blood-pressure") ? [pressure] : [weight]));
     });
     renderPage();
-    expect(await screen.findByRole("heading", { name: "118/76 mmHg · pulse 62 bpm" })).toBeVisible();
+    expect(await screen.findByRole("rowheader", { name: "118/76 mmHg" })).toBeVisible();
 
     const bpForm = screen.getByRole("form", { name: "Record blood pressure" });
     await userEvent.type(within(bpForm).getByLabelText("Systolic (mmHg)"), "120");
@@ -73,11 +73,12 @@ describe("Health data page", () => {
 
   it("renders equivalent trend tables, explicit units, missingness, and correction provenance", async () => {
     const corrected = { ...pressure, id: "33333333-3333-4333-8333-333333333333", systolic_mmhg: 119, provenance: { ...provenance, supersedes_id: pressure.id, correction_reason: "Synthetic correction", is_correction: true } };
+    const withoutPulse = { ...pressure, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", systolic_mmhg: 112, diastolic_mmhg: 74, pulse_bpm: null, notes: "Synthetic seated reading", time: { ...time, occurred_at: "2026-08-08T12:15:00Z", local_time: "2026-08-08T08:15:00" }, provenance: { ...provenance, source_type: "web", confirmation_state: "direct" } };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.endsWith(`/blood-pressure/${corrected.id}/correct`) && init?.method === "POST") return Promise.resolve(json({ ...corrected, diastolic_mmhg: 77 }, 201));
       if (url.includes("/integrations/garmin/records")) return Promise.resolve(json(garminRecords));
-      return Promise.resolve(json(url.includes("blood-pressure") ? [corrected, pressure] : [kgWeight, weight]));
+      return Promise.resolve(json(url.includes("blood-pressure") ? [withoutPulse, pressure, corrected] : [kgWeight, weight]));
     });
     renderPage();
     expect(await screen.findByRole("img", { name: /Blood pressure/ })).toBeVisible();
@@ -96,8 +97,23 @@ describe("Health data page", () => {
     expect(within(weightTable).queryByRole("columnheader", { name: "Entered value" })).not.toBeInTheDocument();
     expect(within(weightTable).getByRole("columnheader", { name: "Source" })).toBeVisible();
     expect(within(weightTable).getAllByRole("cell", { name: "Telegram" })).toHaveLength(2);
-    expect(screen.getByText("Corrected · Synthetic correction")).toBeVisible();
-    expect(screen.getAllByText(/Source: telegram · confirmed from draft/)).toHaveLength(2);
+    const pressureTable = screen.getByRole("region", { name: "Blood pressure records table" });
+    expect(pressureTable).toHaveAttribute("tabindex", "0");
+    expect(within(pressureTable).getByText(/Current recorded blood-pressure facts in latest-experienced-time order/)).toBeVisible();
+    expect(within(pressureTable).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Experienced time", "Systolic / diastolic", "Pulse", "Source and confirmation", "Notes", "Action"]);
+    const pressureRows = within(pressureTable).getAllByRole("row");
+    const newestPressureRow = pressureRows[1];
+    const olderPressureRow = pressureRows[2];
+    if (newestPressureRow === undefined || olderPressureRow === undefined) throw new Error("Expected two blood-pressure record rows");
+    expect(within(newestPressureRow).getByRole("rowheader", { name: "119/76 mmHg" })).toBeVisible();
+    expect(within(olderPressureRow).getByRole("rowheader", { name: "112/74 mmHg" })).toBeVisible();
+    expect(within(olderPressureRow).getByText("Not recorded")).toBeVisible();
+    expect(within(olderPressureRow).getByText("Synthetic seated reading")).toBeVisible();
+    expect(within(olderPressureRow).getByText("Web")).toBeVisible();
+    expect(within(olderPressureRow).getByText("Direct")).toBeVisible();
+    expect(within(newestPressureRow).getByText("Telegram")).toBeVisible();
+    expect(within(newestPressureRow).getByText("Confirmed from draft")).toBeVisible();
+    expect(within(pressureTable).getByText("Corrected · Synthetic correction")).toBeVisible();
     const garminTable = screen.getByRole("region", { name: "Garmin recorded observations table" });
     expect(within(garminTable).getByRole("cell", { name: /8,765 steps/ })).toBeVisible();
     expect(within(garminTable).getByRole("cell", { name: "Stress score: 28" })).toBeVisible();
@@ -110,11 +126,14 @@ describe("Health data page", () => {
     expect(within(garminTable).queryByText(/Garmin · provider · provider imported/)).not.toBeInTheDocument();
     expect(within(garminTable).queryByText("Original provider record")).not.toBeInTheDocument();
     expect(within(garminTable).getByText("Provider correction · Synthetic provider revision")).toBeVisible();
-    await userEvent.click(screen.getByText("Revision history (1)"));
-    expect(screen.getByText(/118\/76 mmHg/)).toBeVisible();
+    await userEvent.click(within(pressureTable).getByText("Revision history (1)"));
+    expect(within(pressureTable).getByText(/118\/76 mmHg/)).toBeVisible();
 
-    await userEvent.click(screen.getByRole("button", { name: "Correct blood pressure" }));
+    await userEvent.click(within(newestPressureRow).getByRole("button", { name: "Correct blood pressure" }));
     const form = screen.getByRole("form", { name: "Correct blood pressure" });
+    const correctionRow = form.closest("tr");
+    expect(correctionRow).not.toBeNull();
+    expect(correctionRow?.querySelector("td")?.colSpan).toBe(6);
     const diastolic = within(form).getByLabelText("Diastolic (mmHg)");
     await userEvent.clear(diastolic);
     await userEvent.type(diastolic, "77");

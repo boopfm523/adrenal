@@ -273,6 +273,9 @@ circle.chart-series { fill: white; }
 .vital-table thead th { background: #e7ece8; }
 .vital-table tbody tr[data-category="fact"] > :first-child { border-left: 0.35rem solid #365f50; }
 .vital-table td > span { display: block; }
+.blood-pressure-table { min-width: 60rem; }
+.blood-pressure-primary { white-space: nowrap; font-size: 1.05rem; }
+.blood-pressure-table button { margin-top: 0.5rem; }
 .weight-primary { white-space: nowrap; font-size: 1.05rem; }
 .secondary-measurement { margin-top: 0.2rem; color: #48554f; font-size: 0.85rem; }
 .correction-table-row td { padding: 0; background: #fffbf3; }
@@ -321,6 +324,7 @@ circle.chart-series { fill: white; }
   .report-layout, .report-range { grid-template-columns: 1fr; }
   .help-category-grid, .help-command-grid, .help-workflow-grid { grid-template-columns: 1fr; }
   .vital-entry-grid, .vital-entry-form { grid-template-columns: 1fr; }
+  .blood-pressure-table .correction-table-row .correction-form { position: sticky; left: 0; width: calc(100vw - 2rem); max-width: 100%; box-sizing: border-box; }
   .lab-document-list, .lab-review-layout, .lab-review-form fieldset { grid-template-columns: 1fr; }
   .lab-upload-form { align-items: stretch; flex-direction: column; }
   .lab-source-panel { position: static; }
