@@ -251,6 +251,9 @@ circle.chart-series { fill: white; }
 .garmin-aggregate-context dt { font-weight: 700; }
 .garmin-aggregate-context dd { margin: 0.25rem 0 0; }
 .garmin-aggregate-context dd span { display: block; color: var(--muted); font-size: 0.9rem; }
+.model-methodology pre { overflow-x: auto; padding: 0.85rem; border: 1px solid #ccd4ce; border-radius: 0.4rem; background: #f4f7f5; white-space: pre-wrap; }
+.model-methodology h3 { margin-top: 1.2rem; }
+.model-methodology li + li { margin-top: 0.45rem; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
 .healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
 .healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }

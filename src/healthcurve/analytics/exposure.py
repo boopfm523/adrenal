@@ -220,6 +220,8 @@ def build_curve(*, day: date, timezone: str, doses: list[ExposureDose]) -> dict[
                 "https://doi.org/10.1002/j.1552-4604.1991.tb01906.x",
                 "https://pmc.ncbi.nlm.nih.gov/articles/PMC5963674/",
                 "https://doi.org/10.1016/j.metabol.2017.02.005",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC4880116/",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC9231005/",
             ],
         },
         "dose_markers": markers,

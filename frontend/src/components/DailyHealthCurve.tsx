@@ -76,6 +76,20 @@ const FOCUS_PRESETS: readonly { label: string; keys: readonly LaneKey[] }[] = [
   { label: "All series (busy)", keys: Object.keys(DEFAULT_VISIBLE) as LaneKey[] },
 ];
 
+const EXPOSURE_REFERENCE_DETAILS: Readonly<Record<string, { label: string; use: string }>> = {
+  "https://doi.org/10.1002/j.1552-4604.1991.tb01906.x": { label: "Derendorf et al. (1991)", use: "conventional oral hydrocortisone pharmacokinetics and the 1.7-hour elimination half-life" },
+  "https://pmc.ncbi.nlm.nih.gov/articles/PMC5963674/": { label: "Johnson et al. (2018)", use: "measured oral time-to-peak, bioavailability, and binding-aware variability" },
+  "https://doi.org/10.1016/j.metabol.2017.02.005": { label: "Werumeus Buning et al. (2017)", use: "population pharmacokinetics and the large between-person variability motivating a relative rather than clinical-unit curve" },
+  "https://pmc.ncbi.nlm.nih.gov/articles/PMC4880116/": { label: "Endocrine Society guideline (2016)", use: "the short plasma half-life and the distinction between replacement practice and this non-clinical visualization" },
+  "https://pmc.ncbi.nlm.nih.gov/articles/PMC9231005/": { label: "Röhr et al. (2022)", use: "evidence that clinical-unit models require more complex protein-binding and absorption handling" },
+};
+
+const REQUIREMENT_EVIDENCE = [
+  { href: "https://pubmed.ncbi.nlm.nih.gov/23506003/", label: "Boonen et al. (2013)", use: "critical illness can reduce cortisol metabolism rather than simply accelerate elimination" },
+  { href: "https://pmc.ncbi.nlm.nih.gov/articles/PMC7241266/", label: "Prete et al. (2020)", use: "major-stress cortisol delivery differs by administration method and cannot be inferred from a consumer stress score" },
+  { href: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3813945/", label: "Lewis and Elder (2013)", use: "cortisol-binding globulin materially affects total and free cortisol interpretation" },
+] as const;
+
 function presetVisibility(keys: readonly LaneKey[]): Record<LaneKey, boolean> {
   const included = new Set(keys);
   return Object.fromEntries(
@@ -385,6 +399,20 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     <div className="healthcurve-readout" role="status" aria-live="polite"><strong>{experiencedTime(new Date(cursorTime).toISOString(), data.exposure.timezone)}</strong>{cursorPoints.length === 0 ? <p>No exact observation at this time. Nearby missing data remains missing.</p> : <ul>{cursorPoints.map(({ lane, point }) => <li key={`${lane.key}-${point.time}-${point.label}`}><strong>{lane.label}:</strong> {point.label} <span>at {experiencedTime(point.time, data.exposure.timezone)}; {point.source}</span></li>)}</ul>}</div>
     <div className="curve-series-summary" aria-label="Visible series sample counts">{shownLanes.map((lane) => <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the readout and table." : ""}</p>)}</div>
     <details className="chart-table"><summary>View exact values and provenance</summary><div className="table-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve exact values"><table><caption>Current recorded facts and deterministic model samples shown in the selected lanes. Timestamped rows sort by experienced instant; aggregates are explicitly untimed.</caption><thead><tr><th scope="col">Local date / time or period</th><th scope="col">Series</th><th scope="col">Exact value</th><th scope="col">Source / provenance</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.time ?? "aggregate"}-${row.series}-${index.toString()}`}><th scope="row">{row.time === null ? `${data.exposure.date} · untimed aggregate` : experiencedTime(row.time, data.exposure.timezone)}</th><td>{row.series}</td><td>{row.value}</td><td>{row.source}</td></tr>)}</tbody></table></div></details>
-    <details className="metric-definition"><summary>Definitions and limitations</summary><p>{data.exposure.definition}</p><p>The overlay normalizes theoretical exposure, heart rate, HRV, respiration, and blood pressure to each series’ observed daily minimum and maximum. Garmin stress already uses 0–100. Symptoms retain their original 0–10 severity and are displayed at severity × 10 as discrete markers. Exact native values remain in the readout and table. These values are not converted into cortisol demand or a coverage ratio.</p></details>
+    <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
+      <p>{data.exposure.definition}</p>
+      <h3>Exact implemented exposure formula</h3>
+      <p><strong>{data.exposure.model.version}</strong> supports only {data.exposure.model.supported_formulation} {data.exposure.model.supported_route} {data.exposure.model.supported_medication} recorded in {data.exposure.model.amount_unit}. For elapsed hours <code>t</code> after each actual dose:</p>
+      <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = ln(2) / ${formatDecimal(data.exposure.model.elimination_half_life_hours)} hours = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nraw(t) = exp(-ke × t) - exp(-ka × t)\nshape(t) = raw(t) / raw(t_peak)\ndose_contribution(t) = recorded_amount_mg × shape(t) REU\ntotal_exposure(t) = sum of every supported current dose contribution`}</code></pre>
+      <p>Each contribution is zero before its recorded administration and after {data.exposure.model.contribution_horizon_hours.toString()} hours. It rises from zero, reaches a normalized peak of 1 REU per recorded mg at <code>t_peak</code>, then declines. Contributions from close or simultaneous doses are summed; none resets another. Output is sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots. REU is a relative visualization unit, not nmol/L, µg/dL, biological effect, or medication adequacy.</p>
+      <h3>Why these parameters are used</h3>
+      <ul>{data.exposure.model.references.map((href) => { const detail = EXPOSURE_REFERENCE_DETAILS[href]; return <li key={href}><a href={href} target="_blank" rel="noreferrer">{detail?.label ?? "Model source"}</a>{detail === undefined ? null : ` — ${detail.use}.`}</li>; })}</ul>
+      <h3>No “needed cortisol” formula is active</h3>
+      <p>HealthCurve currently calculates no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value. The supplied exploratory scenario used <code>Req(t) = Base(t) × S(t)</code>, but its population baseline anchors and stress multipliers are not part of {data.exposure.model.version}. Garmin stress remains a provider score on its own scale. Symptoms retain their recorded 0–10 severity and use <code>severity × 10</code> only for display position. Missing values remain missing. None of these inputs changes the exposure curve or becomes a dose multiplier, coverage ratio, or physiological requirement.</p>
+      <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>
+      <ul>{REQUIREMENT_EVIDENCE.map((source) => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>{` — ${source.use}.`}</li>)}</ul>
+      <h3>Overlay display formula</h3>
+      <p>For every non-stress, non-symptom numeric lane, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. This changes only screen position; exact native values remain in the readout and table. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
+    </details>
   </section>;
 }

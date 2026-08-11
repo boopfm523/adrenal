@@ -18,7 +18,7 @@ function data(overrides: Partial<DailyHealthCurveData> = {}): DailyHealthCurveDa
       series_unit: "REU",
       safety_label: "Theoretical hydrocortisone exposure—not a cortisol measurement or dosing guide.",
       definition: "Synthetic deterministic exposure definition.",
-      model: { version: "hc-exposure-v1", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "2", elimination_half_life_hours: "1.7", elimination_rate_per_hour: "0.4", peak_time_hours: "1", contribution_horizon_hours: 24, sample_interval_minutes: 5, references: [] },
+      model: { version: "hc-exposure-v1", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "2", elimination_half_life_hours: "1.7", elimination_rate_per_hour: "0.407733", peak_time_hours: "0.998758", contribution_horizon_hours: 24, sample_interval_minutes: 5, references: ["https://doi.org/10.1002/j.1552-4604.1991.tb01906.x"] },
       dose_markers: [],
       samples: [
         { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "0" },
@@ -88,6 +88,22 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
     expect(screen.getByLabelText("Visible series sample counts")).toHaveTextContent("Dense sample dots are hidden");
+  });
+
+  it("publishes the executable formula, evidence, and absence of a needed-value model", () => {
+    render(<DailyHealthCurve data={data()} />);
+
+    const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
+    expect(methodology).not.toBeNull();
+    expect(methodology).toHaveTextContent("ke = ln(2) / 1.7 hours = 0.407733 per hour");
+    expect(methodology).toHaveTextContent("t_peak = ln(ka / ke) / (ka - ke) = 0.998758 hours");
+    expect(methodology).toHaveTextContent("total_exposure(t) = sum of every supported current dose contribution");
+    expect(methodology).toHaveTextContent("no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value");
+    expect(methodology).toHaveTextContent("Req(t) = Base(t) × S(t)");
+    expect(methodology).toHaveTextContent("display = 100 × (value - display_min) / max(display_max - display_min, 1)");
+    expect(methodology).toHaveTextContent("fallback bounds are min(0, v) and v + max(1, abs(v) × 0.1)");
+    expect(screen.getByRole("link", { name: "Derendorf et al. (1991)" })).toHaveAttribute("href", "https://doi.org/10.1002/j.1552-4604.1991.tb01906.x");
+    expect(screen.getByRole("link", { name: "Boonen et al. (2013)" })).toHaveAttribute("href", "https://pubmed.ncbi.nlm.nih.gov/23506003/");
   });
 
   it("shows systolic and diastolic together while keeping pulse in heart rate", () => {

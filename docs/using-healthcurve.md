@@ -391,6 +391,56 @@ into a cortisol requirement, medication-demand multiplier, or adequacy/shortfall
 judgment. See
 [ADR-0015](adr/0015-recorded-context-not-cortisol-demand.md).
 
+### Exact HealthCurve formulas and evidence
+
+The Analytics page publishes the executable `hc-exposure-v1` formula, its live
+parameter values, model version, evidence links, and limitations under **How this model
+works: formulas, sources, and limits**. For elapsed hours `t` after a supported actual
+dose, the implementation is exactly:
+
+```text
+ka = 2 per hour
+ke = ln(2) / 1.7 hours
+t_peak = ln(ka / ke) / (ka - ke)
+raw(t) = exp(-ke*t) - exp(-ka*t)
+shape(t) = raw(t) / raw(t_peak)
+dose_contribution(t) = recorded_amount_mg * shape(t) REU
+total_exposure(t) = sum of every supported current dose contribution
+```
+
+Contributions are zero before administration and after 24 elapsed hours. They are
+sampled every five elapsed minutes plus exact administration and modeled-peak knots.
+The peak normalization of 1 REU per recorded mg is a HealthCurve visualization choice,
+not a claim that serum cortisol is dose-proportional. The one-compartment shape and
+parameters are explained and sourced to [Derendorf et al.](https://doi.org/10.1002/j.1552-4604.1991.tb01906.x),
+[Johnson et al.](https://pmc.ncbi.nlm.nih.gov/articles/PMC5963674/),
+[Werumeus Buning et al.](https://doi.org/10.1016/j.metabol.2017.02.005), the
+[Endocrine Society guideline](https://pmc.ncbi.nlm.nih.gov/articles/PMC4880116/), and
+[Röhr et al.](https://pmc.ncbi.nlm.nih.gov/articles/PMC9231005/). Full rationale,
+gold cases, unsupported formulations/routes, and uncertainty are in
+[ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
+
+For display only, each non-stress, non-symptom numeric lane uses
+`display = 100 * (value - display_min) / max(display_max - display_min, 1)`, where
+the bounds are the observed selected-day minimum and maximum. An empty lane uses 0 and
+1. If every point equals `v`, fallback bounds are `min(0, v)` and
+`v + max(1, abs(v) * 0.1)`. Garmin stress uses fixed 0–100 bounds. A symptom retains
+its recorded 0–10 severity and is positioned at `severity * 10`. Exact native values
+stay in the readout and table.
+
+HealthCurve currently has **no baseline, Garmin-stress-derived, or symptom-derived
+cortisol “needed” formula**. The supplied exploratory model proposed
+`Req(t) = Base(t) * S(t)`, but its baseline anchors and stress multipliers are not used
+by `hc-exposure-v1`. [Boonen et al.](https://pubmed.ncbi.nlm.nih.gov/23506003/),
+[Prete et al.](https://pmc.ncbi.nlm.nih.gov/articles/PMC7241266/), and
+[Lewis and Elder](https://pmc.ncbi.nlm.nih.gov/articles/PMC3813945/) show why critical
+illness, administration method, binding, and free-versus-total cortisol complicate a
+physiological requirement. They do not validate converting a Garmin stress score or
+subjective symptom severity into an individual minute-by-minute cortisol requirement.
+Any future experimental demand line therefore requires a new versioned model and ADR,
+explicit uncertainty, validation data, and language that cannot be read as dosing
+advice. See [ADR-0015](adr/0015-recorded-context-not-cortisol-demand.md).
+
 `GET /api/v1/analytics/daily-patterns?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&timezone=Area%2FCity`
 derives up to 366 comparable local-day rows from current facts. Each row states
 `hc-daily-pattern-v1`, its exposure-model version, actual dose-linked plan-version
