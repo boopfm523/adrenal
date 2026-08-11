@@ -42,7 +42,8 @@ describe("Medication plan page", () => {
     expect(screen.getAllByText("2026-08-01T14:00:00Z").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Draft plan—not physician approved").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Draft plan—not physician approved. This version is not in force.").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Next step: review and record physician approval" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Record physician approval" })).toBeVisible();
     expect(await screen.findByText("Synthetic medicine at 07:00:00: 10 mg -> 12 mg")).toBeVisible();
     expect(screen.getByText("No removed schedule entries.")).toBeVisible();
   });
@@ -129,6 +130,7 @@ describe("Medication plan page", () => {
       active_from: null, active_to: null, notes: null,
     };
     const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    let createdDraft: ReturnType<typeof version> | null = null;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       const method = init?.method ?? "GET";
@@ -136,8 +138,11 @@ describe("Medication plan page", () => {
       requests.push({ url, method, body });
       if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
       if (url.endsWith("/medications")) return Promise.resolve(response([medication]));
-      if (url.endsWith("/regimens") && method === "POST") return Promise.resolve(response(version("33333333-3333-4333-8333-333333333333", "My real plan", "draft", "2026-08-15T07:00:00")));
-      if (url.endsWith("/regimens")) return Promise.resolve(response([]));
+      if (url.endsWith("/regimens") && method === "POST") {
+        createdDraft = version("33333333-3333-4333-8333-333333333333", "My real plan", "draft", "2026-08-15T07:00:00");
+        return Promise.resolve(response(createdDraft));
+      }
+      if (url.endsWith("/regimens")) return Promise.resolve(response(createdDraft === null ? [] : [createdDraft]));
       return Promise.resolve(response({ added: [], removed: [], changed: [] }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
@@ -166,7 +171,10 @@ describe("Medication plan page", () => {
     expect(scheduledAmount).toBeValid();
     await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Unapproved plan draft created");
+    expect(await screen.findByRole("status")).toHaveTextContent("Next, review it below and record physician approval");
+    expect(screen.getByRole("heading", { name: "Next step: review and record physician approval" })).toHaveFocus();
+    expect(screen.getByText(/Required provenance: the approving clinician or role and the source of approval/i)).toBeVisible();
+    expect(screen.getByText(/A future-dated plan will wait until that time/i)).toBeVisible();
     const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
     expect(creation?.body).toMatchObject({
       version_label: "My real plan",
@@ -179,28 +187,42 @@ describe("Medication plan page", () => {
 
   it("requires explicit provenance and acknowledgement before approving a draft", async () => {
     const draft = version("33333333-3333-4333-8333-333333333333", "Reviewed synthetic draft", "draft", "2026-09-01T00:00:00");
+    const approved = { ...draft, status: "approved" as const, approved_at: "2026-08-11T12:00:00Z", approved_by: "Dr Synthetic", approval_source: "Portal message" };
     const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    let approvalAttempts = 0;
+    let isApproved = false;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       const method = init?.method ?? "GET";
       const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
       requests.push({ url, method, body });
-      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(isApproved ? approved : null));
       if (url.endsWith("/medications")) return Promise.resolve(response([]));
-      if (url.endsWith(`/regimens/${draft.id}/approve`) && method === "POST") return Promise.resolve(response({ ...draft, status: "approved", approved_by: "Dr Synthetic", approval_source: "Portal message" }));
-      if (url.endsWith("/regimens")) return Promise.resolve(response([draft]));
+      if (url.endsWith(`/regimens/${draft.id}/approve`) && method === "POST") {
+        approvalAttempts += 1;
+        if (approvalAttempts === 1) return Promise.resolve(new Response(JSON.stringify({ detail: "overlapping effective dates" }), { status: 409, headers: { "Content-Type": "application/json" } }));
+        isApproved = true;
+        return Promise.resolve(response(approved));
+      }
+      if (url.endsWith("/regimens")) return Promise.resolve(response([isApproved ? approved : draft]));
       return Promise.resolve(response({ detail: "not found" }));
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
 
-    await userEvent.click(await screen.findByText("Approve this draft"));
+    expect(await screen.findByRole("heading", { name: "Next step: review and record physician approval" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
+    expect(requests.some((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST")).toBe(false);
     await userEvent.type(screen.getByLabelText("Approving clinician or role"), "Dr Synthetic");
     await userEvent.type(screen.getByLabelText("Approval source"), "Portal message");
     await userEvent.click(screen.getByLabelText(/confirm this records a real clinician-approved plan/i));
     await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Check provenance and overlapping effective dates");
+    await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("approved with the provenance");
-    const approval = requests.find((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST");
+    expect(await screen.findByRole("status")).toHaveTextContent("applies this plan according to its effective dates");
+    expect(await screen.findByRole("heading", { name: "Reviewed synthetic draft · currently in force" })).toBeVisible();
+    expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
+    const approval = requests.filter((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST").at(-1);
     expect(approval?.body).toEqual({ approved_by: "Dr Synthetic", approval_source: "Portal message", approved_at: null, source_document_checksum: null });
   });
 });

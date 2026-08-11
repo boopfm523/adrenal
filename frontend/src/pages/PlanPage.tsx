@@ -171,7 +171,7 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
   editDraft: RegimenVersion | null;
   medications: Medication[];
   onCancel: () => void;
-  onSaved: (message: string) => void;
+  onSaved: (message: string, version: RegimenVersion) => void;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const basis = editDraft ?? source;
@@ -182,9 +182,9 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
   useEffect(() => { headingRef.current?.focus(); }, []);
   const mutation = useMutation({
     mutationFn: (payload: RegimenInput) => editDraft === null ? createRegimen(payload) : updateRegimenDraft(editDraft.id, payload),
-    onSuccess: async () => {
+    onSuccess: async (version) => {
       await invalidatePlans(queryClient);
-      onSaved(editDraft === null ? "Unapproved plan draft created. It is not in force." : "Unapproved plan draft updated. It is not in force.");
+      onSaved(editDraft === null ? "Unapproved plan draft created. It is not in force." : "Unapproved plan draft updated. It is not in force.", version);
     },
   });
   const available = selectedNewMedication === null || medications.some((item) => item.id === selectedNewMedication.id) ? medications : [...medications, selectedNewMedication];
@@ -244,11 +244,16 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
   </section>;
 }
 
-function ApprovalForm({ version, onComplete }: { version: RegimenVersion; onComplete: (message: string) => void }): React.JSX.Element {
+function ApprovalForm({ version, focusOnMount, onComplete }: { version: RegimenVersion; focusOnMount: boolean; onComplete: (message: string) => void }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const mutation = useMutation({ mutationFn: (payload: { approved_by: string; approval_source: string; approved_at: string | null; source_document_checksum: null }) => approveRegimen(version.id, payload), onSuccess: async () => { await invalidatePlans(queryClient); onComplete("Plan version approved with the provenance you entered."); } });
-  return <details className="approval-form"><summary>Approve this draft</summary>
-    <p><strong>This is a human-only action.</strong> Use it only to record a plan that a physician has actually approved. HealthCurve and its AI cannot approve it.</p>
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (focusOnMount) headingRef.current?.focus(); }, [focusOnMount]);
+  const mutation = useMutation({ mutationFn: (payload: { approved_by: string; approval_source: string; approved_at: string | null; source_document_checksum: null }) => approveRegimen(version.id, payload), onSuccess: async () => { await invalidatePlans(queryClient); onComplete("Physician approval recorded. HealthCurve now applies this plan according to its effective dates; the plan currently in force is shown above."); } });
+  return <section className="approval-form" aria-labelledby={`approval-heading-${version.id}`}>
+    <h4 id={`approval-heading-${version.id}`} ref={headingRef} tabIndex={-1}>Next step: review and record physician approval</h4>
+    <p><strong>This draft is not active.</strong> Record approval here only after a physician has actually approved this plan. HealthCurve and its AI cannot approve it.</p>
+    <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
+    <p>After approval, HealthCurve uses the plan only during its effective period, beginning {version.effective_from}. A future-dated plan will wait until that time.</p>
     <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null }); }}>
       <label>Approving clinician or role<input name="approved_by" required maxLength={200} /></label>
       <label>Approval source<input name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" /></label>
@@ -257,7 +262,7 @@ function ApprovalForm({ version, onComplete }: { version: RegimenVersion; onComp
       <button type="submit" disabled={mutation.isPending}>Record physician approval</button>
       {mutation.isError ? <p className="error-summary" role="alert">Approval was not recorded. Check provenance and overlapping effective dates.</p> : null}
     </form>
-  </details>;
+  </section>;
 }
 
 function RetirementForm({ version, onComplete }: { version: RegimenVersion; onComplete: (message: string) => void }): React.JSX.Element {
@@ -284,24 +289,30 @@ export function PlanPage(): React.JSX.Element {
   const [newerId, setNewerId] = useState("");
   const [editor, setEditor] = useState<{ source: RegimenVersion | null; edit: RegimenVersion | null } | null>(null);
   const [message, setMessage] = useState("");
+  const [reviewDraftId, setReviewDraftId] = useState<string | null>(null);
   const chronological = [...(history.data ?? [])].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
   const selectedOlderId = olderId !== "" ? olderId : (chronological[chronological.length - 2]?.id ?? "");
   const selectedNewerId = newerId !== "" ? newerId : (chronological[chronological.length - 1]?.id ?? "");
   const diff = useQuery({ queryKey: ["regimen-diff", selectedOlderId, selectedNewerId], queryFn: () => getRegimenDiff(selectedOlderId, selectedNewerId), enabled: selectedOlderId !== "" && selectedNewerId !== "" && selectedOlderId !== selectedNewerId });
-  const complete = (nextMessage: string): void => { setEditor(null); setMessage(nextMessage); };
+  const complete = (nextMessage: string): void => { setEditor(null); setReviewDraftId(null); setMessage(nextMessage); };
+  const completeDraft = (nextMessage: string, version: RegimenVersion): void => {
+    setEditor(null);
+    setReviewDraftId(version.id);
+    setMessage(`${nextMessage} Next, review it below and record physician approval if it matches a plan your physician actually approved.`);
+  };
 
   return <Page title="Medication plan" description="Physician-approved schedules and their provenance, kept separate from actual recorded doses.">
     {(active.isPending || history.isPending || medications.isPending) ? <p role="status">Loading medication plan…</p> : null}
     {(active.isError || history.isError || medications.isError) ? <p className="error-summary" role="alert">Medication plan data could not be loaded.</p> : null}
     {message === "" ? null : <p className="success-message" role="status">{message}</p>}
     {editor === null ? <div className="page-actions"><button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</button></div> : null}
-    {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} onCancel={() => { setEditor(null); }} onSaved={complete} />}
+    {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
     {active.data === null ? <section className="empty-state"><h2>No approved plan currently in force</h2><p>Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</p></section> : null}
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} /></PlanCard>}
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
       {history.data?.length === 0 ? <p>No plan versions recorded.</p> : null}
-      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</article>)}</div>
+      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</article>)}</div>
     </section>
 
     <section aria-labelledby="diff-heading"><h2 id="diff-heading">Compare versions</h2>
