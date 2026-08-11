@@ -38,7 +38,9 @@ describe("Symptoms and diary page", () => {
 
     expect(await screen.findByText("Synthetic public note")).toBeVisible();
     expect(screen.getByText("Synthetic public event")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Symptom records table" })).toBeVisible();
+    const symptomTableRegion = screen.getByRole("region", { name: "Symptom records table" });
+    expect(symptomTableRegion).toBeVisible();
+    expect(within(symptomTableRegion).getByRole("table")).toHaveClass("symptom-records-table");
     expect(screen.getByRole("region", { name: "Diary records table" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Life event records table" })).toBeVisible();
     expect(screen.queryByText("Synthetic private note")).not.toBeInTheDocument();

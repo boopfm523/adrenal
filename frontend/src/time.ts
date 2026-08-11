@@ -23,6 +23,18 @@ export function localDate(now: Date, timezone: string): string {
   return `${requiredPart(parts, "year")}-${requiredPart(parts, "month")}-${requiredPart(parts, "day")}`;
 }
 
+/** Shift an ISO local calendar date without converting through a timezone instant. */
+export function shiftIsoDate(localDay: string, days: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDay);
+  if (match === null) throw new Error("localDay must be an ISO calendar date");
+  const [, year, month, day] = match;
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new Error("localDay must be an ISO calendar date");
+  }
+  const shifted = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day) + days));
+  return shifted.toISOString().slice(0, 10);
+}
+
 export function localDateTime(now: Date, timezone: string): string {
   const parts = partsInTimezone(now, timezone);
   return `${requiredPart(parts, "year")}-${requiredPart(parts, "month")}-${requiredPart(parts, "day")}T${requiredPart(parts, "hour")}:${requiredPart(parts, "minute")}:${requiredPart(parts, "second")}`;

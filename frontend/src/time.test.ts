@@ -1,4 +1,4 @@
-import { localDate, localDateTime, timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "./time";
+import { localDate, localDateTime, shiftIsoDate, timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "./time";
 
 describe("timezone-aware Today values", () => {
   it("uses the owner timezone rather than the browser timezone", () => {
@@ -12,5 +12,11 @@ describe("timezone-aware Today values", () => {
     expect(timezoneAbbreviation("America/New_York", "2026-08-15T12:00:00Z")).toBe("EDT");
     expect(timezoneAbbreviationForLocalDate("Europe/London", "2026-08-01")).toBe("GMT+1");
     expect(timezoneAbbreviationForLocalDate("Pacific/Auckland", "2026-09-27")).toBe("GMT+13");
+  });
+
+  it("shifts local calendar dates across month, year, and leap-day boundaries", () => {
+    expect(shiftIsoDate("2026-01-01", -1)).toBe("2025-12-31");
+    expect(shiftIsoDate("2024-03-01", -1)).toBe("2024-02-29");
+    expect(shiftIsoDate("2026-08-11", -2)).toBe("2026-08-09");
   });
 });

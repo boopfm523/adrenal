@@ -173,6 +173,15 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; vertical-align: top; }
+.symptom-records-table { min-width: 68rem; table-layout: fixed; }
+.symptom-records-table th:nth-child(1) { width: 11rem; }
+.symptom-records-table th:nth-child(2) { width: 9rem; }
+.symptom-records-table th:nth-child(3) { width: 11rem; }
+.symptom-records-table th:nth-child(4) { width: 17rem; }
+.symptom-records-table th:nth-child(5) { width: 20rem; }
+.symptom-records-table td > span, .symptom-records-table th > span { display: block; }
+.symptom-records-table__provenance span + span { margin-top: 0.2rem; }
+.symptom-records-table__actions button { display: block; margin-top: 0.55rem; }
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; border-top: 1px solid #ccd4ce; padding-top: 1rem; }
 .pagination__status { margin: 0; font-weight: 700; }
 .pagination__actions { display: flex; gap: 0.75rem; }
@@ -201,6 +210,9 @@ circle.chart-series { fill: white; }
 .chart-table summary { cursor: pointer; font-weight: 750; }
 .healthcurve-card { border-color: #174c3c; box-shadow: 0 0.35rem 1.2rem rgb(23 76 60 / 10%); }
 .healthcurve-date-filter { grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1fr) auto; align-items: end; }
+.healthcurve-date-shortcuts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.healthcurve-date-shortcuts > span { margin-right: 0.2rem; font-weight: 800; }
+.healthcurve-date-shortcuts button { min-height: 2.35rem; padding: 0.4rem 0.75rem; }
 .curve-toggles { display: flex; flex-wrap: wrap; gap: 0.65rem 1.1rem; margin-block: 1rem; padding: 1rem; border: 1px solid #ccd4ce; border-radius: 0.6rem; }
 .curve-toggles legend { padding-inline: 0.35rem; font-weight: 800; }
 .curve-toggles .checkbox-label { display: flex; gap: 0.45rem; align-items: center; }
@@ -209,13 +221,17 @@ circle.chart-series { fill: white; }
 .healthcurve-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #ccd4ce; background: #fbfcfb; }
 .healthcurve-chart { display: block; min-width: 52rem; width: 100%; height: auto; }
 .healthcurve-time-grid { stroke: #dce2dd; stroke-width: 1; }
-.healthcurve-time-label, .healthcurve-scale-label { fill: #47554f; font-size: 12px; }
+.healthcurve-time-label { fill: #47554f; font-size: 10px; }
+.healthcurve-scale-label { fill: #47554f; font-size: 12px; }
 .healthcurve-overlay-bg { fill: #fbfcfb; }
 .healthcurve-relative-grid { stroke: #dce2dd; stroke-width: 1; }
 .healthcurve-axis-title { fill: #26332e; font-size: 12px; font-weight: 700; }
 .healthcurve-legend { display: flex; flex-wrap: wrap; gap: 0.55rem 1rem; margin-block: 0.8rem; }
 .healthcurve-legend span { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; }
 .healthcurve-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-block: 1rem; }
+.healthcurve-controls { margin-top: 1rem; padding-top: 0.25rem; border-top: 1px solid #ccd4ce; }
+.healthcurve-controls .healthcurve-focus { margin-block: 0.55rem 0.75rem; }
+.healthcurve-controls .curve-toggles { margin-block: 0 0.65rem; }
 .healthcurve-focus > span { font-weight: 800; margin-right: 0.25rem; }
 .healthcurve-focus button { min-height: 2.35rem; padding: 0.4rem 0.7rem; }
 .primary-healthcurve-entry { margin: 1rem 0; padding: 1rem; border: 2px solid #174c3c; border-radius: 0.6rem; background: #f4f8f5; }
@@ -257,6 +273,12 @@ circle.chart-series { fill: white; }
 .healthcurve-point--diastolic { fill: #4a8a68; }
 .healthcurve-blood-pressure-label { fill: #123f2d; font-size: 12px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 3px; stroke-linejoin: round; }
 .healthcurve-point--symptoms { fill: #bd2f6b; }
+.healthcurve-recorded-symptoms { margin: 0.8rem 0; padding: 0.75rem 1rem; border: 1px solid #d5a5bb; border-radius: 0.45rem; background: #fff5f9; }
+.healthcurve-recorded-symptoms h3 { margin: 0; }
+.healthcurve-recorded-symptoms p { margin-block: 0.35rem; }
+.healthcurve-recorded-symptoms ul { margin-block: 0.35rem 0; }
+.healthcurve-unscored-symptom-line { stroke: #bd2f6b; stroke-width: 1.5; stroke-dasharray: 2 4; opacity: 0.72; }
+.healthcurve-unscored-symptom-marker { fill: #bd2f6b; stroke: white; stroke-width: 1.5; }
 .garmin-aggregate-context { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid #ccd4ce; border-radius: 0.5rem; background: #f4f7f5; }
 .garmin-aggregate-context h3 { margin-top: 0; }
 .garmin-aggregate-context dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem; margin-bottom: 0; }
@@ -270,6 +292,13 @@ circle.chart-series { fill: white; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
 .healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
 .healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }
+.healthcurve-hover-tooltip { pointer-events: none; overflow: visible; }
+.healthcurve-hover-tooltip-card { box-sizing: border-box; height: 100%; overflow: auto; padding: 0.65rem; border: 1px solid #65736d; border-radius: 0.35rem; background: rgb(255 255 255 / 96%); box-shadow: 0 0.3rem 0.8rem rgb(23 34 30 / 22%); color: #17221e; font-size: 11px; line-height: 1.25; }
+.healthcurve-hover-tooltip-card > strong { display: block; margin-bottom: 0.35rem; font-size: 12px; }
+.healthcurve-hover-tooltip-card p, .healthcurve-hover-tooltip-card ul { margin: 0; }
+.healthcurve-hover-tooltip-card ul { padding-left: 1rem; }
+.healthcurve-hover-tooltip-card li + li { margin-top: 0.35rem; }
+.healthcurve-hover-tooltip-card li span { display: block; color: #47554f; }
 .healthcurve-time-explorer { display: grid; gap: 0.35rem; margin-block: 0.8rem; font-weight: 700; }
 .healthcurve-time-explorer input { width: 100%; }
 .healthcurve-readout { min-height: 4.5rem; padding: 0.8rem; border: 1px solid #ccd4ce; border-radius: 0.45rem; background: #f4f7f5; }

@@ -57,6 +57,11 @@ describe("Daily HealthCurve", () => {
 
     expect(screen.getAllByRole("img")).toHaveLength(1);
     expect(screen.getByRole("img")).toHaveAccessibleName(/interactive selected-day HealthCurve overlay/i);
+    const controls = screen.getByLabelText("HealthCurve chart controls");
+    const legend = screen.getByLabelText("Overlay series legend");
+    const chart = screen.getByRole("region", { name: "Daily HealthCurve synchronized chart" });
+    expect(controls.nextElementSibling).toBe(legend);
+    expect(legend.nextElementSibling).toBe(chart);
     expect(document.querySelectorAll("[data-series='exposure']")).toHaveLength(1);
     expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Stress" })).toHaveAttribute("aria-pressed", "true");
@@ -72,13 +77,25 @@ describe("Daily HealthCurve", () => {
     const readout = screen.getByRole("status");
     expect(within(readout).getByText("Heart rate:")).toBeVisible();
     expect(readout).toHaveTextContent("Heart rate: 80 bpm");
-    expect(readout).toHaveTextContent(/GMT-5/);
+    expect(readout.textContent.match(/GMT-5/g)).toHaveLength(1);
 
     const pointerTarget = document.querySelector<SVGRectElement>(".healthcurve-pointer-target");
     if (pointerTarget === null) throw new Error("pointer target missing");
-    vi.spyOn(pointerTarget, "getBoundingClientRect").mockReturnValue({ left: 0, width: 100 } as DOMRect);
-    fireEvent.pointerMove(pointerTarget, { clientX: 50 });
+    vi.spyOn(pointerTarget, "getBoundingClientRect").mockReturnValue({ left: 0, width: 1_380 } as DOMRect);
+    fireEvent.pointerEnter(pointerTarget);
+    fireEvent.pointerMove(pointerTarget, { clientX: 60 });
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Heart rate: 80 bpm");
+    expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
+    expect(tooltip).not.toHaveTextContent(/at 2026-/);
+    expect(screen.getByRole("img").querySelector(":scope > title")).toBeNull();
+    const tickLabels = [...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent);
+    expect(tickLabels.every((label) => /^\d{2}:\d{2}$/.test(label))).toBe(true);
+    expect(tickLabels.join(" ")).not.toMatch(/AM|PM|GMT/);
+    fireEvent.pointerMove(pointerTarget, { clientX: 690 });
     expect(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" })).toHaveValue("690");
+    fireEvent.pointerLeave(pointerTarget);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("breaks recorded curves across missing cadence intervals", () => {
@@ -249,7 +266,7 @@ describe("Daily HealthCurve", () => {
     expect(within(table).getAllByText("Heart rate")).toHaveLength(1_000);
   });
 
-  it("keeps a symptom with missing severity out of the numeric chart without hiding the fact", () => {
+  it("shows close unscored symptoms as timed events without inventing severity", () => {
     render(<DailyHealthCurve data={data({ symptoms: [{
       id: "10000000-0000-4000-8000-000000000001",
       category: "fact",
@@ -260,11 +277,33 @@ describe("Daily HealthCurve", () => {
       provenance: { ...provenance, source_type: "web", confirmation_state: "direct" },
       episode_id: null,
       notes: null,
+    }, {
+      id: "10000000-0000-4000-8000-000000000002",
+      category: "fact",
+      name: "Synthetic dizziness",
+      severity: null,
+      body_area: null,
+      time: { occurred_at: "2026-03-08T16:01:00Z", local_time: "2026-03-08T12:01:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+      provenance: { ...provenance, source_type: "telegram", confirmation_state: "confirmed_from_draft" },
+      episode_id: null,
+      notes: null,
     }] })} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Recorded events" }));
     expect(document.querySelectorAll("circle.healthcurve-point--symptoms")).toHaveLength(0);
+    expect(document.querySelectorAll(".healthcurve-unscored-symptom-marker")).toHaveLength(2);
+    expect(screen.getByRole("img")).toHaveAccessibleName(/2 recorded symptom events/i);
+    const symptomList = screen.getByRole("heading", { name: "Recorded symptoms" }).parentElement;
+    expect(symptomList).toHaveTextContent("Synthetic fatigue — severity not recorded");
+    expect(symptomList).toHaveTextContent("Synthetic dizziness — severity not recorded");
+    const summary = within(screen.getByLabelText("Visible series sample counts")).getByText(/Symptoms:/).parentElement;
+    expect(summary).toHaveTextContent("2 recorded events; 0 with recorded severity; 2 without severity");
+    fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "660" } });
+    const readout = screen.getByRole("status");
+    expect(readout).toHaveTextContent("Synthetic fatigue: severity missing");
+    expect(readout).toHaveTextContent("Synthetic dizziness: severity missing");
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(within(table).getByText("Synthetic fatigue: severity missing")).toBeInTheDocument();
+    expect(within(table).getByText("Synthetic dizziness: severity missing")).toBeInTheDocument();
   });
 });

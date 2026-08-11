@@ -47,6 +47,13 @@ interface TableRow {
   source: string;
 }
 
+interface SymptomObservation {
+  id: string;
+  time: string;
+  label: string;
+  source: string;
+}
+
 const WIDTH = 960;
 const HEIGHT = 430;
 const LEFT = 74;
@@ -130,11 +137,11 @@ function experiencedTime(value: string, timezone: string): string {
 }
 
 function timeTicks(start: number, end: number, timezone: string): { time: number; label: string }[] {
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-    timeZoneName: "shortOffset",
+    hourCycle: "h23",
   });
   return Array.from({ length: 7 }, (_, index) => {
     const time = start + index / 6 * (end - start);
@@ -272,6 +279,24 @@ function nearestVisiblePoints(shownLanes: Lane[], cursorTime: number): { lane: L
   });
 }
 
+function missingSeverityObservations(symptoms: Symptom[]): SymptomObservation[] {
+  return symptoms.flatMap((symptom) => symptom.severity == null ? [{
+    id: symptom.id,
+    time: symptom.time.occurred_at,
+    label: `${symptom.name}: severity missing`,
+    source: `${symptom.provenance.source_type}; ${symptom.provenance.confirmation_state}`,
+  }] : []);
+}
+
+function nearbySymptomObservations(
+  observations: SymptomObservation[],
+  cursorTime: number,
+): SymptomObservation[] {
+  return observations.filter(
+    (observation) => Math.abs(Date.parse(observation.time) - cursorTime) <= 60_000,
+  );
+}
+
 function tableRows(data: DailyHealthCurveData, visible: Record<LaneKey, boolean>): TableRow[] {
   const rows: TableRow[] = lanes(data).flatMap((lane) => visible[lane.key] ? lane.points.map((point) => ({
     time: point.time,
@@ -350,6 +375,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
   const start = Date.parse(data.exposure.day_start);
   const end = Date.parse(data.exposure.day_end);
   const [cursorMinute, setCursorMinute] = useState(0);
+  const [hoveringChart, setHoveringChart] = useState(false);
   const cursorTime = Math.min(end, start + cursorMinute * 60_000);
   const allLanes = useMemo(() => lanes(data), [data]);
   const shownLanes = allLanes.filter((lane) => visible[lane.key]);
@@ -365,8 +391,30 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     (record) => (record.awakenings ?? 0) > 0 && (record.sleep_intervals ?? []).length === 0,
   );
   const cursorPoints = nearestVisiblePoints(shownLanes, cursorTime);
+  const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
+  const cursorUnscoredSymptoms = visible.symptoms
+    ? nearbySymptomObservations(unscoredSymptoms, cursorTime)
+    : [];
+  const cursorRows = [
+    ...cursorPoints.map(({ lane, point }) => ({
+      key: `${lane.key}-${point.time}-${point.label}`,
+      series: lane.label,
+      value: point.label,
+      source: point.source,
+    })),
+    ...cursorUnscoredSymptoms.map((symptom) => ({
+      key: `unscored-symptom-${symptom.id}`,
+      series: "Symptoms",
+      value: symptom.label,
+      source: symptom.source,
+    })),
+  ];
+  const cursorLabel = experiencedTime(new Date(cursorTime).toISOString(), data.exposure.timezone);
   const elapsedMinutes = Math.round((end - start) / 60_000);
   const cursorX = LEFT + (cursorTime - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+  const tooltipWidth = 280;
+  const tooltipX = Math.min(WIDTH - tooltipWidth - 8, Math.max(LEFT + 8, cursorX + (cursorX > WIDTH * 0.62 ? -tooltipWidth - 12 : 12)));
+  const tooltipHeight = Math.min(PLOT_HEIGHT - 24, 52 + Math.max(1, cursorRows.length) * 42);
 
   function moveCursor(clientX: number, left: number, width: number): void {
     const ratio = Math.max(0, Math.min(1, (clientX - left) / Math.max(width, 1)));
@@ -377,24 +425,24 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     <h2 id="daily-healthcurve-title">Your daily HealthCurve</h2>
     <p>{data.exposure.safety_label}</p>
     <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the interactive readout and table. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
-    <div className="healthcurve-focus" role="group" aria-label="Choose a focused HealthCurve comparison"><span>Quick focus:</span>{FOCUS_PRESETS.map((preset) => <button key={preset.label} type="button" className={isPresetVisible(visible, preset.keys) ? undefined : "button-secondary"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</button>)}</div>
-    <fieldset className="curve-toggles"><legend>Show or hide chart series</legend>{Object.entries({
-      exposure: "Theoretical exposure and actual doses",
-      stress: "Garmin stress",
-      heart_rate: "Heart rate",
-      hrv: "HRV",
-      respiration_rate: "Respiration",
-      blood_pressure: "Blood pressure",
-      symptoms: "Symptoms",
-      episodes: "Stress episodes",
-    } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset>
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
     {dailyAggregates.length === 0 ? null : <section className="garmin-aggregate-context" aria-labelledby="garmin-aggregate-context-title"><h3 id="garmin-aggregate-context-title">Garmin aggregate context</h3><p>These values summarize a provider-defined period. They have no exact intraday observation time, so they are not positioned on or connected within the chart.</p><dl>{dailyAggregates.map((record) => <div key={record.id}><dt>{record.measurement_label ?? garminMetricLabel(record.metric_type)}</dt><dd><strong>{formatGarminDailyValue(record.metric_type, record.value, record.unit)}</strong><span>{record.period_label === null || record.period_label === undefined ? "Untimed aggregate" : `Untimed · ${record.period_label}`} · Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</span></dd></div>)}</dl></section>}
     <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
+    <div className="healthcurve-controls" aria-label="HealthCurve chart controls"><div className="healthcurve-focus" role="group" aria-label="Choose a focused HealthCurve comparison"><span>Quick focus:</span>{FOCUS_PRESETS.map((preset) => <button key={preset.label} type="button" className={isPresetVisible(visible, preset.keys) ? undefined : "button-secondary"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</button>)}</div>
+      <fieldset className="curve-toggles"><legend>Show or hide chart series</legend>{Object.entries({
+        exposure: "Theoretical exposure and actual doses",
+        stress: "Garmin stress",
+        heart_rate: "Heart rate",
+        hrv: "HRV",
+        respiration_rate: "Respiration",
+        blood_pressure: "Blood pressure",
+        symptoms: "Symptoms",
+        episodes: "Stress episodes",
+      } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset></div>
     <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}</span>)}</div>
+    {visible.symptoms && data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; relative display positions share one time axis and exact values follow.`}>
-        <title>Interactive selected-day HealthCurve overlay. Relative display positions are not equivalent units. Exact values follow in the readout and table.</title>
+      <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; relative display positions share one time axis and exact values follow.`}>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
         {sleepRecords.length === 0 ? null : <g data-series="sleep">{sleepRecords.map((record) => {
           const sessionStart = Date.parse(record.time.occurred_at);
@@ -454,15 +502,21 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
           const x = xPosition(dose.occurred_at, start, end);
           return <g key={dose.dose_event_id}><line className="healthcurve-dose-marker" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT}><title>{experiencedTime(dose.occurred_at, data.exposure.timezone)}: actual dose {formatMeasurement(dose.amount, dose.unit)} {dose.medication_name}</title></line><circle className="healthcurve-dose-dot" cx={x} cy={TOP} r="5" /></g>;
         }) : null}
+        {visible.symptoms ? <g data-series="unscored-symptoms">{unscoredSymptoms.map((symptom, index) => {
+          const x = xPosition(symptom.time, start, end);
+          const y = TOP + PLOT_HEIGHT + 10 + index % 2 * 10;
+          return <g key={symptom.id} className="healthcurve-unscored-symptom"><title>{experiencedTime(symptom.time, data.exposure.timezone)}: {symptom.label}; source {symptom.source}; marker is outside the severity scale</title><line className="healthcurve-unscored-symptom-line" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT} /><polygon className="healthcurve-unscored-symptom-marker" points={`${(x - 5).toString()},${y.toString()} ${x.toString()},${(y - 5).toString()} ${(x + 5).toString()},${y.toString()} ${x.toString()},${(y + 5).toString()}`} /></g>;
+        })}</g> : null}
         <line className="healthcurve-cursor" x1={cursorX} y1={TOP} x2={cursorX} y2={TOP + PLOT_HEIGHT} />
-        <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} onPointerMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
+        <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} onPointerEnter={() => { setHoveringChart(true); }} onPointerLeave={() => { setHoveringChart(false); }} onPointerMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
+        {hoveringChart ? <foreignObject className="healthcurve-hover-tooltip" x={tooltipX} y={TOP + 12} width={tooltipWidth} height={tooltipHeight}><div className="healthcurve-hover-tooltip-card" role="tooltip"><strong>{cursorLabel}</strong>{cursorRows.length === 0 ? <p>No exact observation at this time.</p> : <ul>{cursorRows.map((row) => <li key={`tooltip-${row.key}`}><strong>{row.series}:</strong> {row.value}<span>{row.source}</span></li>)}</ul>}</div></foreignObject> : null}
         <text transform={`translate(18 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="healthcurve-axis-title">Relative display position (0–100)</text>
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({timezoneAbbreviation(data.exposure.timezone, data.exposure.day_start)})</text>
       </svg>
     </div>
     <label className="healthcurve-time-explorer">Explore the chart by time<input aria-label="Explore daily HealthCurve by time" type="range" min="0" max={elapsedMinutes} step="1" value={Math.min(cursorMinute, elapsedMinutes)} onChange={(event) => { setCursorMinute(Number(event.target.value)); }} /></label>
-    <div className="healthcurve-readout" role="status" aria-live="polite"><strong>{experiencedTime(new Date(cursorTime).toISOString(), data.exposure.timezone)}</strong>{cursorPoints.length === 0 ? <p>No exact observation at this time. Nearby missing data remains missing.</p> : <ul>{cursorPoints.map(({ lane, point }) => <li key={`${lane.key}-${point.time}-${point.label}`}><strong>{lane.label}:</strong> {point.label} <span>at {experiencedTime(point.time, data.exposure.timezone)}; {point.source}</span></li>)}</ul>}</div>
-    <div className="curve-series-summary" aria-label="Visible series sample counts">{shownLanes.map((lane) => <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the readout and table." : ""}</p>)}</div>
+    <div className="healthcurve-readout" role="status" aria-live="polite"><strong>{cursorLabel}</strong>{cursorRows.length === 0 ? <p>No exact observation at this time. Nearby missing data remains missing.</p> : <ul>{cursorRows.map((row) => <li key={row.key}><strong>{row.series}:</strong> {row.value} <span>{row.source}</span></li>)}</ul>}</div>
+    <div className="curve-series-summary" aria-label="Visible series sample counts">{shownLanes.map((lane) => lane.key === "symptoms" ? <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p> : <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the readout and table." : ""}</p>)}</div>
     <details className="chart-table"><summary>View exact values and provenance</summary><div className="table-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve exact values"><table><caption>Current recorded facts and deterministic model samples shown in the selected lanes. Timestamped rows sort by experienced instant; aggregates are explicitly untimed.</caption><thead><tr><th scope="col">Local date / time or period</th><th scope="col">Series</th><th scope="col">Exact value</th><th scope="col">Source / provenance</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.time ?? "aggregate"}-${row.series}-${index.toString()}`}><th scope="row">{row.time === null ? `${data.exposure.date} · untimed aggregate` : experiencedTime(row.time, data.exposure.timezone)}</th><td>{row.series}</td><td>{row.value}</td><td>{row.source}</td></tr>)}</tbody></table></div></details>
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
