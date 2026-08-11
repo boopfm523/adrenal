@@ -22,7 +22,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, declarative_mixin, mapped_column
+from sqlalchemy.orm import Mapped, declarative_mixin, mapped_column, relationship
 
 from healthcurve.db import FACT_SCHEMA, OPS_SCHEMA, FactBase, OpsBase, StrEnumType
 from healthcurve.events.base import EventMixin, event_table_args
@@ -51,6 +51,10 @@ class GarminSyncStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     COMPLETED_WITH_WARNINGS = "completed_with_warnings"
+
+
+class GarminSleepStage(StrEnum):
+    AWAKE = "awake"
 
 
 class GarminConnection(OpsBase):
@@ -204,6 +208,11 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
     duration_seconds: Mapped[int | None] = mapped_column()
     garmin_duration_source: Mapped[str] = mapped_column(String(32), nullable=False)
     awakenings: Mapped[int | None] = mapped_column()
+    stage_intervals: Mapped[list[GarminSleepStageInterval]] = relationship(
+        back_populates="sleep_event",
+        cascade="all, delete-orphan",
+        order_by="GarminSleepStageInterval.ordinal",
+    )
 
     __table_args__ = (
         CheckConstraint("ended_at > occurred_at", name="sleep_interval_ordered"),
@@ -226,6 +235,31 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
             name="garmin_sleep_exactly_one_source",
         ),
         *event_table_args("garmin_sleep_event"),
+    )
+
+
+class GarminSleepStageInterval(FactBase):
+    """One explicit provider/FIT sleep-stage interval for an immutable sleep revision."""
+
+    __tablename__ = "garmin_sleep_stage_interval"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    sleep_event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("fact.garmin_sleep_event.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ordinal: Mapped[int] = mapped_column(nullable=False)
+    stage: Mapped[GarminSleepStage] = mapped_column(
+        StrEnumType(GarminSleepStage, 24), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sleep_event: Mapped[GarminSleepEvent] = relationship(back_populates="stage_intervals")
+
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="sleep_stage_ordinal_nonnegative"),
+        CheckConstraint("ended_at > started_at", name="sleep_stage_interval_ordered"),
+        UniqueConstraint("sleep_event_id", "ordinal", name="uq_sleep_stage_interval_ordinal"),
+        FACT_SCHEMA,
     )
 
 

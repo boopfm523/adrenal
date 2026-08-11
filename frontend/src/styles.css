@@ -227,6 +227,8 @@ circle.chart-series { fill: white; }
 .healthcurve-key--respiration_rate { border-color: #25677a; }
 .healthcurve-key--blood_pressure { border-color: #1c5a34; border-top-style: dotted; }
 .healthcurve-key--symptoms { border-color: #bd2f6b; border-top-style: dotted; }
+.healthcurve-key--sleep { border-color: #315b8a; border-top-style: solid; }
+.healthcurve-key--awake { border-color: #d17d23; border-top-style: solid; }
 .healthcurve-series { fill: none; stroke: #153cc1; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
 .healthcurve-series--stress { stroke: #a14c12; stroke-dasharray: 8 4; }
 .healthcurve-series--heart_rate { stroke: #a32038; }
@@ -239,6 +241,11 @@ circle.chart-series { fill: white; }
 .healthcurve-exposure-line { fill: none; stroke: #153cc1; stroke-width: 3.5; stroke-linejoin: round; }
 .healthcurve-dose-marker { stroke: #9f3e17; stroke-width: 2; stroke-dasharray: 5 3; }
 .healthcurve-dose-dot { fill: #9f3e17; }
+.healthcurve-sleep-band { fill: rgb(49 91 138 / 24%); stroke: #315b8a; stroke-width: 1; }
+.healthcurve-awake-interval { fill: rgb(209 125 35 / 14%); stroke: #b05f0c; stroke-width: 1; stroke-dasharray: 3 3; }
+.healthcurve-sleep-marker { stroke: #315b8a; stroke-width: 2; stroke-dasharray: 5 3; }
+.healthcurve-sleep-marker--end { stroke: #5e3f83; }
+.healthcurve-sleep-label { fill: #274869; font-size: 11px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 3px; stroke-linejoin: round; }
 .healthcurve-point { fill: #174c3c; stroke: white; stroke-width: 1; }
 .healthcurve-point--stress { fill: #a14c12; }
 .healthcurve-point--heart_rate { fill: #a32038; }

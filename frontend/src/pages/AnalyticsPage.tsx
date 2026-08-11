@@ -102,6 +102,7 @@ export function AnalyticsPage(): React.JSX.Element {
       ]);
       return { exposure, garmin, symptoms, bloodPressure, episodes };
     },
+    refetchInterval: 60_000,
   });
   const summary = useQuery({ queryKey: ["analytics", filters], queryFn: () => getAnalyticsSummary(filters.dateFrom, filters.dateTo, filters.timezone) });
   const patterns = useQuery({ queryKey: ["daily-patterns", filters], queryFn: () => getDailyPatterns(filters.dateFrom, filters.dateTo, filters.timezone) });

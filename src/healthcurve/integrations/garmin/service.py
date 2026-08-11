@@ -16,6 +16,8 @@ from healthcurve.integrations.garmin.models import (
     GarminImportBatch,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepStage,
+    GarminSleepStageInterval,
     GarminSourceMixin,
 )
 from healthcurve.integrations.garmin.parser import (
@@ -141,6 +143,19 @@ def confirm_import(
             activity_count += 1
         row.apply_event_time(candidate.time)
         session.add(row)
+        if isinstance(candidate, SleepCandidate):
+            session.flush([row])
+            session.add_all(
+                GarminSleepStageInterval(
+                    sleep_event_id=row.id,
+                    ordinal=ordinal,
+                    stage=GarminSleepStage.AWAKE,
+                    started_at=interval.started_at,
+                    ended_at=interval.ended_at,
+                )
+                for ordinal, interval in enumerate(candidate.stage_intervals)
+                if interval.started_at is not None and interval.ended_at is not None
+            )
 
     audit.record(
         session,

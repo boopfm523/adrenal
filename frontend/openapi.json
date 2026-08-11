@@ -2990,6 +2990,13 @@
             ],
             "title": "Sample Interval Seconds"
           },
+          "sleep_intervals": {
+            "items": {
+              "$ref": "#/components/schemas/GarminSleepIntervalOut"
+            },
+            "title": "Sleep Intervals",
+            "type": "array"
+          },
           "sleep_score": {
             "anyOf": [
               {
@@ -3064,6 +3071,32 @@
           "page"
         ],
         "title": "GarminRecordsOut",
+        "type": "object"
+      },
+      "GarminSleepIntervalOut": {
+        "properties": {
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "stage": {
+            "const": "awake",
+            "title": "Stage",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "started_at",
+          "ended_at"
+        ],
+        "title": "GarminSleepIntervalOut",
         "type": "object"
       },
       "GarminStatusOut": {
@@ -10276,6 +10309,105 @@
           }
         },
         "summary": "Samples",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/integrations/garmin/sleep": {
+      "get": {
+        "description": "Return current sleep sessions that overlap one bounded local day.",
+        "operationId": "list_sleep_records_api_v1_integrations_garmin_sleep_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Day",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminRecordsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sleep Records",
         "tags": [
           "garmin"
         ]

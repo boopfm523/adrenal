@@ -72,6 +72,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminMetricType,
     GarminSleepEvent,
+    GarminSleepStageInterval,
     GarminSyncRun,
     GarminSyncStatus,
 )
@@ -1299,6 +1300,7 @@ def test_garmin_preview_then_confirm_is_idempotent_and_preserves_provenance(
         assert session.scalar(select(func.count()).select_from(GarminImportBatch)) == 1
         assert session.scalar(select(func.count()).select_from(GarminMetricEvent)) == 4
         assert session.scalar(select(func.count()).select_from(GarminSleepEvent)) == 1
+        assert session.scalar(select(func.count()).select_from(GarminSleepStageInterval)) == 1
         assert session.scalar(select(func.count()).select_from(GarminActivityEvent)) == 1
         metric = session.scalar(select(GarminMetricEvent))
         assert metric is not None
@@ -1359,14 +1361,50 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         )
 
     def fetched(
-        steps: int, heart_rate: int, nightly_hrv: int = 41, highest_respiration: float = 18.4
+        steps: int,
+        heart_rate: int,
+        nightly_hrv: int = 41,
+        highest_respiration: float = 18.4,
+        awake_minutes: int = 10,
     ) -> FetchedWindow:
         daily = map_day(
             day=date(2026, 1, 10),
             stats={"totalSteps": steps},
-            sleep={},
+            sleep={
+                "dailySleepDTO": {
+                    "sleepStartTimestampGMT": int(
+                        datetime(2026, 1, 9, 23, tzinfo=UTC).timestamp() * 1_000
+                    ),
+                    "sleepEndTimestampGMT": int(
+                        datetime(2026, 1, 10, 7, tzinfo=UTC).timestamp() * 1_000
+                    ),
+                    "sleepStartTimestampLocal": int(
+                        datetime(2026, 1, 9, 23, tzinfo=UTC).timestamp() * 1_000
+                    ),
+                    "timeZoneId": "UTC",
+                    "awakeCount": 1,
+                },
+                "sleepLevels": [
+                    {
+                        "startGMT": "2026-01-09T23:00:00Z",
+                        "endGMT": "2026-01-10T02:00:00Z",
+                        "activityLevel": 1,
+                    },
+                    {
+                        "startGMT": "2026-01-10T02:00:00Z",
+                        "endGMT": f"2026-01-10T02:{awake_minutes:02d}:00Z",
+                        "activityLevel": 3,
+                    },
+                    {
+                        "startGMT": f"2026-01-10T02:{awake_minutes:02d}:00Z",
+                        "endGMT": "2026-01-10T07:00:00Z",
+                        "activityLevel": 1,
+                    },
+                ],
+            },
             timezone="UTC",
         )
+        assert daily.sleep is not None
         activities, activity_warnings = map_activities(
             [
                 {
@@ -1425,7 +1463,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             timezone="UTC",
             metrics=(*daily.metrics, *intraday.aggregates),
             intraday_metrics=intraday.observations,
-            sleeps=(),
+            sleeps=(daily.sleep,),
             activities=activities,
             warnings=tuple(sorted({*daily.warnings, *intraday.warnings, *activity_warnings})),
             capabilities={
@@ -1439,13 +1477,15 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
 
     with Session(engine) as session, session.begin():
         first = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
-        assert (first.created, first.corrected, first.unchanged) == (13, 0, 0)
+        assert (first.created, first.corrected, first.unchanged) == (14, 0, 0)
     with Session(engine) as session, session.begin():
         duplicate = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
-        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 13)
+        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 14)
     with Session(engine) as session, session.begin():
-        corrected = persist_window(session, owner_id=owner_id, fetched=fetched(120, 73, 43, 19.2))
-        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 4, 9)
+        corrected = persist_window(
+            session, owner_id=owner_id, fetched=fetched(120, 73, 43, 19.2, 12)
+        )
+        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 5, 9)
 
     with Session(engine) as session:
         metrics = list(
@@ -1490,6 +1530,23 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         )
         assert activity is not None
         assert activity.distance_miles == Decimal(1)
+        sleeps = list(
+            session.scalars(select(GarminSleepEvent).where(GarminSleepEvent.owner_id == owner_id))
+        )
+        assert len(sleeps) == 2
+        assert len(events.current_only(session, GarminSleepEvent, sleeps)) == 1
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminSleepStageInterval)
+                .join(
+                    GarminSleepEvent,
+                    GarminSleepEvent.id == GarminSleepStageInterval.sleep_event_id,
+                )
+                .where(GarminSleepEvent.owner_id == owner_id)
+            )
+            == 2
+        )
         assert (
             session.scalar(
                 select(func.count())
@@ -1504,7 +1561,11 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     headers = {auth.CSRF_HEADER_NAME: login.json()["csrf_token"]}
     records = client.get("/api/v1/integrations/garmin/records")
     assert records.status_code == 200
-    assert {row["kind"] for row in records.json()["records"]} == {"daily", "activity"}
+    assert {row["kind"] for row in records.json()["records"]} == {
+        "daily",
+        "sleep",
+        "activity",
+    }
     assert any(row["distance_miles"] == "1.0000" for row in records.json()["records"])
     nightly_hrv = next(
         row for row in records.json()["records"] if row["garmin_field_name"] == "lastNightAvg"
@@ -1538,6 +1599,22 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         ).json()["records"]
         == []
     )
+    sleep_response = client.get(
+        "/api/v1/integrations/garmin/sleep",
+        params={"day": "2026-01-10", "timezone": "UTC", "page_size": 100},
+    )
+    assert sleep_response.status_code == 200, sleep_response.text
+    sleep_body = sleep_response.json()
+    assert sleep_body["page"]["total_items"] == 1
+    assert sleep_body["records"][0]["time"]["occurred_at"] == "2026-01-09T23:00:00Z"
+    assert sleep_body["records"][0]["ended_at"] == "2026-01-10T07:00:00Z"
+    assert sleep_body["records"][0]["sleep_intervals"] == [
+        {
+            "stage": "awake",
+            "started_at": "2026-01-10T02:00:00Z",
+            "ended_at": "2026-01-10T02:12:00Z",
+        }
+    ]
     status_response = client.get("/api/v1/integrations/garmin/status")
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "connected"
@@ -1581,6 +1658,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert len(garmin_export["connection_state"]) == 1
     assert len(garmin_export["sync_runs"]) == 3
     assert len(private_export.json()["facts"]["garmin_metrics"]) == 16
+    assert len(private_export.json()["facts"]["garmin_sleep_stage_intervals"]) == 2
     assert any(
         row["garmin_field_name"] == "lastNightAvg" and row["aggregation"] == "daily_summary"
         for row in private_export.json()["facts"]["garmin_metrics"]
@@ -1645,7 +1723,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     )
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["disconnect_requested"] is True
-    assert deleted.json()["data_rows_deleted"] == 20
+    assert deleted.json()["data_rows_deleted"] == 24
 
     class LogoutClient:
         logged_out = False
@@ -1726,6 +1804,12 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     primary_records = client.get("/api/v1/integrations/garmin/records")
     assert primary_records.status_code == 200
     assert secondary_record_ids.isdisjoint(row["id"] for row in primary_records.json()["records"])
+    primary_sleep = client.get(
+        "/api/v1/integrations/garmin/sleep",
+        params={"day": "2026-01-10", "timezone": "UTC"},
+    )
+    assert primary_sleep.status_code == 200
+    assert primary_sleep.json()["records"] == []
 
 
 def test_lab_csv_preview_flags_unknowns_then_confirm_is_idempotent(

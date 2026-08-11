@@ -66,6 +66,16 @@ def synthetic_fit() -> bytes:
         },
         {
             "mesg_num": _MESG_NUM["SLEEP_LEVEL"],
+            "timestamp": SYNTHETIC_START + timedelta(hours=3),
+            "sleep_level": "awake",
+        },
+        {
+            "mesg_num": _MESG_NUM["SLEEP_LEVEL"],
+            "timestamp": SYNTHETIC_START + timedelta(hours=3, minutes=10),
+            "sleep_level": "light",
+        },
+        {
+            "mesg_num": _MESG_NUM["SLEEP_LEVEL"],
             "timestamp": SYNTHETIC_START + timedelta(hours=7),
             "sleep_level": "awake",
         },

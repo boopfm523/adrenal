@@ -29,6 +29,7 @@ from healthcurve.integrations.garmin.models import (
     GarminConnectionState,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepStageInterval,
     GarminSyncRun,
 )
 from healthcurve.integrations.garmin.parser import (
@@ -63,6 +64,12 @@ class GarminStatusOut(BaseModel):
     latest_sync_warning_codes: list[str] = Field(default_factory=list)
 
 
+class GarminSleepIntervalOut(BaseModel):
+    stage: Literal["awake"]
+    started_at: datetime
+    ended_at: datetime
+
+
 class GarminRecordOut(BaseModel):
     id: uuid.UUID
     kind: Literal["daily", "sample", "sleep", "activity"]
@@ -82,6 +89,7 @@ class GarminRecordOut(BaseModel):
     duration_source: str | None = None
     awakenings: int | None = None
     sleep_score: int | None = None
+    sleep_intervals: list[GarminSleepIntervalOut] = Field(default_factory=list)
     activity_type: str | None = None
     distance_miles: str | None = None
 
@@ -285,6 +293,41 @@ def samples(
     )
 
 
+@router.get("/sleep", response_model=GarminRecordsOut)
+def list_sleep_records(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    day: date,
+    timezone: str | None = None,
+) -> GarminRecordsOut:
+    """Return current sleep sessions that overlap one bounded local day."""
+
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=day,
+        date_to=day,
+    )
+    if window.start is None or window.end_exclusive is None:  # pragma: no cover
+        raise AssertionError("single-day Garmin sleep window must be bounded")
+    page = paginate_current_facts(
+        session,
+        GarminSleepEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=(
+            GarminSleepEvent.occurred_at < window.end_exclusive,
+            GarminSleepEvent.ended_at > window.start,
+        ),
+        include_revisions=False,
+    )
+    return GarminRecordsOut(
+        records=[_garmin_record_out(row) for row in page.items],
+        page=page.metadata,
+    )
+
+
 def _garmin_record_out(
     row: GarminMetricEvent | GarminSleepEvent | GarminActivityEvent,
 ) -> GarminRecordOut:
@@ -321,6 +364,14 @@ def _garmin_record_out(
             duration_source=row.garmin_duration_source,
             awakenings=row.awakenings,
             sleep_score=row.overall_sleep_score,
+            sleep_intervals=[
+                GarminSleepIntervalOut(
+                    stage=interval.stage.value,
+                    started_at=interval.started_at,
+                    ended_at=interval.ended_at,
+                )
+                for interval in row.stage_intervals
+            ],
         )
     return GarminRecordOut(
         id=row.id,
@@ -354,16 +405,37 @@ def disconnect_preview(session: DbSession, owner: CurrentOwner) -> GarminDisconn
             or 0
         )
 
+    def sleep_interval_count(automatic: bool) -> int:
+        source_condition = (
+            GarminSleepEvent.garmin_sync_run_id.is_not(None)
+            if automatic
+            else GarminSleepEvent.garmin_import_batch_id.is_not(None)
+        )
+        return (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminSleepStageInterval)
+                .join(
+                    GarminSleepEvent,
+                    GarminSleepEvent.id == GarminSleepStageInterval.sleep_event_id,
+                )
+                .where(GarminSleepEvent.owner_id == owner.id, source_condition)
+            )
+            or 0
+        )
+
     return GarminDisconnectPreviewOut(
         state="not_connected" if connection is None else connection.state.value,
         automatic_fact_rows=sum(
             count(model, True)
             for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent)
-        ),
+        )
+        + sleep_interval_count(True),
         reviewed_import_fact_rows=sum(
             count(model, False)
             for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent)
-        ),
+        )
+        + sleep_interval_count(False),
         sync_run_rows=(
             session.scalar(
                 select(func.count())

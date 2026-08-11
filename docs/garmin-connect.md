@@ -22,12 +22,19 @@ HealthCurve stores only these fields when Garmin supplies them:
 - provider-defined aggregate facts for nightly-average HRV; waking- and sleeping-
   period average respiration; and daily low/high respiration;
 - timestamped heart rate, stress, respiration, and nightly HRV samples when available;
-- sleep start, wake time, duration, duration source, number of awakenings, and sleep
-  score.
+- sleep start, wake time, duration, duration source, number of awakenings, sleep
+  score, and explicitly bounded awake-stage intervals when Garmin supplies them.
 
 Missing stays missing. HealthCurve never substitutes zero. Intensity minutes, Body
-Battery, Pulse Ox, calories, Garmin weight, sleep stages, GPS routes, and every other
-provider field are deferred unless a later Bead explicitly adds them.
+Battery, Pulse Ox, calories, Garmin weight, non-awake sleep-stage detail, GPS routes,
+and every other provider field are deferred unless a later Bead explicitly adds them.
+
+The selected-day sleep endpoint uses interval overlap, so a session beginning before
+midnight still appears on its wake day. HealthCurve stores only explicit bounded awake
+intervals under the immutable sleep revision. An aggregate awakening count never
+becomes guessed timestamps; when the provider reports awakenings without their timing,
+the graph says that intermediate timing is unavailable. See
+[ADR-0016](adr/0016-garmin-sleep-interval-contract.md).
 
 ## Verified intraday and aggregate contract
 

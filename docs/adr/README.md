@@ -23,6 +23,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0013](0013-theoretical-steroid-exposure-model.md) | Versioned theoretical steroid-exposure model from recorded doses | Accepted |
 | [0014](0014-garmin-intraday-read-contract.md) | Read-only Garmin intraday metric contract | Accepted |
 | [0015](0015-recorded-context-not-cortisol-demand.md) | Recorded context overlays without inferred cortisol demand | Accepted |
+| [0016](0016-garmin-sleep-interval-contract.md) | Explicit Garmin sleep intervals on the selected-day HealthCurve | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

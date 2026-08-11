@@ -565,8 +565,16 @@ export function getDailyGarminSamples(day: string, timezone: string): Promise<Ga
   });
 }
 
+export function getDailyGarminSleep(day: string, timezone: string): Promise<GarminRecord[]> {
+  return collectPages(async (page) => {
+    const params = new URLSearchParams({ day, timezone, page: page.toString(), page_size: "100" });
+    const response = await apiRequest<GarminRecords>(`/integrations/garmin/sleep?${params.toString()}`);
+    return { items: response.records, totalPages: response.page.total_pages };
+  });
+}
+
 export async function getDailyGarminContext(day: string, timezone: string): Promise<GarminRecord[]> {
-  const [dailyRecords, samples] = await Promise.all([
+  const [dailyRecords, samples, sleep] = await Promise.all([
     collectPages(async (page) => {
       const response = await apiRequest<GarminRecords>(
         `/integrations/garmin/records?${selectedDayParams(day, timezone, page).toString()}`,
@@ -577,8 +585,11 @@ export async function getDailyGarminContext(day: string, timezone: string): Prom
       };
     }),
     getDailyGarminSamples(day, timezone),
+    getDailyGarminSleep(day, timezone),
   ]);
-  const currentById = new Map([...dailyRecords, ...samples].map((record) => [record.id, record]));
+  const currentById = new Map(
+    [...dailyRecords, ...samples, ...sleep].map((record) => [record.id, record]),
+  );
   return [...currentById.values()].sort(
     (left, right) => Date.parse(left.time.occurred_at) - Date.parse(right.time.occurred_at),
   );

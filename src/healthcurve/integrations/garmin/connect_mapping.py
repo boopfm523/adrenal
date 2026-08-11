@@ -30,6 +30,13 @@ class DailyObservation:
 
 
 @dataclass(frozen=True)
+class SleepStageObservation:
+    stage: str
+    started_at: datetime
+    ended_at: datetime
+
+
+@dataclass(frozen=True)
 class SleepObservation:
     event_time: EventTime
     ended_at: datetime
@@ -37,6 +44,8 @@ class SleepObservation:
     duration_source: str
     awakenings: int | None
     score: int | None
+    stage_count: int
+    stage_intervals: tuple[SleepStageObservation, ...]
     provider_id: str
     revision: str
 
@@ -174,6 +183,13 @@ def _map_sleep(
     scores = dto.get("sleepScores")
     overall = scores.get("overall") if isinstance(scores, dict) else None
     score = _bounded_int(overall.get("value"), 0, 100) if isinstance(overall, dict) else None
+    stage_intervals, stage_count = _map_sleep_stages(
+        payload=payload,
+        dto=dto,
+        sleep_start=start_gmt,
+        sleep_end=end_gmt,
+        warnings=warnings,
+    )
     event_time = _provider_event_time(start_gmt, start_local, dto, timezone, warnings)
     selected = {
         "day": day.isoformat(),
@@ -183,6 +199,15 @@ def _map_sleep(
         "duration_source": duration_source,
         "awakenings": awakenings,
         "score": score,
+        "stage_count": stage_count,
+        "stage_intervals": [
+            {
+                "stage": interval.stage,
+                "started_at": interval.started_at.isoformat(),
+                "ended_at": interval.ended_at.isoformat(),
+            }
+            for interval in stage_intervals
+        ],
     }
     return SleepObservation(
         event_time=event_time,
@@ -191,9 +216,78 @@ def _map_sleep(
         duration_source=duration_source,
         awakenings=awakenings,
         score=score,
+        stage_count=stage_count,
+        stage_intervals=stage_intervals,
         provider_id=f"sleep:{day.isoformat()}",
         revision=_revision(selected),
     )
+
+
+def _map_sleep_stages(
+    *,
+    payload: dict[str, Any],
+    dto: dict[str, Any],
+    sleep_start: datetime,
+    sleep_end: datetime,
+    warnings: list[str],
+) -> tuple[tuple[SleepStageObservation, ...], int]:
+    raw_levels = payload.get("sleepLevels")
+    if not isinstance(raw_levels, list):
+        raw_levels = dto.get("sleepLevels")
+    if not isinstance(raw_levels, list):
+        return (), 0
+    if len(raw_levels) > 10_000:
+        warnings.append("sleep_stages_truncated")
+    valid_count = 0
+    awake: list[SleepStageObservation] = []
+    for raw in raw_levels[:10_000]:
+        if not isinstance(raw, dict):
+            warnings.append("sleep_stage_invalid")
+            continue
+        started_at = _first_stage_time(raw, ("startGMT", "startTimeGMT", "startTimestampGMT"))
+        ended_at = _first_stage_time(raw, ("endGMT", "endTimeGMT", "endTimestampGMT"))
+        if (
+            started_at is None
+            or ended_at is None
+            or ended_at <= started_at
+            or started_at < sleep_start
+            or ended_at > sleep_end
+        ):
+            warnings.append("sleep_stage_bounds_invalid")
+            continue
+        valid_count += 1
+        if not _is_awake_stage(raw.get("activityLevel", raw.get("sleepLevel", raw.get("stage")))):
+            continue
+        if awake and started_at < awake[-1].ended_at:
+            warnings.append("sleep_awake_interval_overlap")
+            continue
+        awake.append(SleepStageObservation("awake", started_at, ended_at))
+    return tuple(awake), valid_count
+
+
+def _first_stage_time(payload: dict[str, Any], keys: tuple[str, ...]) -> datetime | None:
+    for key in keys:
+        value = payload.get(key)
+        parsed = (
+            _epoch_millis(value, utc=True)
+            if isinstance(value, int | float)
+            else _parse_iso(value, utc=True)
+        )
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _is_awake_stage(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int | float):
+        return int(value) == 3
+    return isinstance(value, str) and value.strip().casefold().replace("_", " ") in {
+        "awake",
+        "wake",
+        "waking",
+    }
 
 
 def _provider_event_time(

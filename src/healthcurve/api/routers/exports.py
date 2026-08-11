@@ -26,6 +26,7 @@ from healthcurve.integrations.garmin.models import (
     GarminImportBatch,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepStageInterval,
     GarminSyncRun,
 )
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
@@ -55,6 +56,22 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
     return str(value)
+
+
+def _garmin_sleep_interval_rows(session: DbSession, owner_id: Any) -> list[dict[str, Any]]:
+    rows = session.scalars(
+        select(GarminSleepStageInterval)
+        .join(GarminSleepEvent, GarminSleepEvent.id == GarminSleepStageInterval.sleep_event_id)
+        .where(GarminSleepEvent.owner_id == owner_id)
+        .order_by(GarminSleepStageInterval.sleep_event_id, GarminSleepStageInterval.ordinal)
+    )
+    return [
+        {
+            column.name: _jsonable(getattr(row, column.name))
+            for column in GarminSleepStageInterval.__table__.columns
+        }
+        for row in rows
+    ]
 
 
 def _report_export(session: DbSession, owner_id: Any, *, include_ai: bool) -> dict[str, Any]:
@@ -131,6 +148,7 @@ def create_export(
             "garmin_import_batches": _rows(session, GarminImportBatch, owner.id),
             "garmin_metrics": _rows(session, GarminMetricEvent, owner.id),
             "garmin_sleep": _rows(session, GarminSleepEvent, owner.id),
+            "garmin_sleep_stage_intervals": _garmin_sleep_interval_rows(session, owner.id),
             "garmin_activities": _rows(session, GarminActivityEvent, owner.id),
         },
         "integrations": {

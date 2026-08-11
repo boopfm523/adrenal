@@ -32,6 +32,7 @@ def _daily_sleep(
     start_local_as_utc: datetime,
     timezone: str,
     duration: int | None = None,
+    sleep_levels: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     dto: dict[str, Any] = {
         "sleepStartTimestampGMT": _milliseconds(start_utc),
@@ -43,7 +44,10 @@ def _daily_sleep(
     }
     if duration is not None:
         dto["sleepTimeSeconds"] = duration
-    return {"dailySleepDTO": dto}
+    payload: dict[str, Any] = {"dailySleepDTO": dto}
+    if sleep_levels is not None:
+        payload["sleepLevels"] = sleep_levels
+    return payload
 
 
 def test_daily_metrics_preserve_missingness_and_sleep_provenance() -> None:
@@ -91,6 +95,52 @@ def test_sleep_crossing_dst_uses_source_zone_and_elapsed_duration() -> None:
     assert mapped.sleep.event_time.local_time.isoformat() == "2026-03-08T01:30:00"
     assert mapped.sleep.event_time.utc_offset_minutes == -300
     assert mapped.sleep.duration_seconds == 7_200
+
+
+def test_sleep_maps_only_explicit_bounded_awake_intervals() -> None:
+    start = datetime(2026, 1, 9, 4, 0, tzinfo=UTC)
+    end = datetime(2026, 1, 9, 12, 0, tzinfo=UTC)
+    mapped = map_day(
+        day=date(2026, 1, 9),
+        stats={},
+        sleep=_daily_sleep(
+            start_utc=start,
+            end_utc=end,
+            start_local_as_utc=datetime(2026, 1, 8, 23, 0, tzinfo=UTC),
+            timezone="America/New_York",
+            sleep_levels=[
+                {
+                    "startGMT": "2026-01-09T04:00:00Z",
+                    "endGMT": "2026-01-09T06:00:00Z",
+                    "activityLevel": 1,
+                },
+                {
+                    "startGMT": "2026-01-09T06:00:00Z",
+                    "endGMT": "2026-01-09T06:12:00Z",
+                    "activityLevel": 3,
+                },
+                {
+                    "startGMT": "2026-01-09T06:12:00Z",
+                    "endGMT": "2026-01-09T12:00:00Z",
+                    "sleepLevel": "light",
+                },
+                {
+                    "startGMT": "2026-01-09T03:59:00Z",
+                    "endGMT": "2026-01-09T04:01:00Z",
+                    "activityLevel": 3,
+                },
+            ],
+        ),
+        timezone="America/New_York",
+    )
+
+    assert mapped.sleep is not None
+    assert mapped.sleep.stage_count == 3
+    assert [
+        (interval.stage, interval.started_at, interval.ended_at)
+        for interval in mapped.sleep.stage_intervals
+    ] == [("awake", datetime(2026, 1, 9, 6, tzinfo=UTC), datetime(2026, 1, 9, 6, 12, tzinfo=UTC))]
+    assert "sleep_stage_bounds_invalid" in mapped.warnings
 
 
 def test_activity_contract_covers_miles_unknown_types_and_missing_distance() -> None:

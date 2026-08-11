@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import delete, false, or_, select
+from sqlalchemy import delete, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,7 @@ from healthcurve.integrations.garmin.models import (
     GarminImportBatch,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepStageInterval,
     GarminSyncRun,
 )
 from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
@@ -253,6 +254,18 @@ def delete_integration(
     data_rows = 0
     disconnect_requested = False
     if delete_data and provider == "garmin":
+        data_rows += (
+            session.scalar(
+                select(func.count())
+                .select_from(GarminSleepStageInterval)
+                .join(
+                    GarminSleepEvent,
+                    GarminSleepEvent.id == GarminSleepStageInterval.sleep_event_id,
+                )
+                .where(GarminSleepEvent.owner_id == owner_id)
+            )
+            or 0
+        )
         for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent):
             data_rows += _delete_event_chains(session, model, owner_id)
         data_rows += _delete_count(

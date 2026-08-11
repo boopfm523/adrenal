@@ -509,6 +509,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/garmin/sleep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sleep Records
+         * @description Return current sleep sessions that overlap one bounded local day.
+         */
+        get: operations["list_sleep_records_api_v1_integrations_garmin_sleep_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/garmin/status": {
         parameters: {
             query?: never;
@@ -2188,6 +2208,8 @@ export interface components {
             provenance: components["schemas"]["ProvenanceOut"];
             /** Sample Interval Seconds */
             sample_interval_seconds?: number | null;
+            /** Sleep Intervals */
+            sleep_intervals?: components["schemas"]["GarminSleepIntervalOut"][];
             /** Sleep Score */
             sleep_score?: number | null;
             /** Summary */
@@ -2208,6 +2230,24 @@ export interface components {
             page: components["schemas"]["PageMetadata"];
             /** Records */
             records: components["schemas"]["GarminRecordOut"][];
+        };
+        /** GarminSleepIntervalOut */
+        GarminSleepIntervalOut: {
+            /**
+             * Ended At
+             * Format: date-time
+             */
+            ended_at: string;
+            /**
+             * Stage
+             * @constant
+             */
+            stage: "awake";
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
         };
         /** GarminStatusOut */
         GarminStatusOut: {
@@ -4828,6 +4868,42 @@ export interface operations {
         };
     };
     samples_api_v1_integrations_garmin_samples_get: {
+        parameters: {
+            query: {
+                day: string;
+                timezone?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarminRecordsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sleep_records_api_v1_integrations_garmin_sleep_get: {
         parameters: {
             query: {
                 day: string;

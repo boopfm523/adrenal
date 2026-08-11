@@ -314,6 +314,29 @@ function tableRows(data: DailyHealthCurveData, visible: Record<LaneKey, boolean>
       source: `${dose.source_type}; ${dose.confirmation_state}`,
     })));
   }
+  rows.push(...data.garmin.flatMap((record) => {
+    if (record.kind !== "sleep" || record.ended_at == null) return [];
+    const source = `Garmin ${record.provenance.confirmation_state.replaceAll("_", " ")}`;
+    const sleepRows: TableRow[] = [{
+      time: record.time.occurred_at,
+      series: "Sleep start",
+      value: "Garmin-recorded sleep session started",
+      source,
+    }];
+    sleepRows.push(...(record.sleep_intervals ?? []).map((interval) => ({
+      time: interval.started_at,
+      series: "Awake interval",
+      value: `Awake through ${experiencedTime(interval.ended_at, data.exposure.timezone)}`,
+      source,
+    })));
+    sleepRows.push({
+      time: record.ended_at,
+      series: "Wake / sleep end",
+      value: "Garmin-recorded sleep session ended",
+      source,
+    });
+    return sleepRows;
+  }));
   return rows.sort((left, right) => {
     if (left.time === null && right.time !== null) return -1;
     if (left.time !== null && right.time === null) return 1;
@@ -337,6 +360,10 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     const lane = METRIC_LANES.find((definition) => definition.metric === record.metric_type);
     return lane !== undefined && visible[lane.key];
   });
+  const sleepRecords = data.garmin.filter((record) => record.kind === "sleep" && record.ended_at != null);
+  const missingWakeTiming = sleepRecords.some(
+    (record) => (record.awakenings ?? 0) > 0 && (record.sleep_intervals ?? []).length === 0,
+  );
   const cursorPoints = nearestVisiblePoints(shownLanes, cursorTime);
   const elapsedMinutes = Math.round((end - start) / 60_000);
   const cursorX = LEFT + (cursorTime - start) / Math.max(end - start, 1) * PLOT_WIDTH;
@@ -363,12 +390,34 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset>
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
     {dailyAggregates.length === 0 ? null : <section className="garmin-aggregate-context" aria-labelledby="garmin-aggregate-context-title"><h3 id="garmin-aggregate-context-title">Garmin aggregate context</h3><p>These values summarize a provider-defined period. They have no exact intraday observation time, so they are not positioned on or connected within the chart.</p><dl>{dailyAggregates.map((record) => <div key={record.id}><dt>{record.measurement_label ?? garminMetricLabel(record.metric_type)}</dt><dd><strong>{formatGarminDailyValue(record.metric_type, record.value, record.unit)}</strong><span>{record.period_label === null || record.period_label === undefined ? "Untimed aggregate" : `Untimed · ${record.period_label}`} · Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</span></dd></div>)}</dl></section>}
-    <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.</p>
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}</span>)}</div>
+    <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}</span>)}</div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
       <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; relative display positions share one time axis and exact values follow.`}>
         <title>Interactive selected-day HealthCurve overlay. Relative display positions are not equivalent units. Exact values follow in the readout and table.</title>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
+        {sleepRecords.length === 0 ? null : <g data-series="sleep">{sleepRecords.map((record) => {
+          const sessionStart = Date.parse(record.time.occurred_at);
+          const sessionEnd = Date.parse(record.ended_at ?? record.time.occurred_at);
+          const clippedStart = Math.max(start, sessionStart);
+          const clippedEnd = Math.min(end, sessionEnd);
+          const startX = LEFT + (clippedStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          const endX = LEFT + (clippedEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          return <g key={record.id} className="healthcurve-sleep-session">
+            <title>{experiencedTime(record.time.occurred_at, data.exposure.timezone)} sleep start; {experiencedTime(record.ended_at ?? record.time.occurred_at, data.exposure.timezone)} wake / sleep end; Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</title>
+            <rect className="healthcurve-sleep-band" x={startX} y={TOP} width={Math.max(2, endX - startX)} height="12" />
+            {(record.sleep_intervals ?? []).map((interval, index) => {
+              const awakeStart = Math.max(start, Date.parse(interval.started_at));
+              const awakeEnd = Math.min(end, Date.parse(interval.ended_at));
+              if (awakeEnd <= awakeStart) return null;
+              const awakeX = LEFT + (awakeStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+              const awakeEndX = LEFT + (awakeEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+              return <rect key={`${interval.started_at}-${index.toString()}`} className="healthcurve-awake-interval" x={awakeX} y={TOP} width={Math.max(2, awakeEndX - awakeX)} height={PLOT_HEIGHT}><title>{experiencedTime(interval.started_at, data.exposure.timezone)} through {experiencedTime(interval.ended_at, data.exposure.timezone)}: explicit Garmin awake interval</title></rect>;
+            })}
+            {sessionStart >= start && sessionStart < end ? <><line className="healthcurve-sleep-marker healthcurve-sleep-marker--start" x1={startX} y1={TOP} x2={startX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className="healthcurve-sleep-label" x={startX + 4} y={TOP + 27}>Sleep start</text></> : null}
+            {sessionEnd > start && sessionEnd <= end ? <><line className="healthcurve-sleep-marker healthcurve-sleep-marker--end" x1={endX} y1={TOP} x2={endX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className="healthcurve-sleep-label" x={endX + 4} y={TOP + 27}>Wake</text></> : null}
+          </g>;
+        })}</g>}
         {[0, 25, 50, 75, 100].map((relative) => {
           const y = TOP + PLOT_HEIGHT - relative / 100 * PLOT_HEIGHT;
           return <g key={relative}><line className="healthcurve-relative-grid" x1={LEFT} y1={y} x2={LEFT + PLOT_WIDTH} y2={y} /><text className="healthcurve-scale-label" x={LEFT - 10} y={y} dy="0.35em" textAnchor="end">{relative.toString()}</text></g>;

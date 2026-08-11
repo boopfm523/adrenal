@@ -194,6 +194,39 @@ describe("Daily HealthCurve", () => {
     expect(table).toHaveTextContent("Garmin provider imported; untimed daily summary");
   });
 
+  it("shows explicit sleep bounds and awake intervals without inferring wake timing", () => {
+    const sleep: GarminRecord = {
+      ...sample(0),
+      id: "50000000-0000-4000-8000-000000000001",
+      kind: "sleep",
+      summary: "Sleep interval recorded by Garmin",
+      time: { ...sample(0).time, occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00" },
+      ended_at: "2026-03-08T12:00:00Z",
+      duration_seconds: 21_600,
+      duration_source: "provider",
+      awakenings: 2,
+      sleep_score: 82,
+      sleep_intervals: [{ stage: "awake", started_at: "2026-03-08T08:00:00Z", ended_at: "2026-03-08T08:10:00Z" }],
+    };
+    const view = render(<DailyHealthCurve data={data({ garmin: [sleep] })} />);
+
+    expect(document.querySelectorAll("[data-series='sleep']")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-sleep-band")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-sleep-marker--start")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-sleep-marker--end")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(1);
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Sleep session");
+    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
+    expect(table).toHaveTextContent("Sleep start");
+    expect(table).toHaveTextContent("Awake interval");
+    expect(table).toHaveTextContent("Wake / sleep end");
+    expect(screen.queryByText(/Garmin reported one or more awakenings without their exact times/)).not.toBeInTheDocument();
+
+    view.rerender(<DailyHealthCurve data={data({ garmin: [{ ...sleep, id: "50000000-0000-4000-8000-000000000002", sleep_intervals: [] }] })} />);
+    expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(0);
+    expect(screen.getByText(/Garmin reported one or more awakenings without their exact times/)).toBeVisible();
+  });
+
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
     render(<DailyHealthCurve data={data()} />);
 

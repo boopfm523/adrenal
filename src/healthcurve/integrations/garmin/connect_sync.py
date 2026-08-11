@@ -35,6 +35,8 @@ from healthcurve.integrations.garmin.models import (
     GarminConnectionState,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepStage,
+    GarminSleepStageInterval,
     GarminSyncRun,
     GarminSyncStatus,
 )
@@ -257,7 +259,7 @@ def _upsert_metric(
     }
     return _upsert_event(
         session, GarminMetricEvent, owner_id, provider_id, value.revision, value.event_time, fields
-    )
+    )[0]
 
 
 def _upsert_intraday_metric(
@@ -279,7 +281,7 @@ def _upsert_intraday_metric(
     }
     return _upsert_event(
         session, GarminMetricEvent, owner_id, provider_id, value.revision, value.event_time, fields
-    )
+    )[0]
 
 
 def _upsert_sleep(
@@ -290,14 +292,27 @@ def _upsert_sleep(
         **_source_fields(run_id, provider_id, value.revision, "daily-sleep"),
         "ended_at": value.ended_at,
         "overall_sleep_score": value.score,
-        "stage_count": 0,
+        "stage_count": value.stage_count,
         "duration_seconds": value.duration_seconds,
         "garmin_duration_source": value.duration_source,
         "awakenings": value.awakenings,
     }
-    return _upsert_event(
+    outcome, row = _upsert_event(
         session, GarminSleepEvent, owner_id, provider_id, value.revision, value.event_time, fields
     )
+    if outcome != "unchanged":
+        session.flush([row])
+        session.add_all(
+            GarminSleepStageInterval(
+                sleep_event_id=row.id,
+                ordinal=ordinal,
+                stage=GarminSleepStage.AWAKE,
+                started_at=interval.started_at,
+                ended_at=interval.ended_at,
+            )
+            for ordinal, interval in enumerate(value.stage_intervals)
+        )
+    return outcome
 
 
 def _upsert_activity(
@@ -325,7 +340,7 @@ def _upsert_activity(
         value.revision,
         value.event_time,
         fields,
-    )
+    )[0]
 
 
 def _upsert_event[E: EventMixin](
@@ -336,7 +351,7 @@ def _upsert_event[E: EventMixin](
     revision: str,
     event_time: EventTime,
     fields: dict[str, Any],
-) -> str:
+) -> tuple[str, E]:
     rows = list(
         session.scalars(
             select(model).where(
@@ -349,9 +364,9 @@ def _upsert_event[E: EventMixin](
     current = events.current_only(session, model, rows)
     head = current[0] if current else None
     if head is not None and head.source_revision == revision:
-        return "unchanged"
+        return "unchanged", head
     if head is None:
-        events.create_event(
+        created = events.create_event(
             session,
             model,
             owner_id=owner_id,
@@ -360,8 +375,8 @@ def _upsert_event[E: EventMixin](
             confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
             **fields,
         )
-        return "created"
-    events.correct_event(
+        return "created", created
+    corrected = events.correct_event(
         session,
         model,
         head,
@@ -369,7 +384,7 @@ def _upsert_event[E: EventMixin](
         changes=fields,
         event_time=event_time,
     )
-    return "corrected"
+    return "corrected", corrected
 
 
 def _source_fields(

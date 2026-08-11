@@ -373,7 +373,13 @@ dosing advice. See [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
 
 The selected-day HealthCurve overlays the actual-dose exposure shape, Garmin stress/
 HRV/respiration/heart rate, blood pressure, discrete symptom markers, dose markers,
-and stress-episode windows on one local-time graph. Hovering over the graph or using
+stress-episode windows, and Garmin sleep sessions on one local-time graph. Sleep start
+and wake/end use labeled vertical markers; explicitly timed awake intervals use a
+distinct amber background. Overnight sessions appear on every selected local day they
+overlap. A reported awakening count without interval timestamps is labeled unavailable
+rather than distributed or inferred across the night. The selected-day data refreshes
+periodically so a completed Garmin sync appears without manual sleep entry. Hovering
+over the graph or using
 its keyboard/mobile time control shows exact nearby observations with their original
 units and timestamps. Continuous shapes use a clearly labeled relative 0–100 display
 position so unlike units can be compared in time without implying that their values

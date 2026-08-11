@@ -56,7 +56,11 @@ def test_official_sdk_fit_maps_only_explicit_metrics_and_attribution() -> None:
         candidate for candidate in parsed.candidates if isinstance(candidate, SleepCandidate)
     )
     assert sleep.overall_sleep_score == 82
-    assert sleep.stage_count == 2
+    assert sleep.stage_count == 4
+    assert len(sleep.stage_intervals) == 1
+    assert sleep.stage_intervals[0].started_at is not None
+    assert sleep.stage_intervals[0].ended_at is not None
+    assert (sleep.stage_intervals[0].ended_at - sleep.stage_intervals[0].started_at).seconds == 600
     activity = next(
         candidate for candidate in parsed.candidates if isinstance(candidate, ActivityCandidate)
     )

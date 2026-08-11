@@ -15,6 +15,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from itertools import pairwise
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -93,12 +94,20 @@ class MetricCandidate:
 
 
 @dataclass(frozen=True)
+class SleepStageCandidate:
+    stage: Literal["awake"] = "awake"
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class SleepCandidate:
     kind: Literal["sleep"] = "sleep"
     time: EventTime | None = None
     ended_at: datetime | None = None
     overall_sleep_score: int | None = None
     stage_count: int = 0
+    stage_intervals: tuple[SleepStageCandidate, ...] = ()
     source: CandidateSource | None = None
 
 
@@ -484,13 +493,24 @@ def _fit_sleep(
     source: CandidateSource,
     timezone: str,
 ) -> None:
-    timestamps = [message.get("timestamp") for message in messages.get("sleep_level_mesgs", [])]
-    explicit = sorted(_as_datetime(value) for value in timestamps if value is not None)
+    explicit = sorted(
+        (
+            _as_datetime(message["timestamp"]),
+            str(message.get("sleep_level", "")).strip().casefold(),
+        )
+        for message in messages.get("sleep_level_mesgs", [])
+        if message.get("timestamp") is not None
+    )
     if not explicit:
         return
-    if len(explicit) < 2 or explicit[-1] <= explicit[0]:
+    if len(explicit) < 2 or explicit[-1][0] <= explicit[0][0]:
         warnings.append("sleep:explicit_bounds_missing")
         return
+    awake_intervals = tuple(
+        SleepStageCandidate(started_at=current[0], ended_at=following[0])
+        for current, following in pairwise(explicit)
+        if current[1] in {"awake", "wake", "waking"} and following[0] > current[0]
+    )
     score: int | None = None
     assessments = messages.get("sleep_assessment_mesgs", [])
     if assessments and assessments[-1].get("overall_sleep_score") is not None:
@@ -502,10 +522,11 @@ def _fit_sleep(
     _append_candidate(
         candidates,
         SleepCandidate(
-            time=_event_time(explicit[0], timezone),
-            ended_at=_event_time(explicit[-1], timezone).occurred_at,
+            time=_event_time(explicit[0][0], timezone),
+            ended_at=_event_time(explicit[-1][0], timezone).occurred_at,
             overall_sleep_score=score,
             stage_count=len(explicit),
+            stage_intervals=awake_intervals,
             source=source,
         ),
     )
