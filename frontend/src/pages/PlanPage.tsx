@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   approveRegimen,
@@ -13,9 +14,11 @@ import {
   retireRegimen,
   updateRegimenDraft,
   type Medication,
+  type RecordedHistoryFilters,
   type RegimenInput,
   type RegimenVersion,
 } from "../api/client";
+import { useAuth } from "../auth/context";
 import { PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
@@ -37,6 +40,10 @@ interface InstructionDraft {
   authored_by: string;
   authored_on: string;
 }
+
+interface PlanHistoryView extends RecordedHistoryFilters { page: number }
+function planHistoryView(search: string, profileTimezone: string): PlanHistoryView { const params = new URLSearchParams(search); const rawPage = params.get("page") ?? ""; return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, page: /^\d+$/.test(rawPage) && Number(rawPage) >= 1 ? Number(rawPage) : 1 }; }
+function planHistorySearch(view: PlanHistoryView): URLSearchParams { const params = new URLSearchParams({ timezone: view.timezone }); if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom); if (view.dateTo !== "") params.set("local_date_to", view.dateTo); if (view.page > 1) params.set("page", view.page.toString()); return params; }
 
 const blankSlot = (medicationId = ""): SlotDraft => ({
   medication_id: medicationId,
@@ -283,9 +290,18 @@ function PlanDeletionButton({ version, onDeleted }: { version: RegimenVersion; o
 }
 
 export function PlanPage(): React.JSX.Element {
-  const [historyPage, setHistoryPage] = useState(1);
+  const profileTimezone = useAuth().session?.user.defaultTimezone ?? "UTC";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedSearch = searchParams.toString();
+  const view = useMemo(() => planHistoryView(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);
+  const filters = useMemo<RecordedHistoryFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone }), [view.dateFrom, view.dateTo, view.timezone]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
+  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
+  const setDraft = (next: RecordedHistoryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
+  const [validation, setValidation] = useState<string | null>(null);
   const active = useQuery({ queryKey: ["regimens", "active"], queryFn: getActiveRegimen });
-  const history = useQuery({ queryKey: ["regimens", "history", historyPage], queryFn: () => getRegimens(historyPage) });
+  const history = useQuery({ queryKey: ["regimens", "history", filters, view.page], queryFn: () => getRegimens(filters, view.page), enabled: !invalidRange });
   const medications = useQuery({ queryKey: ["medications"], queryFn: getMedications });
   const [olderId, setOlderId] = useState("");
   const [newerId, setNewerId] = useState("");
@@ -300,13 +316,13 @@ export function PlanPage(): React.JSX.Element {
   const complete = (nextMessage: string): void => { setEditor(null); setReviewDraftId(null); setMessage(nextMessage); };
   const completeDraft = (nextMessage: string, version: RegimenVersion): void => {
     setEditor(null);
-    setHistoryPage(1);
+    if (view.page > 1) setSearchParams(planHistorySearch({ ...view, page: 1 }));
     setReviewDraftId(version.id);
     setMessage(`${nextMessage} Next, review it below and record physician approval if it matches a plan your physician actually approved.`);
   };
 
   return <Page title="Medication plan" description="Physician-approved schedules and their provenance, kept separate from actual recorded doses.">
-    {(active.isPending || history.isPending || medications.isPending) ? <p role="status">Loading medication plan…</p> : null}
+    {(active.isPending || history.isFetching || medications.isPending) ? <p role="status">Loading medication plan…</p> : null}
     {(active.isError || history.isError || medications.isError) ? <p className="error-summary" role="alert">Medication plan data could not be loaded.</p> : null}
     {message === "" ? null : <p className="success-message" role="status">{message}</p>}
     {editor === null ? <div className="page-actions"><button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</button></div> : null}
@@ -315,9 +331,11 @@ export function PlanPage(): React.JSX.Element {
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} /></PlanCard>}
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
+      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...draft, page: 1 })); }}><label>Effective from date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Effective through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setValidation(null); setDraftState({ search: "", filters: reset }); setOlderId(""); setNewerId(""); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
+      <p className="privacy-note">Inclusive dates use {filters.timezone} and select versions by when the plan becomes effective. This does not change plan approval or active status.</p>
       {history.data?.page.total_items === 0 ? <p>No plan versions recorded.</p> : null}
-      <div className="version-history">{versions.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (historyPage > 1 && versions.length === 1) setHistoryPage((current) => current - 1); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</article>)}</div>
-      {history.data === undefined ? null : <PaginationControls label="Plan version history" metadata={history.data.page} onPageChange={(nextPage) => { setOlderId(""); setNewerId(""); setHistoryPage(nextPage); }} />}
+      {versions.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><table><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td><time dateTime={version.effective_from}>{version.effective_from}</time><span>through {version.effective_to ?? "ongoing"}</span></td><th scope="row"><h3>{version.version_label}</h3></th><td><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></table></div>}
+      {history.data === undefined ? null : <PaginationControls label="Plan version history" metadata={history.data.page} onPageChange={(page) => { setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...view, page })); }} />}
     </section>
 
     <section aria-labelledby="diff-heading"><h2 id="diff-heading">Compare versions</h2>

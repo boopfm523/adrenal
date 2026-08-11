@@ -1,5 +1,6 @@
-import { useState, type SyntheticEvent } from "react";
+import { useMemo, useState, type SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 
 import {
   confirmLabDocument,
@@ -16,6 +17,7 @@ import {
   type LabDeletionPreview,
   type LabExtractionDraft,
   type LabResult,
+  type RecordedHistoryFilters,
 } from "../api/client";
 import { useAuth } from "../auth/context";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
@@ -30,6 +32,11 @@ interface TrendGroup {
   unit: string;
   values: LabResult[];
 }
+
+interface LabHistoryView extends RecordedHistoryFilters { resultPage: number; documentPage: number }
+function labPage(params: URLSearchParams, name: string): number { const value = params.get(name) ?? ""; return /^\d+$/.test(value) && Number(value) >= 1 ? Number(value) : 1; }
+function labHistoryView(search: string, profileTimezone: string): LabHistoryView { const params = new URLSearchParams(search); return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, resultPage: labPage(params, "result_page"), documentPage: labPage(params, "document_page") }; }
+function labHistorySearch(view: LabHistoryView): URLSearchParams { const params = new URLSearchParams({ timezone: view.timezone }); if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom); if (view.dateTo !== "") params.set("local_date_to", view.dateTo); if (view.resultPage > 1) params.set("result_page", view.resultPage.toString()); if (view.documentPage > 1) params.set("document_page", view.documentPage.toString()); return params; }
 
 function displayedSourceValue(result: LabResult): string {
   if (result.original_value !== null) return result.original_unit === null ? formatDecimal(result.original_value) : formatMeasurement(result.original_value, result.original_unit);
@@ -179,18 +186,18 @@ function DocumentList({ documents, selectedId, select, onDeleted }: { documents:
   if (documents.length === 0) return <p>No lab PDFs uploaded yet.</p>;
   return <section aria-labelledby="lab-documents-heading">
     <h2 id="lab-documents-heading">Uploaded lab documents</h2>
-    <div className="lab-document-list">{documents.map((document) => {
+    <div className="table-scroll" tabIndex={0} role="region" aria-label="Uploaded laboratory document history table"><table><caption>Private laboratory documents ordered by upload time, latest first.</caption><thead><tr><th scope="col">Uploaded</th><th scope="col">Document</th><th scope="col">Validation and recording state</th><th scope="col">Review and source actions</th><th scope="col">Deletion</th></tr></thead><tbody>{documents.map((document) => {
       const resolved = document.draft_state === "confirmed" || document.draft_state === "edited";
-      return <article className="version-card" key={document.document_id}>
-        <h3>{document.display_name}</h3>
-        <p>{document.page_count === null ? "Validation pending" : `${String(document.page_count)} page${document.page_count === 1 ? "" : "s"}`} · {resolved ? "Confirmed into recorded facts" : document.status === "rejected" ? `Rejected: ${document.rejection_reason ?? "validation failed"}` : "Not recorded—review required"}</p>
-        <div className="quick-actions">
+      return <tr key={document.document_id}>
+        <td><time dateTime={document.created_at}>{new Date(document.created_at).toLocaleString()}</time></td><th scope="row">{document.display_name}<span>{document.page_count === null ? "Validation pending" : `${String(document.page_count)} page${document.page_count === 1 ? "" : "s"}`}</span></th>
+        <td>{resolved ? "Confirmed into recorded facts" : document.status === "rejected" ? `Rejected: ${document.rejection_reason ?? "validation failed"}` : "Not recorded—review required"}</td>
+        <td><div className="quick-actions">
           {resolved ? <a className="button-link" href={sourcePreviewUrl(document.document_id, 1)} target="_blank" rel="noreferrer">View first source page</a> : <button type="button" className={selectedId === document.document_id ? undefined : "button-secondary"} disabled={document.status === "rejected"} onClick={() => { select(document.document_id); }}>{selectedId === document.document_id ? "Review open below" : "Open review"}</button>}
           <a href={sourceDownloadUrl(document.document_id)}>Download original PDF</a>
-        </div>
-        <DocumentDeletion document={document} onDeleted={() => { onDeleted(document.document_id); }} />
-      </article>;
-    })}</div>
+        </div></td>
+        <td><DocumentDeletion document={document} onDeleted={() => { onDeleted(document.document_id); }} /></td>
+      </tr>;
+    })}</tbody></table></div>
   </section>;
 }
 
@@ -305,25 +312,34 @@ function DocumentReview({ documentId, timezone, close }: { documentId: string; t
 
 export function LabsPage(): React.JSX.Element {
   const timezone = useAuth().session?.user.defaultTimezone ?? "UTC";
-  const [resultPage, setResultPage] = useState(1);
-  const [documentPage, setDocumentPage] = useState(1);
-  const resultsQuery = useQuery({ queryKey: ["lab-results", resultPage], queryFn: () => getLabResults(resultPage) });
-  const documentsQuery = useQuery({ queryKey: ["lab-documents", documentPage], queryFn: () => getLabDocuments(documentPage) });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedSearch = searchParams.toString();
+  const view = useMemo(() => labHistoryView(appliedSearch, timezone), [appliedSearch, timezone]);
+  const filters = useMemo<RecordedHistoryFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone }), [view.dateFrom, view.dateTo, view.timezone]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
+  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
+  const setDraft = (next: RecordedHistoryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
+  const [validation, setValidation] = useState<string | null>(null);
+  const resultsQuery = useQuery({ queryKey: ["lab-results", filters, view.resultPage], queryFn: () => getLabResults(filters, view.resultPage), enabled: !invalidRange });
+  const documentsQuery = useQuery({ queryKey: ["lab-documents", filters, view.documentPage], queryFn: () => getLabDocuments(filters, view.documentPage), enabled: !invalidRange });
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const results = resultsQuery.data?.items ?? [];
   const groups = trendGroups(results);
   return <Page title="Laboratory results" description="Review private PDF extraction drafts, then view recorded source facts and deterministic trends. HealthCurve does not diagnose, interpret cortisol, or recommend treatment.">
     <aside className="safety-note"><strong>Descriptive records only.</strong> Reference ranges are preserved exactly from each source and are never invented or used here to diagnose. Cortisol collection time and specimen type materially affect context; discuss interpretation with your physician.</aside>
     <UploadPanel onUploaded={(document) => { setSelectedDocumentId(document.document_id); }} />
-    {documentsQuery.isPending ? <p role="status">Loading lab documents…</p> : null}
+    <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...draft, resultPage: 1, documentPage: 1 })); }}><label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone }; setValidation(null); setSelectedDocumentId(null); setDraftState({ search: "", filters: reset }); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
+    <p className="privacy-note">Inclusive dates use {filters.timezone}. Result dates mean specimen collection; document dates mean private upload time.</p>
+    {documentsQuery.isFetching ? <p role="status">Loading lab documents…</p> : null}
     {documentsQuery.isError ? <p className="error-summary" role="alert">Lab documents could not be loaded.</p> : null}
-    {documentsQuery.data === undefined ? null : <><DocumentList documents={documentsQuery.data.items} selectedId={selectedDocumentId} select={setSelectedDocumentId} onDeleted={(id) => { if (selectedDocumentId === id) setSelectedDocumentId(null); if (documentPage > 1 && documentsQuery.data.items.length === 1) setDocumentPage((current) => current - 1); }} /><PaginationControls label="Lab document history" metadata={documentsQuery.data.page} onPageChange={(nextPage) => { setSelectedDocumentId(null); setDocumentPage(nextPage); }} /></>}
+    {documentsQuery.data === undefined ? null : <><DocumentList documents={documentsQuery.data.items} selectedId={selectedDocumentId} select={setSelectedDocumentId} onDeleted={(id) => { if (selectedDocumentId === id) setSelectedDocumentId(null); if (view.documentPage > 1 && documentsQuery.data.items.length === 1) setSearchParams(labHistorySearch({ ...view, documentPage: view.documentPage - 1 })); }} /><PaginationControls label="Lab document history" metadata={documentsQuery.data.page} onPageChange={(documentPage) => { setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...view, documentPage })); }} /></>}
     {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
     <hr />
-    {resultsQuery.isPending ? <p role="status">Loading laboratory facts…</p> : null}
+    {resultsQuery.isFetching ? <p role="status">Loading laboratory facts…</p> : null}
     {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}
-    {!resultsQuery.isPending && !resultsQuery.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
+    {!resultsQuery.isFetching && !resultsQuery.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
     {groups.map((group) => <AccessibleLineChart key={group.key} title={`${group.name} — ${group.specimen}`} summary="Each point is one recorded specimen on the visible results page. Lines are descriptive only; missing intervals are not inferred." unit={group.unit} timezone={timezone} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={`Values on this results page use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match.`} sampleCount={group.values.length} missingCount={0} series={[{ name: group.name, source: "recorded lab facts with deterministic derivation", values: group.values.map((result) => ({ label: dateLabel(result), value: result.normalized_value })) }]} />)}
-    {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : formatMeasurement(result.normalized_value, result.normalized_unit)}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div>{resultsQuery.data === undefined ? null : <PaginationControls label="Laboratory result records" metadata={resultsQuery.data.page} onPageChange={setResultPage} />}</section>}
+    {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : formatMeasurement(result.normalized_value, result.normalized_unit)}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div>{resultsQuery.data === undefined ? null : <PaginationControls label="Laboratory result records" metadata={resultsQuery.data.page} onPageChange={(resultPage) => { setSearchParams(labHistorySearch({ ...view, resultPage })); }} />}</section>}
   </Page>;
 }

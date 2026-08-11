@@ -361,12 +361,12 @@ export function getWeight(filters: HealthDataFilters, page = 1): Promise<WeightP
   return apiRequest<WeightPage>(`/weight?${healthDataQuery(filters, page)}`);
 }
 
-export function getLabResults(page = 1): Promise<LabResultPage> {
-  return apiRequest<LabResultPage>(`/labs/results?page=${page.toString()}`);
+export function getLabResults(filters: RecordedHistoryFilters, page = 1): Promise<LabResultPage> {
+  return apiRequest<LabResultPage>(`/labs/results?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
-export function getLabDocuments(page = 1): Promise<LabDocumentPage> {
-  return apiRequest<LabDocumentPage>(`/labs/documents?page=${page.toString()}`);
+export function getLabDocuments(filters: RecordedHistoryFilters, page = 1): Promise<LabDocumentPage> {
+  return apiRequest<LabDocumentPage>(`/labs/documents?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
 export function getLabDocument(documentId: string): Promise<LabDocument> {
@@ -455,8 +455,8 @@ export function getLifeEvents(filters: SymptomsDiaryFilters, page = 1): Promise<
   return apiRequest<LifeEventPage>(`/life-events?${symptomsDiaryQuery(filters, page).toString()}`);
 }
 
-export function getRegimens(page = 1): Promise<RegimenVersionPage> {
-  return apiRequest<RegimenVersionPage>(`/regimens?page=${page.toString()}`);
+export function getRegimens(filters: RecordedHistoryFilters, page = 1): Promise<RegimenVersionPage> {
+  return apiRequest<RegimenVersionPage>(`/regimens?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
 export function getMedications(): Promise<Medication[]> {
@@ -534,8 +534,8 @@ export function requestGarminSync(idempotencyKey: string, refresh = false): Prom
   });
 }
 
-export function getReports(page = 1): Promise<ReportPage> {
-  return apiRequest<ReportPage>(`/reports?page=${page.toString()}`);
+export function getReports(filters: RecordedHistoryFilters, page = 1): Promise<ReportPage> {
+  return apiRequest<ReportPage>(`/reports?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
 export function getReport(id: string): Promise<ReportPreview> {

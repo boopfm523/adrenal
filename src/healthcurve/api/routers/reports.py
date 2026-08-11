@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import (
     AppRateLimiter,
     AppSettings,
@@ -201,8 +202,25 @@ def create_report(
 
 
 @router.get("", response_model=ReportPage)
-def list_reports(session: DbSession, owner: CurrentOwner, pagination: Pagination) -> ReportPage:
+def list_reports(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
+) -> ReportPage:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
     query = select(ReportSnapshot).where(ReportSnapshot.owner_id == owner.id)
+    if window.start is not None:
+        query = query.where(ReportSnapshot.created_at >= window.start)
+    if window.end_exclusive is not None:
+        query = query.where(ReportSnapshot.created_at < window.end_exclusive)
     total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     metadata = page_metadata(total_items, pagination)
     snapshots = list(

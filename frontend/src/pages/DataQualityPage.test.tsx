@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { DataQualityPage } from "./DataQualityPage";
@@ -8,8 +9,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function renderPage(): void {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DataQualityPage /></MemoryRouter></QueryClientProvider>);
+function renderPage(initialEntry = "/data-quality"): void {
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><DataQualityPage /></MemoryRouter></QueryClientProvider>);
 }
 
 describe("Data quality page", () => {
@@ -26,10 +27,22 @@ describe("Data quality page", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Checking data quality");
     expect(await screen.findByRole("heading", { name: "Problems to review" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Data-quality problems table" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Known genuine absences table" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Known genuine absences" })).toBeVisible();
     expect(screen.getByText(/not a recorded value of zero/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Review failed operation" })).toHaveAttribute("href", "/data-quality#operations");
     expect(screen.getByRole("link", { name: "Review Garmin connection" })).toHaveAttribute("href", "/settings#integration-heading");
+  });
+
+  it("keeps the bounded current-findings page in URL state without inventing dates", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const value = typeof input === "string" ? input : input instanceof URL ? input.href : input.url; urls.push(value); const second = value.includes("page=2"); return Promise.resolve(jsonResponse({ completeness_notice: "Synthetic completeness boundary.", findings: [], page: { page: second ? 2 : 1, page_size: 25, total_items: 26, total_pages: 2 } })); });
+    renderPage("/data-quality?page=1");
+    expect(await screen.findByText(/current derived review queue/i)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => { expect(urls.some((value) => value.includes("page=2"))).toBe(true); });
+    expect(screen.queryByLabelText(/from date/i)).not.toBeInTheDocument();
   });
 
   it("shows a bounded empty state instead of claiming completeness", async () => {

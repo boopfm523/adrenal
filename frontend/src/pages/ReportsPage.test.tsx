@@ -13,11 +13,20 @@ function url(input: RequestInfo | URL): string { if (typeof input === "string") 
 function report(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { id: "11111111-1111-4111-8111-111111111111", date_from: "2026-07-11", date_to: "2026-08-09", timezone: "Europe/London", selected_sections: ["metrics", "doses", "approved_plan"], include_ai: false, canonical_sha256: "a".repeat(64), render_version: "report-v1", created_at: "2026-08-09T12:00:00Z", artifacts: [{ format: "pdf", media_type: "application/pdf", sha256: "b".repeat(64), byte_size: 100, download_url: "/api/v1/reports/11111111-1111-4111-8111-111111111111/artifacts/pdf" }], ...overrides }; }
 function reportPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 function preview(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { ...report(), source_manifest: { fact: ["fact-1"], plan: ["plan-1"], patient_note: [], ai: [] }, metric_values: { dose_total: { definition: "Synthetic deterministic sum", timezone: "Europe/London", value: "10.0000" } }, snapshot_content: { fact: [{ id: "fact-1", amount: "10.0000" }], plan: [{ id: "plan-1", status: "approved" }], patient_note: [], ai: [] }, ...overrides }; }
-function renderPage(): void { sessionStore.set(session); render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><ReportsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
+function renderPage(initialEntry = "/reports"): void { sessionStore.set(session); render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><ReportsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
 
 describe("Reports page", () => {
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date("2026-08-09T12:00:00Z")); });
   afterEach(() => { sessionStore.clear(); vi.useRealTimers(); });
+
+  it("filters snapshot creation history through shareable URL state", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const path = url(input); urls.push(path); return Promise.resolve(response(reportPage([report()]))); });
+    renderPage("/reports?history_date_from=2026-08-09&history_date_to=2026-08-10&history_timezone=Europe%2FLondon");
+
+    expect(await screen.findByRole("region", { name: "Immutable report snapshot history table" })).toBeVisible();
+    expect(urls.some((path) => path.includes("local_date_from=2026-08-09") && path.includes("local_date_to=2026-08-10") && path.includes("timezone=Europe%2FLondon"))).toBe(true);
+  });
 
   it("generates with AI off by default and previews separated immutable categories", async () => {
     const requests: { method: string; body: Record<string, unknown> | null }[] = [];

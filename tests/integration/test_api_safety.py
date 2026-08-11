@@ -2940,6 +2940,100 @@ def test_dose_episode_injection_and_context_local_date_filters_share_dst_boundar
     assert invalid.json()["detail"]["code"] == "invalid_local_date_range"
 
 
+def test_plan_lab_and_report_history_filters_use_domain_dates_and_dst_boundaries(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    boundary = "2024-03-10T05:00:00"
+    outside = "2024-03-11T04:00:00"
+    regimens = []
+    for label, effective_from in (
+        ("Synthetic DST boundary plan", boundary),
+        ("Synthetic next-day plan", outside),
+    ):
+        response = client.post(
+            "/api/v1/regimens",
+            headers=logged_in,
+            json={
+                "version_label": label,
+                "effective_from": effective_from,
+                "slots": [],
+                "instructions": [],
+            },
+        )
+        assert response.status_code == 201, response.text
+        regimens.append(response.json()["id"])
+
+    panels = []
+    for label, local_time in (
+        ("Synthetic boundary analyte", boundary),
+        ("Synthetic outside analyte", outside),
+    ):
+        response = client.post(
+            "/api/v1/labs/manual",
+            headers=logged_in,
+            json={
+                "specimen_time": {"local_time": local_time, "timezone": "UTC"},
+                "report_time": {"local_time": local_time, "timezone": "UTC"},
+                "results": [{"analyte_name": label, "qualitative_result": "Synthetic"}],
+            },
+        )
+        assert response.status_code == 201, response.text
+        panels.append(response.json()["panel_id"])
+
+    report = client.post(
+        "/api/v1/reports",
+        headers=logged_in,
+        json={
+            "date_from": "2024-03-10",
+            "date_to": "2024-03-10",
+            "timezone": "America/New_York",
+            "selected_sections": ["metrics"],
+        },
+    )
+    assert report.status_code == 201, report.text
+    report_id = report.json()["id"]
+    with Session(engine) as session, session.begin():
+        snapshot = session.get(ReportSnapshot, uuid.UUID(report_id))
+        assert snapshot is not None
+        snapshot.created_at = datetime(2024, 3, 10, 5, tzinfo=UTC)
+
+    params = {
+        "local_date_from": "2024-03-10",
+        "local_date_to": "2024-03-10",
+        "timezone": "America/New_York",
+    }
+    plan_ids = {
+        item["id"] for item in client.get("/api/v1/regimens", params=params).json()["items"]
+    }
+    assert regimens[0] in plan_ids
+    assert regimens[1] not in plan_ids
+    lab_panel_ids = {
+        item["panel_id"]
+        for item in client.get("/api/v1/labs/results", params=params).json()["items"]
+    }
+    assert panels[0] in lab_panel_ids
+    assert panels[1] not in lab_panel_ids
+    report_ids = {
+        item["id"] for item in client.get("/api/v1/reports", params=params).json()["items"]
+    }
+    assert report_id in report_ids
+
+    invalid_params = {
+        "local_date_from": "2024-03-11",
+        "local_date_to": "2024-03-10",
+        "timezone": "America/New_York",
+    }
+    for path in (
+        "/api/v1/regimens",
+        "/api/v1/labs/results",
+        "/api/v1/labs/documents",
+        "/api/v1/reports",
+    ):
+        invalid = client.get(path, params=invalid_params)
+        assert invalid.status_code == 422, (path, invalid.text)
+        assert invalid.json()["detail"]["code"] == "invalid_local_date_range"
+
+
 def test_timeline_orders_by_experienced_time_with_stable_ties(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

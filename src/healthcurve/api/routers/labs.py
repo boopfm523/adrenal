@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import hmac
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.vision import apply_vision_fallback
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import (
     AppRateLimiter,
     AppSettings,
@@ -63,7 +64,12 @@ router = APIRouter(prefix="/labs", tags=["labs"])
 
 @router.get("/results", response_model=LabResultPage)
 def list_lab_results(
-    session: DbSession, owner: CurrentOwner, pagination: Pagination
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> LabResultPage:
     """Return source facts and derived values together, never conflated."""
     query = (
@@ -71,6 +77,16 @@ def list_lab_results(
         .join(LabPanel, LabPanel.id == LabResult.panel_id)
         .where(LabResult.owner_id == owner.id, LabPanel.owner_id == owner.id)
     )
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    if window.start is not None:
+        query = query.where(LabPanel.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        query = query.where(LabPanel.occurred_at < window.end_exclusive)
     total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     metadata = page_metadata(total_items, pagination)
     rows = session.execute(
@@ -319,7 +335,13 @@ class LabDocumentPage(ApiModel):
 
 @router.get("/documents", response_model=LabDocumentPage)
 def list_lab_documents(
-    session: DbSession, owner: CurrentOwner, settings: AppSettings, pagination: Pagination
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> LabDocumentPage:
     """List owner documents without starting model work for every historical file."""
     layout = DocumentLayout(settings.uploads_dir)
@@ -327,6 +349,16 @@ def list_lab_documents(
         LabDocument.owner_id == owner.id,
         LabDocument.status != LabDocumentStatus.DELETED,
     )
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    if window.start is not None:
+        query = query.where(LabDocument.created_at >= window.start)
+    if window.end_exclusive is not None:
+        query = query.where(LabDocument.created_at < window.end_exclusive)
     total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     metadata = page_metadata(total_items, pagination)
     documents = list(

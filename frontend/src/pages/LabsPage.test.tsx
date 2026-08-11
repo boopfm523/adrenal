@@ -25,13 +25,23 @@ function json(body: unknown, status = 200): Response {
 }
 function page(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
-function renderPage(): void {
+function renderPage(initialEntry = "/labs"): void {
   sessionStore.set(session);
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><LabsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><LabsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
 }
 
 describe("Labs page", () => {
   afterEach(() => { sessionStore.clear(); });
+
+  it("applies one shareable date range to specimen and document histories", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(json(page(url.includes("/labs/documents?") ? [document] : [base]))); });
+    renderPage("/labs?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=America%2FNew_York");
+
+    expect(await screen.findByRole("region", { name: "Uploaded laboratory document history table" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Laboratory source facts and derived values" })).toBeVisible();
+    await waitFor(() => { expect(urls.filter((url) => url.includes("/labs/")).every((url) => url.includes("local_date_from=2026-08-09") && url.includes("timezone=America%2FNew_York"))).toBe(true); });
+  });
 
   it("separates source and derived data and provides an equivalent trend table", async () => {
     const results = [base, { ...base, id: "33333333-3333-4333-8333-333333333333", specimen_time: { ...base.specimen_time, occurred_at: "2026-08-10T12:00:00Z", local_time: "2026-08-10T08:00:00" }, original_value: "11", normalized_value: "303.6000000000" }, { ...base, id: "44444444-4444-4444-8444-444444444444", specimen_type: "Saliva", original_unit: "unsupported", normalized_value: null, normalized_unit: null, normalization_method: null }];

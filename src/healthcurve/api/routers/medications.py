@@ -7,11 +7,13 @@ token, an approver, and a source (SAFE-16), and it is audited.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 
 from healthcurve import privacy
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.schemas import (
@@ -108,8 +110,26 @@ def list_regimens(
     settings: AppSettings,
     pagination: Pagination,
     status_filter: RegimenStatus | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> RegimenVersionPage:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
     query = select(RegimenVersion).where(RegimenVersion.owner_id == owner.id)
+    if window.start is not None:
+        query = query.where(
+            RegimenVersion.effective_from >= window.start.astimezone(UTC).replace(tzinfo=None)
+        )
+    if window.end_exclusive is not None:
+        query = query.where(
+            RegimenVersion.effective_from
+            < window.end_exclusive.astimezone(UTC).replace(tzinfo=None)
+        )
     if status_filter is not None:
         query = query.where(RegimenVersion.status == status_filter)
     total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0

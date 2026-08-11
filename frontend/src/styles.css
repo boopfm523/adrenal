@@ -234,6 +234,7 @@ circle.chart-series { fill: white; }
 .quality-card .button-link { margin-top: 0.5rem; }
 .category-card--patient { border: 1px solid #a86712; border-left: 0.45rem solid #a86712; }
 .report-layout { display: grid; grid-template-columns: minmax(20rem, 1.15fr) minmax(18rem, 0.85fr); gap: 2rem; align-items: start; }
+.report-layout > section { min-width: 0; }
 .report-builder { display: grid; gap: 1rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .report-builder fieldset { border: 1px solid #ccd4ce; border-radius: 0.5rem; padding: 1rem; }
 .report-builder legend { padding-inline: 0.4rem; font-weight: 800; }

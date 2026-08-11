@@ -3,7 +3,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
+import { AuthContext } from "../auth/context";
 import { PlanPage } from "./PlanPage";
+
+const auth = { status: "authenticated" as const, session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } }, signIn: vi.fn(), signOut: vi.fn() };
+function renderPage(initialEntry = "/plan", client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) { return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={auth}><PlanPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
 
 function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string) {
   return {
@@ -24,6 +28,36 @@ function response(body: unknown): Response { return new Response(JSON.stringify(
 function versionPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
 describe("Medication plan page", () => {
+  it("loads shareable effective-date filters and keeps them while paging", async () => {
+    const urls: string[] = [];
+    const row = version("33333333-3333-4333-8333-333333333333", "Filtered synthetic plan", "retired", "2026-08-09T00:00:00");
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      urls.push(url);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.includes("/regimens?")) {
+        const second = url.includes("page=2");
+        return Promise.resolve(response({ items: [row], page: { page: second ? 2 : 1, page_size: 25, total_items: 26, total_pages: 2 } }));
+      }
+      if (url.includes("/diff/")) return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+      return Promise.resolve(response([]));
+    });
+    renderPage("/plan?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=America%2FNew_York");
+
+    expect(await screen.findByRole("heading", { name: "Filtered synthetic plan" })).toBeVisible();
+    expect(urls.some((url) => url.includes("local_date_from=2026-08-09") && url.includes("local_date_to=2026-08-10") && url.includes("timezone=America%2FNew_York"))).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => { expect(urls.some((url) => url.includes("page=2") && url.includes("local_date_from=2026-08-09"))).toBe(true); });
+  });
+
+  it("rejects a reversed effective-date range before loading history", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const url = requestUrl(input); urls.push(url); if (url.endsWith("/regimens/active")) return Promise.resolve(response(null)); return Promise.resolve(response([])); });
+    renderPage("/plan?local_date_from=2026-08-11&local_date_to=2026-08-10&timezone=America%2FNew_York");
+    expect(await screen.findByRole("alert")).toHaveTextContent("From date must be on or before Through date");
+    expect(urls.some((url) => url.includes("/regimens?"))).toBe(false);
+  });
+
   it("keeps approval provenance visible, distinguishes drafts, and renders a deterministic diff", async () => {
     const approved = version("22222222-2222-4222-8222-222222222222", "Approved synthetic plan", "approved", "2026-08-01T00:00:00");
     const retired = version("11111111-1111-4111-8111-111111111111", "Retired synthetic plan", "retired", "2026-01-01T00:00:00");
@@ -35,9 +69,10 @@ describe("Medication plan page", () => {
       if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([draft, approved, retired])));
       return Promise.resolve(response({ detail: "not found" }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
 
     expect(await screen.findByRole("heading", { name: "Approved synthetic plan · currently in force" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Medication plan version history table" })).toBeVisible();
     expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Synthetic clinic letter").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2026-08-01T14:00:00Z").length).toBeGreaterThan(0);
@@ -70,7 +105,7 @@ describe("Medication plan page", () => {
       if (url.includes("/diff/")) return Promise.resolve(response({ added: [], removed: [], changed: [] }));
       return Promise.resolve(response({ detail: "not found" }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
 
     expect(await screen.findByRole("heading", { name: "Disposable synthetic draft" })).toBeVisible();
     const deleteButtons = screen.getAllByRole("button", { name: "Delete plan" });
@@ -105,7 +140,7 @@ describe("Medication plan page", () => {
       return Promise.resolve(response({ detail: "not found" }));
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const view = render(<QueryClientProvider client={queryClient}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    const view = renderPage("/plan", queryClient);
 
     expect(await screen.findByRole("heading", { name: "Synthetic plan" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Delete plan" })).not.toBeInTheDocument();
@@ -119,7 +154,7 @@ describe("Medication plan page", () => {
       if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([developmentDraft])));
       return Promise.resolve(response({ detail: "not found" }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
     await userEvent.click(await screen.findByRole("button", { name: "Delete plan" }));
     expect(requests).toHaveLength(0);
   });
@@ -146,7 +181,7 @@ describe("Medication plan page", () => {
       if (url.includes("/regimens?")) return Promise.resolve(response(versionPage(createdDraft === null ? [] : [createdDraft])));
       return Promise.resolve(response({ added: [], removed: [], changed: [] }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
 
     await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
     expect(screen.getByRole("heading", { name: "Create your first plan draft" })).toHaveFocus();
@@ -209,11 +244,11 @@ describe("Medication plan page", () => {
       if (url.endsWith("/medications")) return Promise.resolve(response(medications));
       return Promise.resolve(response({ detail: "not found" }));
     });
-    const view = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    const view = renderPage();
 
     await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
     expect(view.container.querySelector("form form")).toBeNull();
-    expect(view.container.querySelectorAll("form")).toHaveLength(2);
+    expect(view.container.querySelectorAll("form")).toHaveLength(3);
     await userEvent.click(screen.getByText("Add a medication to the list"));
     const name = screen.getByLabelText("Name");
     name.focus();
@@ -256,7 +291,7 @@ describe("Medication plan page", () => {
       if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([isApproved ? approved : draft])));
       return Promise.resolve(response({ detail: "not found" }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
 
     expect(await screen.findByRole("heading", { name: "Next step: review and record physician approval" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));

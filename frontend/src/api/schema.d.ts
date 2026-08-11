@@ -4144,6 +4144,9 @@ export interface operations {
     list_lab_documents_api_v1_labs_documents_get: {
         parameters: {
             query?: {
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -4576,6 +4579,9 @@ export interface operations {
     list_lab_results_api_v1_labs_results_get: {
         parameters: {
             query?: {
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -4905,6 +4911,9 @@ export interface operations {
         parameters: {
             query?: {
                 status_filter?: components["schemas"]["RegimenStatus"] | null;
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -5189,6 +5198,9 @@ export interface operations {
     list_reports_api_v1_reports_get: {
         parameters: {
             query?: {
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };
