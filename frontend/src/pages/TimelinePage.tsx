@@ -7,6 +7,7 @@ import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatQuantitativeText } from "../format";
+import { timezoneAbbreviation } from "../time";
 
 const eventTypes = [
   ["", "All record types"],
@@ -115,7 +116,7 @@ export function TimelinePage(): React.JSX.Element {
           <button className="button-secondary" type="button" onClick={() => { setDraftState({ search: "", filters: emptyFilters }); setSearchParams(new URLSearchParams()); }}>Clear filters</button>
         </div>
       </form>
-      <p className="privacy-note">Sensitive diary entries are hidden by default. Dates use {timezone}.</p>
+      <p className="privacy-note">Sensitive diary entries are hidden by default. Dates use {timezoneAbbreviation(timezone)}.</p>
       <p><Link className="button-link" to={healthCurveUrl}>{selectedHealthCurveDay === null ? "Open HealthCurve daily review" : `Review ${selectedHealthCurveDay} in HealthCurve`}</Link></p>
 
       {timeline.isPending ? <p role="status">Loading timeline…</p> : null}
@@ -134,7 +135,7 @@ export function TimelinePage(): React.JSX.Element {
             <tbody>{timeline.data.items.map((item) => {
               const note = categoryNote(item.category, item.event_type);
               return <tr key={item.id} data-category={item.event_type === "context" ? "context" : item.category}>
-                <td className="timeline-time"><time dateTime={item.time.occurred_at}>{localTime(item.time.local_time)}</time><span>{item.time.timezone}</span></td>
+                <td className="timeline-time"><time dateTime={item.time.occurred_at}>{localTime(item.time.local_time)}</time><span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td>
                 <th scope="row"><span className="timeline-summary">{formatQuantitativeText(item.summary)}</span><span className="timeline-type">{words(item.event_type)}</span></th>
                 <td><span>{item.provenance?.source_type === undefined ? "Source not available" : words(item.provenance.source_type)}</span><span>{item.provenance?.confirmation_state === undefined ? "Confirmation not available" : words(item.provenance.confirmation_state)}</span></td>
                 <td><span className={`timeline-category timeline-category--${item.event_type === "context" ? "context" : item.category}`}>{categoryLabel(item.category, item.event_type)}</span><span>{item.provenance?.is_correction === true ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>{note === null ? null : <span className="timeline-category-note">{note}</span>}</td>

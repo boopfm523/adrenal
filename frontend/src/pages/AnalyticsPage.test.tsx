@@ -60,11 +60,11 @@ describe("Analytics page", () => {
     expect(await screen.findByText(/configured private model is unavailable/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Download daily features CSV" })).toBeVisible();
     expect(screen.getAllByText("Missing—0 samples")).toHaveLength(2);
-    expect(screen.getAllByText("Europe/London").length).toBeGreaterThan(3);
+    expect(screen.getAllByText("GMT+1").length).toBeGreaterThan(3);
     expect(screen.getAllByText("Gap—no value")).toHaveLength(2);
     expect(screen.getByText(/actual Missing—no dose facts/)).toBeInTheDocument();
     expect(screen.getByText(/planned Missing—no approved plan/)).toBeInTheDocument();
-    expect(screen.getByText("X axis: Date (Europe/London). Y axis: Daily dose total (mg).")).toBeVisible();
+    expect(screen.getByText("X axis: Date (GMT+1). Y axis: Daily dose total (mg).")).toBeVisible();
     expect(within(screen.getByRole("region", { name: "Daily medication totals versus plan data table" })).getAllByRole("cell", { name: "20" })).toHaveLength(2);
     expect(screen.getAllByText("Metric definition")).toHaveLength(4);
     expect(screen.getAllByText("Missing—no resolved durations")).toHaveLength(2);

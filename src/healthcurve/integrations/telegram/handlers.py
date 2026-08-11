@@ -39,6 +39,7 @@ from healthcurve.events.timekeeping import (
     NonExistentLocalTimeError,
     from_instant,
     resolve_event_time,
+    timezone_abbreviation,
 )
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
@@ -577,7 +578,10 @@ def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
         session, owner_id=owner.id, day=local_today, timezone=owner.default_timezone
     )
 
-    lines = [f"Today ({local_today.isoformat()}, {owner.default_timezone})", ""]
+    lines = [
+        f"Today ({local_today.isoformat()}, {timezone_abbreviation(owner.default_timezone, now)})",
+        "",
+    ]
     slots = cast(list[meds.SlotComparison], comparison["slots"])
     if not slots:
         lines.append("Nothing recorded, and no approved plan for today.")

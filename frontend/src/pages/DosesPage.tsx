@@ -7,6 +7,7 @@ import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement } from "../format";
+import { timezoneAbbreviation } from "../time";
 
 interface FormValues {
   amount: string;
@@ -49,7 +50,7 @@ function initialValues(dose: Dose): FormValues {
 }
 
 function experiencedTime(dose: Dose): string {
-  return `${dose.time.local_time.replace("T", " ").slice(0, 16)} · ${dose.time.timezone}`;
+  return `${dose.time.local_time.replace("T", " ").slice(0, 16)} · ${timezoneAbbreviation(dose.time.timezone, dose.time.occurred_at)}`;
 }
 
 function changedFields(dose: Dose, values: FormValues): DoseCorrectionInput["changes"] {
@@ -152,7 +153,7 @@ export function DosesPage(): React.JSX.Element {
         {validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}
         <div className="filter-actions"><button type="submit">Apply filters</button><button className="button-secondary" type="button" onClick={() => { setValidation(null); setEditingId(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone: profileTimezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</button></div>
       </form>
-      <p className="privacy-note">Inclusive dates use {filters.timezone}. These are actual recorded facts, not scheduled plan entries.</p>
+      <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. These are actual recorded facts, not scheduled plan entries.</p>
       {doses.isFetching ? <p role="status">Loading recorded doses…</p> : null}
       {doses.isError ? <p className="error-summary" role="alert">Recorded doses could not be loaded.</p> : null}
       {doses.data?.page.total_items === 0 ? <section className="empty-state"><h2>No doses recorded</h2><p>A missing record is not a recorded zero dose.</p></section> : null}
@@ -163,7 +164,7 @@ export function DosesPage(): React.JSX.Element {
           <tbody>{current.flatMap((dose) => {
             const history = historyFor(dose);
             const row = <tr key={dose.id} data-dose-id={dose.id}>
-              <td className="dose-time"><time dateTime={dose.time.occurred_at}>{dose.time.local_time.replace("T", " ").slice(0, 16)}</time><span>{dose.time.timezone}</span></td>
+              <td className="dose-time"><time dateTime={dose.time.occurred_at}>{dose.time.local_time.replace("T", " ").slice(0, 16)}</time><span>{timezoneAbbreviation(dose.time.timezone, dose.time.occurred_at)}</span></td>
               <th scope="row"><span>{dose.medication_name}</span><span>{formatMeasurement(dose.amount, dose.unit)}</span>{dose.notes === null ? null : <span className="dose-notes">{dose.notes}</span>}</th>
               <td><span>{dose.dose_category.replace("_", " ")}</span><span>{dose.route.replace("_", " ")}</span></td>
               <td><span>{dose.provenance.source_type.replace("_", " ")}</span><span>{dose.provenance.confirmation_state.replace("_", " ")}</span></td>

@@ -150,7 +150,7 @@ def test_today_uses_local_day_across_utc_midnight(monkeypatch: pytest.MonkeyPatc
         now=datetime(2026, 8, 10, 0, 30, tzinfo=UTC),
     )
 
-    assert reply.text.startswith("Today (2026-08-09, America/Los_Angeles)")
+    assert reply.text.startswith("Today (2026-08-09, PDT)")
     compare.assert_called_once_with(
         ANY,
         owner_id=OWNER_ID,

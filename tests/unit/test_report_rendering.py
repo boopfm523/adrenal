@@ -70,6 +70,8 @@ def test_html_json_and_csv_are_deterministic_partitioned_and_ai_off_by_default()
     assert b"Physician-approved plan" in left_html
     assert b"Patient notes and questions" in left_html
     assert b"AI-generated analysis" not in left_html
+    assert b"<strong>Timezone:</strong> EDT" in left_html
+    assert b"America/New_York" not in left_html
     assert b"<script>bad()" not in left_html
     assert b"&lt;script&gt;bad()&lt;/script&gt;" in left_html
 

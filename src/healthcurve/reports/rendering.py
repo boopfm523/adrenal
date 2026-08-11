@@ -10,11 +10,13 @@ import csv
 import io
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Final
 
 from jinja2 import Environment, StrictUndefined, select_autoescape
 from playwright.sync_api import sync_playwright
 
+from healthcurve.events.timekeeping import timezone_abbreviation_for_local_date
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.service import PARTITIONS, document
 
@@ -109,6 +111,7 @@ def render_html(snapshot: ReportSnapshot) -> bytes:
     content = payload["snapshot_content"]
     manifest = payload["source_manifest"]
     metrics = payload["metric_values"]
+    display_day = date.fromisoformat(payload["date_to"])
     categories = []
     for key in PARTITIONS:
         if key == "ai" and not payload["include_ai"]:
@@ -130,7 +133,7 @@ def render_html(snapshot: ReportSnapshot) -> bytes:
             {
                 "name": name.replace("_", " ").title(),
                 "definition": metric["definition"],
-                "timezone": metric["timezone"],
+                "timezone": timezone_abbreviation_for_local_date(metric["timezone"], display_day),
                 "value": _canonical_json(
                     {
                         key: value
@@ -144,7 +147,7 @@ def render_html(snapshot: ReportSnapshot) -> bytes:
     html = _HTML.render(
         date_from=payload["date_from"],
         date_to=payload["date_to"],
-        timezone=payload["timezone"],
+        timezone=timezone_abbreviation_for_local_date(payload["timezone"], display_day),
         checksum=snapshot.canonical_sha256,
         metrics=metric_rows,
         categories=categories,

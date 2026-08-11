@@ -18,15 +18,16 @@ import { AccessibleLineChart } from "../components/AccessibleLineChart";
 import { DailyHealthCurve } from "../components/DailyHealthCurve";
 import { DailyPatternsTable } from "../components/DailyPatternsTable";
 import { formatDecimal, formatMeasurement } from "../format";
-import { localDate } from "../time";
+import { localDate, timezoneAbbreviationForLocalDate } from "../time";
 
 interface MetricFrameProps extends PropsWithChildren {
   title: string;
   metric: { definition: string; timezone: string; sample_count: number; missing_count: number };
+  referenceDate: string;
 }
 
-function MetricFrame({ title, metric, children }: MetricFrameProps): React.JSX.Element {
-  return <section className="metric-card"><h2>{title}</h2><dl className="metric-metadata"><div><dt>Timezone</dt><dd>{metric.timezone}</dd></div><div><dt>Sample count</dt><dd>{formatDecimal(metric.sample_count)}</dd></div><div><dt>Missing values</dt><dd>{formatDecimal(metric.missing_count)}</dd></div></dl>{children}<details className="metric-definition"><summary>Metric definition</summary><p>{metric.definition}</p></details></section>;
+function MetricFrame({ title, metric, referenceDate, children }: MetricFrameProps): React.JSX.Element {
+  return <section className="metric-card"><h2>{title}</h2><dl className="metric-metadata"><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(metric.timezone, referenceDate)}</dd></div><div><dt>Sample count</dt><dd>{formatDecimal(metric.sample_count)}</dd></div><div><dt>Missing values</dt><dd>{formatDecimal(metric.missing_count)}</dd></div></dl>{children}<details className="metric-definition"><summary>Metric definition</summary><p>{metric.definition}</p></details></section>;
 }
 
 type DoseDay = AnalyticsSummary["daily_doses"]["values"][number];
@@ -42,12 +43,12 @@ function DailyDoses({ summary }: { summary: AnalyticsSummary }): React.JSX.Eleme
   const metric = summary.daily_doses;
   const units = new Set(metric.values.map((day) => day.unit).filter((unit) => unit !== null));
   const chartUnit = units.size === 1 ? [...units][0] ?? "unit unavailable" : "mixed or unavailable units";
-  return <><AccessibleLineChart title="Daily medication totals versus plan" summary={`${formatDecimal(metric.days_without_approved_plan)} day(s) have no physician-approved plan in force. Gaps mean the value is missing or unavailable.`} unit={chartUnit} timezone={metric.timezone} dateRange={`${summary.date_from} through ${summary.date_to}`} definition={metric.definition} sampleCount={metric.sample_count} missingCount={metric.missing_count} xAxisLabel="Date" yAxisLabel="Daily dose total" includeZero series={[{ name: "Physician-approved plan total", source: "approved regimen versions", values: metric.values.map((day) => ({ label: day.date, value: day.incompatible_units ? null : day.planned_total, unit: day.unit })) }, { name: "Recorded actual total", source: "current dose facts", values: metric.values.map((day) => ({ label: day.date, value: day.incompatible_units ? null : day.actual_total, unit: day.unit })) }]} /><div className="visually-hidden" aria-live="polite">{metric.values.map((day) => `${day.date}: planned ${doseTotal(day, "planned")}; actual ${doseTotal(day, "actual")}.`).join(" ")}</div></>;
+  return <><AccessibleLineChart title="Daily medication totals versus plan" summary={`${formatDecimal(metric.days_without_approved_plan)} day(s) have no physician-approved plan in force. Gaps mean the value is missing or unavailable.`} unit={chartUnit} timezone={metric.timezone} timezoneReferenceDate={summary.date_to} dateRange={`${summary.date_from} through ${summary.date_to}`} definition={metric.definition} sampleCount={metric.sample_count} missingCount={metric.missing_count} xAxisLabel="Date" yAxisLabel="Daily dose total" includeZero series={[{ name: "Physician-approved plan total", source: "approved regimen versions", values: metric.values.map((day) => ({ label: day.date, value: day.incompatible_units ? null : day.planned_total, unit: day.unit })) }, { name: "Recorded actual total", source: "current dose facts", values: metric.values.map((day) => ({ label: day.date, value: day.incompatible_units ? null : day.actual_total, unit: day.unit })) }]} /><div className="visually-hidden" aria-live="polite">{metric.values.map((day) => `${day.date}: planned ${doseTotal(day, "planned")}; actual ${doseTotal(day, "actual")}.`).join(" ")}</div></>;
 }
 
 function Timing({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
   const metric = summary.timing;
-  return <MetricFrame title="Dose timing" metric={metric}>
+  return <MetricFrame title="Dose timing" metric={metric} referenceDate={summary.date_to}>
     <dl className="metric-values">
       <div><dt>Matched doses</dt><dd>{formatDecimal(metric.matched_count)}</dd></div>
       <div><dt>Average absolute difference from plan</dt><dd>{metric.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatDecimal(metric.average_absolute_deviation_minutes)} minutes`}</dd></div>
@@ -63,12 +64,12 @@ function Timing({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
 
 function Episodes({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
   const metric = summary.episodes;
-  return <MetricFrame title="Stress episodes" metric={metric}><dl className="metric-values"><div><dt>Episodes started</dt><dd>{formatDecimal(metric.count)}</dd></div><div><dt>Total resolved duration</dt><dd>{metric.sample_count === metric.missing_count ? "Missing—no resolved durations" : `${formatDecimal(metric.total_duration_minutes)} minutes`}</dd></div><div><dt>Average resolved duration</dt><dd>{metric.average_duration_minutes === null ? "Missing—no resolved durations" : `${formatDecimal(metric.average_duration_minutes)} minutes`}</dd></div><div><dt>Open episodes without duration</dt><dd>{formatDecimal(metric.missing_count)}</dd></div></dl></MetricFrame>;
+  return <MetricFrame title="Stress episodes" metric={metric} referenceDate={summary.date_to}><dl className="metric-values"><div><dt>Episodes started</dt><dd>{formatDecimal(metric.count)}</dd></div><div><dt>Total resolved duration</dt><dd>{metric.sample_count === metric.missing_count ? "Missing—no resolved durations" : `${formatDecimal(metric.total_duration_minutes)} minutes`}</dd></div><div><dt>Average resolved duration</dt><dd>{metric.average_duration_minutes === null ? "Missing—no resolved durations" : `${formatDecimal(metric.average_duration_minutes)} minutes`}</dd></div><div><dt>Open episodes without duration</dt><dd>{formatDecimal(metric.missing_count)}</dd></div></dl></MetricFrame>;
 }
 
 function Symptoms({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
   const metric = summary.symptoms;
-  return <MetricFrame title="Symptoms" metric={metric}><dl className="metric-values"><div><dt>Symptom facts</dt><dd>{formatDecimal(metric.count)}</dd></div><div><dt>Average recorded severity</dt><dd>{metric.average_severity === null ? "Missing—no severity values" : `${formatDecimal(metric.average_severity)} on the recorded 0-10 scale`}</dd></div><div><dt>Symptoms without severity</dt><dd>{formatDecimal(metric.missing_count)}</dd></div></dl><h3>Frequency by recorded name</h3>{Object.keys(metric.frequency).length === 0 ? <p>No symptom facts in this range.</p> : <ul>{Object.entries(metric.frequency).map(([name, count]) => <li key={name}>{name}: {formatDecimal(count)}</li>)}</ul>}</MetricFrame>;
+  return <MetricFrame title="Symptoms" metric={metric} referenceDate={summary.date_to}><dl className="metric-values"><div><dt>Symptom facts</dt><dd>{formatDecimal(metric.count)}</dd></div><div><dt>Average recorded severity</dt><dd>{metric.average_severity === null ? "Missing—no severity values" : `${formatDecimal(metric.average_severity)} on the recorded 0-10 scale`}</dd></div><div><dt>Symptoms without severity</dt><dd>{formatDecimal(metric.missing_count)}</dd></div></dl><h3>Frequency by recorded name</h3>{Object.keys(metric.frequency).length === 0 ? <p>No symptom facts in this range.</p> : <ul>{Object.entries(metric.frequency).map(([name, count]) => <li key={name}>{name}: {formatDecimal(count)}</li>)}</ul>}</MetricFrame>;
 }
 
 export function AnalyticsPage(): React.JSX.Element {
@@ -116,6 +117,6 @@ export function AnalyticsPage(): React.JSX.Element {
     {patterns.isPending ? <p role="status">Deriving comparable daily features…</p> : null}{patterns.isError ? <p className="error-summary" role="alert">Daily pattern features could not be calculated. Check the date range and IANA timezone.</p> : null}
     {patterns.data === undefined ? null : <DailyPatternsTable data={patterns.data} />}
     {summary.isPending ? <p role="status">Calculating deterministic metrics…</p> : null}{summary.isError ? <p className="error-summary" role="alert">Metrics could not be calculated. Check the date range and IANA timezone.</p> : null}
-    {summary.data === undefined ? null : <><p className="analytics-range">Results for <strong>{summary.data.date_from}</strong> through <strong>{summary.data.date_to}</strong> in <strong>{summary.data.timezone}</strong>.</p><DailyDoses summary={summary.data} /><Timing summary={summary.data} /><Episodes summary={summary.data} /><Symptoms summary={summary.data} /></>}
+    {summary.data === undefined ? null : <><p className="analytics-range">Results for <strong>{summary.data.date_from}</strong> through <strong>{summary.data.date_to}</strong> in <strong>{timezoneAbbreviationForLocalDate(summary.data.timezone, summary.data.date_to)}</strong>.</p><DailyDoses summary={summary.data} /><Timing summary={summary.data} /><Episodes summary={summary.data} /><Symptoms summary={summary.data} /></>}
   </Page>;
 }

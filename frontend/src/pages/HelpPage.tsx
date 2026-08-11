@@ -161,7 +161,7 @@ export function HelpPage(): React.JSX.Element {
           <article className="help-workflow">
             <h3>Create a physician report</h3>
             <p>Select a date range and sections. Facts, approved plan, patient notes, and optional AI remain visibly separated. AI and sensitive notes are off by default.</p>
-            <CopyableExample label="Synthetic report range" value="2026-07-01 through 2026-07-31 · America/New_York · AI off" />
+            <CopyableExample label="Synthetic report range" value="2026-07-01 through 2026-07-31 · EDT · AI off" />
             <Link to="/reports">Open Reports</Link>
           </article>
           <article className="help-workflow">

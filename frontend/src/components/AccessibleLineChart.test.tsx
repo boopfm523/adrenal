@@ -8,7 +8,7 @@ const series: ChartSeries[] = [
 ];
 
 function chart(overrides: Partial<React.ComponentProps<typeof AccessibleLineChart>> = {}): React.JSX.Element {
-  return <AccessibleLineChart title="Synthetic chart" summary="Synthetic values over time." unit="mg" timezone="Europe/London" dateRange="2026-08-01 through 2026-08-05" definition="Synthetic deterministic definition." sampleCount={7} missingCount={3} series={series} {...overrides} />;
+  return <AccessibleLineChart title="Synthetic chart" summary="Synthetic values over time." unit="mg" timezone="Europe/London" timezoneReferenceDate="2026-08-05" dateRange="2026-08-01 through 2026-08-05" definition="Synthetic deterministic definition." sampleCount={7} missingCount={3} series={series} {...overrides} />;
 }
 
 describe("Accessible line chart", () => {
@@ -16,7 +16,7 @@ describe("Accessible line chart", () => {
     const { container } = render(chart({ xAxisLabel: "Date", yAxisLabel: "Dose total" }));
 
     expect(screen.getByRole("img", { name: /Synthetic chart/ })).toBeVisible();
-    expect(screen.getByText("X axis: Date (Europe/London). Y axis: Dose total (mg).")).toBeVisible();
+    expect(screen.getByText("X axis: Date (GMT+1). Y axis: Dose total (mg).")).toBeVisible();
     expect(screen.getByRole("region", { name: "Synthetic chart scrollable graph" })).toBeVisible();
     expect([...container.querySelectorAll(".chart-x-tick text")].map((node) => node.textContent)).toEqual(["08-01", "08-02", "08-03", "08-04", "08-05"]);
     expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["1", "1.5", "2", "2.5", "3", "3.5", "4"]);

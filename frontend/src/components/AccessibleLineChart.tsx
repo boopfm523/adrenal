@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import { formatDecimal, formatMeasurement, humanizeUnit } from "../format";
+import { timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "../time";
 
 export interface ChartValue {
   label: string;
@@ -19,6 +20,7 @@ interface AccessibleLineChartProps {
   summary: string;
   unit: string;
   timezone: string;
+  timezoneReferenceDate?: string | undefined;
   dateRange: string;
   definition: string;
   sampleCount: number;
@@ -152,6 +154,7 @@ export function AccessibleLineChart({
   summary,
   unit,
   timezone,
+  timezoneReferenceDate,
   dateRange,
   definition,
   sampleCount,
@@ -172,12 +175,15 @@ export function AccessibleLineChart({
   const scale = chartScale(numericValues, includeZero, yPadding);
   const labels = series[0]?.values.map((value) => value.label) ?? [];
   const tickIndices = xTickIndices(labels.length);
-  const axisDescription = `X axis: ${xAxisLabel} (${timezone}). Y axis: ${yAxisLabel} (${displayedUnit}).`;
+  const timezoneLabel = timezoneReferenceDate === undefined
+    ? timezoneAbbreviation(timezone)
+    : timezoneAbbreviationForLocalDate(timezone, timezoneReferenceDate);
+  const axisDescription = `X axis: ${xAxisLabel} (${timezoneLabel}). Y axis: ${yAxisLabel} (${displayedUnit}).`;
 
   return <section className="metric-card chart-card" aria-labelledby={headingId}>
     <h2 id={headingId}>{title}</h2>
     <p>{summary}</p>
-    <dl className="metric-metadata"><div><dt>Unit</dt><dd>{displayedUnit}</dd></div><div><dt>Timezone</dt><dd>{timezone}</dd></div><div><dt>Date range</dt><dd>{dateRange}</dd></div><div><dt>Sample count</dt><dd>{formatDecimal(sampleCount)}</dd></div><div><dt>Missing values</dt><dd>{formatDecimal(missingCount)}</dd></div></dl>
+    <dl className="metric-metadata"><div><dt>Unit</dt><dd>{displayedUnit}</dd></div><div><dt>Timezone</dt><dd>{timezoneLabel}</dd></div><div><dt>Date range</dt><dd>{dateRange}</dd></div><div><dt>Sample count</dt><dd>{formatDecimal(sampleCount)}</dd></div><div><dt>Missing values</dt><dd>{formatDecimal(missingCount)}</dd></div></dl>
     {series.length > 1 ? <aside className="association-caution"><strong>Association does not establish causation.</strong> Overlaid series share a time axis for comparison only.</aside> : null}
     <div className="chart-legend" aria-label="Chart series">{series.map((item, index) => <span key={item.name}><i className={`series-key series-key--${(index % 3).toString()}`} aria-hidden="true" />{item.name} · source: {item.source}</span>)}</div>
     <p className="chart-axis-description">{axisDescription}</p>
@@ -195,7 +201,7 @@ export function AccessibleLineChart({
         })}
         <line x1={LEFT} y1={PLOT_BOTTOM} x2={WIDTH - RIGHT} y2={PLOT_BOTTOM} className="chart-axis" />
         <line x1={LEFT} y1={TOP} x2={LEFT} y2={PLOT_BOTTOM} className="chart-axis" />
-        <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezone})</text>
+        <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezoneLabel})</text>
         <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({displayedUnit})</text>
         {series.map((item, seriesIndex) => {
           const segments = plottedSegments(item.values, scale);

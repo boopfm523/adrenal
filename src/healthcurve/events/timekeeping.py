@@ -24,7 +24,7 @@ rather than a silent rewrite of history.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -42,6 +42,25 @@ class NonExistentLocalTimeError(ValueError):
 
 class UnknownTimezoneError(ValueError):
     """The IANA zone name is not in the tz database."""
+
+
+def timezone_abbreviation(timezone: str, occurred_at: datetime) -> str:
+    """Return the current tz-database abbreviation for an aware instant and IANA zone."""
+    if occurred_at.tzinfo is None:
+        raise ValueError("occurred_at must be timezone-aware")
+    abbreviation = occurred_at.astimezone(load_zone(timezone)).tzname()
+    if not abbreviation:  # pragma: no cover - ZoneInfo zones always provide a name
+        raise ValueError("timezone abbreviation is unavailable")
+    return abbreviation
+
+
+def timezone_abbreviation_for_local_date(timezone: str, local_day: date) -> str:
+    """Return the abbreviation in force at local noon on a calendar date."""
+    zone = load_zone(timezone)
+    abbreviation = datetime.combine(local_day, time(12), tzinfo=zone).tzname()
+    if not abbreviation:  # pragma: no cover - ZoneInfo zones always provide a name
+        raise ValueError("timezone abbreviation is unavailable")
+    return abbreviation
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,7 +7,7 @@ record read back after the person has flown somewhere else.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -21,6 +21,8 @@ from healthcurve.events.timekeeping import (
     is_nonexistent,
     offset_matches_tz_database,
     resolve_event_time,
+    timezone_abbreviation,
+    timezone_abbreviation_for_local_date,
     verify_consistency,
 )
 
@@ -48,6 +50,12 @@ def test_summer_offset_is_recorded() -> None:
     resolved = resolve_event_time(datetime(2026, 7, 15, 7, 8), LONDON)  # noqa: DTZ001
     assert resolved.utc_offset_minutes == 60  # BST
     assert resolved.occurred_at == datetime(2026, 7, 15, 6, 8, tzinfo=UTC)
+
+
+def test_timezone_abbreviation_tracks_iana_rules_at_the_referenced_instant() -> None:
+    assert timezone_abbreviation(NEW_YORK, datetime(2026, 1, 15, 12, tzinfo=UTC)) == "EST"
+    assert timezone_abbreviation(NEW_YORK, datetime(2026, 8, 15, 12, tzinfo=UTC)) == "EDT"
+    assert timezone_abbreviation_for_local_date(NEW_YORK, date(2026, 1, 15)) == "EST"
 
 
 def test_naive_input_is_required() -> None:

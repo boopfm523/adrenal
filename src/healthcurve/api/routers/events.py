@@ -36,6 +36,7 @@ from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.events.timekeeping import timezone_abbreviation
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminMetricEvent,
@@ -504,7 +505,10 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             elif context.location_precision is LocationPrecision.EXACT:  # type: ignore[attr-defined]
                 location = "Exact location recorded (consent on file)"
             else:
-                location = f"Timezone context: {context.timezone}"  # type: ignore[attr-defined]
+                location = (
+                    "Timezone context: "
+                    f"{timezone_abbreviation(context.timezone, context.occurred_at)}"  # type: ignore[attr-defined]
+                )
             conditions = context.conditions  # type: ignore[attr-defined]
             return f"{location} · {conditions}" if conditions else location
         case "blood_pressure":

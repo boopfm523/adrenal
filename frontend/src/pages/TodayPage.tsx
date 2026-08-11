@@ -11,7 +11,7 @@ import { useAuth } from "../auth/context";
 import { FactCard, PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
 import { formatDecimal, formatMeasurement } from "../format";
-import { localDate, localDateTime } from "../time";
+import { localDate, localDateTime, timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "../time";
 
 type Slot = PlanComparisonDay["slots"][number];
 
@@ -96,7 +96,7 @@ export function TodayPage(): React.JSX.Element {
 
   return (
     <Page title="Today" description="Recorded facts and your physician-approved plan remain separate.">
-      <p className="today-date"><strong>{day}</strong> · {timezone}</p>
+      <p className="today-date"><strong>{day}</strong> · {timezoneAbbreviationForLocalDate(timezone, day)}</p>
       <section className="primary-healthcurve-entry" aria-labelledby="today-healthcurve-title">
         <h2 id="today-healthcurve-title">Review today’s HealthCurve</h2>
         <p>See actual recorded dose timing beside stress, symptoms, Garmin observations, and vital signs without entering anything twice.</p>
@@ -121,7 +121,7 @@ export function TodayPage(): React.JSX.Element {
 
       {comparison.data !== undefined && planVersions.length > 0 ? (
         <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${formatDecimal(planVersions.length)} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
-          <p>Schedule for {day} in {timezone}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
+          <p>Schedule for {day} in {timezoneAbbreviationForLocalDate(timezone, day)}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
           {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : (
             <ol className="dose-slots">
               {planSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}
@@ -151,7 +151,7 @@ export function TodayPage(): React.JSX.Element {
       {openEpisode === undefined ? null : (
         <FactCard title="Open stress episode" metadata={<Link to="/episodes">Review episode</Link>}>
           <p><strong>Trigger recorded:</strong> {openEpisode.trigger}</p>
-          <p>Started {openEpisode.started_at} · {openEpisode.timezone}</p>
+          <p>Started {openEpisode.started_at} · {timezoneAbbreviation(openEpisode.timezone, openEpisode.started_at)}</p>
           <p>{formatDecimal(openEpisode.dose_count)} linked dose record(s) · {formatDecimal(openEpisode.symptom_count)} linked symptom record(s)</p>
         </FactCard>
       )}

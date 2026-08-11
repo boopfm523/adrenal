@@ -323,6 +323,12 @@ Authenticated clients can record contextual observations through
 timezone, resolved UTC instant, and historical offset together. This preserves travel
 and daylight-saving context without rewriting any health event.
 
+HealthCurve keeps the full IANA identifier as the canonical stored and API value, but
+human-facing time references show the timezone-database abbreviation in force on the
+referenced date (for example, `EST` in winter and `EDT` in summer). Configuration and
+filter fields remain labeled as IANA timezone inputs because abbreviations are ambiguous
+and are not safe identifiers.
+
 Location privacy is explicit. `none` stores no location; `coarse` requires a label
 such as a city or region and forbids coordinates; `exact` requires a latitude,
 longitude, and `exact_location_consent=true`. Those rules are enforced by both the API

@@ -13,6 +13,7 @@ import {
   formatMeasurement,
   garminMetricLabel,
 } from "../format";
+import { timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "../time";
 
 export interface DailyHealthCurveData {
   exposure: SteroidExposureCurve;
@@ -360,12 +361,12 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       symptoms: "Symptoms",
       episodes: "Stress episodes",
     } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset>
-    <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{data.exposure.timezone}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
+    <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
     {dailyAggregates.length === 0 ? null : <section className="garmin-aggregate-context" aria-labelledby="garmin-aggregate-context-title"><h3 id="garmin-aggregate-context-title">Garmin aggregate context</h3><p>These values summarize a provider-defined period. They have no exact intraday observation time, so they are not positioned on or connected within the chart.</p><dl>{dailyAggregates.map((record) => <div key={record.id}><dt>{record.measurement_label ?? garminMetricLabel(record.metric_type)}</dt><dd><strong>{formatGarminDailyValue(record.metric_type, record.value, record.unit)}</strong><span>{record.period_label === null || record.period_label === undefined ? "Untimed aggregate" : `Untimed · ${record.period_label}`} · Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</span></dd></div>)}</dl></section>}
     <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.</p>
     <div className="healthcurve-legend" aria-label="Overlay series legend">{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}</span>)}</div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${data.exposure.timezone}; relative display positions share one time axis and exact values follow.`}>
+      <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; relative display positions share one time axis and exact values follow.`}>
         <title>Interactive selected-day HealthCurve overlay. Relative display positions are not equivalent units. Exact values follow in the readout and table.</title>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
         {[0, 25, 50, 75, 100].map((relative) => {
@@ -392,7 +393,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
         <line className="healthcurve-cursor" x1={cursorX} y1={TOP} x2={cursorX} y2={TOP + PLOT_HEIGHT} />
         <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} onPointerMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
         <text transform={`translate(18 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="healthcurve-axis-title">Relative display position (0–100)</text>
-        <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({data.exposure.timezone})</text>
+        <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({timezoneAbbreviation(data.exposure.timezone, data.exposure.day_start)})</text>
       </svg>
     </div>
     <label className="healthcurve-time-explorer">Explore the chart by time<input aria-label="Explore daily HealthCurve by time" type="range" min="0" max={elapsedMinutes} step="1" value={Math.min(cursorMinute, elapsedMinutes)} onChange={(event) => { setCursorMinute(Number(event.target.value)); }} /></label>
