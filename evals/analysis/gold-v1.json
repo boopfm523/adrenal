@@ -1,6 +1,6 @@
 {
   "version": "analysis-gold-v1",
-  "prompt_version": "analysis-v1",
+  "prompt_version": "analysis-v3",
   "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
   "minimum_pass_rate": 1.0,
   "cases": [

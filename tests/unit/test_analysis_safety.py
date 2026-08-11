@@ -70,6 +70,25 @@ def test_analysis_requires_manifest_citations_and_complete_provenance_shape() ->
 
 
 @pytest.mark.safety("SAFE-20")
+def test_analysis_requires_explicit_missingness_and_correlation_caution() -> None:
+    contradictory = response().model_copy(update={"missingness": "none identified"})
+    with pytest.raises(AnalysisValidationError, match="explicitly disclose missing data"):
+        validate_response(
+            contradictory,
+            source_record_ids=[SOURCE],
+            computed_inputs={"total_mg": "15.0000", "missing_records": 2},
+        )
+
+    without_caution = response().model_copy(update={"correlation_caution": "none"})
+    with pytest.raises(AnalysisValidationError, match="correlation or causation caution"):
+        validate_response(
+            without_caution,
+            source_record_ids=[SOURCE],
+            computed_inputs={"total_mg": "15.0000", "missing_records": 0},
+        )
+
+
+@pytest.mark.safety("SAFE-20")
 def test_analysis_rejects_every_number_absent_from_computed_input() -> None:
     with pytest.raises(AnalysisValidationError, match="absent from computed input"):
         validate_response(
@@ -126,6 +145,7 @@ def test_analysis_gold_baseline_passes_and_degradation_fails() -> None:
     degraded = AnalysisEvaluationReport.model_validate(raw)
     summary = verify_analysis_report(gold, degraded)
     assert not summary.passed
+    assert any("cited-deterministic-total: observed=invalid" in item for item in summary.failures)
 
 
 def test_analysis_gate_rejects_prompt_gold_or_model_provenance_drift() -> None:

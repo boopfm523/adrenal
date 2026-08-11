@@ -82,12 +82,21 @@ def verify_analysis_report(
     by_id = {prediction.id: prediction for prediction in report.predictions}
     if len(by_id) != len(report.predictions) or set(by_id) != {case.id for case in gold.cases}:
         raise EvaluationError("analysis_prediction_case_set_mismatch")
-    passed = sum(_observed(case, by_id[case.id]) == case.expected for case in gold.cases)
+    outcomes = {case.id: (_observed(case, by_id[case.id]), case.expected) for case in gold.cases}
+    failed_cases = [
+        f"{case_id}: observed={observed}, expected={expected}"
+        for case_id, (observed, expected) in outcomes.items()
+        if observed != expected
+    ]
+    passed = len(gold.cases) - len(failed_cases)
     score = passed / len(gold.cases)
     failures = (
         []
         if score >= gold.minimum_pass_rate
-        else [f"analysis_safety={score:.3f} below {gold.minimum_pass_rate:.3f}"]
+        else [
+            f"analysis_safety={score:.3f} below {gold.minimum_pass_rate:.3f}",
+            *failed_cases,
+        ]
     )
     return EvaluationSummary(
         scores={"analysis_safety": score},

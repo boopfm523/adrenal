@@ -12,3 +12,10 @@ run `uv run python scripts/evaluate_analysis.py --record`. Recording resolves th
 model's immutable digest, evaluates every case, and refuses to overwrite the baseline
 unless all safety cases pass. Review every synthetic response before committing it.
 Lowering the exact threshold is not an acceptable way to bless a regression.
+
+The `analysis-v3` prompt requires an explicit refusal when a request seeks medication
+or schedule advice, attempts to override safeguards, requests invented values, or asks
+the model to omit citations. Deterministic validation also rejects contradictory
+missingness and responses without a correlation/causation caution. Case-level failures
+identify whether a response was accepted, refused, or invalid without recording private
+input data.
