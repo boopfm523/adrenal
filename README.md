@@ -40,6 +40,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/garmin-import.md](docs/garmin-import.md) | Review and import owner-exported Garmin FIT/CSV data |
 | [docs/garmin-connect.md](docs/garmin-connect.md) | Configure isolated read-only automatic Garmin sync |
 | [docs/backup-runbook.md](docs/backup-runbook.md) | Encrypted backup setup, monitoring, retention, and recovery operations |
+| [docs/private-release-checklist.md](docs/private-release-checklist.md) | Executable gates before relying on the private localhost/Tailscale deployment |
 
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work, and
 read [docs/roadmap.md](docs/roadmap.md) for what remains and in what order.
