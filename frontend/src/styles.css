@@ -199,6 +199,34 @@ circle.chart-series { fill: white; }
 .chart-unit-warning { border-left: 0.35rem solid #a86712; padding: 0.8rem; background: #fff7e8; }
 .chart-table { margin-top: 1rem; }
 .chart-table summary { cursor: pointer; font-weight: 750; }
+.healthcurve-card { border-color: #174c3c; box-shadow: 0 0.35rem 1.2rem rgb(23 76 60 / 10%); }
+.healthcurve-date-filter { grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1fr) auto; align-items: end; }
+.curve-toggles { display: flex; flex-wrap: wrap; gap: 0.65rem 1.1rem; margin-block: 1rem; padding: 1rem; border: 1px solid #ccd4ce; border-radius: 0.6rem; }
+.curve-toggles legend { padding-inline: 0.35rem; font-weight: 800; }
+.curve-toggles .checkbox-label { display: flex; gap: 0.45rem; align-items: center; }
+.curve-toggles input { width: 1.15rem; height: 1.15rem; }
+.curve-missingness { border-left: 0.3rem solid #6b3f82; padding: 0.75rem; background: #f8f3fb; }
+.healthcurve-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #ccd4ce; background: #fbfcfb; }
+.healthcurve-chart { display: block; min-width: 52rem; width: 100%; height: auto; }
+.healthcurve-time-grid { stroke: #dce2dd; stroke-width: 1; }
+.healthcurve-time-label, .healthcurve-scale-label { fill: #47554f; font-size: 12px; }
+.healthcurve-lane-bg { fill: rgb(238 243 239 / 55%); stroke: #dce2dd; }
+.healthcurve-lane-title { fill: #17221e; font-size: 14px; font-weight: 800; }
+.healthcurve-lane-unit, .healthcurve-lane-range { fill: #47554f; font-size: 11px; }
+.healthcurve-exposure-line { fill: none; stroke: #153cc1; stroke-width: 3.5; stroke-linejoin: round; }
+.healthcurve-dose-marker { stroke: #9f3e17; stroke-width: 2; stroke-dasharray: 5 3; }
+.healthcurve-dose-dot { fill: #9f3e17; }
+.healthcurve-point { fill: #174c3c; stroke: white; stroke-width: 1; }
+.healthcurve-point--stress { fill: #a14c12; }
+.healthcurve-point--heart_rate { fill: #a32038; }
+.healthcurve-point--hrv { fill: #6b3f82; }
+.healthcurve-point--respiration_rate { fill: #25677a; }
+.healthcurve-point--blood_pressure { fill: #1c5a34; }
+.healthcurve-point--symptoms { fill: #bd2f6b; }
+.healthcurve-episode { fill: rgb(199 121 45 / 45%); stroke: #8a4c0e; stroke-width: 1.5; }
+.curve-series-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.5rem 1rem; margin-block: 1rem; }
+.curve-series-summary p { margin: 0; padding: 0.6rem; background: #f4f7f5; }
+.analytics-history { margin-top: 2.5rem; padding-top: 1rem; border-top: 0.2rem solid #174c3c; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(16rem, 1fr)); gap: 1rem; }
 .settings-card { border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .button-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }

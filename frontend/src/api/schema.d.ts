@@ -5587,6 +5587,7 @@ export interface operations {
                 local_date_from?: string | null;
                 local_date_to?: string | null;
                 timezone?: string | null;
+                overlaps_window?: boolean;
                 page?: number;
                 page_size?: number;
             };

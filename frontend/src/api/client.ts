@@ -30,6 +30,7 @@ export type RegimenApprovalInput = components["schemas"]["RegimenApprovalIn"];
 export type Medication = components["schemas"]["MedicationOut"];
 export type MedicationInput = components["schemas"]["MedicationIn"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
+export type SteroidExposureCurve = components["schemas"]["SteroidExposureCurveOut"];
 export type DataQuality = components["schemas"]["DataQualityOut"];
 export type ReportSummary = components["schemas"]["ReportOut"];
 export type ReportPage = components["schemas"]["ReportPage"];
@@ -500,6 +501,63 @@ export async function deleteRegimen(versionId: string): Promise<void> {
 export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: string): Promise<AnalyticsSummary> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
+}
+
+export function getSteroidExposure(day: string, timezone: string): Promise<SteroidExposureCurve> {
+  const params = new URLSearchParams({ day, timezone });
+  return apiRequest<SteroidExposureCurve>(`/analytics/steroid-exposure?${params.toString()}`);
+}
+
+async function collectPages<T>(
+  fetchPage: (page: number) => Promise<{ items: T[]; totalPages: number }>,
+): Promise<T[]> {
+  const first = await fetchPage(1);
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    items.push(...(await fetchPage(page)).items);
+  }
+  return items;
+}
+
+function selectedDayParams(day: string, timezone: string, page: number): URLSearchParams {
+  return new URLSearchParams({
+    local_date_from: day,
+    local_date_to: day,
+    timezone,
+    page: page.toString(),
+    page_size: "100",
+  });
+}
+
+export function getDailyGarminSamples(day: string, timezone: string): Promise<GarminRecord[]> {
+  return collectPages(async (page) => {
+    const params = new URLSearchParams({ day, timezone, page: page.toString(), page_size: "100" });
+    const response = await apiRequest<GarminRecords>(`/integrations/garmin/samples?${params.toString()}`);
+    return { items: response.records, totalPages: response.page.total_pages };
+  });
+}
+
+export function getDailySymptoms(day: string, timezone: string): Promise<Symptom[]> {
+  return collectPages(async (page) => {
+    const response = await apiRequest<SymptomPage>(`/symptoms?${selectedDayParams(day, timezone, page).toString()}`);
+    return { items: response.items, totalPages: response.page.total_pages };
+  });
+}
+
+export function getDailyBloodPressure(day: string, timezone: string): Promise<BloodPressure[]> {
+  return collectPages(async (page) => {
+    const response = await apiRequest<BloodPressurePage>(`/blood-pressure?${selectedDayParams(day, timezone, page).toString()}`);
+    return { items: response.items, totalPages: response.page.total_pages };
+  });
+}
+
+export function getDailyEpisodes(day: string, timezone: string): Promise<Episode[]> {
+  return collectPages(async (page) => {
+    const params = selectedDayParams(day, timezone, page);
+    params.set("overlaps_window", "true");
+    const response = await apiRequest<EpisodePage>(`/stress-episodes?${params.toString()}`);
+    return { items: response.items, totalPages: response.page.total_pages };
+  });
 }
 
 export function getDataQuality(page = 1): Promise<DataQuality> {

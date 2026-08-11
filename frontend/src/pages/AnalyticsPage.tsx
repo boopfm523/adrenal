@@ -1,10 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type PropsWithChildren } from "react";
 
-import { getAnalyticsSummary, type AnalyticsSummary } from "../api/client";
+import {
+  getAnalyticsSummary,
+  getDailyBloodPressure,
+  getDailyEpisodes,
+  getDailyGarminSamples,
+  getDailySymptoms,
+  getSteroidExposure,
+  type AnalyticsSummary,
+} from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
+import { DailyHealthCurve } from "../components/DailyHealthCurve";
 import { formatDecimal, formatMeasurement } from "../format";
 import { localDate } from "../time";
 
@@ -67,10 +76,30 @@ export function AnalyticsPage(): React.JSX.Element {
     return { dateFrom: localDate(new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000), profileTimezone), dateTo: localDate(now, profileTimezone), timezone: profileTimezone };
   });
   const [filters, setFilters] = useState(draft);
+  const [dayDraft, setDayDraft] = useState(() => ({ day: localDate(new Date(), profileTimezone), timezone: profileTimezone }));
+  const [dayFilter, setDayFilter] = useState(dayDraft);
+  const dailyCurve = useQuery({
+    queryKey: ["daily-healthcurve", dayFilter],
+    queryFn: async () => {
+      const [exposure, garmin, symptoms, bloodPressure, episodes] = await Promise.all([
+        getSteroidExposure(dayFilter.day, dayFilter.timezone),
+        getDailyGarminSamples(dayFilter.day, dayFilter.timezone),
+        getDailySymptoms(dayFilter.day, dayFilter.timezone),
+        getDailyBloodPressure(dayFilter.day, dayFilter.timezone),
+        getDailyEpisodes(dayFilter.day, dayFilter.timezone),
+      ]);
+      return { exposure, garmin, symptoms, bloodPressure, episodes };
+    },
+  });
   const summary = useQuery({ queryKey: ["analytics", filters], queryFn: () => getAnalyticsSummary(filters.dateFrom, filters.dateTo, filters.timezone) });
 
-  return <Page title="Analytics" description="Deterministic summaries of recorded facts and approved plan data, with definitions and missingness shown.">
+  return <Page title="Analytics" description="Review one day's HealthCurve from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
     <aside className="safety-note"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
+    <form className="filter-panel healthcurve-date-filter" onSubmit={(event) => { event.preventDefault(); setDayFilter(dayDraft); }}><label>HealthCurve date<input required type="date" value={dayDraft.day} onChange={(event) => { setDayDraft({ ...dayDraft, day: event.target.value }); }} /></label><label>IANA timezone<input required value={dayDraft.timezone} onChange={(event) => { setDayDraft({ ...dayDraft, timezone: event.target.value }); }} /></label><button type="submit">Review this day</button></form>
+    {dailyCurve.isPending ? <p role="status">Building your daily HealthCurve…</p> : null}
+    {dailyCurve.isError ? <p className="error-summary" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</p> : null}
+    {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} />}
+    <section className="analytics-history" aria-labelledby="analytics-history-title"><h2 id="analytics-history-title">Longer-range summaries</h2><p>Use these deterministic totals to compare days across a longer period. Daily pattern analysis will build on the selected-day view.</p></section>
     <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><label>From date<input required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Calculate metrics</button></form>
     {summary.isPending ? <p role="status">Calculating deterministic metrics…</p> : null}{summary.isError ? <p className="error-summary" role="alert">Metrics could not be calculated. Check the date range and IANA timezone.</p> : null}
     {summary.data === undefined ? null : <><p className="analytics-range">Results for <strong>{summary.data.date_from}</strong> through <strong>{summary.data.date_to}</strong> in <strong>{summary.data.timezone}</strong>.</p><DailyDoses summary={summary.data} /><Timing summary={summary.data} /><Episodes summary={summary.data} /><Symptoms summary={summary.data} /></>}

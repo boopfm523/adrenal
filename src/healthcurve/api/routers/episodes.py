@@ -71,6 +71,7 @@ def list_episodes(
     local_date_from: date | None = None,
     local_date_to: date | None = None,
     timezone: str | None = None,
+    overlaps_window: bool = False,
 ) -> EpisodePage:
     window = local_date_window(
         profile_timezone=owner.default_timezone,
@@ -79,10 +80,16 @@ def list_episodes(
         date_to=local_date_to,
     )
     query = select(StressEpisode).where(StressEpisode.owner_id == owner.id)
-    if window.start is not None:
-        query = query.where(StressEpisode.started_at >= window.start)
-    if window.end_exclusive is not None:
-        query = query.where(StressEpisode.started_at < window.end_exclusive)
+    if overlaps_window and window.start is not None and window.end_exclusive is not None:
+        query = query.where(
+            StressEpisode.started_at < window.end_exclusive,
+            (StressEpisode.ended_at.is_(None) | (StressEpisode.ended_at >= window.start)),
+        )
+    else:
+        if window.start is not None:
+            query = query.where(StressEpisode.started_at >= window.start)
+        if window.end_exclusive is not None:
+            query = query.where(StressEpisode.started_at < window.end_exclusive)
     if status_filter is not None:
         query = query.where(StressEpisode.status == status_filter)
     elif open_only:

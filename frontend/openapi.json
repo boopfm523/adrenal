@@ -11913,6 +11913,16 @@
           },
           {
             "in": "query",
+            "name": "overlaps_window",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Overlaps Window",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": false,
             "schema": {

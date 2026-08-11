@@ -12,6 +12,7 @@ _EXPLICIT_COLLECTION_ROUTES = {
     "routers/data_quality.py:/data-quality",
     "routers/events.py:/timeline",
     "routers/garmin.py:/records",
+    "routers/garmin.py:/samples",
 }
 _ALLOWED_STATUSES = {"paginated", "pending", "bounded_reference"}
 _ALLOWED_DATE_FILTERS = {

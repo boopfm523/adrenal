@@ -2949,6 +2949,24 @@ def test_dose_episode_injection_and_context_local_date_filters_share_dst_boundar
         headers=logged_in,
         json={"trigger": "Synthetic DST episode", "time": boundary_time},
     )
+    overlapping_episode = client.post(
+        "/api/v1/stress-episodes",
+        headers=logged_in,
+        json={
+            "trigger": "Synthetic episode crossing local midnight",
+            "time": {"local_time": "2024-03-10T04:00:00", "timezone": "UTC"},
+        },
+    )
+    assert overlapping_episode.status_code == 201
+    resolved_overlap = client.patch(
+        f"/api/v1/stress-episodes/{overlapping_episode.json()['id']}",
+        headers=logged_in,
+        json={
+            "status": "resolved",
+            "ended_at": {"local_time": "2024-03-10T06:00:00", "timezone": "UTC"},
+        },
+    )
+    assert resolved_overlap.status_code == 200
     injection = client.post(
         "/api/v1/emergency-injections",
         headers=logged_in,
@@ -2996,6 +3014,17 @@ def test_dose_episode_injection_and_context_local_date_filters_share_dst_boundar
         response = client.get(path, params=params)
         assert response.status_code == 200, response.text
         assert expected_id in {row["id"] for row in response.json()["items"]}
+    ordinary_episode_ids = {
+        row["id"] for row in client.get("/api/v1/stress-episodes", params=params).json()["items"]
+    }
+    overlapping_episode_ids = {
+        row["id"]
+        for row in client.get(
+            "/api/v1/stress-episodes", params={**params, "overlaps_window": True}
+        ).json()["items"]
+    }
+    assert overlapping_episode.json()["id"] not in ordinary_episode_ids
+    assert overlapping_episode.json()["id"] in overlapping_episode_ids
     dose_ids = {row["id"] for row in client.get("/api/v1/doses", params=params).json()["items"]}
     assert outside.json()["id"] not in dose_ids
 

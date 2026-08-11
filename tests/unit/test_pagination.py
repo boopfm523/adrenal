@@ -59,6 +59,7 @@ def test_pagination_inventory_rejects_new_mapped_card_history(tmp_path: Path) ->
             "routers/data_quality.py:/data-quality": api_entry,
             "routers/events.py:/timeline": api_entry,
             "routers/garmin.py:/records": api_entry,
+            "routers/garmin.py:/samples": api_entry,
         },
         "frontend_tables": {},
         "frontend_mapped_card_files": {},
