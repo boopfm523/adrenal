@@ -151,6 +151,16 @@ describe("Timeline page", () => {
     });
   });
 
+  it("links a single filtered day directly into HealthCurve", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      timezone: "America/Chicago", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 }, items: [],
+    }), { headers: { "Content-Type": "application/json" } }));
+
+    renderPage("/timeline?local_date_from=2026-08-01&local_date_to=2026-08-01&timezone=America%2FChicago&sort_order=desc");
+
+    expect(screen.getByRole("link", { name: "Review 2026-08-01 in HealthCurve" })).toHaveAttribute("href", "/healthcurve?day=2026-08-01&timezone=America%2FChicago");
+  });
+
   it("distinguishes filtered-to-zero from a new record", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       timezone: "America/New_York", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 }, items: [],

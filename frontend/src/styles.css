@@ -218,6 +218,8 @@ circle.chart-series { fill: white; }
 .healthcurve-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-block: 1rem; }
 .healthcurve-focus > span { font-weight: 800; margin-right: 0.25rem; }
 .healthcurve-focus button { min-height: 2.35rem; padding: 0.4rem 0.7rem; }
+.primary-healthcurve-entry { margin: 1rem 0; padding: 1rem; border: 2px solid #174c3c; border-radius: 0.6rem; background: #f4f8f5; }
+.primary-healthcurve-entry h2 { margin-top: 0; }
 .healthcurve-key { display: inline-block; width: 1.6rem; border-top: 0.24rem solid #153cc1; }
 .healthcurve-key--stress { border-color: #a14c12; border-top-style: dashed; }
 .healthcurve-key--heart_rate { border-color: #a32038; }

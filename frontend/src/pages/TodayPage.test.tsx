@@ -113,6 +113,8 @@ describe("Today page", () => {
     expect(await screen.findByRole("heading", { name: "No approved plan for this date" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "No doses recorded today" })).toBeVisible();
     expect(screen.getByText("This is an empty record, not a recorded amount of zero.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Review today’s HealthCurve" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open today’s HealthCurve" })).toHaveAttribute("href", "/healthcurve?day=2026-08-09&timezone=America%2FNew_York");
     expect(screen.getByRole("link", { name: "Open emergency plan" })).toHaveAttribute("href", "/emergency");
     expect(screen.queryByText("0.0000 mg")).not.toBeInTheDocument();
   });

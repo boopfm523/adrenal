@@ -24,14 +24,15 @@ export function App(): React.JSX.Element {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/today" replace />} />
+          <Route index element={<Navigate to="/healthcurve" replace />} />
+          <Route path="/healthcurve" element={<AnalyticsPage />} />
           <Route path="/today" element={<TodayPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/doses" element={<DosesPage />} />
           <Route path="/symptoms-diary" element={<SymptomsDiaryPage />} />
           <Route path="/plan" element={<PlanPage />} />
           <Route path="/episodes" element={<EpisodesPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/analytics" element={<Navigate to="/healthcurve" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/data-quality" element={<DataQualityPage />} />
           <Route path="/reports" element={<ReportsPage />} />

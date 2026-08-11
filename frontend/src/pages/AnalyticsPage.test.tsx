@@ -37,9 +37,11 @@ describe("Analytics page", () => {
   it("renders definitions, timezone, missingness, and the no-causation caution", async () => {
     const urls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url)); });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><AnalyticsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
 
     expect(screen.getByText(/Association does not establish causation/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "HealthCurve", level: 1 })).toBeVisible();
+    expect(screen.getByLabelText("HealthCurve date")).toHaveValue("2026-08-01");
     expect(await screen.findByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Daily HealthCurve synchronized chart" })).toBeVisible();
     expect(screen.getByText(/Focused comparison on one time axis/)).toBeVisible();

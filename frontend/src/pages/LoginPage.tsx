@@ -18,7 +18,7 @@ export function LoginPage(): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const state = location.state as LocationState | null;
 
-  if (status === "authenticated") return <Navigate to="/today" replace />;
+  if (status === "authenticated") return <Navigate to="/healthcurve" replace />;
 
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): Promise<void> {
     event.preventDefault();
@@ -26,7 +26,7 @@ export function LoginPage(): React.JSX.Element {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      const destination = state?.from?.startsWith("/") === true ? state.from : "/today";
+      const destination = state?.from?.startsWith("/") === true ? state.from : "/healthcurve";
       void navigate(destination, { replace: true });
     } catch (caught: unknown) {
       setError(caught instanceof ApiError ? caught.message : "Sign-in is temporarily unavailable.");

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/context";
 
 const navigation = [
+  ["HealthCurve", "/healthcurve"],
   ["Today", "/today"],
   ["Timeline", "/timeline"],
   ["Doses", "/doses"],
@@ -11,7 +12,6 @@ const navigation = [
   ["Symptoms & diary", "/symptoms-diary"],
   ["Health data", "/health-data"],
   ["Labs", "/labs"],
-  ["Analytics", "/analytics"],
   ["Reports", "/reports"],
   ["Data quality", "/data-quality"],
   ["Settings & privacy", "/settings"],
@@ -25,7 +25,7 @@ export function AppLayout(): React.JSX.Element {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="app-header">
-        <NavLink className="brand" to="/today">HealthCurve</NavLink>
+        <NavLink className="brand" to="/healthcurve" aria-label="HealthCurve home">HealthCurve</NavLink>
         <a className="emergency-link" href="/emergency">
           <span aria-hidden="true">!</span> Emergency plan
         </a>

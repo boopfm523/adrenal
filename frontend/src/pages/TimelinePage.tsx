@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { getTimeline, type TimelineFilters } from "../api/client";
 import { useAuth } from "../auth/context";
@@ -83,6 +83,8 @@ export function TimelinePage(): React.JSX.Element {
   const setDraft = (next: TimelineFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
   const timeline = useQuery({ queryKey: ["timeline", filters], queryFn: () => getTimeline(filters) });
   const filtered = filters.type !== "" || filters.dateFrom !== "" || filters.dateTo !== "" || filters.includeSensitive;
+  const selectedHealthCurveDay = filters.dateFrom !== "" && filters.dateFrom === filters.dateTo ? filters.dateFrom : null;
+  const healthCurveUrl = selectedHealthCurveDay === null ? "/healthcurve" : `/healthcurve?${new URLSearchParams({ day: selectedHealthCurveDay, timezone: filters.timezone }).toString()}`;
 
   return (
     <Page title="Timeline" description="The authoritative chronology of recorded facts, with source and correction provenance.">
@@ -114,6 +116,7 @@ export function TimelinePage(): React.JSX.Element {
         </div>
       </form>
       <p className="privacy-note">Sensitive diary entries are hidden by default. Dates use {timezone}.</p>
+      <p><Link className="button-link" to={healthCurveUrl}>{selectedHealthCurveDay === null ? "Open HealthCurve daily review" : `Review ${selectedHealthCurveDay} in HealthCurve`}</Link></p>
 
       {timeline.isPending ? <p role="status">Loading timeline…</p> : null}
       {timeline.isError ? <p className="error-summary" role="alert">The timeline could not be loaded.</p> : null}

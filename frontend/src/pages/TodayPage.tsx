@@ -92,10 +92,16 @@ export function TodayPage(): React.JSX.Element {
   const planVersions = comparison.data?.regimen_versions ?? [];
   const hasRecordedDose = comparison.data?.slots.some((slot) => slot.dose_id !== null) ?? false;
   const openEpisode = episodes.data?.items[0];
+  const healthCurveUrl = `/healthcurve?${new URLSearchParams({ day, timezone }).toString()}`;
 
   return (
     <Page title="Today" description="Recorded facts and your physician-approved plan remain separate.">
       <p className="today-date"><strong>{day}</strong> · {timezone}</p>
+      <section className="primary-healthcurve-entry" aria-labelledby="today-healthcurve-title">
+        <h2 id="today-healthcurve-title">Review today’s HealthCurve</h2>
+        <p>See actual recorded dose timing beside stress, symptoms, Garmin observations, and vital signs without entering anything twice.</p>
+        <Link className="button-link" to={healthCurveUrl}>Open today’s HealthCurve</Link>
+      </section>
       <div className="quick-actions" aria-label="Quick actions">
         <Link className="button-link" to="/timeline">Open timeline</Link>
         <Link className="button-link" to="/doses">Review doses</Link>
