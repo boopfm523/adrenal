@@ -14,6 +14,16 @@ _EXPLICIT_COLLECTION_ROUTES = {
     "routers/garmin.py:/records",
 }
 _ALLOWED_STATUSES = {"paginated", "pending", "bounded_reference"}
+_ALLOWED_DATE_FILTERS = {
+    "created_local",
+    "effective_local",
+    "experienced_local",
+    "inherited_bounded",
+    "mixed_domain_local",
+    "none_current",
+    "none_reference",
+    "selected_range",
+}
 
 
 def _list_routes(root: Path) -> set[str]:
@@ -50,8 +60,18 @@ def _table_files(root: Path) -> set[str]:
     }
 
 
-def _entries(value: object) -> dict[str, dict[str, str]]:
-    return cast(dict[str, dict[str, str]], value)
+def _mapped_card_files(root: Path) -> set[str]:
+    frontend = root / "frontend/src"
+    discovered = set()
+    for path in frontend.rglob("*.tsx"):
+        source = path.read_text(encoding="utf-8")
+        if any(".map(" in line and "<article" in line for line in source.splitlines()):
+            discovered.add(path.relative_to(root).as_posix())
+    return discovered
+
+
+def _entries(value: object) -> dict[str, dict[str, object]]:
+    return cast(dict[str, dict[str, object]], value)
 
 
 def audit(root: Path) -> list[str]:
@@ -61,9 +81,11 @@ def audit(root: Path) -> list[str]:
     )
     api = _entries(inventory["api_collections"])
     tables = _entries(inventory["frontend_tables"])
+    cards = _entries(inventory["frontend_mapped_card_files"])
     additional = _entries(inventory["additional_ui_collections"])
     discovered_api = _list_routes(root)
     discovered_tables = _table_files(root)
+    discovered_cards = _mapped_card_files(root)
 
     failures = [
         *(f"unclassified_api_collection:{name}" for name in sorted(discovered_api - api.keys())),
@@ -76,16 +98,59 @@ def audit(root: Path) -> list[str]:
             f"stale_frontend_classification:{name}"
             for name in sorted(tables.keys() - discovered_tables)
         ),
+        *(
+            f"unclassified_frontend_mapped_cards:{name}"
+            for name in sorted(discovered_cards - cards.keys())
+        ),
+        *(
+            f"stale_frontend_mapped_card_classification:{name}"
+            for name in sorted(cards.keys() - discovered_cards)
+        ),
     ]
-    for group_name, entries in (("api", api), ("frontend", tables), ("additional", additional)):
+    for group_name, entries in (
+        ("api", api),
+        ("frontend", tables),
+        ("cards", cards),
+        ("additional", additional),
+    ):
         for name, entry in sorted(entries.items()):
-            status = entry.get("status", "")
+            status = str(entry.get("status", ""))
             if status not in _ALLOWED_STATUSES:
                 failures.append(f"invalid_status:{group_name}:{name}")
-            if status in {"paginated", "pending"} and not entry.get("issue", "").startswith("hc-"):
+            if status in {"paginated", "pending"} and not str(entry.get("issue", "")).startswith(
+                "hc-"
+            ):
                 failures.append(f"missing_issue:{group_name}:{name}")
             if status == "bounded_reference" and not entry.get("reason"):
                 failures.append(f"missing_bounded_reason:{group_name}:{name}")
+            date_filter = str(entry.get("date_filter", ""))
+            if date_filter not in _ALLOWED_DATE_FILTERS:
+                failures.append(f"missing_or_invalid_date_filter:{group_name}:{name}")
+            if not entry.get("sensitivity"):
+                failures.append(f"missing_sensitivity:{group_name}:{name}")
+
+    for name, entry in sorted(api.items()):
+        if entry.get("status") == "paginated" and entry.get("pagination_contract") != "PageRequest":
+            failures.append(f"missing_pagination_contract:api:{name}")
+        if (
+            str(entry.get("date_filter", "")).endswith("_local")
+            and entry.get("timezone") != "explicit_iana"
+        ):
+            failures.append(f"missing_explicit_timezone:api:{name}")
+
+    for name, entry in sorted(tables.items()):
+        if entry.get("status") != "paginated":
+            continue
+        if entry.get("semantic_table") is not True:
+            failures.append(f"missing_semantic_table:frontend:{name}")
+        if entry.get("responsive_scroll") is not True:
+            failures.append(f"missing_responsive_scroll:frontend:{name}")
+        if entry.get("url_state") is not True:
+            failures.append(f"missing_url_state:frontend:{name}")
+
+    for name, entry in sorted(cards.items()):
+        if entry.get("status") != "bounded_reference" or not entry.get("reason"):
+            failures.append(f"mapped_cards_not_bounded:cards:{name}")
     return failures
 
 

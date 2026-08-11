@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -34,3 +35,39 @@ def test_pagination_inventory_covers_discovered_surfaces() -> None:
     root = Path(__file__).resolve().parents[2]
 
     assert audit(root) == []
+
+
+def test_pagination_inventory_rejects_new_mapped_card_history(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    page = tmp_path / "frontend/src/pages/NewHistory.tsx"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        "export function NewHistory() { return rows.map((row) => "
+        "<article key={row.id}>{row.name}</article>); }",
+        encoding="utf-8",
+    )
+    api_entry = {
+        "status": "paginated",
+        "issue": "hc-test",
+        "pagination_contract": "PageRequest",
+        "date_filter": "experienced_local",
+        "timezone": "explicit_iana",
+        "sensitivity": "owner_scoped_health",
+    }
+    inventory = {
+        "api_collections": {
+            "routers/data_quality.py:/data-quality": api_entry,
+            "routers/events.py:/timeline": api_entry,
+            "routers/garmin.py:/records": api_entry,
+        },
+        "frontend_tables": {},
+        "frontend_mapped_card_files": {},
+        "additional_ui_collections": {},
+    }
+    (tmp_path / "docs/pagination-inventory.json").write_text(
+        json.dumps(inventory), encoding="utf-8"
+    )
+
+    assert audit(tmp_path) == [
+        "unclassified_frontend_mapped_cards:frontend/src/pages/NewHistory.tsx"
+    ]

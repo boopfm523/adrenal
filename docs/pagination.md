@@ -27,11 +27,21 @@ expose the visible range and page count in a polite live region and use native b
 keyboard and assistive-technology behavior remains predictable.
 
 [`pagination-inventory.json`](pagination-inventory.json) classifies every currently
-discovered list endpoint, table-rendering source file, and known growing card/list
-surface. `uv run python scripts/check_pagination_inventory.py` fails when a new list
-route or table appears without a classification, when a pending surface lacks its Beads
-issue, or when a stale classification remains. `pending` entries are required work for
-`hc-inbox.10`; they are not accepted as complete pagination.
+discovered list endpoint, table-rendering source file, known growing collection, and
+file that maps records into article cards. Each entry records its pagination or bounded
+contract, meaningful date-filter category, health-data sensitivity, and exception
+rationale. Paginated frontend histories must declare semantic-table rendering,
+responsive horizontal containment, and URL-backed page/filter state. Local-date API
+contracts must declare an explicit IANA timezone.
+
+`uv run python scripts/check_pagination_inventory.py` fails when a new list route,
+table, or mapped-card file appears without classification; a discovered entry becomes
+stale; a paginated surface omits its Beads issue or contract; or a bounded reference
+lacks a rationale. Mapped articles are allowed only for bounded child content such as
+revision details on the current page, never as an unbounded primary history. Static
+forms, fixed configuration children, and accessible chart fallback tables may be
+excluded only through a recorded bounded-reference rationale. `pending` is reserved for
+linked follow-up work and is not evidence of completed pagination.
 
 Chart exact-value tables inherit a documented bound from their data source. Vitals and
 lab charts use only the current visible API page. Analytics charts use the selected date
