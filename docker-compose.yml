@@ -50,6 +50,10 @@ services:
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_OLLAMA_VISION_MODEL: ${HC_OLLAMA_VISION_MODEL:-qwen3-vl:30b}
+      HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
+      HC_OLLAMA_READ_TIMEOUT_S: ${HC_OLLAMA_READ_TIMEOUT_S:-60}
+      HC_OLLAMA_MAX_RETRIES: ${HC_OLLAMA_MAX_RETRIES:-2}
+      HC_OLLAMA_THINKING: ${HC_OLLAMA_THINKING:-false}
       HC_REDIS_URL: redis://redis:6379/0
       # The API receives only the non-secret feature flag/lookback so it can expose
       # owner controls. Garmin credentials and tokens are mounted only into the
@@ -130,6 +134,10 @@ services:
       # (ADR-0003); the app refuses to start otherwise.
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
+      HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
+      HC_OLLAMA_READ_TIMEOUT_S: ${HC_OLLAMA_READ_TIMEOUT_S:-60}
+      HC_OLLAMA_MAX_RETRIES: ${HC_OLLAMA_MAX_RETRIES:-2}
+      HC_OLLAMA_THINKING: ${HC_OLLAMA_THINKING:-false}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's

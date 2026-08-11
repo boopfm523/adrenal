@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help setup fmt lint types imports test test-fast test-pg eval audit secrets frontend-generate frontend-check check up down logs migrate ready
+.PHONY: help setup fmt lint types imports env-check test test-fast test-pg eval audit secrets frontend-generate frontend-check check up down logs migrate ready
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -26,6 +26,9 @@ types: ## Type check
 
 imports: ## Enforce module boundaries (ADR-0002)
 	uv run lint-imports
+
+env-check: ## Reject supported environment variables missing from .env.example
+	uv run python scripts/check_env_example.py
 
 test: ## Run the whole suite
 	uv run pytest
@@ -63,7 +66,7 @@ frontend-check: ## Verify OpenAPI drift, frontend lint/tests, and production bui
 	uv run python scripts/export_openapi.py --check
 	cd frontend && npm run check
 
-check: lint types imports test eval audit secrets frontend-check ## Everything CI runs
+check: lint types imports env-check test eval audit secrets frontend-check ## Everything CI runs
 
 up: ## Start the local stack
 	docker compose up -d --build

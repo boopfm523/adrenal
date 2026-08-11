@@ -97,7 +97,6 @@ class Settings(BaseSettings):
 
     # --- Database (ADR-0001) ---
     database_url: str = "postgresql+psycopg://healthcurve@localhost:5432/healthcurve"
-    database_password: SecretStr | None = None
     #: The restricted role used only where model output becomes a draft (SAFE-15/16).
     #: Unset means the AI path shares the privileged connection, which downgrades those
     #: rules from a database privilege to a convention -- refused in production.
