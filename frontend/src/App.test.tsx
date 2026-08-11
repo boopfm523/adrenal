@@ -28,8 +28,29 @@ describe("primary HealthCurve route", () => {
   it.each(["/", "/analytics"])("routes %s to the daily HealthCurve", async (entry) => {
     renderApp(entry);
     await waitFor(() => { expect(screen.getByLabelText("Current route")).toHaveTextContent("/healthcurve"); });
-    expect(screen.getByRole("heading", { name: "HealthCurve", level: 1 })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "HealthCurve", level: 1 })).toBeVisible();
     expect(screen.getByRole("link", { name: "HealthCurve" })).toHaveAttribute("aria-current", "page");
+    cleanup();
+  });
+
+  it.each([
+    ["/healthcurve", "HealthCurve"],
+    ["/today", "Today"],
+    ["/timeline", "Timeline"],
+    ["/doses", "Doses"],
+    ["/symptoms-diary", "Symptoms & diary"],
+    ["/plan", "Medication plan"],
+    ["/episodes", "Stress episodes"],
+    ["/settings", "Settings & privacy"],
+    ["/data-quality", "Data quality"],
+    ["/reports", "Reports"],
+    ["/help", "Help"],
+    ["/health-data", "Health data"],
+    ["/labs", "Laboratory results"],
+  ])("supports authenticated direct navigation to %s", async (entry, heading) => {
+    renderApp(entry);
+    expect(await screen.findByRole("heading", { name: heading, level: 1 })).toBeVisible();
+    expect(screen.getByLabelText("Current route")).toHaveTextContent(entry);
     cleanup();
   });
 });

@@ -24,10 +24,10 @@ function renderHelp(): void {
 }
 
 describe("Help page", () => {
-  it("is authenticated primary navigation with prominent safety and category boundaries", () => {
+  it("is authenticated primary navigation with prominent safety and category boundaries", async () => {
     renderHelp();
 
-    expect(screen.getByRole("heading", { name: "Help", level: 1 })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeVisible();
     expect(screen.getByRole("link", { name: "Help" })).toHaveClass("active");
     const safety = screen.getByRole("heading", { name: "HealthCurve is not emergency care or dosing advice" }).closest("aside");
     if (safety === null) throw new Error("emergency safety region missing");
@@ -43,6 +43,7 @@ describe("Help page", () => {
     const writeText = vi.fn<(value: string) => Promise<void>>().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     renderHelp();
+    await screen.findByRole("heading", { name: "Help", level: 1 });
 
     for (const item of helpContent.telegramCommands) {
       const heading = screen.getByRole("heading", { name: item.command });
@@ -62,8 +63,9 @@ describe("Help page", () => {
     expect(within(doseCard).getByRole("status")).toHaveTextContent("Copied");
   });
 
-  it("labels API-only and implemented capabilities while documenting backlog capture", () => {
+  it("labels API-only and implemented capabilities while documenting backlog capture", async () => {
     renderHelp();
+    await screen.findByRole("heading", { name: "Help", level: 1 });
 
     expect(screen.getByText("API only—no complete web create form yet")).toBeVisible();
     expect(screen.getByText("Labs web page")).toBeVisible();
