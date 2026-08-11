@@ -69,7 +69,13 @@ jobs:
           version: "0.9.9"
           enable-cache: true
 
-      - run: uv sync --frozen --dev --extra documents
+      - name: Install pinned dependencies
+        run: uv sync --frozen --dev --extra documents
+
+      # The documents extra installs the Python Playwright package, but Playwright's
+      # version-matched browser executable is a separate artifact on a fresh runner.
+      - name: Install Chromium for PDF rendering tests
+        run: uv run playwright install --with-deps chromium
 
       # Runs the safety-rule coverage gate along with everything else: a rule marked
       # `enforced` in docs/safety-rules.yaml that has lost its test fails here.
