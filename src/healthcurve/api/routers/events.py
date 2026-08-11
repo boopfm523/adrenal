@@ -517,7 +517,7 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             return f"Weight {pounds} lb{entered}"
         case "garmin_daily":
             metric = row.metric_type.value.replace("_", " ").title()  # type: ignore[attr-defined]
-            return f"Garmin-recorded {metric}: {row.value} {row.unit}"  # type: ignore[attr-defined]
+            return f"{metric}: {row.value} {row.unit}"  # type: ignore[attr-defined]
         case "garmin_sleep":
             duration = row.duration_seconds  # type: ignore[attr-defined]
             duration_text = (
@@ -527,12 +527,12 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             )
             score = row.overall_sleep_score  # type: ignore[attr-defined]
             score_text = "score unavailable" if score is None else f"score {score}"
-            return f"Garmin-recorded sleep: {duration_text}; {score_text}"
+            return f"Sleep: {duration_text}; {score_text}"
         case "garmin_activity":
             sport = row.sport.replace("_", " ").title()  # type: ignore[attr-defined]
             distance = row.distance_miles  # type: ignore[attr-defined]
             distance_text = "distance unavailable" if distance is None else f"{distance} mi"
-            return f"Garmin-recorded activity: {sport}; {distance_text}"
+            return f"Activity: {sport}; {distance_text}"
         case _:  # pragma: no cover
             return type_name
 

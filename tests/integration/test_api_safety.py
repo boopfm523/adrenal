@@ -1436,9 +1436,14 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         "garmin_daily",
         "garmin_activity",
     ]
+    assert [item["summary"] for item in garmin_timeline.json()["items"]] == [
+        "Steps: 120.0000 steps",
+        "Activity: Walking; 1.0000 mi",
+    ]
     assert all(
-        item["summary"].startswith("Garmin-recorded") for item in garmin_timeline.json()["items"]
+        item["provenance"]["source_type"] == "provider" for item in garmin_timeline.json()["items"]
     )
+    assert all("Garmin-recorded" not in item["summary"] for item in garmin_timeline.json()["items"])
     quality = client.get("/api/v1/data-quality")
     assert quality.status_code == 200
     assert any(
