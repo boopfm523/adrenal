@@ -42,7 +42,7 @@ describe("Medication plan page", () => {
     expect(screen.getAllByText("Draft plan—not physician approved").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Draft plan—not physician approved. This version is not in force.").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
-    expect(await screen.findByText("Synthetic medicine at 07:00:00: 10.0000 mg -> 12.0000 mg")).toBeVisible();
+    expect(await screen.findByText("Synthetic medicine at 07:00:00: 10 mg -> 12 mg")).toBeVisible();
     expect(screen.getByText("No removed schedule entries.")).toBeVisible();
   });
 

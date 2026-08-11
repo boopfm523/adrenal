@@ -5,6 +5,7 @@ import { createEpisode, getEpisodes, updateEpisode, type Episode } from "../api/
 import { useAuth } from "../auth/context";
 import { FactCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import { formatDecimal } from "../format";
 
 function nowLocal(): string {
   const now = new Date();
@@ -47,11 +48,11 @@ function EpisodeCard({ episode }: { episode: Episode }): React.JSX.Element {
     mutation.mutate({ status: "resolved", ended_at: { local_time: data.get("ended_at") as string, timezone: episode.timezone, fold: null } });
   }
 
-  return <FactCard title={episode.trigger} metadata={<span>{episode.dose_count} linked dose{episode.dose_count === 1 ? "" : "s"} · {episode.symptom_count} linked symptom{episode.symptom_count === 1 ? "" : "s"}</span>}>
+  return <FactCard title={episode.trigger} metadata={<span>{formatDecimal(episode.dose_count)} linked dose{episode.dose_count === 1 ? "" : "s"} · {formatDecimal(episode.symptom_count)} linked symptom{episode.symptom_count === 1 ? "" : "s"}</span>}>
     <p className={`episode-status episode-status--${episode.status}`}>{episode.status}</p>
     <dl className="provenance-grid"><div><dt>Started</dt><dd>{displayTime(episode.started_at, episode.timezone)}</dd></div><div><dt>Timezone</dt><dd>{episode.timezone}</dd></div><div><dt>Severity</dt><dd>{episode.severity ?? "Not recorded"}</dd></div><div><dt>Ended</dt><dd>{episode.ended_at === null ? "Episode remains open" : displayTime(episode.ended_at, episode.timezone)}</dd></div></dl>
     {episode.illness_description === null ? null : <p><strong>Context:</strong> {episode.illness_description}</p>}
-    {episode.highest_temperature_c === null ? null : <p><strong>Highest recorded temperature:</strong> {episode.highest_temperature_c} °C</p>}
+    {episode.highest_temperature_c === null ? null : <p><strong>Highest recorded temperature:</strong> {formatDecimal(episode.highest_temperature_c)} °C</p>}
     {episode.notes === null ? null : <p><strong>Notes:</strong> {episode.notes}</p>}
     {episode.recovery_notes === null ? null : <p><strong>Recovery notes:</strong> {episode.recovery_notes}</p>}
     {episode.outcome === null ? null : <p><strong>Outcome:</strong> {episode.outcome}</p>}

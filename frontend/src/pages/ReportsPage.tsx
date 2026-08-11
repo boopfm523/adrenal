@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createReport, getReport, getReports, type ReportCreate, type ReportPreview } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
+import { formatPreviewJson } from "../format";
 import { localDate } from "../time";
 
 const sectionOptions = [
@@ -28,7 +29,7 @@ function records(value: unknown): unknown[] {
 }
 
 function jsonText(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return formatPreviewJson(value);
 }
 
 function reportDateError(dateFrom: string, dateTo: string): string | null {

@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../auth/context";
 import { FactCard, PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import { formatDecimal, formatMeasurement } from "../format";
 import { localDate, localDateTime } from "../time";
 
 type Slot = PlanComparisonDay["slots"][number];
@@ -54,20 +55,20 @@ function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: s
     <li className={`dose-slot dose-slot--${slot.status}`}>
       <div>
         <p className="dose-slot__schedule">
-          <strong>{displayTime(slot.scheduled_local_time)}</strong> · {slot.medication_name} · {slot.planned_amount} {slot.unit}
+          <strong>{displayTime(slot.scheduled_local_time)}</strong> · {slot.medication_name} · {formatMeasurement(slot.planned_amount, slot.unit)}
         </p>
         <p className="dose-slot__status"><strong>{label}</strong></p>
         {slot.status === "missing" ? (
           <p className="status-explanation">No dose record exists for this slot. “Not recorded” does not mean “not taken.”</p>
         ) : (
           <p className="status-explanation">
-            Recorded fact: {slot.actual_amount} {slot.unit} at {displayTime(slot.actual_local_time)}.
+            Recorded fact: {formatMeasurement(slot.actual_amount, slot.unit)} at {displayTime(slot.actual_local_time)}.
           </p>
         )}
       </div>
       {slot.status === "missing" && slot.planned_amount !== null ? (
         <button type="button" disabled={mutation.isPending} onClick={() => { mutation.mutate(); }}>
-          {mutation.isPending ? "Recording…" : `Record ${slot.planned_amount} ${slot.unit} taken now`}
+          {mutation.isPending ? "Recording…" : `Record ${formatMeasurement(slot.planned_amount, slot.unit)} taken now`}
         </button>
       ) : null}
       {mutation.isError ? <p className="error-summary" role="alert">The dose was not recorded. Review the time and try again.</p> : null}
@@ -113,7 +114,7 @@ export function TodayPage(): React.JSX.Element {
       ) : null}
 
       {comparison.data !== undefined && planVersions.length > 0 ? (
-        <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${planVersions.length.toString()} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
+        <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${formatDecimal(planVersions.length)} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
           <p>Schedule for {day} in {timezone}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
           {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : (
             <ol className="dose-slots">
@@ -136,7 +137,7 @@ export function TodayPage(): React.JSX.Element {
 
       {unplannedDoses.map((dose) => (
         <FactCard key={dose.dose_id} title={`${dose.medication_name} recorded`} metadata={<Link to="/timeline">Open recorded fact</Link>}>
-          <p>{dose.actual_amount} {dose.unit} at {displayTime(dose.actual_local_time)} · {statusLabels[dose.status] ?? dose.status}</p>
+          <p>{formatMeasurement(dose.actual_amount, dose.unit)} at {displayTime(dose.actual_local_time)} · {statusLabels[dose.status] ?? dose.status}</p>
         </FactCard>
       ))}
 
@@ -145,7 +146,7 @@ export function TodayPage(): React.JSX.Element {
         <FactCard title="Open stress episode" metadata={<Link to="/episodes">Review episode</Link>}>
           <p><strong>Trigger recorded:</strong> {openEpisode.trigger}</p>
           <p>Started {openEpisode.started_at} · {openEpisode.timezone}</p>
-          <p>{openEpisode.dose_count} linked dose record(s) · {openEpisode.symptom_count} linked symptom record(s)</p>
+          <p>{formatDecimal(openEpisode.dose_count)} linked dose record(s) · {formatDecimal(openEpisode.symptom_count)} linked symptom record(s)</p>
         </FactCard>
       )}
     </Page>

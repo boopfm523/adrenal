@@ -41,6 +41,9 @@ describe("Labs page", () => {
     expect(screen.getByRole("columnheader", { name: "Derived result" })).toBeVisible();
     expect(screen.getByText("Not derived—original preserved")).toBeVisible();
     expect(screen.getByRole("region", { name: "Cortisol — Serum data table" })).toBeInTheDocument();
+    expect(screen.getAllByText("276").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("303.6").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/276\.0000000000/)).not.toBeInTheDocument();
     expect(screen.getByText(/does not diagnose, interpret cortisol/)).toBeVisible();
   });
 

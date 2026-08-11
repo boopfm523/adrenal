@@ -90,7 +90,7 @@ describe("Timeline page", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Synthetic medicine 10.0000 mg")).toBeVisible();
+    expect(await screen.findByText("Synthetic medicine 10 mg")).toBeVisible();
     expect(screen.getByText("2026-08-09 07:00")).toBeVisible();
     expect(screen.getByText("telegram")).toBeVisible();
     expect(screen.getByText("user confirmed")).toBeVisible();
@@ -102,7 +102,7 @@ describe("Timeline page", () => {
     if (firstRow === undefined || secondRow === undefined) throw new Error("timeline rows missing");
     expect(within(firstRow).getByText("Synthetic later symptom severity 2/10")).toBeVisible();
     expect(within(firstRow).getByText("Original record")).toBeVisible();
-    expect(within(secondRow).getByText("Synthetic medicine 10.0000 mg")).toBeVisible();
+    expect(within(secondRow).getByText("Synthetic medicine 10 mg")).toBeVisible();
     const firstInput = fetchMock.mock.calls[0]?.[0];
     const firstUrl = firstInput === undefined ? "" : requestUrl(firstInput);
     expect(firstUrl).not.toContain("include_sensitive");

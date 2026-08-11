@@ -14,12 +14,13 @@ import { sessionStore } from "../api/session";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { ContextSettings } from "../components/ContextSettings";
+import { formatDecimal } from "../format";
 
 function IntegrationControl({ provider, description }: { provider: "telegram" | "weather"; description: string }): React.JSX.Element {
   const mutation = useMutation({ mutationFn: ({ password, deleteData }: { password: string; deleteData: boolean }) => disconnectIntegration(provider, password, deleteData) });
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ password: data.get("password") as string, deleteData: data.get("delete_data") === "on" }); }
   const title = provider === "telegram" ? "Telegram logging" : "Open-Meteo weather";
-  return <article className="settings-card"><h3>{title}</h3><p>{description}</p><form className="privacy-action" onSubmit={submit}><label>Current password<input name="password" type="password" required autoComplete="current-password" /></label><label className="checkbox-label"><input name="delete_data" type="checkbox" defaultChecked />Delete imported/provider-derived data as well as disconnecting</label><button type="submit" disabled={mutation.isPending}>Disconnect {provider}</button></form>{mutation.isSuccess ? <p className="success-message" role="status">Disconnected. {mutation.data.credentials_deleted} credential(s) and {mutation.data.data_rows_deleted} provider row(s) deleted.</p> : null}{mutation.isError ? <p className="error-summary" role="alert">The integration was not disconnected. Check your password.</p> : null}</article>;
+  return <article className="settings-card"><h3>{title}</h3><p>{description}</p><form className="privacy-action" onSubmit={submit}><label>Current password<input name="password" type="password" required autoComplete="current-password" /></label><label className="checkbox-label"><input name="delete_data" type="checkbox" defaultChecked />Delete imported/provider-derived data as well as disconnecting</label><button type="submit" disabled={mutation.isPending}>Disconnect {provider}</button></form>{mutation.isSuccess ? <p className="success-message" role="status">Disconnected. {formatDecimal(mutation.data.credentials_deleted)} credential(s) and {formatDecimal(mutation.data.data_rows_deleted)} provider row(s) deleted.</p> : null}{mutation.isError ? <p className="error-summary" role="alert">The integration was not disconnected. Check your password.</p> : null}</article>;
 }
 
 function requestKey(): string {
@@ -76,13 +77,13 @@ function GarminControl(): React.JSX.Element {
     {sync.isError ? <p className="error-summary" role="alert">The Garmin sync was not queued. Review the connection status.</p> : null}
     <form className="privacy-action danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); disconnect.mutate({ password: data.get("password") as string, confirmation: data.get("confirmation") as string }); }}>
       <h4>Disconnect Garmin</h4>
-      <p>{preview.data === undefined ? "Loading impact preview…" : `${preview.data.automatic_fact_rows.toString()} automatic fact row(s), ${preview.data.reviewed_import_fact_rows.toString()} reviewed import fact row(s), and ${preview.data.sync_run_rows.toString()} sync provenance row(s) are currently recorded.`}</p>
+      <p>{preview.data === undefined ? "Loading impact preview…" : `${formatDecimal(preview.data.automatic_fact_rows)} automatic fact row(s), ${formatDecimal(preview.data.reviewed_import_fact_rows)} reviewed import fact row(s), and ${formatDecimal(preview.data.sync_run_rows)} sync provenance row(s) are currently recorded.`}</p>
       <label className="checkbox-label"><input name="delete_data" type="checkbox" checked={deleteData} onChange={(event) => { setDeleteData(event.target.checked); }} />Delete Garmin-derived facts and sync provenance as well as disconnecting</label>
       <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label>
       <label>Type {confirmation}<input name="confirmation" required autoComplete="off" /></label>
       <button type="submit" disabled={disconnect.isPending}>Disconnect Garmin</button>
     </form>
-    {disconnect.isSuccess ? <p className="success-message" role="status">Disconnect accepted. {disconnect.data.data_rows_deleted} provider row(s) deleted. Local Garmin token cleanup is {disconnect.data.disconnect_requested ? "queued" : "already complete"}.</p> : null}
+    {disconnect.isSuccess ? <p className="success-message" role="status">Disconnect accepted. {formatDecimal(disconnect.data.data_rows_deleted)} provider row(s) deleted. Local Garmin token cleanup is {disconnect.data.disconnect_requested ? "queued" : "already complete"}.</p> : null}
     {disconnect.isError ? <p className="error-summary" role="alert">Garmin was not disconnected. Check the password and exact confirmation phrase.</p> : null}
   </article>;
 }

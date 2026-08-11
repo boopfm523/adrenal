@@ -35,6 +35,8 @@ describe("Reports page", () => {
     expect(screen.getByRole("heading", { name: "Physician-approved plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Patient notes and questions" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "AI-generated analysis" })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/"(?:value|amount)": "10"/)).toHaveLength(2);
+    expect(screen.queryByText(/10\.0000/)).not.toBeInTheDocument();
   });
 
   it("warns on AI opt-in and renders opted-in AI separately", async () => {

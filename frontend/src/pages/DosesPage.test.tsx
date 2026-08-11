@@ -48,12 +48,12 @@ describe("Doses page", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
 
     const table = await screen.findByRole("table", { name: /current recorded dose facts ordered by experienced time/i });
-    expect(within(table).getByRole("rowheader", { name: /Synthetic medicine\s*10\.1250 mg/ })).toBeVisible();
+    expect(within(table).getByRole("rowheader", { name: /Synthetic medicine\s*10\.125 mg/ })).toBeVisible();
     expect(within(table).queryByRole("rowheader", { name: /10\.0000 mg/ })).not.toBeInTheDocument();
     const region = screen.getByRole("region", { name: "Recorded doses table" });
     expect(region).toHaveAttribute("tabindex", "0");
     await userEvent.click(screen.getByText("Revision history (1)"));
-    expect(screen.getByText(/10\.0000 mg/)).toBeVisible();
+    expect(screen.getByText(/10 mg/)).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Correct recorded fact" }));
     const form = screen.getByRole("form", { name: "Correct Synthetic medicine dose" });
@@ -81,9 +81,9 @@ describe("Doses page", () => {
 
     const rows = within(await screen.findByRole("table")).getAllByRole("row").slice(1);
     expect(rows.map((row) => within(row).getByRole("rowheader").textContent)).toEqual([
-      "Equal first1.0000 mg",
-      "Equal second2.0000 mg",
-      "Later medicine3.0000 mg",
+      "Equal first1 mg",
+      "Equal second2 mg",
+      "Later medicine3 mg",
     ]);
   });
 

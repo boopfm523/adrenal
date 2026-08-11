@@ -112,6 +112,15 @@ TanStack Query's cache and returns the application to the login screen.
 the database. `parseFloat` reintroduces the floating-point imprecision the schema was
 designed to avoid. Format for display; never round-trip through a `number`.
 
+Human-facing quantitative output uses the deterministic formatter in
+`frontend/src/format.ts`. Its locale policy is fixed **en-US presentation**: commas
+group thousands, a period is the decimal separator, and only insignificant trailing
+fractional zeroes are removed. Remaining digits are preserved exactly from API decimal
+strings; canonical API responses, entered values, exports, and stored facts are not
+rewritten. Provider identifiers are mapped to readable labels only at presentation
+time. Forms continue to edit the unformatted canonical value so a displayed comma can
+never be submitted as health data.
+
 **2. Every event carries two times.** `occurred_at` is a UTC instant; `local_time` is
 the naive wall clock the owner experienced, with `timezone` and `utc_offset_minutes`
 alongside. Show `local_time`. Use `occurred_at` only for durations and ordering. Never

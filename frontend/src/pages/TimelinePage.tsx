@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { getTimeline, type TimelineFilters } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
+import { formatQuantitativeText } from "../format";
 
 const eventTypes = [
   ["", "All record types"],
@@ -128,7 +129,7 @@ export function TimelinePage(): React.JSX.Element {
               const note = categoryNote(item.category, item.event_type);
               return <tr key={item.id} data-category={item.event_type === "context" ? "context" : item.category}>
                 <td className="timeline-time"><time dateTime={item.time.occurred_at}>{localTime(item.time.local_time)}</time><span>{item.time.timezone}</span></td>
-                <th scope="row"><span className="timeline-summary">{item.summary}</span><span className="timeline-type">{words(item.event_type)}</span></th>
+                <th scope="row"><span className="timeline-summary">{formatQuantitativeText(item.summary)}</span><span className="timeline-type">{words(item.event_type)}</span></th>
                 <td><span>{item.provenance?.source_type === undefined ? "Source not available" : words(item.provenance.source_type)}</span><span>{item.provenance?.confirmation_state === undefined ? "Confirmation not available" : words(item.provenance.confirmation_state)}</span></td>
                 <td><span className={`timeline-category timeline-category--${item.event_type === "context" ? "context" : item.category}`}>{categoryLabel(item.category, item.event_type)}</span><span>{item.provenance?.is_correction === true ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>{note === null ? null : <span className="timeline-category-note">{note}</span>}</td>
               </tr>;

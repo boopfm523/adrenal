@@ -19,7 +19,7 @@ describe("Accessible line chart", () => {
     expect(screen.getByText("X axis: Date (Europe/London). Y axis: Dose total (mg).")).toBeVisible();
     expect(screen.getByRole("region", { name: "Synthetic chart scrollable graph" })).toBeVisible();
     expect([...container.querySelectorAll(".chart-x-tick text")].map((node) => node.textContent)).toEqual(["08-01", "08-02", "08-03", "08-04", "08-05"]);
-    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0"]);
+    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["1", "1.5", "2", "2.5", "3", "3.5", "4"]);
     expect(container.querySelectorAll('[data-series="Recorded"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-point-series="Recorded"]')).toHaveLength(4);
     expect(container.querySelector('[data-point-series="Recorded"] title')).toHaveTextContent("2026-08-01: 1 mg");
@@ -44,7 +44,7 @@ describe("Accessible line chart", () => {
     }));
 
     expect(screen.getByRole("region", { name: "Synthetic chart scrollable graph" })).toHaveClass("chart-plot-scroll--compact");
-    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179.0", "179.5", "180.0", "180.5", "181.0"]);
+    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179", "179.5", "180", "180.5", "181"]);
     expect(container.querySelectorAll('[data-point-series="Weight"]')).toHaveLength(1);
 
     rerender(chart({
@@ -60,7 +60,7 @@ describe("Accessible line chart", () => {
       yPadding: 1,
       series: [{ name: "Weight", source: "synthetic facts", values: [{ label: "2026-08-01", value: "180" }, { label: "2026-08-02", value: "181" }] }],
     }));
-    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179.0", "179.5", "180.0", "180.5", "181.0", "181.5", "182.0"]);
+    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179", "179.5", "180", "180.5", "181", "181.5", "182"]);
   });
 
   it("does not plot values with incompatible units on one Y-axis", () => {

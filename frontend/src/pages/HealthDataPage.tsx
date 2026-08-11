@@ -21,6 +21,12 @@ import { useAuth } from "../auth/context";
 import { AccessibleLineChart, type ChartSeries } from "../components/AccessibleLineChart";
 import { FactCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import {
+  formatDecimal,
+  formatGarminDailyValue,
+  garminMetricLabel,
+  humanizeSource,
+} from "../format";
 
 function localNow(): string {
   const now = new Date();
@@ -68,8 +74,8 @@ function GarminRecordsTable({ records }: { records: GarminRecord[] }): React.JSX
       <thead><tr><th scope="col">Experienced time</th><th scope="col">Observation</th><th scope="col">Recorded value</th><th scope="col">Duration and details</th></tr></thead>
       <tbody>{ordered.map((record) => <tr key={record.id} data-category="fact">
         <td className="timeline-time">{displayTime(record.time.local_time)}<span>{record.time.timezone}</span></td>
-        <td><strong>{record.kind === "daily" ? record.metric_type?.replaceAll("_", " ") : record.kind === "sleep" ? "sleep" : record.activity_type?.replaceAll("_", " ")}</strong>{record.provenance.is_correction ? <span>{`Provider correction · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}</td>
-        <td>{record.kind === "daily" ? <>{record.value ?? <span className="missing-value">Unavailable</span>} {record.unit ?? ""}</> : record.kind === "sleep" ? <>Sleep score: {record.sleep_score ?? <span className="missing-value">Unavailable</span>}</> : <>Distance: {record.distance_miles == null ? <span className="missing-value">Unavailable</span> : `${record.distance_miles} mi`}</>}</td>
+        <td><strong>{record.kind === "daily" ? garminMetricLabel(record.metric_type) : record.kind === "sleep" ? "Sleep" : humanizeSource(record.activity_type ?? "Activity")}</strong>{record.provenance.is_correction ? <span>{`Provider correction · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}</td>
+        <td>{record.kind === "daily" ? formatGarminDailyValue(record.metric_type, record.value, record.unit) : record.kind === "sleep" ? <>Sleep score: {record.sleep_score ?? <span className="missing-value">Unavailable</span>}</> : <>Distance: {record.distance_miles == null ? <span className="missing-value">Unavailable</span> : `${formatDecimal(record.distance_miles)} mi`}</>}</td>
         <td>{record.kind === "daily" ? <span className="missing-value">Daily summary</span> : <>{duration(record.duration_seconds)}{record.kind === "sleep" ? <><span>Awakenings: {record.awakenings ?? "Unavailable"}</span><span>Duration source: {record.duration_source?.replaceAll("_", " ") ?? "Unavailable"}</span></> : null}</>}</td>
       </tr>)}</tbody>
     </table>
@@ -111,20 +117,19 @@ function WeightHistoryTable({ records, byId, editing, setEditing }: {
 }): React.JSX.Element {
   return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Weight records table">
     <table className="vital-table">
-      <caption>Current recorded weight facts. Pounds are primary; the entered value and unit remain visible.</caption>
-      <thead><tr><th scope="col">Experienced time</th><th scope="col">Weight (lb)</th><th scope="col">Entered value</th><th scope="col">Source and provenance</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
+      <caption>Current recorded weight facts on a consistent pounds scale, with normalized kilograms beneath each value.</caption>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Weight</th><th scope="col">Source</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
       <tbody>{records.map((record) => {
         const history = historyFor(record, byId);
         return <Fragment key={record.id}>
           <tr data-category="fact">
             <td className="timeline-time">{displayTime(record.time.local_time)}<span>{record.time.timezone}</span></td>
-            <td className="weight-primary"><strong>{record.display_lb} lb</strong></td>
-            <td>{record.value} {record.unit}{record.unit === "kg" ? <span className="secondary-measurement">{record.normalized_kg} kg normalized</span> : null}</td>
-            <td><span>{source(record)}</span><span>{record.provenance.is_correction ? `Corrected · ${record.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.display_lb} lb</strong> · entered {prior.value} {prior.unit}</p><p>{displayTime(prior.time.local_time)} · {prior.time.timezone}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
+            <td className="weight-primary"><strong>{formatDecimal(record.display_lb)} lb</strong><span className="secondary-measurement">{formatDecimal(record.normalized_kg)} kg</span></td>
+            <td>{humanizeSource(record.provenance.source_type)}</td>
             <td>{record.notes ?? <span className="missing-value">None</span>}</td>
-            <td><button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button></td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{formatDecimal(prior.display_lb)} lb</strong> · entered {formatDecimal(prior.value)} {prior.unit}</p><p>{displayTime(prior.time.local_time)} · {prior.time.timezone}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
           </tr>
-          {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
+          {editing === record.id ? <tr className="correction-table-row"><td colSpan={5}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
       })}</tbody>
     </table>

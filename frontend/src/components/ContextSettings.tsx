@@ -9,6 +9,7 @@ import {
   type ContextInput,
 } from "../api/client";
 import { useAuth } from "../auth/context";
+import { formatDecimal, formatMeasurement } from "../format";
 import { ContextCard } from "./CategoryCards";
 
 type Precision = ContextInput["location_precision"];
@@ -40,9 +41,9 @@ function WeatherDetails({ event }: { event: ContextEvent }): React.JSX.Element {
       <p><strong>Weather source:</strong> {event.weather_provider} observation at {event.weather_observed_at ?? "time not recorded"}</p>
       <dl className="provenance-grid">
         <div><dt>Conditions</dt><dd>{event.conditions ?? "Not recorded"}</dd></div>
-        <div><dt>Temperature</dt><dd>{event.temperature === undefined || event.temperature === null ? "Not recorded" : `${event.temperature} °${event.temperature_unit?.toUpperCase() ?? "unit not recorded"}`}</dd></div>
-        <div><dt>Humidity</dt><dd>{event.humidity_percent === undefined || event.humidity_percent === null ? "Not recorded" : `${event.humidity_percent}%`}</dd></div>
-        <div><dt>Pressure</dt><dd>{event.pressure === undefined || event.pressure === null ? "Not recorded" : `${event.pressure} ${event.pressure_unit ?? "unit not recorded"}`}</dd></div>
+        <div><dt>Temperature</dt><dd>{event.temperature === undefined || event.temperature === null ? "Not recorded" : `${formatDecimal(event.temperature)} °${event.temperature_unit?.toUpperCase() ?? "unit not recorded"}`}</dd></div>
+        <div><dt>Humidity</dt><dd>{event.humidity_percent === undefined || event.humidity_percent === null ? "Not recorded" : `${formatDecimal(event.humidity_percent)}%`}</dd></div>
+        <div><dt>Pressure</dt><dd>{event.pressure === undefined || event.pressure === null ? "Not recorded" : formatMeasurement(event.pressure, event.pressure_unit)}</dd></div>
       </dl>
     </div>
   );

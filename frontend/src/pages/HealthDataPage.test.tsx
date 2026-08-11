@@ -19,6 +19,7 @@ const garminRecords = {
   notice: "Unavailable provider values remain missing rather than zero.",
   records: [
     { id: "55555555-5555-4555-8555-555555555555", kind: "daily", summary: "Steps", time, provenance: garminProvenance, metric_type: "steps", value: "8765.0000", unit: "steps", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
+    { id: "99999999-9999-4999-8999-999999999999", kind: "daily", summary: "Stress", time: { ...time, occurred_at: "2026-08-09T13:00:00Z", local_time: "2026-08-09T09:00:00" }, provenance: garminProvenance, metric_type: "stress", value: "28.0000", unit: "garmin_score", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
     { id: "66666666-6666-4666-8666-666666666666", kind: "sleep", summary: "Sleep", time: { ...time, occurred_at: "2026-08-10T04:00:00Z", local_time: "2026-08-10T00:00:00" }, provenance: garminProvenance, metric_type: null, value: null, unit: null, ended_at: "2026-08-10T12:00:00Z", duration_seconds: 28800, duration_source: "provider", awakenings: 2, sleep_score: 82, activity_type: null, distance_miles: null },
     { id: "77777777-7777-4777-8777-777777777777", kind: "activity", summary: "Walking", time: { ...time, occurred_at: "2026-08-10T14:00:00Z", local_time: "2026-08-10T10:00:00" }, provenance: correctedGarminProvenance, metric_type: null, value: null, unit: null, ended_at: "2026-08-10T14:30:00Z", duration_seconds: 1800, duration_source: null, awakenings: null, sleep_score: null, activity_type: "walking", distance_miles: "3.1000" },
   ],
@@ -86,18 +87,23 @@ describe("Health data page", () => {
     expect(screen.getByRole("region", { name: "Weight scrollable graph" })).toBeVisible();
     expect(screen.getAllByText("Missing values")[0]).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Systolic (mmHg)" })).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader", { name: "Weight (lb)" })).toHaveLength(2);
-    expect(screen.getAllByRole("cell", { name: "180.0" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("columnheader", { name: "Weight (lb)" })).toHaveLength(1);
+    expect(screen.getByRole("columnheader", { name: "Weight" })).toBeVisible();
+    expect(screen.getAllByRole("cell", { name: "180" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("cell", { name: "183.2" }).length).toBeGreaterThan(0);
     const weightTable = screen.getByRole("region", { name: "Weight records table" });
-    expect(within(weightTable).getByRole("cell", { name: /83\.1000 kg/ })).toBeVisible();
-    expect(within(weightTable).getByText("83.1000 kg normalized")).toBeVisible();
+    expect(within(weightTable).getByRole("cell", { name: /183\.2 lb83\.1 kg/ })).toBeVisible();
+    expect(within(weightTable).queryByRole("columnheader", { name: "Entered value" })).not.toBeInTheDocument();
+    expect(within(weightTable).getByRole("columnheader", { name: "Source" })).toBeVisible();
+    expect(within(weightTable).getAllByRole("cell", { name: "Telegram" })).toHaveLength(2);
     expect(screen.getByText("Corrected · Synthetic correction")).toBeVisible();
     expect(screen.getAllByText(/Source: telegram · confirmed from draft/)).toHaveLength(2);
     const garminTable = screen.getByRole("region", { name: "Garmin recorded observations table" });
-    expect(within(garminTable).getByRole("cell", { name: /8765\.0000 steps/ })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: /8,765 steps/ })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: "Stress score: 28" })).toBeVisible();
+    expect(within(garminTable).queryByText(/garmin_score/)).not.toBeInTheDocument();
     expect(within(garminTable).getByRole("cell", { name: /Sleep score: 82/ })).toBeVisible();
-    expect(within(garminTable).getByRole("cell", { name: /Distance: 3\.1000 mi/ })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: /Distance: 3\.1 mi/ })).toBeVisible();
     expect(within(garminTable).getByText(/Garmin provider-imported recorded facts/)).toBeVisible();
     expect(within(garminTable).queryByRole("columnheader", { name: "Source and provenance" })).not.toBeInTheDocument();
     expect(within(garminTable).queryByText("Garmin recorded observation")).not.toBeInTheDocument();
@@ -116,7 +122,7 @@ describe("Health data page", () => {
     await userEvent.click(within(form).getByRole("button", { name: "Save corrected fact" }));
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input, init]) => requestUrl(input).includes(`/blood-pressure/${corrected.id}/correct`) && init?.method === "POST")).toBe(true); });
 
-    const kgRow = within(weightTable).getByRole("cell", { name: "183.2 lb" }).closest("tr");
+    const kgRow = within(weightTable).getByRole("cell", { name: /183\.2 lb83\.1 kg/ }).closest("tr");
     if (kgRow === null) throw new Error("Expected the converted kilogram record row");
     await userEvent.click(within(kgRow).getByRole("button", { name: "Correct weight" }));
     expect(screen.getByRole("form", { name: "Correct weight" })).toBeVisible();

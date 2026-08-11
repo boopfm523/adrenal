@@ -166,7 +166,7 @@ describe("Today page", () => {
     expect(screen.getByText("No dose record exists for this slot. “Not recorded” does not mean “not taken.”")).toBeVisible();
     expect(screen.getByText("Trigger recorded:")).toBeVisible();
 
-    await userEvent.click(screen.getByRole("button", { name: "Record 10.0000 mg taken now" }));
+    await userEvent.click(screen.getByRole("button", { name: "Record 10 mg taken now" }));
 
     await waitFor(() => { expect(screen.getByText("Recorded late")).toBeVisible(); });
     const write = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).endsWith("/api/v1/doses") && init?.method === "POST");

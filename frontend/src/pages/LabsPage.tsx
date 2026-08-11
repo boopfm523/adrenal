@@ -20,6 +20,7 @@ import {
 import { useAuth } from "../auth/context";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
 import { Page } from "../components/Page";
+import { formatDecimal, formatMeasurement } from "../format";
 
 interface TrendGroup {
   key: string;
@@ -30,7 +31,7 @@ interface TrendGroup {
 }
 
 function displayedSourceValue(result: LabResult): string {
-  if (result.original_value !== null) return `${result.original_value}${result.original_unit === null ? "" : ` ${result.original_unit}`}`;
+  if (result.original_value !== null) return result.original_unit === null ? formatDecimal(result.original_value) : formatMeasurement(result.original_value, result.original_unit);
   return result.qualitative_result ?? "Missing source value";
 }
 
@@ -109,16 +110,16 @@ function DeletionImpact({ preview }: { preview: LabDeletionPreview }): React.JSX
     <div className="table-scroll" tabIndex={0} role="region" aria-label="Lab report deletion impact">
       <table><thead><tr><th scope="col">Affected unit</th><th scope="col">Count</th></tr></thead><tbody>
         <tr><th scope="row">Source document</th><td>1</td></tr>
-        <tr><th scope="row">Extraction drafts</th><td>{preview.extraction_draft_ids.length}</td></tr>
-        <tr><th scope="row">Recorded lab panels</th><td>{preview.panel_ids.length}</td></tr>
-        <tr><th scope="row">Recorded lab results</th><td>{preview.result_ids.length}</td></tr>
-        <tr><th scope="row">Derived normalized results</th><td>{preview.derived_result_count}</td></tr>
-        <tr><th scope="row">Trend points</th><td>{preview.trend_point_count}</td></tr>
-        <tr><th scope="row">AI analyses containing these sources</th><td>{preview.ai_analysis_ids.length}</td></tr>
-        <tr><th scope="row">Immutable physician-report snapshots</th><td>{preview.report_snapshot_ids.length}</td></tr>
-        <tr><th scope="row">Rendered report artifacts</th><td>{preview.report_artifact_ids.length}</td></tr>
-        <tr><th scope="row">Inert page previews</th><td>{preview.page_preview_count}</td></tr>
-        <tr><th scope="row">Private document-storage artifacts</th><td>{preview.private_storage_artifact_count}</td></tr>
+        <tr><th scope="row">Extraction drafts</th><td>{formatDecimal(preview.extraction_draft_ids.length)}</td></tr>
+        <tr><th scope="row">Recorded lab panels</th><td>{formatDecimal(preview.panel_ids.length)}</td></tr>
+        <tr><th scope="row">Recorded lab results</th><td>{formatDecimal(preview.result_ids.length)}</td></tr>
+        <tr><th scope="row">Derived normalized results</th><td>{formatDecimal(preview.derived_result_count)}</td></tr>
+        <tr><th scope="row">Trend points</th><td>{formatDecimal(preview.trend_point_count)}</td></tr>
+        <tr><th scope="row">AI analyses containing these sources</th><td>{formatDecimal(preview.ai_analysis_ids.length)}</td></tr>
+        <tr><th scope="row">Immutable physician-report snapshots</th><td>{formatDecimal(preview.report_snapshot_ids.length)}</td></tr>
+        <tr><th scope="row">Rendered report artifacts</th><td>{formatDecimal(preview.report_artifact_ids.length)}</td></tr>
+        <tr><th scope="row">Inert page previews</th><td>{formatDecimal(preview.page_preview_count)}</td></tr>
+        <tr><th scope="row">Private document-storage artifacts</th><td>{formatDecimal(preview.private_storage_artifact_count)}</td></tr>
       </tbody></table>
     </div>
     <details><summary>Show exact affected record IDs</summary><dl className="data-list">
@@ -320,6 +321,6 @@ export function LabsPage(): React.JSX.Element {
     {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}
     {!resultsQuery.isPending && !resultsQuery.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
     {groups.map((group) => <AccessibleLineChart key={group.key} title={`${group.name} — ${group.specimen}`} summary="Each point is one recorded specimen. Lines are descriptive only; missing intervals are not inferred." unit={group.unit} timezone={timezone} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={`Values use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match.`} sampleCount={group.values.length} missingCount={0} series={[{ name: group.name, source: "recorded lab facts with deterministic derivation", values: group.values.map((result) => ({ label: dateLabel(result), value: result.normalized_value })) }]} />)}
-    {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : `${result.normalized_value} ${result.normalized_unit}`}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div></section>}
+    {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : formatMeasurement(result.normalized_value, result.normalized_unit)}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div></section>}
   </Page>;
 }

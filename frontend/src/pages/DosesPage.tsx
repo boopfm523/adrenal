@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { correctDose, getDoses, type Dose, type DoseCorrectionInput } from "../api/client";
 import { Page } from "../components/Page";
+import { formatMeasurement } from "../format";
 
 interface FormValues {
   amount: string;
@@ -129,10 +130,10 @@ export function DosesPage(): React.JSX.Element {
             const history = historyFor(dose);
             const row = <tr key={dose.id} data-dose-id={dose.id}>
               <td className="dose-time"><time dateTime={dose.time.occurred_at}>{dose.time.local_time.replace("T", " ").slice(0, 16)}</time><span>{dose.time.timezone}</span></td>
-              <th scope="row"><span>{dose.medication_name}</span><span>{dose.amount} {dose.unit}</span>{dose.notes === null ? null : <span className="dose-notes">{dose.notes}</span>}</th>
+              <th scope="row"><span>{dose.medication_name}</span><span>{formatMeasurement(dose.amount, dose.unit)}</span>{dose.notes === null ? null : <span className="dose-notes">{dose.notes}</span>}</th>
               <td><span>{dose.dose_category.replace("_", " ")}</span><span>{dose.route.replace("_", " ")}</span></td>
               <td><span>{dose.provenance.source_type.replace("_", " ")}</span><span>{dose.provenance.confirmation_state.replace("_", " ")}</span></td>
-              <td><span>{dose.provenance.is_correction ? `Corrected · ${dose.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span><button type="button" onClick={() => { setEditingId(editingId === dose.id ? null : dose.id); }}>{editingId === dose.id ? "Close correction form" : "Correct recorded fact"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p>{prior.amount} {prior.unit} · {experiencedTime(prior)} · {prior.route} · {prior.dose_category}</p><p>Source: {prior.provenance.source_type.replace("_", " ")} · Confirmation: {prior.provenance.confirmation_state.replace("_", " ")}</p></article>)}</details>}</td>
+              <td><span>{dose.provenance.is_correction ? `Corrected · ${dose.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span><button type="button" onClick={() => { setEditingId(editingId === dose.id ? null : dose.id); }}>{editingId === dose.id ? "Close correction form" : "Correct recorded fact"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p>{formatMeasurement(prior.amount, prior.unit)} · {experiencedTime(prior)} · {prior.route} · {prior.dose_category}</p><p>Source: {prior.provenance.source_type.replace("_", " ")} · Confirmation: {prior.provenance.confirmation_state.replace("_", " ")}</p></article>)}</details>}</td>
             </tr>;
             return editingId === dose.id ? [row, <tr className="correction-table-row" key={`${dose.id}-correction`}><td colSpan={5}><CorrectionForm dose={dose} onCancel={() => { setEditingId(null); }} /></td></tr>] : [row];
           })}</tbody>

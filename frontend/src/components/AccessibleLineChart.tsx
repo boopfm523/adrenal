@@ -1,5 +1,7 @@
 import { useId } from "react";
 
+import { formatDecimal, formatMeasurement, humanizeUnit } from "../format";
+
 export interface ChartValue {
   label: string;
   value: string | null;
@@ -94,7 +96,7 @@ function decimalPlaces(step: number): number {
 
 function formatTick(value: number, step: number): string {
   const normalized = Math.abs(value) < step / 1_000_000 ? 0 : value;
-  return normalized.toFixed(decimalPlaces(step));
+  return formatDecimal(normalized.toFixed(decimalPlaces(step)));
 }
 
 function formatXAxisTick(label: string): string {
@@ -142,7 +144,7 @@ function valueUnits(series: ChartSeries[], fallbackUnit: string): Set<string> {
 
 function tableValue(value: ChartValue | undefined, mixedUnits: boolean, fallbackUnit: string): string {
   if (value?.value == null) return "Gap—no value";
-  return mixedUnits ? `${value.value} ${value.unit ?? fallbackUnit}` : value.value;
+  return mixedUnits ? formatMeasurement(value.value, value.unit ?? fallbackUnit) : formatDecimal(value.value);
 }
 
 export function AccessibleLineChart({
@@ -166,15 +168,16 @@ export function AccessibleLineChart({
   const units = valueUnits(series, unit);
   const mixedUnits = units.size > 1;
   const effectiveUnit = mixedUnits ? "Mixed units—see table" : [...units][0] ?? unit;
+  const displayedUnit = mixedUnits ? effectiveUnit : humanizeUnit(effectiveUnit);
   const scale = chartScale(numericValues, includeZero, yPadding);
   const labels = series[0]?.values.map((value) => value.label) ?? [];
   const tickIndices = xTickIndices(labels.length);
-  const axisDescription = `X axis: ${xAxisLabel} (${timezone}). Y axis: ${yAxisLabel} (${effectiveUnit}).`;
+  const axisDescription = `X axis: ${xAxisLabel} (${timezone}). Y axis: ${yAxisLabel} (${displayedUnit}).`;
 
   return <section className="metric-card chart-card" aria-labelledby={headingId}>
     <h2 id={headingId}>{title}</h2>
     <p>{summary}</p>
-    <dl className="metric-metadata"><div><dt>Unit</dt><dd>{effectiveUnit}</dd></div><div><dt>Timezone</dt><dd>{timezone}</dd></div><div><dt>Date range</dt><dd>{dateRange}</dd></div><div><dt>Sample count</dt><dd>{sampleCount}</dd></div><div><dt>Missing values</dt><dd>{missingCount}</dd></div></dl>
+    <dl className="metric-metadata"><div><dt>Unit</dt><dd>{displayedUnit}</dd></div><div><dt>Timezone</dt><dd>{timezone}</dd></div><div><dt>Date range</dt><dd>{dateRange}</dd></div><div><dt>Sample count</dt><dd>{formatDecimal(sampleCount)}</dd></div><div><dt>Missing values</dt><dd>{formatDecimal(missingCount)}</dd></div></dl>
     {series.length > 1 ? <aside className="association-caution"><strong>Association does not establish causation.</strong> Overlaid series share a time axis for comparison only.</aside> : null}
     <div className="chart-legend" aria-label="Chart series">{series.map((item, index) => <span key={item.name}><i className={`series-key series-key--${(index % 3).toString()}`} aria-hidden="true" />{item.name} · source: {item.source}</span>)}</div>
     <p className="chart-axis-description">{axisDescription}</p>
@@ -193,14 +196,14 @@ export function AccessibleLineChart({
         <line x1={LEFT} y1={PLOT_BOTTOM} x2={WIDTH - RIGHT} y2={PLOT_BOTTOM} className="chart-axis" />
         <line x1={LEFT} y1={TOP} x2={LEFT} y2={PLOT_BOTTOM} className="chart-axis" />
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezone})</text>
-        <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({effectiveUnit})</text>
+        <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({displayedUnit})</text>
         {series.map((item, seriesIndex) => {
           const segments = plottedSegments(item.values, scale);
-          return <g key={item.name} aria-hidden="true">{segments.map((segment, segmentIndex) => segment.length > 1 ? <path key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} d={path(segment)} className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} /> : null)}{segments.flat().map((point, pointIndex) => <circle key={`${item.name}-point-${pointIndex.toString()}`} data-point-series={item.name} cx={point.x} cy={point.y} r="4" className={`chart-series chart-series--${(seriesIndex % 3).toString()}`}><title>{point.item.label}: {point.item.value} {point.item.unit ?? effectiveUnit}</title></circle>)}</g>;
+          return <g key={item.name} aria-hidden="true">{segments.map((segment, segmentIndex) => segment.length > 1 ? <path key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} d={path(segment)} className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} /> : null)}{segments.flat().map((point, pointIndex) => <circle key={`${item.name}-point-${pointIndex.toString()}`} data-point-series={item.name} cx={point.x} cy={point.y} r="4" className={`chart-series chart-series--${(seriesIndex % 3).toString()}`}><title>{point.item.label}: {formatMeasurement(point.item.value, point.item.unit ?? effectiveUnit)}</title></circle>)}</g>;
         })}
       </svg>
     </div>}
-    <details className="chart-table"><summary>View data table</summary><div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} data table`}><table><thead><tr><th scope="col">Date / time</th>{series.map((item) => <th scope="col" key={item.name}>{item.name} ({mixedUnits ? "unit shown per value" : effectiveUnit})</th>)}</tr></thead><tbody>{labels.map((label, index) => <tr key={label}><th scope="row">{label}</th>{series.map((item) => <td key={item.name}>{tableValue(item.values[index], mixedUnits, unit)}</td>)}</tr>)}</tbody></table></div></details>
+    <details className="chart-table"><summary>View data table</summary><div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} data table`}><table><thead><tr><th scope="col">Date / time</th>{series.map((item) => <th scope="col" key={item.name}>{item.name} ({mixedUnits ? "unit shown per value" : displayedUnit})</th>)}</tr></thead><tbody>{labels.map((label, index) => <tr key={label}><th scope="row">{label}</th>{series.map((item) => <td key={item.name}>{tableValue(item.values[index], mixedUnits, unit)}</td>)}</tr>)}</tbody></table></div></details>
     <details className="metric-definition"><summary>Metric definition</summary><p>{definition}</p></details>
   </section>;
 }

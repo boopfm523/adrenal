@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
+import { formatMeasurement, formatQuantitativeText } from "../format";
 
 interface SlotDraft {
   medication_id: string;
@@ -104,7 +105,7 @@ function PlanContents({ version }: { version: RegimenVersion }): React.JSX.Eleme
   return <>
     <ApprovalProvenance version={version} />
     <h3>Scheduled slots</h3>
-    {slots.length === 0 ? <p>No scheduled slots recorded.</p> : <ul className="plan-list">{slots.map((slot) => <li key={slot.id}><strong>{slot.scheduled_local_time.slice(0, 5)}</strong> · {slot.medication_name} · {slot.amount} {slot.unit} · {slot.route}{slot.condition === null ? null : <span> · {slot.condition}</span>}</li>)}</ul>}
+    {slots.length === 0 ? <p>No scheduled slots recorded.</p> : <ul className="plan-list">{slots.map((slot) => <li key={slot.id}><strong>{slot.scheduled_local_time.slice(0, 5)}</strong> · {slot.medication_name} · {formatMeasurement(slot.amount, slot.unit)} · {slot.route}{slot.condition === null ? null : <span> · {slot.condition}</span>}</li>)}</ul>}
     <h3>Physician-authored instructions</h3>
     {instructions.length === 0 ? <p>No instructions recorded in this version.</p> : instructions.map((instruction) => <article className="instruction-card" key={instruction.id}><h4>{instruction.title}</h4><p>{instruction.body}</p><p>Authored by {instruction.authored_by} on {instruction.authored_on}</p></article>)}
   </>;
@@ -205,7 +206,7 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
       <fieldset><legend>Scheduled medication slots</legend>
         <p>These are scheduled plan entries—not records of medicine actually taken.</p>
         {slots.map((slot, index) => <div className="repeatable-row" key={index}>
-          <label>Medication<select required value={slot.medication_id} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, medication_id: event.target.value } : item)); }}><option value="">Choose medication</option>{available.map((medication) => <option value={medication.id} key={medication.id}>{medication.name}{medication.strength === null ? "" : ` ${medication.strength} ${medication.strength_unit ?? ""}`}</option>)}</select></label>
+          <label>Medication<select required value={slot.medication_id} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, medication_id: event.target.value } : item)); }}><option value="">Choose medication</option>{available.map((medication) => <option value={medication.id} key={medication.id}>{medication.name}{medication.strength === null ? "" : ` ${formatMeasurement(medication.strength, medication.strength_unit)}`}</option>)}</select></label>
           <label>Time<input type="time" required value={slot.scheduled_local_time} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, scheduled_local_time: event.target.value } : item)); }} /></label>
           <label>Amount<input type="number" required min="0.0001" step="any" inputMode="decimal" value={slot.amount} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item)); }} /></label>
           <label>Unit<select value={slot.unit} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value as SlotDraft["unit"] } : item)); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">mL</option><option value="tablet">tablet</option></select></label>
@@ -296,7 +297,7 @@ export function PlanPage(): React.JSX.Element {
       {selectedOlderId === selectedNewerId && selectedOlderId !== "" ? <p className="error-summary" role="alert">Choose two different versions.</p> : null}
       {diff.isPending && diff.isFetching ? <p role="status">Calculating deterministic version diff…</p> : null}
       {diff.isError ? <p className="error-summary" role="alert">The version comparison could not be loaded.</p> : null}
-      {diff.data === undefined ? null : <div className="version-diff">{(["added", "removed", "changed"] as const).map((kind) => <section key={kind}><h3>{kind[0]?.toUpperCase()}{kind.slice(1)}</h3>{diff.data[kind]?.length === 0 ? <p>No {kind} schedule entries.</p> : <ul>{diff.data[kind]?.map((entry) => <li key={entry}>{entry}</li>)}</ul>}</section>)}</div>}
+      {diff.data === undefined ? null : <div className="version-diff">{(["added", "removed", "changed"] as const).map((kind) => <section key={kind}><h3>{kind[0]?.toUpperCase()}{kind.slice(1)}</h3>{diff.data[kind]?.length === 0 ? <p>No {kind} schedule entries.</p> : <ul>{diff.data[kind]?.map((entry) => <li key={entry}>{formatQuantitativeText(entry)}</li>)}</ul>}</section>)}</div>}
     </section>
   </Page>;
 }
