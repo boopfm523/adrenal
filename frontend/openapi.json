@@ -3981,7 +3981,7 @@
       },
       "PlanComparisonDay": {
         "additionalProperties": false,
-        "description": "A day compared against the plan in force on that day.\n\n``missing`` slots are *derived*, not stored: no zero-dose row is ever written\n(SAFE-10).",
+        "description": "A day compared against the historical plan intervals in force on that day.\n\n``missing`` slots are *derived*, not stored: no zero-dose row is ever written\n(SAFE-10).",
         "properties": {
           "actual_total": {
             "anyOf": [
@@ -4041,6 +4041,13 @@
             ],
             "title": "Regimen Version Label"
           },
+          "regimen_versions": {
+            "items": {
+              "$ref": "#/components/schemas/PlanComparisonRegimen"
+            },
+            "title": "Regimen Versions",
+            "type": "array"
+          },
           "slots": {
             "items": {
               "$ref": "#/components/schemas/PlanComparisonSlot"
@@ -4062,6 +4069,7 @@
           "timezone",
           "regimen_version_id",
           "regimen_version_label",
+          "regimen_versions",
           "slots",
           "planned_total",
           "actual_total",
@@ -4072,9 +4080,59 @@
         "title": "PlanComparisonDay",
         "type": "object"
       },
+      "PlanComparisonRegimen": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "format": "date-time",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version_label": {
+            "title": "Version Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version_label",
+          "effective_from",
+          "effective_to"
+        ],
+        "title": "PlanComparisonRegimen",
+        "type": "object"
+      },
       "PlanComparisonSlot": {
         "additionalProperties": false,
         "properties": {
+          "absolute_minutes_from_scheduled": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Absolute Minutes From Scheduled"
+          },
           "actual_amount": {
             "anyOf": [
               {
@@ -4141,6 +4199,53 @@
             ],
             "title": "Planned Amount"
           },
+          "regimen_effective_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimen Effective From"
+          },
+          "regimen_effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimen Effective To"
+          },
+          "regimen_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimen Version Id"
+          },
+          "regimen_version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimen Version Label"
+          },
           "route": {
             "$ref": "#/components/schemas/Route"
           },
@@ -4187,6 +4292,11 @@
           "dose_id",
           "status",
           "minutes_from_scheduled",
+          "absolute_minutes_from_scheduled",
+          "regimen_version_id",
+          "regimen_version_label",
+          "regimen_effective_from",
+          "regimen_effective_to",
           "unit",
           "route"
         ],
@@ -5253,6 +5363,17 @@
       "TimingMetric": {
         "additionalProperties": false,
         "properties": {
+          "average_absolute_deviation_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Absolute Deviation Minutes"
+          },
           "definition": {
             "title": "Definition",
             "type": "string"
@@ -5267,6 +5388,11 @@
             "title": "Late",
             "type": "integer"
           },
+          "matched_count": {
+            "minimum": 0.0,
+            "title": "Matched Count",
+            "type": "integer"
+          },
           "missing_count": {
             "minimum": 0.0,
             "title": "Missing Count",
@@ -5277,6 +5403,13 @@
             "title": "On Time",
             "type": "integer"
           },
+          "plan_periods": {
+            "items": {
+              "$ref": "#/components/schemas/TimingPlanPeriod"
+            },
+            "title": "Plan Periods",
+            "type": "array"
+          },
           "sample_count": {
             "minimum": 0.0,
             "title": "Sample Count",
@@ -5285,6 +5418,17 @@
           "timezone": {
             "title": "Timezone",
             "type": "string"
+          },
+          "total_absolute_deviation_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Absolute Deviation Minutes"
           },
           "unplanned": {
             "minimum": 0.0,
@@ -5297,12 +5441,142 @@
           "timezone",
           "sample_count",
           "missing_count",
+          "matched_count",
           "on_time",
           "early",
           "late",
-          "unplanned"
+          "unplanned",
+          "total_absolute_deviation_minutes",
+          "average_absolute_deviation_minutes",
+          "plan_periods"
         ],
         "title": "TimingMetric",
+        "type": "object"
+      },
+      "TimingPlanPeriod": {
+        "additionalProperties": false,
+        "properties": {
+          "average_absolute_deviation_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Absolute Deviation Minutes"
+          },
+          "early": {
+            "minimum": 0.0,
+            "title": "Early",
+            "type": "integer"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "late": {
+            "minimum": 0.0,
+            "title": "Late",
+            "type": "integer"
+          },
+          "matched_count": {
+            "minimum": 0.0,
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "missing_count": {
+            "minimum": 0.0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "on_time": {
+            "minimum": 0.0,
+            "title": "On Time",
+            "type": "integer"
+          },
+          "regimen_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimen Version Id"
+          },
+          "regimen_version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimen Version Label"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "total_absolute_deviation_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Absolute Deviation Minutes"
+          },
+          "unplanned": {
+            "minimum": 0.0,
+            "title": "Unplanned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "regimen_version_id",
+          "regimen_version_label",
+          "effective_from",
+          "effective_to",
+          "sample_count",
+          "matched_count",
+          "missing_count",
+          "on_time",
+          "early",
+          "late",
+          "unplanned",
+          "total_absolute_deviation_minutes",
+          "average_absolute_deviation_minutes"
+        ],
+        "title": "TimingPlanPeriod",
         "type": "object"
       },
       "ValidationError": {
@@ -6851,7 +7125,7 @@
     },
     "/api/v1/doses/plan-comparison": {
       "get": {
-        "description": "Compare a day's doses with the plan in force that day.\n\nMissing slots are derived from the absence of a dose. No zero-dose row exists or is\ncreated (SAFE-10).",
+        "description": "Compare a day's doses with the historical plan intervals in force that day.\n\nMissing slots are derived from the absence of a dose. No zero-dose row exists or is\ncreated (SAFE-10).",
         "operationId": "plan_comparison_api_v1_doses_plan_comparison_get",
         "parameters": [
           {

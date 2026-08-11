@@ -353,6 +353,15 @@ insights or causal claims. Daily plan-versus-actual totals also have a local SVG
 whose adjacent semantic table is authoritative and preserves gaps. The report API
 freezes those deterministic values for reproducible physician reports.
 
+Historical dose timing is resolved against the physician-approved plan whose half-open
+effective interval contained each scheduled or recorded instant, including retired
+plans and a plan transition within a day. The timing result shows signed minutes
+(actual minus scheduled), absolute minutes for each matched dose, total and average
+absolute deviation, and a breakdown by historical plan period. Missing schedule slots
+and unplanned doses retain their own counts and are never treated as zero-minute
+deviations. Correcting a dose's occurrence time recalculates its applicable plan and
+slot association without changing the preserved original fact.
+
 ### Physician-report API
 
 Authenticated clients can create an immutable physician-report snapshot with

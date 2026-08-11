@@ -34,7 +34,18 @@ function DailyDoses({ summary }: { summary: AnalyticsSummary }): React.JSX.Eleme
 
 function Timing({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
   const metric = summary.timing;
-  return <MetricFrame title="Dose timing" metric={metric}><dl className="metric-values"><div><dt>On time</dt><dd>{metric.on_time}</dd></div><div><dt>Early</dt><dd>{metric.early}</dd></div><div><dt>Late</dt><dd>{metric.late}</dd></div><div><dt>Unplanned</dt><dd>{metric.unplanned}</dd></div><div><dt>Missing schedule matches</dt><dd>{metric.missing_count}</dd></div></dl></MetricFrame>;
+  return <MetricFrame title="Dose timing" metric={metric}>
+    <dl className="metric-values">
+      <div><dt>Matched doses</dt><dd>{metric.matched_count}</dd></div>
+      <div><dt>Average absolute difference from plan</dt><dd>{metric.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${metric.average_absolute_deviation_minutes} minutes`}</dd></div>
+      <div><dt>Total absolute difference from plan</dt><dd>{metric.total_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${metric.total_absolute_deviation_minutes} minutes`}</dd></div>
+      <div><dt>On time</dt><dd>{metric.on_time}</dd></div><div><dt>Early</dt><dd>{metric.early}</dd></div><div><dt>Late</dt><dd>{metric.late}</dd></div><div><dt>Unplanned</dt><dd>{metric.unplanned}</dd></div><div><dt>Missing schedule matches</dt><dd>{metric.missing_count}</dd></div>
+    </dl>
+    <h3>Results by historical plan period</h3>
+    {metric.plan_periods.length === 0 ? <p>No scheduled or recorded dose timing rows in this range.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="Dose timing by historical plan period">
+      <table className="vital-table"><caption>Each row uses the physician-approved plan effective at the recorded or scheduled time. Missing and unplanned doses are excluded from minute averages.</caption><thead><tr><th scope="col">Plan</th><th scope="col">Effective interval</th><th scope="col">Matched</th><th scope="col">Average absolute difference</th><th scope="col">On time</th><th scope="col">Early</th><th scope="col">Late</th><th scope="col">Missing</th><th scope="col">Unplanned</th></tr></thead><tbody>{metric.plan_periods.map((period, index) => <tr key={period.regimen_version_id ?? `no-plan-${index.toString()}`}><th scope="row">{period.regimen_version_label ?? "No physician-approved plan"}</th><td>{period.effective_from === null ? "No plan interval" : `${period.effective_from} through ${period.effective_to ?? "ongoing"}`}</td><td>{period.matched_count}</td><td>{period.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${period.average_absolute_deviation_minutes} minutes`}</td><td>{period.on_time}</td><td>{period.early}</td><td>{period.late}</td><td>{period.missing_count}</td><td>{period.unplanned}</td></tr>)}</tbody></table>
+    </div>}
+  </MetricFrame>;
 }
 
 function Episodes({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {

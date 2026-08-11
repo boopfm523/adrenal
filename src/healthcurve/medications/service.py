@@ -15,10 +15,12 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Final
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from healthcurve.events import service as event_service
 from healthcurve.medications.models import (
@@ -37,10 +39,13 @@ ON_TIME_TOLERANCE: Final = timedelta(minutes=30)
 
 TIMING_METRIC_DEFINITION: Final = (
     "A dose is matched to the nearest unmatched scheduled slot for the same medication "
-    "within 4 hours. It is 'on time' within 30 minutes of the scheduled local time, "
-    "'early' or 'late' otherwise. A slot with no matched dose is 'missing' -- derived "
-    "from the absence of a record, never stored as a zero dose. A dose matching no slot "
-    "is 'unplanned'. Days are bounded by local midnight in the stated timezone."
+    "within 4 hours in the physician-approved plan's half-open historical effective "
+    "interval. It is 'on time' within 30 minutes of the scheduled local time, 'early' "
+    "or 'late' otherwise. Signed minutes are actual minus scheduled; absolute deviation "
+    "uses only matched doses. A slot with no matched dose is 'missing' -- derived from "
+    "the absence of a record, never stored as a zero dose. A dose matching no slot is "
+    "'unplanned'; missing and unplanned rows are not treated as zero-minute deviations. "
+    "Days are bounded by local midnight in the stated timezone."
 )
 
 MATCH_WINDOW: Final = timedelta(hours=4)
@@ -155,9 +160,11 @@ def retire_version(
     if version.status is RegimenStatus.RETIRED:
         return version
     version.status = RegimenStatus.RETIRED
-    version.retired_at = retired_at or datetime.now(UTC)
-    if version.effective_to is None:
-        version.effective_to = version.retired_at
+    retired_moment = retired_at or datetime.now(UTC)
+    version.retired_at = retired_moment
+    retired_end = _naive(retired_moment)
+    if version.effective_to is None or version.effective_to > retired_end:
+        version.effective_to = retired_end
         version.effective_period = _period(version.effective_from, version.effective_to)
     session.flush()
     return version
@@ -166,17 +173,18 @@ def retire_version(
 def active_version_at(
     session: Session, owner_id: uuid.UUID, moment: datetime
 ) -> RegimenVersion | None:
-    """The approved version in force at ``moment``, or None.
+    """The historically approved version in force at ``moment``, or None.
 
     None is a real answer -- before the first approved plan there was no plan, and
-    saying so is more honest than falling back to the newest one.
+    saying so is more honest than falling back to the newest one. Retiring a version
+    closes its effective interval; it does not erase the plan's earlier history.
     """
     naive = _naive(moment)
     return session.scalar(
         select(RegimenVersion)
         .where(
             RegimenVersion.owner_id == owner_id,
-            RegimenVersion.status == RegimenStatus.APPROVED,
+            _historically_approved_clause(),
             RegimenVersion.effective_from <= naive,
             (RegimenVersion.effective_to.is_(None)) | (RegimenVersion.effective_to > naive),
         )
@@ -221,6 +229,7 @@ class SlotComparison:
     """One row of the comparison. Plain object so the API layer owns serialisation."""
 
     __slots__ = (
+        "absolute_minutes_from_scheduled",
         "actual_amount",
         "actual_local_time",
         "dose_id",
@@ -228,6 +237,10 @@ class SlotComparison:
         "medication_name",
         "minutes_from_scheduled",
         "planned_amount",
+        "regimen_effective_from",
+        "regimen_effective_to",
+        "regimen_version_id",
+        "regimen_version_label",
         "route",
         "scheduled_local_time",
         "slot_id",
@@ -250,6 +263,7 @@ class SlotComparison:
         minutes_from_scheduled: int | None,
         unit: DoseUnit,
         route: Route,
+        regimen_version: RegimenVersion | None = None,
     ) -> None:
         self.slot_id = slot_id
         self.medication_id = medication_id
@@ -261,6 +275,13 @@ class SlotComparison:
         self.dose_id = dose_id
         self.status = status
         self.minutes_from_scheduled = minutes_from_scheduled
+        self.absolute_minutes_from_scheduled = (
+            abs(minutes_from_scheduled) if minutes_from_scheduled is not None else None
+        )
+        self.regimen_version_id = regimen_version.id if regimen_version else None
+        self.regimen_version_label = regimen_version.version_label if regimen_version else None
+        self.regimen_effective_from = regimen_version.effective_from if regimen_version else None
+        self.regimen_effective_to = regimen_version.effective_to if regimen_version else None
         self.unit = unit
         self.route = route
 
@@ -272,18 +293,17 @@ def compare_day(
     day: date,
     timezone: str,
 ) -> dict[str, object]:
-    """Compare one local day's doses against the plan in force that day.
+    """Compare one local day's doses against the plans historically in force that day.
 
     Day boundaries are local midnight in ``timezone``, so a dose at 23:50 belongs to
     the day the owner experienced it rather than to whichever UTC day it fell in.
     """
-    from zoneinfo import ZoneInfo
-
     zone = ZoneInfo(timezone)
     start = datetime.combine(day, datetime.min.time(), tzinfo=zone)
     end = start + timedelta(days=1)
 
-    version = active_version_at(session, owner_id, start)
+    versions = _historical_versions_overlapping(session, owner_id, start, end)
+    day_versions = _versions_active_during(versions, start, end)
 
     doses = list(
         session.scalars(
@@ -299,14 +319,23 @@ def compare_day(
     # Corrections supersede: only the head of each chain counts toward totals.
     doses = event_service.current_only(session, DoseEvent, doses)
 
-    slots = sorted(version.slots, key=lambda s: s.scheduled_local_time) if version else []
+    scheduled_slots: list[tuple[RegimenVersion, RegimenDoseSlot, datetime]] = []
+    for version in versions:
+        for slot in version.slots:
+            scheduled_local = datetime.combine(day, slot.scheduled_local_time)
+            winning_version = _active_from_candidates(
+                versions, scheduled_local.replace(tzinfo=zone)
+            )
+            if winning_version is not None and winning_version.id == version.id:
+                scheduled_slots.append((version, slot, scheduled_local))
+    scheduled_slots.sort(key=lambda item: (item[2], item[1].sort_order, item[1].id))
 
     comparisons: list[SlotComparison] = []
     unmatched = list(doses)
+    matches = _match_scheduled_slots(scheduled_slots, doses, zone)
 
-    for slot in slots:
-        scheduled_local = datetime.combine(day, slot.scheduled_local_time)
-        match = _best_match(slot, unmatched, scheduled_local)
+    for version, slot, scheduled_local in scheduled_slots:
+        match = matches.get(slot.id)
 
         if match is None:
             comparisons.append(
@@ -321,6 +350,7 @@ def compare_day(
                     dose_id=None,
                     status="missing",  # derived, never stored
                     minutes_from_scheduled=None,
+                    regimen_version=version,
                     unit=slot.unit,
                     route=slot.route,
                 )
@@ -328,7 +358,8 @@ def compare_day(
             continue
 
         unmatched.remove(match)
-        delta = match.local_time - scheduled_local
+        actual_local = _local_in_zone(match, zone)
+        delta = actual_local - scheduled_local
         minutes = int(delta.total_seconds() // 60)
         if abs(delta) <= ON_TIME_TOLERANCE:
             status = "on_time"
@@ -345,16 +376,18 @@ def compare_day(
                 scheduled_local_time=slot.scheduled_local_time,
                 planned_amount=slot.amount,
                 actual_amount=match.amount,
-                actual_local_time=match.local_time,
+                actual_local_time=actual_local,
                 dose_id=match.id,
                 status=status,
                 minutes_from_scheduled=minutes,
+                regimen_version=version,
                 unit=match.unit,
                 route=match.route,
             )
         )
 
     for dose in unmatched:
+        dose_version = active_version_at(session, owner_id, dose.occurred_at)
         comparisons.append(
             SlotComparison(
                 slot_id=None,
@@ -363,23 +396,31 @@ def compare_day(
                 scheduled_local_time=None,
                 planned_amount=None,
                 actual_amount=dose.amount,
-                actual_local_time=dose.local_time,
+                actual_local_time=_local_in_zone(dose, zone),
                 dose_id=dose.id,
                 status="unplanned",
                 minutes_from_scheduled=None,
+                regimen_version=dose_version,
                 unit=dose.unit,
                 route=dose.route,
             )
         )
 
-    planned_total = sum((s.amount for s in slots), Decimal(0)) if slots else None
+    planned_total = (
+        sum((slot.amount for _, slot, _ in scheduled_slots), Decimal(0))
+        if scheduled_slots
+        else None
+    )
     actual_total = sum((d.amount for d in doses), Decimal(0))
 
     return {
         "date": day,
         "timezone": timezone,
-        "regimen_version_id": version.id if version else None,
-        "regimen_version_label": version.version_label if version else None,
+        "regimen_version_id": day_versions[0].id if len(day_versions) == 1 else None,
+        "regimen_version_label": (
+            day_versions[0].version_label if len(day_versions) == 1 else None
+        ),
+        "regimen_versions": day_versions,
         "slots": comparisons,
         "planned_total": planned_total,
         "actual_total": actual_total,
@@ -389,17 +430,156 @@ def compare_day(
     }
 
 
-def _best_match(
-    slot: RegimenDoseSlot, candidates: list[DoseEvent], scheduled_local: datetime
-) -> DoseEvent | None:
-    """The nearest unmatched dose of the same medication within the match window."""
-    same_medication = [d for d in candidates if d.medication_id == slot.medication_id]
-    if not same_medication:
-        return None
-    nearest = min(same_medication, key=lambda d: abs(d.local_time - scheduled_local))
-    if abs(nearest.local_time - scheduled_local) > MATCH_WINDOW:
-        return None
-    return nearest
+def _match_scheduled_slots(
+    scheduled_slots: list[tuple[RegimenVersion, RegimenDoseSlot, datetime]],
+    doses: list[DoseEvent],
+    zone: ZoneInfo,
+) -> dict[uuid.UUID, DoseEvent]:
+    """Choose deterministic one-to-one matches by smallest local-time distance."""
+    candidates: list[tuple[timedelta, datetime, datetime, uuid.UUID, uuid.UUID, DoseEvent]] = []
+    for _, slot, scheduled_local in scheduled_slots:
+        for dose in doses:
+            if dose.medication_id != slot.medication_id:
+                continue
+            actual_local = _local_in_zone(dose, zone)
+            distance = abs(actual_local - scheduled_local)
+            if distance <= MATCH_WINDOW:
+                candidates.append((distance, scheduled_local, actual_local, slot.id, dose.id, dose))
+    candidates.sort(key=lambda item: item[:5])
+
+    matched_slots: set[uuid.UUID] = set()
+    matched_doses: set[uuid.UUID] = set()
+    matches: dict[uuid.UUID, DoseEvent] = {}
+    for _, _, _, slot_id, dose_id, dose in candidates:
+        if slot_id in matched_slots or dose_id in matched_doses:
+            continue
+        matches[slot_id] = dose
+        matched_slots.add(slot_id)
+        matched_doses.add(dose_id)
+    return matches
+
+
+def _local_in_zone(dose: DoseEvent, zone: ZoneInfo) -> datetime:
+    """Return a dose's wall time in the selected comparison timezone."""
+    return dose.occurred_at.astimezone(zone).replace(tzinfo=None)
+
+
+def _historical_versions_overlapping(
+    session: Session,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> list[RegimenVersion]:
+    """Approved history whose half-open interval intersects ``[start, end)``."""
+    naive_start = _naive(start)
+    naive_end = _naive(end)
+    return list(
+        session.scalars(
+            select(RegimenVersion)
+            .where(
+                RegimenVersion.owner_id == owner_id,
+                _historically_approved_clause(),
+                RegimenVersion.effective_from < naive_end,
+                (RegimenVersion.effective_to.is_(None))
+                | (RegimenVersion.effective_to > naive_start),
+            )
+            .order_by(RegimenVersion.effective_from)
+        )
+    )
+
+
+def _active_from_candidates(
+    versions: list[RegimenVersion], moment: datetime
+) -> RegimenVersion | None:
+    """Resolve a winner from loaded history using the same interval rules."""
+    naive = _naive(moment)
+    eligible = [
+        version
+        for version in versions
+        if _was_approved(version)
+        and version.effective_from <= naive
+        and (version.effective_to is None or version.effective_to > naive)
+    ]
+    return max(eligible, key=lambda version: version.effective_from) if eligible else None
+
+
+def _historically_approved_clause() -> ColumnElement[bool]:
+    """SQL predicate excluding drafts that were merely moved to retired status."""
+    return or_(
+        RegimenVersion.status == RegimenStatus.APPROVED,
+        and_(
+            RegimenVersion.status == RegimenStatus.RETIRED,
+            RegimenVersion.approved_at.is_not(None),
+            RegimenVersion.approved_by.is_not(None),
+        ),
+    )
+
+
+def _was_approved(version: RegimenVersion) -> bool:
+    return version.status is RegimenStatus.APPROVED or (
+        version.status is RegimenStatus.RETIRED
+        and version.approved_at is not None
+        and version.approved_by is not None
+    )
+
+
+def _versions_active_during(
+    versions: list[RegimenVersion], start: datetime, end: datetime
+) -> list[RegimenVersion]:
+    """Return each winning plan version for at least one instant in the day."""
+    probes = [start]
+    naive_start = _naive(start)
+    naive_end = _naive(end)
+    probes.extend(
+        version.effective_from.replace(tzinfo=UTC)
+        for version in versions
+        if naive_start <= version.effective_from < naive_end
+    )
+    active: list[RegimenVersion] = []
+    seen: set[uuid.UUID] = set()
+    for probe in sorted(probes):
+        version = _active_from_candidates(versions, probe)
+        if version is not None and version.id not in seen:
+            active.append(version)
+            seen.add(version.id)
+    return active
+
+
+def association_for_event_time(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    medication_id: uuid.UUID,
+    occurred_at: datetime,
+    local_time: datetime,
+    timezone: str,
+) -> tuple[RegimenVersion | None, RegimenDoseSlot | None]:
+    """Resolve the plan and nearest valid slot for a newly timed dose fact.
+
+    A time correction must not carry an association from the original instant into a
+    different historical plan period.
+    """
+    version = active_version_at(session, owner_id, occurred_at)
+    if version is None:
+        return None, None
+    zone = ZoneInfo(timezone)
+    candidates: list[tuple[timedelta, RegimenDoseSlot]] = []
+    for slot in version.slots:
+        if slot.medication_id != medication_id:
+            continue
+        scheduled_local = datetime.combine(local_time.date(), slot.scheduled_local_time)
+        scheduled_version = active_version_at(
+            session, owner_id, scheduled_local.replace(tzinfo=zone)
+        )
+        if scheduled_version is None or scheduled_version.id != version.id:
+            continue
+        delta = abs(local_time - scheduled_local)
+        if delta <= MATCH_WINDOW:
+            candidates.append((delta, slot))
+    if not candidates:
+        return version, None
+    candidates.sort(key=lambda item: (item[0], item[1].sort_order, item[1].id))
+    return version, candidates[0][1]
 
 
 def find_medication_by_name(session: Session, owner_id: uuid.UUID, name: str) -> Medication | None:

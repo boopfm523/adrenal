@@ -88,6 +88,7 @@ export function TodayPage(): React.JSX.Element {
 
   const planSlots = comparison.data?.slots.filter((slot) => slot.slot_id !== null) ?? [];
   const unplannedDoses = comparison.data?.slots.filter((slot) => slot.slot_id === null) ?? [];
+  const planVersions = comparison.data?.regimen_versions ?? [];
   const hasRecordedDose = comparison.data?.slots.some((slot) => slot.dose_id !== null) ?? false;
   const openEpisode = episodes.data?.[0];
 
@@ -103,7 +104,7 @@ export function TodayPage(): React.JSX.Element {
       {comparison.isPending ? <p role="status">Loading today’s record…</p> : null}
       {comparison.isError ? <p className="error-summary" role="alert">Today’s dose record could not be loaded.</p> : null}
 
-      {comparison.data?.regimen_version_id === null ? (
+      {comparison.data !== undefined && planVersions.length === 0 ? (
         <section className="empty-state" aria-labelledby="no-plan">
           <h2 id="no-plan">No approved plan for this date</h2>
           <p>Recorded doses still appear as facts. HealthCurve will not infer a schedule from them.</p>
@@ -111,9 +112,9 @@ export function TodayPage(): React.JSX.Element {
         </section>
       ) : null}
 
-      {comparison.data?.regimen_version_id !== null && comparison.data !== undefined ? (
-        <PlanCard title={comparison.data.regimen_version_label ?? "Approved regimen"} metadata={<Link to="/plan">Review approved plan</Link>}>
-          <p>Schedule for {day} in {timezone}. A missing record is not proof that a dose was not taken.</p>
+      {comparison.data !== undefined && planVersions.length > 0 ? (
+        <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${planVersions.length.toString()} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
+          <p>Schedule for {day} in {timezone}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
           {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : (
             <ol className="dose-slots">
               {planSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}

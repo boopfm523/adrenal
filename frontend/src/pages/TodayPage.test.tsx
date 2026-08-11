@@ -35,6 +35,7 @@ function comparison(overrides: Record<string, unknown> = {}): Record<string, unk
     timezone: "America/New_York",
     regimen_version_id: null,
     regimen_version_label: null,
+    regimen_versions: [],
     slots: [],
     planned_total: null,
     actual_total: "0.0000",
@@ -127,6 +128,7 @@ describe("Today page", () => {
         return Promise.resolve(jsonResponse(comparison({
           regimen_version_id: "44444444-4444-4444-8444-444444444444",
           regimen_version_label: "Synthetic approved regimen",
+          regimen_versions: [{ id: "44444444-4444-4444-8444-444444444444", version_label: "Synthetic approved regimen", effective_from: "2026-01-01T00:00:00", effective_to: null }],
           slots: [slot],
           planned_total: "10.0000",
           actual_total: recorded ? "10.0000" : "0.0000",
@@ -181,5 +183,28 @@ describe("Today page", () => {
       slot_id: "11111111-1111-4111-8111-111111111111",
       time: expect.objectContaining({ timezone: "America/New_York" }),
     }));
+  });
+
+  it("shows both historical plan periods when the approved plan changes during the day", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("plan-comparison")) return Promise.resolve(jsonResponse(comparison({
+        regimen_versions: [
+          { id: "44444444-4444-4444-8444-444444444444", version_label: "Morning plan", effective_from: "2026-01-01T00:00:00", effective_to: "2026-08-09T12:00:00" },
+          { id: "66666666-6666-4666-8666-666666666666", version_label: "Afternoon plan", effective_from: "2026-08-09T12:00:00", effective_to: null },
+        ],
+        slots: [plannedSlot(), plannedSlot({ slot_id: "77777777-7777-4777-8777-777777777777", scheduled_local_time: "17:00:00" })],
+        planned_total: "20.0000",
+        missed_slots: 2,
+      })));
+      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse([]));
+      return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
+    });
+
+    renderToday();
+
+    expect(await screen.findByRole("heading", { name: "2 approved plan periods" })).toBeVisible();
+    expect(screen.getByText(/physician-approved plan changed during this day/)).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "No approved plan for this date" })).not.toBeInTheDocument();
   });
 });

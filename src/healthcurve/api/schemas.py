@@ -622,6 +622,11 @@ class PlanComparisonSlot(ApiModel):
     #: on_time | late | early | missing | unplanned | extra
     status: str
     minutes_from_scheduled: int | None
+    absolute_minutes_from_scheduled: int | None
+    regimen_version_id: uuid.UUID | None
+    regimen_version_label: str | None
+    regimen_effective_from: datetime | None
+    regimen_effective_to: datetime | None
     unit: DoseUnit
     route: Route
 
@@ -630,8 +635,15 @@ class PlanComparisonSlot(ApiModel):
         return None if value is None else str(value)
 
 
+class PlanComparisonRegimen(ApiModel):
+    id: uuid.UUID
+    version_label: str
+    effective_from: datetime
+    effective_to: datetime | None
+
+
 class PlanComparisonDay(ApiModel):
-    """A day compared against the plan in force on that day.
+    """A day compared against the historical plan intervals in force on that day.
 
     ``missing`` slots are *derived*, not stored: no zero-dose row is ever written
     (SAFE-10).
@@ -641,6 +653,7 @@ class PlanComparisonDay(ApiModel):
     timezone: str
     regimen_version_id: uuid.UUID | None
     regimen_version_label: str | None
+    regimen_versions: list[PlanComparisonRegimen]
     slots: list[PlanComparisonSlot]
     planned_total: Decimal | None
     actual_total: Decimal
@@ -685,10 +698,38 @@ class DailyDoseMetric(MetricBase):
 
 
 class TimingMetric(MetricBase):
+    matched_count: int = Field(ge=0)
     on_time: int = Field(ge=0)
     early: int = Field(ge=0)
     late: int = Field(ge=0)
     unplanned: int = Field(ge=0)
+    total_absolute_deviation_minutes: Decimal | None
+    average_absolute_deviation_minutes: Decimal | None
+    plan_periods: list[TimingPlanPeriod]
+
+    @field_serializer("total_absolute_deviation_minutes", "average_absolute_deviation_minutes")
+    def _deviation(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class TimingPlanPeriod(ApiModel):
+    regimen_version_id: uuid.UUID | None
+    regimen_version_label: str | None
+    effective_from: datetime | None
+    effective_to: datetime | None
+    sample_count: int = Field(ge=0)
+    matched_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    on_time: int = Field(ge=0)
+    early: int = Field(ge=0)
+    late: int = Field(ge=0)
+    unplanned: int = Field(ge=0)
+    total_absolute_deviation_minutes: Decimal | None
+    average_absolute_deviation_minutes: Decimal | None
+
+    @field_serializer("total_absolute_deviation_minutes", "average_absolute_deviation_minutes")
+    def _deviation(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
 
 
 class EpisodeMetric(MetricBase):

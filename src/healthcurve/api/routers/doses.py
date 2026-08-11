@@ -15,6 +15,7 @@ from healthcurve.api.schemas import (
     DoseOut,
     EventTimeOut,
     PlanComparisonDay,
+    PlanComparisonRegimen,
     PlanComparisonSlot,
     ProvenanceOut,
 )
@@ -114,6 +115,18 @@ def correct_dose(
             detail="a correction must change at least one field",
         )
 
+    if event_time is not None:
+        version, slot = meds.association_for_event_time(
+            session,
+            owner_id=owner.id,
+            medication_id=original.medication_id,
+            occurred_at=event_time.occurred_at,
+            local_time=event_time.local_time,
+            timezone=event_time.timezone,
+        )
+        changes["regimen_version_id"] = version.id if version else None
+        changes["slot_id"] = slot.id if slot else None
+
     try:
         correction = events.correct_event(
             session,
@@ -136,7 +149,7 @@ def plan_comparison(
     day: date = Query(description="Local calendar day to compare"),
     timezone: str | None = Query(default=None, description="IANA zone; defaults to owner setting"),
 ):
-    """Compare a day's doses with the plan in force that day.
+    """Compare a day's doses with the historical plan intervals in force that day.
 
     Missing slots are derived from the absence of a dose. No zero-dose row exists or is
     created (SAFE-10).
@@ -154,6 +167,15 @@ def plan_comparison(
         timezone=result["timezone"],  # type: ignore[arg-type]
         regimen_version_id=result["regimen_version_id"],  # type: ignore[arg-type]
         regimen_version_label=result["regimen_version_label"],  # type: ignore[arg-type]
+        regimen_versions=[
+            PlanComparisonRegimen(
+                id=version.id,
+                version_label=version.version_label,
+                effective_from=version.effective_from,
+                effective_to=version.effective_to,
+            )
+            for version in result["regimen_versions"]  # type: ignore[union-attr]
+        ],
         slots=[
             PlanComparisonSlot(
                 slot_id=c.slot_id,
@@ -166,6 +188,11 @@ def plan_comparison(
                 dose_id=c.dose_id,
                 status=c.status,
                 minutes_from_scheduled=c.minutes_from_scheduled,
+                absolute_minutes_from_scheduled=c.absolute_minutes_from_scheduled,
+                regimen_version_id=c.regimen_version_id,
+                regimen_version_label=c.regimen_version_label,
+                regimen_effective_from=c.regimen_effective_from,
+                regimen_effective_to=c.regimen_effective_to,
                 unit=c.unit,
                 route=c.route,
             )

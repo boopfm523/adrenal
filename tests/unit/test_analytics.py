@@ -1,7 +1,15 @@
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Any, cast
 
-from healthcurve.analytics.service import DayInput, EpisodeInput, SymptomInput, summarize
+from healthcurve.analytics.service import (
+    DayInput,
+    EpisodeInput,
+    SymptomInput,
+    TimingInput,
+    summarize,
+)
 
 
 def test_deterministic_summary_matches_independent_fixture() -> None:
@@ -134,3 +142,52 @@ def test_incompatible_units_are_not_combined() -> None:
     assert value["planned_total"] is None  # type: ignore[index]
     assert value["actual_total"] is None  # type: ignore[index]
     assert value["incompatible_units"] is True  # type: ignore[index]
+
+
+def test_timing_deviation_excludes_missing_and_unplanned_and_groups_plan_history() -> None:
+    earlier = uuid.UUID("11111111-1111-4111-8111-111111111111")
+    later = uuid.UUID("22222222-2222-4222-8222-222222222222")
+    first_start = datetime(2026, 8, 1, tzinfo=UTC)
+    transition = datetime(2026, 8, 8, tzinfo=UTC)
+    result = summarize(
+        date_from=date(2026, 8, 1),
+        date_to=date(2026, 8, 9),
+        timezone="America/New_York",
+        days=[
+            DayInput(
+                day=date(2026, 8, 1),
+                planned_total=Decimal("20"),
+                actual_total=Decimal("25"),
+                recorded_dose_count=2,
+                statuses=("late", "missing", "unplanned"),
+                timings=(
+                    TimingInput("late", 45, earlier, "Earlier", first_start, transition),
+                    TimingInput("missing", None, earlier, "Earlier", first_start, transition),
+                    TimingInput("unplanned", None, earlier, "Earlier", first_start, transition),
+                ),
+            ),
+            DayInput(
+                day=date(2026, 8, 9),
+                planned_total=Decimal("20"),
+                actual_total=Decimal("20"),
+                recorded_dose_count=1,
+                statuses=("early",),
+                timings=(TimingInput("early", -15, later, "Later", transition, None),),
+            ),
+        ],
+        episodes=[],
+        symptoms=[],
+    )
+
+    timing = result["timing"]
+    assert isinstance(timing, dict)
+    assert timing["sample_count"] == 4
+    assert timing["matched_count"] == 2
+    assert timing["total_absolute_deviation_minutes"] == Decimal("60")
+    assert timing["average_absolute_deviation_minutes"] == Decimal("30")
+    periods = cast(list[dict[str, Any]], timing["plan_periods"])
+    assert [period["regimen_version_label"] for period in periods] == ["Earlier", "Later"]
+    assert periods[0]["average_absolute_deviation_minutes"] == Decimal("45")
+    assert periods[0]["missing_count"] == 1
+    assert periods[0]["unplanned"] == 1
+    assert periods[1]["average_absolute_deviation_minutes"] == Decimal("15")

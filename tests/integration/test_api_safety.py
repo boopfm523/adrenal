@@ -28,6 +28,7 @@ from testcontainers.community.postgres import PostgresContainer
 from healthcurve import models as all_models
 from healthcurve import privacy
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
+from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
@@ -40,7 +41,7 @@ from healthcurve.document_worker import process_available, validate_one
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
-from healthcurve.events.timekeeping import from_instant
+from healthcurve.events.timekeeping import from_instant, resolve_event_time
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.identity.recovery import recover_owner_access
@@ -69,6 +70,7 @@ from healthcurve.labs.service import backfill_normalizations
 from healthcurve.medications import service as medication_service
 from healthcurve.medications.models import (
     ApprovedInstruction,
+    DoseCategory,
     DoseEvent,
     DoseUnit,
     InstructionCategory,
@@ -88,6 +90,7 @@ from healthcurve.operations.rate_limit import (
 )
 from healthcurve.operations.restore_drill import assert_restore_sentinel
 from healthcurve.operations.telemetry import OperationalEvent
+from healthcurve.reports import builder as report_builder
 from healthcurve.reports import service as report_service
 from healthcurve.reports.cleanup_jobs import (
     REPORT_ARTIFACT_CLEANUP_TASK,
@@ -3713,6 +3716,271 @@ def test_comparison_states_its_metric_definition_and_timezone(
     assert body["timezone"] == "Europe/London"
     assert "30 minutes" in body["metric_definition"]
     assert "never stored as a zero dose" in body["metric_definition"]
+
+
+def test_historical_plan_intervals_midday_dst_deviation_and_correction(
+    engine: Engine,
+) -> None:
+    """Retired history and a DST-day transition remain the comparison authority."""
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner = Owner(
+                email="historical-plan-owner@example.test",
+                password_hash=auth.hash_password(PASSWORD),
+                default_timezone="America/New_York",
+            )
+            session.add(owner)
+            session.flush()
+            medication = Medication(
+                owner_id=owner.id,
+                name="Synthetic replacement",
+                normalized_name="synthetic replacement historical plan",
+                default_unit=DoseUnit.MG,
+                default_route=Route.ORAL,
+            )
+            session.add(medication)
+            session.flush()
+
+            unapproved = medication_service.create_draft(
+                session,
+                owner_id=owner.id,
+                version_label="Never approved draft",
+                effective_from=datetime(2026, 2, 1, tzinfo=UTC).replace(tzinfo=None),
+                effective_to=datetime(2026, 4, 1, tzinfo=UTC).replace(tzinfo=None),
+            )
+            medication_service.retire_version(
+                session, unapproved, retired_at=datetime(2026, 2, 20, tzinfo=UTC)
+            )
+            assert unapproved.effective_to == datetime(2026, 2, 20, tzinfo=UTC).replace(tzinfo=None)
+            assert (
+                medication_service.active_version_at(
+                    session, owner.id, datetime(2026, 2, 10, tzinfo=UTC)
+                )
+                is None
+            )
+
+            transition = datetime(2026, 3, 8, 16, tzinfo=UTC).replace(
+                tzinfo=None
+            )  # noon after New York's DST jump
+            earlier = medication_service.create_draft(
+                session,
+                owner_id=owner.id,
+                version_label="Earlier weekly plan",
+                effective_from=datetime(2026, 3, 1, 5, tzinfo=UTC).replace(tzinfo=None),
+                effective_to=transition,
+            )
+            for clock in (time(8), time(12), time(18)):
+                earlier.slots.append(
+                    RegimenDoseSlot(
+                        medication_id=medication.id,
+                        scheduled_local_time=clock,
+                        amount=Decimal("5"),
+                        unit=DoseUnit.MG,
+                        route=Route.ORAL,
+                    )
+                )
+            medication_service.approve_version(
+                session,
+                earlier,
+                approved_by="Dr Synthetic",
+                approval_source="synthetic fixture",
+            )
+            medication_service.retire_version(
+                session, earlier, retired_at=datetime(2026, 3, 8, 16, tzinfo=UTC)
+            )
+
+            later = medication_service.create_draft(
+                session,
+                owner_id=owner.id,
+                version_label="Later weekly plan",
+                effective_from=transition,
+            )
+            for clock in (time(12), time(16), time(20)):
+                later.slots.append(
+                    RegimenDoseSlot(
+                        medication_id=medication.id,
+                        scheduled_local_time=clock,
+                        amount=Decimal("5"),
+                        unit=DoseUnit.MG,
+                        route=Route.ORAL,
+                    )
+                )
+            medication_service.approve_version(
+                session,
+                later,
+                approved_by="Dr Synthetic",
+                approval_source="synthetic fixture",
+            )
+            session.flush()
+
+            def record(day_value: date, clock: time) -> DoseEvent:
+                event_time = resolve_event_time(
+                    datetime.combine(day_value, clock), "America/New_York"
+                )
+                version, slot = medication_service.association_for_event_time(
+                    session,
+                    owner_id=owner.id,
+                    medication_id=medication.id,
+                    occurred_at=event_time.occurred_at,
+                    local_time=event_time.local_time,
+                    timezone=event_time.timezone,
+                )
+                return events.create_event(
+                    session,
+                    DoseEvent,
+                    owner_id=owner.id,
+                    event_time=event_time,
+                    source_type=SourceType.WEB,
+                    confirmation_state=ConfirmationState.DIRECT,
+                    medication_id=medication.id,
+                    amount=Decimal("5"),
+                    unit=DoseUnit.MG,
+                    route=Route.ORAL,
+                    category=DoseCategory.SCHEDULED,
+                    regimen_version_id=version.id if version else None,
+                    slot_id=slot.id if slot else None,
+                    episode_id=None,
+                    notes=None,
+                )
+
+            for clock in (time(8, 20), time(12, 30), time(20, 10), time(23)):
+                record(date(2026, 3, 8), clock)
+
+            retired_lookup = medication_service.active_version_at(
+                session, owner.id, datetime(2026, 3, 7, 13, tzinfo=UTC)
+            )
+            boundary_lookup = medication_service.active_version_at(
+                session, owner.id, datetime(2026, 3, 8, 16, tzinfo=UTC)
+            )
+            assert retired_lookup is not None and retired_lookup.id == earlier.id
+            assert boundary_lookup is not None and boundary_lookup.id == later.id
+
+            comparison = medication_service.compare_day(
+                session,
+                owner_id=owner.id,
+                day=date(2026, 3, 8),
+                timezone="America/New_York",
+            )
+            rows = comparison["slots"]
+            assert isinstance(rows, list)
+            scheduled = [row for row in rows if row.scheduled_local_time is not None]
+            assert [(row.scheduled_local_time, row.regimen_version_id) for row in scheduled] == [
+                (time(8), earlier.id),
+                (time(12), later.id),
+                (time(16), later.id),
+                (time(20), later.id),
+            ]
+            assert [row.status for row in rows] == [
+                "on_time",
+                "on_time",
+                "missing",
+                "on_time",
+                "unplanned",
+            ]
+            assert [row.minutes_from_scheduled for row in rows] == [20, 30, None, 10, None]
+            assert [row.absolute_minutes_from_scheduled for row in rows] == [
+                20,
+                30,
+                None,
+                10,
+                None,
+            ]
+
+            analytics_summary = analytics_service.summary_for_owner(
+                session,
+                owner_id=owner.id,
+                date_from=date(2026, 3, 8),
+                date_to=date(2026, 3, 8),
+                timezone="America/New_York",
+            )
+            timing = analytics_summary["timing"]
+            assert isinstance(timing, dict)
+            assert timing["matched_count"] == 3
+            assert timing["total_absolute_deviation_minutes"] == Decimal("60")
+            assert timing["average_absolute_deviation_minutes"] == Decimal("20")
+            periods = cast(list[dict[str, Any]], timing["plan_periods"])
+            assert [period["regimen_version_label"] for period in periods] == [
+                "Earlier weekly plan",
+                "Later weekly plan",
+            ]
+            assert periods[1]["missing_count"] == 1
+            assert periods[1]["unplanned"] == 1
+
+            original = record(date(2026, 3, 7), time(8, 5))
+            record(date(2026, 3, 9), time(12, 5))
+            multi_period_summary = analytics_service.summary_for_owner(
+                session,
+                owner_id=owner.id,
+                date_from=date(2026, 3, 7),
+                date_to=date(2026, 3, 9),
+                timezone="America/New_York",
+            )
+            multi_timing = multi_period_summary["timing"]
+            assert isinstance(multi_timing, dict)
+            multi_periods = cast(list[dict[str, Any]], multi_timing["plan_periods"])
+            assert [period["regimen_version_label"] for period in multi_periods] == [
+                "Earlier weekly plan",
+                "Later weekly plan",
+            ]
+            report = report_builder.build_snapshot(
+                session,
+                owner_id=owner.id,
+                date_from=date(2026, 3, 7),
+                date_to=date(2026, 3, 9),
+                timezone="America/New_York",
+                selected_sections=["metrics"],
+            )
+            report_timing = cast(dict[str, Any], report.metric_values["timing"])
+            report_periods = cast(list[dict[str, Any]], report_timing["plan_periods"])
+            assert [period["regimen_version_label"] for period in report_periods] == [
+                "Earlier weekly plan",
+                "Later weekly plan",
+            ]
+            assert report_timing["average_absolute_deviation_minutes"] is not None
+
+            summary = medication_service.compare_day(
+                session,
+                owner_id=owner.id,
+                day=date(2026, 2, 1),
+                timezone="America/New_York",
+            )
+            assert summary["slots"] == []
+            assert summary["planned_total"] is None
+
+            assert original.regimen_version_id == earlier.id
+            assert original.slot_id is not None
+            corrected_time = resolve_event_time(
+                datetime(2026, 3, 8, 12, 5, tzinfo=UTC).replace(tzinfo=None),
+                "America/New_York",
+            )
+            corrected_version, corrected_slot = medication_service.association_for_event_time(
+                session,
+                owner_id=owner.id,
+                medication_id=medication.id,
+                occurred_at=corrected_time.occurred_at,
+                local_time=corrected_time.local_time,
+                timezone=corrected_time.timezone,
+            )
+            assert corrected_version is not None and corrected_version.id == later.id
+            assert corrected_slot is not None and corrected_slot.regimen_version_id == later.id
+            correction = events.correct_event(
+                session,
+                DoseEvent,
+                original,
+                reason="synthetic time correction",
+                changes={
+                    "regimen_version_id": corrected_version.id,
+                    "slot_id": corrected_slot.id,
+                },
+                event_time=corrected_time,
+            )
+            assert correction.regimen_version_id == later.id
+            assert correction.slot_id == corrected_slot.id
+    finally:
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.mark.safety("SAFE-27")

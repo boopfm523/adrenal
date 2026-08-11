@@ -258,7 +258,7 @@ export interface paths {
         };
         /**
          * Plan Comparison
-         * @description Compare a day's doses with the plan in force that day.
+         * @description Compare a day's doses with the historical plan intervals in force that day.
          *
          *     Missing slots are derived from the absence of a dose. No zero-dose row exists or is
          *     created (SAFE-10).
@@ -2367,7 +2367,7 @@ export interface components {
         };
         /**
          * PlanComparisonDay
-         * @description A day compared against the plan in force on that day.
+         * @description A day compared against the historical plan intervals in force on that day.
          *
          *     ``missing`` slots are *derived*, not stored: no zero-dose row is ever written
          *     (SAFE-10).
@@ -2390,6 +2390,8 @@ export interface components {
             regimen_version_id: string | null;
             /** Regimen Version Label */
             regimen_version_label: string | null;
+            /** Regimen Versions */
+            regimen_versions: components["schemas"]["PlanComparisonRegimen"][];
             /** Slots */
             slots: components["schemas"]["PlanComparisonSlot"][];
             /** Timezone */
@@ -2397,8 +2399,27 @@ export interface components {
             /** Unplanned Doses */
             unplanned_doses: number;
         };
+        /** PlanComparisonRegimen */
+        PlanComparisonRegimen: {
+            /**
+             * Effective From
+             * Format: date-time
+             */
+            effective_from: string;
+            /** Effective To */
+            effective_to: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version Label */
+            version_label: string;
+        };
         /** PlanComparisonSlot */
         PlanComparisonSlot: {
+            /** Absolute Minutes From Scheduled */
+            absolute_minutes_from_scheduled: number | null;
             /** Actual Amount */
             actual_amount: string | null;
             /** Actual Local Time */
@@ -2416,6 +2437,14 @@ export interface components {
             minutes_from_scheduled: number | null;
             /** Planned Amount */
             planned_amount: string | null;
+            /** Regimen Effective From */
+            regimen_effective_from: string | null;
+            /** Regimen Effective To */
+            regimen_effective_to: string | null;
+            /** Regimen Version Id */
+            regimen_version_id: string | null;
+            /** Regimen Version Label */
+            regimen_version_label: string | null;
             route: components["schemas"]["Route"];
             /** Scheduled Local Time */
             scheduled_local_time: string | null;
@@ -2832,20 +2861,57 @@ export interface components {
         };
         /** TimingMetric */
         TimingMetric: {
+            /** Average Absolute Deviation Minutes */
+            average_absolute_deviation_minutes: string | null;
             /** Definition */
             definition: string;
             /** Early */
             early: number;
             /** Late */
             late: number;
+            /** Matched Count */
+            matched_count: number;
             /** Missing Count */
             missing_count: number;
             /** On Time */
             on_time: number;
+            /** Plan Periods */
+            plan_periods: components["schemas"]["TimingPlanPeriod"][];
             /** Sample Count */
             sample_count: number;
             /** Timezone */
             timezone: string;
+            /** Total Absolute Deviation Minutes */
+            total_absolute_deviation_minutes: string | null;
+            /** Unplanned */
+            unplanned: number;
+        };
+        /** TimingPlanPeriod */
+        TimingPlanPeriod: {
+            /** Average Absolute Deviation Minutes */
+            average_absolute_deviation_minutes: string | null;
+            /** Early */
+            early: number;
+            /** Effective From */
+            effective_from: string | null;
+            /** Effective To */
+            effective_to: string | null;
+            /** Late */
+            late: number;
+            /** Matched Count */
+            matched_count: number;
+            /** Missing Count */
+            missing_count: number;
+            /** On Time */
+            on_time: number;
+            /** Regimen Version Id */
+            regimen_version_id: string | null;
+            /** Regimen Version Label */
+            regimen_version_label: string | null;
+            /** Sample Count */
+            sample_count: number;
+            /** Total Absolute Deviation Minutes */
+            total_absolute_deviation_minutes: string | null;
             /** Unplanned */
             unplanned: number;
         };

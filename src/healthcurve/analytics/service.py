@@ -24,9 +24,10 @@ from healthcurve.medications import service as medications
 
 DOSE_TOTAL_DEFINITION: Final = (
     "For each local calendar day, actual total is the sum of current recorded dose "
-    "facts. Planned total is the sum of slots in the physician-approved regimen in "
-    "force at local midnight. No recorded doses is shown as missing, not as a "
-    "zero-dose fact. If a day contains incompatible units, totals are unavailable "
+    "facts. Planned total is the sum of slots whose scheduled local instant falls in "
+    "the half-open effective interval of the historically physician-approved regimen, "
+    "including a plan change within a day. No recorded doses is shown as missing, not "
+    "as a zero-dose fact. If a day contains incompatible units, totals are unavailable "
     "rather than combined."
 )
 EPISODE_DEFINITION: Final = (
@@ -42,6 +43,16 @@ SYMPTOM_DEFINITION: Final = (
 
 
 @dataclass(frozen=True, slots=True)
+class TimingInput:
+    status: str
+    minutes_from_scheduled: int | None
+    regimen_version_id: uuid.UUID | None = None
+    regimen_version_label: str | None = None
+    effective_from: datetime | None = None
+    effective_to: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DayInput:
     day: date
     planned_total: Decimal | None
@@ -50,6 +61,7 @@ class DayInput:
     statuses: tuple[str, ...]
     unit: str | None = "mg"
     incompatible_units: bool = False
+    timings: tuple[TimingInput, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +89,69 @@ def summarize(
     planned_days = sum(day.planned_total is not None for day in days)
     recorded_days = sum(day.recorded_dose_count > 0 for day in days)
     timing_statuses = [status for day in days for status in day.statuses]
+    timing_inputs = [timing for day in days for timing in day.timings]
+    if timing_inputs:
+        timing_statuses = [timing.status for timing in timing_inputs]
+    else:
+        timing_inputs = [
+            TimingInput(status=status, minutes_from_scheduled=None)
+            for day in days
+            for status in day.statuses
+        ]
+    deviations = [
+        Decimal(abs(timing.minutes_from_scheduled))
+        for timing in timing_inputs
+        if timing.minutes_from_scheduled is not None
+    ]
+    period_groups: dict[
+        tuple[uuid.UUID | None, str | None, datetime | None, datetime | None], list[TimingInput]
+    ] = {}
+    for timing in timing_inputs:
+        key = (
+            timing.regimen_version_id,
+            timing.regimen_version_label,
+            timing.effective_from,
+            timing.effective_to,
+        )
+        period_groups.setdefault(key, []).append(timing)
+
+    plan_periods: list[dict[str, object]] = []
+    for key, rows in sorted(
+        period_groups.items(),
+        key=lambda item: (
+            item[0][2] is None,
+            item[0][2].isoformat() if item[0][2] is not None else "",
+            str(item[0][0] or ""),
+        ),
+    ):
+        period_deviations = [
+            Decimal(abs(row.minutes_from_scheduled))
+            for row in rows
+            if row.minutes_from_scheduled is not None
+        ]
+        statuses = [row.status for row in rows]
+        total_deviation = sum(period_deviations, Decimal(0)) if period_deviations else None
+        plan_periods.append(
+            {
+                "regimen_version_id": key[0],
+                "regimen_version_label": key[1],
+                "effective_from": key[2],
+                "effective_to": key[3],
+                "sample_count": len(rows),
+                "matched_count": len(period_deviations),
+                "missing_count": statuses.count("missing"),
+                "on_time": statuses.count("on_time"),
+                "early": statuses.count("early"),
+                "late": statuses.count("late"),
+                "unplanned": statuses.count("unplanned"),
+                "total_absolute_deviation_minutes": total_deviation,
+                "average_absolute_deviation_minutes": (
+                    total_deviation / len(period_deviations)
+                    if total_deviation is not None
+                    else None
+                ),
+            }
+        )
     duration_values = [
         Decimal((episode.ended_at - episode.started_at).total_seconds()) / Decimal(60)
         for episode in episodes
@@ -118,10 +193,18 @@ def summarize(
             "timezone": timezone,
             "sample_count": len(timing_statuses),
             "missing_count": timing_statuses.count("missing"),
+            "matched_count": len(deviations),
             "on_time": timing_statuses.count("on_time"),
             "early": timing_statuses.count("early"),
             "late": timing_statuses.count("late"),
             "unplanned": timing_statuses.count("unplanned"),
+            "total_absolute_deviation_minutes": (
+                sum(deviations, Decimal(0)) if deviations else None
+            ),
+            "average_absolute_deviation_minutes": (
+                sum(deviations, Decimal(0)) / len(deviations) if deviations else None
+            ),
+            "plan_periods": plan_periods,
         },
         "episodes": {
             "definition": EPISODE_DEFINITION,
@@ -168,6 +251,17 @@ def summary_for_owner(
         )
         slots = comparison["slots"]
         statuses = tuple(slot.status for slot in slots)  # type: ignore[union-attr]
+        timings = tuple(
+            TimingInput(
+                status=slot.status,
+                minutes_from_scheduled=slot.minutes_from_scheduled,
+                regimen_version_id=slot.regimen_version_id,
+                regimen_version_label=slot.regimen_version_label,
+                effective_from=slot.regimen_effective_from,
+                effective_to=slot.regimen_effective_to,
+            )
+            for slot in slots  # type: ignore[union-attr]
+        )
         units = {str(slot.unit) for slot in slots}  # type: ignore[union-attr]
         incompatible_units = len(units) > 1
         recorded_count = sum(status != "missing" for status in statuses)
@@ -182,6 +276,7 @@ def summary_for_owner(
                 statuses=statuses,
                 unit=next(iter(units)) if len(units) == 1 else None,
                 incompatible_units=incompatible_units,
+                timings=timings,
             )
         )
         current_day += timedelta(days=1)
