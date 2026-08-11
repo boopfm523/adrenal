@@ -3331,6 +3331,9 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -4023,6 +4026,9 @@ export interface operations {
     records_api_v1_integrations_garmin_records_get: {
         parameters: {
             query?: {
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -5576,6 +5582,9 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
                 page?: number;
                 page_size?: number;
             };

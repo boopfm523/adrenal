@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   correctBloodPressure,
@@ -13,6 +14,7 @@ import {
   type BloodPressureCorrectionInput,
   type BloodPressureInput,
   type GarminRecord,
+  type HealthDataFilters,
   type Weight,
   type WeightCorrectionInput,
   type WeightInput,
@@ -36,6 +38,39 @@ function localNow(): string {
 
 function displayTime(value: string): string {
   return value.replace("T", " ").slice(0, 16);
+}
+
+interface HealthDataViewState extends HealthDataFilters {
+  bpPage: number;
+  weightPage: number;
+  garminPage: number;
+}
+
+function pageFromSearch(params: URLSearchParams, name: string): number {
+  const value = params.get(name) ?? "";
+  return /^\d+$/.test(value) && Number(value) >= 1 ? Number(value) : 1;
+}
+
+function viewStateFromSearch(search: string, profileTimezone: string): HealthDataViewState {
+  const params = new URLSearchParams(search);
+  return {
+    dateFrom: params.get("local_date_from") ?? "",
+    dateTo: params.get("local_date_to") ?? "",
+    timezone: params.get("timezone") ?? profileTimezone,
+    bpPage: pageFromSearch(params, "bp_page"),
+    weightPage: pageFromSearch(params, "weight_page"),
+    garminPage: pageFromSearch(params, "garmin_page"),
+  };
+}
+
+function searchFromViewState(state: HealthDataViewState): URLSearchParams {
+  const params = new URLSearchParams({ timezone: state.timezone });
+  if (state.dateFrom !== "") params.set("local_date_from", state.dateFrom);
+  if (state.dateTo !== "") params.set("local_date_to", state.dateTo);
+  if (state.bpPage > 1) params.set("bp_page", state.bpPage.toString());
+  if (state.weightPage > 1) params.set("weight_page", state.weightPage.toString());
+  if (state.garminPage > 1) params.set("garmin_page", state.garminPage.toString());
+  return params;
 }
 
 function historyFor<T extends { id: string; provenance: { supersedes_id?: string | null } }>(record: T, byId: Map<string, T>): T[] {
@@ -261,27 +296,44 @@ function WeightCorrection({ record, close }: { record: Weight; close: () => void
 export function HealthDataPage(): React.JSX.Element {
   const { session } = useAuth();
   const timezone = session?.user.defaultTimezone ?? "UTC";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedSearch = searchParams.toString();
+  const view = useMemo(() => viewStateFromSearch(appliedSearch, timezone), [appliedSearch, timezone]);
+  const filters = useMemo<HealthDataFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone }), [view.dateFrom, view.dateTo, view.timezone]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
+  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
+  const setDraft = (next: HealthDataFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const [filterValidation, setFilterValidation] = useState<string | null>(null);
+  const appliedRangeInvalid = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
+  const hasActiveDates = filters.dateFrom !== "" || filters.dateTo !== "";
   const [editing, setEditing] = useState<string | null>(null);
-  const [bpPage, setBpPage] = useState(1);
-  const [weightPage, setWeightPage] = useState(1);
-  const [garminPage, setGarminPage] = useState(1);
-  const bp = useQuery({ queryKey: ["blood-pressure", bpPage], queryFn: () => getBloodPressure(bpPage) });
-  const weight = useQuery({ queryKey: ["weight", weightPage], queryFn: () => getWeight(weightPage) });
-  const garmin = useQuery({ queryKey: ["garmin-records", garminPage], queryFn: () => getGarminRecords(garminPage) });
+  const bp = useQuery({ queryKey: ["blood-pressure", filters, view.bpPage], queryFn: () => getBloodPressure(filters, view.bpPage), enabled: !appliedRangeInvalid });
+  const weight = useQuery({ queryKey: ["weight", filters, view.weightPage], queryFn: () => getWeight(filters, view.weightPage), enabled: !appliedRangeInvalid });
+  const garmin = useQuery({ queryKey: ["garmin-records", filters, view.garminPage], queryFn: () => getGarminRecords(filters, view.garminPage), enabled: !appliedRangeInvalid });
   const currentBp = bp.data?.items ?? [];
   const currentWeight = weight.data?.items ?? [];
   const bpById = new Map([...currentBp, ...(bp.data?.revisions ?? [])].map((record) => [record.id, record]));
   const weightById = new Map([...currentWeight, ...(weight.data?.revisions ?? [])].map((record) => [record.id, record]));
   return <Page title="Health data" description="Record and review blood pressure, weight, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
     <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /></div></section>
-    {bp.isPending || weight.isPending || garmin.isPending ? <p role="status">Loading recorded health data…</p> : null}
-    {bp.isError || weight.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded.</p> : null}
-    <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
-      {currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <AccessibleLineChart title="Blood pressure" summary="Systolic and diastolic measurements on the visible records page." unit="mmHg" timezone={timezone} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact on the visible records page. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Blood pressure" series={bpSeries(currentBp)} />}
-      {currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <AccessibleLineChart title="Weight" summary="Weight measurements on the visible records page, shown on one consistent pounds scale." unit="lb" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact on the visible records page, converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The chart adds one pound of visual padding above and below the observed range; exact values remain in the chart points and records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Weight" yPadding={1} compactPlot series={weightSeries(currentWeight)} />}
+    <section aria-labelledby="health-data-filter-heading"><h2 id="health-data-filter-heading">Filter recorded health data</h2>
+      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, garminPage: 1 })); }}>
+        <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label>
+        <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label>
+        <label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>
+        {filterValidation === null && !appliedRangeInvalid ? null : <p className="error-summary form-wide" role="alert">{filterValidation ?? "From date must be on or before Through date."}</p>}
+        <div className="filter-actions"><button type="submit">Apply filters</button><button className="button-secondary" type="button" onClick={() => { setFilterValidation(null); setEditing(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</button></div>
+      </form>
+      <p className="privacy-note">Inclusive calendar dates are interpreted in {filters.timezone}. Records keep their original experienced timezone.</p>
     </section>
-    <section aria-labelledby="garmin-records-heading"><h2 id="garmin-records-heading">Garmin recorded observations</h2><p className="privacy-note">These are provider-imported facts, separate from physician-approved plans and AI analysis. Scores and missing values are not interpreted as medical conclusions.</p>{garmin.data?.records.length === 0 ? <p>No Garmin observations recorded.</p> : garmin.data === undefined ? null : <GarminRecordsTable records={garmin.data.records} />}{garmin.data === undefined ? null : <PaginationControls label="Garmin records" metadata={garmin.data.page} onPageChange={setGarminPage} />}</section>
-    <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>{currentBp.length === 0 ? <p>No blood-pressure readings recorded.</p> : <BloodPressureHistoryTable records={currentBp} byId={bpById} editing={editing} setEditing={setEditing} />}{bp.data === undefined ? null : <PaginationControls label="Blood pressure records" metadata={bp.data.page} onPageChange={(nextPage) => { setEditing(null); setBpPage(nextPage); }} />}</section>
-    <section aria-labelledby="weight-records-heading"><h2 id="weight-records-heading">Weight records and provenance</h2>{currentWeight.length === 0 ? <p>No weight readings recorded.</p> : <WeightHistoryTable records={currentWeight} byId={weightById} editing={editing} setEditing={setEditing} />}{weight.data === undefined ? null : <PaginationControls label="Weight records" metadata={weight.data.page} onPageChange={(nextPage) => { setEditing(null); setWeightPage(nextPage); }} />}</section>
+    {bp.isFetching || weight.isFetching || garmin.isFetching ? <p role="status">Loading recorded health data…</p> : null}
+    {bp.isError || weight.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded. Check the date range and IANA timezone.</p> : null}
+    <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
+      {currentBp.length === 0 ? <p>{hasActiveDates ? "No blood-pressure readings match the selected dates." : "No blood-pressure readings recorded."}</p> : <AccessibleLineChart title="Blood pressure" summary="Systolic and diastolic measurements on the visible records page." unit="mmHg" timezone={timezone} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact on the visible records page. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Blood pressure" series={bpSeries(currentBp)} />}
+      {currentWeight.length === 0 ? <p>{hasActiveDates ? "No weight readings match the selected dates." : "No weight readings recorded."}</p> : <AccessibleLineChart title="Weight" summary="Weight measurements on the visible records page, shown on one consistent pounds scale." unit="lb" timezone={timezone} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact on the visible records page, converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The chart adds one pound of visual padding above and below the observed range; exact values remain in the chart points and records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Weight" yPadding={1} compactPlot series={weightSeries(currentWeight)} />}
+    </section>
+    <section aria-labelledby="garmin-records-heading"><h2 id="garmin-records-heading">Garmin recorded observations</h2><p className="privacy-note">These are provider-imported facts, separate from physician-approved plans and AI analysis. Scores and missing values are not interpreted as medical conclusions.</p>{garmin.data?.records.length === 0 ? <p>No Garmin observations match the selected dates.</p> : garmin.data === undefined ? null : <GarminRecordsTable records={garmin.data.records} />}{garmin.data === undefined ? null : <PaginationControls label="Garmin records" metadata={garmin.data.page} onPageChange={(garminPage) => { setSearchParams(searchFromViewState({ ...view, garminPage })); }} />}</section>
+    <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>{currentBp.length === 0 ? <p>No blood-pressure readings match the selected dates.</p> : <BloodPressureHistoryTable records={currentBp} byId={bpById} editing={editing} setEditing={setEditing} />}{bp.data === undefined ? null : <PaginationControls label="Blood pressure records" metadata={bp.data.page} onPageChange={(bpPage) => { setEditing(null); setSearchParams(searchFromViewState({ ...view, bpPage })); }} />}</section>
+    <section aria-labelledby="weight-records-heading"><h2 id="weight-records-heading">Weight records and provenance</h2>{currentWeight.length === 0 ? <p>No weight readings match the selected dates.</p> : <WeightHistoryTable records={currentWeight} byId={weightById} editing={editing} setEditing={setEditing} />}{weight.data === undefined ? null : <PaginationControls label="Weight records" metadata={weight.data.page} onPageChange={(weightPage) => { setEditing(null); setSearchParams(searchFromViewState({ ...view, weightPage })); }} />}</section>
   </Page>;
 }

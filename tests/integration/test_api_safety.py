@@ -2599,6 +2599,174 @@ def test_timeline_local_date_filter_uses_the_requested_timezone(
     assert excluded["items"] == []
 
 
+def test_health_data_local_date_filters_compose_with_pagination_and_corrections(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    def blood_pressure(local_time: str, systolic: int) -> str:
+        response = client.post(
+            "/api/v1/blood-pressure",
+            json={
+                "systolic_mmhg": systolic,
+                "diastolic_mmhg": 70,
+                "time": {"local_time": local_time, "timezone": "UTC"},
+            },
+            headers=logged_in,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    # New York's 2026 spring-forward day spans 05:00Z through 03:59:59Z the next day.
+    at_start = blood_pressure("2026-03-08T05:00:00", 110)
+    near_end = blood_pressure("2026-03-09T03:59:00", 111)
+    outside = blood_pressure("2026-03-09T04:00:00", 112)
+    weight = client.post(
+        "/api/v1/weight",
+        json={
+            "value": "180",
+            "unit": "lb",
+            "time": {"local_time": "2026-03-09T03:00:00", "timezone": "UTC"},
+        },
+        headers=logged_in,
+    )
+    assert weight.status_code == 201, weight.text
+    with Session(engine) as session, session.begin():
+        other_owner = Owner(
+            email="health-filter-other-owner@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other_owner)
+        session.flush()
+        other_record = events.create_event(
+            session,
+            BloodPressureEvent,
+            owner_id=other_owner.id,
+            event_time=resolve_event_time(datetime(2026, 3, 8, 6), "UTC"),  # noqa: DTZ001
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            systolic_mmhg=199,
+            diastolic_mmhg=99,
+        )
+        other_record_id = str(other_record.id)
+
+    params = {
+        "local_date_from": "2026-03-08",
+        "local_date_to": "2026-03-08",
+        "timezone": "America/New_York",
+        "page_size": 1,
+    }
+    first = client.get("/api/v1/blood-pressure", params=params)
+    second = client.get("/api/v1/blood-pressure", params={**params, "page": 2})
+    assert first.status_code == second.status_code == 200
+    assert first.json()["page"] == {
+        "page": 1,
+        "page_size": 1,
+        "total_items": 2,
+        "total_pages": 2,
+    }
+    assert {first.json()["items"][0]["id"], second.json()["items"][0]["id"]} == {
+        at_start,
+        near_end,
+    }
+    assert outside not in {first.json()["items"][0]["id"], second.json()["items"][0]["id"]}
+    assert other_record_id not in {
+        first.json()["items"][0]["id"],
+        second.json()["items"][0]["id"],
+    }
+    assert (
+        client.get(
+            "/api/v1/weight",
+            params={key: value for key, value in params.items() if key != "page_size"},
+        ).json()["items"][0]["id"]
+        == weight.json()["id"]
+    )
+    from_only = client.get(
+        "/api/v1/blood-pressure",
+        params={"local_date_from": "2026-03-09", "timezone": "America/New_York"},
+    )
+    through_only = client.get(
+        "/api/v1/blood-pressure",
+        params={"local_date_to": "2026-03-07", "timezone": "America/New_York"},
+    )
+    assert from_only.status_code == through_only.status_code == 200
+    assert outside in {row["id"] for row in from_only.json()["items"]}
+    assert at_start not in {row["id"] for row in from_only.json()["items"]}
+    assert through_only.json()["items"] == []
+
+    corrected = client.post(
+        f"/api/v1/blood-pressure/{at_start}/correct",
+        json={
+            "reason": "Synthetic correction within selected local date",
+            "changes": {"systolic_mmhg": 109},
+        },
+        headers=logged_in,
+    )
+    assert corrected.status_code == 201, corrected.text
+    corrected_page = client.get("/api/v1/blood-pressure", params={**params, "page_size": 25}).json()
+    assert at_start not in {row["id"] for row in corrected_page["items"]}
+    assert corrected.json()["id"] in {row["id"] for row in corrected_page["items"]}
+    assert at_start in {row["id"] for row in corrected_page["revisions"]}
+
+    invalid_range = client.get(
+        "/api/v1/weight",
+        params={
+            "local_date_from": "2026-03-09",
+            "local_date_to": "2026-03-08",
+            "timezone": "UTC",
+        },
+    )
+    invalid_timezone = client.get("/api/v1/blood-pressure", params={"timezone": "Not/AZone"})
+    assert invalid_range.status_code == invalid_timezone.status_code == 422
+    assert invalid_range.json()["detail"]["code"] == "invalid_local_date_range"
+    assert invalid_timezone.json()["detail"]["code"] == "invalid_timezone"
+
+    with Session(engine) as session:
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+    with Session(engine) as session, session.begin():
+        session.add(
+            GarminConnection(
+                owner_id=owner_id,
+                state=GarminConnectionState.CONNECTED,
+                connected_at=datetime(2026, 3, 8, 5, tzinfo=UTC),
+                capabilities={},
+                client_version="synthetic-filter-test",
+            )
+        )
+    mapped = map_day(
+        day=date(2026, 3, 8),
+        stats={"totalSteps": 1234},
+        sleep={},
+        timezone="America/New_York",
+    )
+    fetched = FetchedWindow(
+        start_date=date(2026, 3, 8),
+        end_date=date(2026, 3, 8),
+        timezone="America/New_York",
+        metrics=mapped.metrics,
+        sleeps=(),
+        activities=(),
+        warnings=mapped.warnings,
+        capabilities=mapped.capabilities,
+        started_at=datetime(2026, 3, 9, 5, tzinfo=UTC),
+        finished_at=datetime(2026, 3, 9, 5, 0, 1, tzinfo=UTC),
+    )
+    with Session(engine) as session, session.begin():
+        persist_window(session, owner_id=owner_id, fetched=fetched)
+    garmin_included = client.get("/api/v1/integrations/garmin/records", params=params)
+    garmin_excluded = client.get(
+        "/api/v1/integrations/garmin/records",
+        params={
+            "local_date_from": "2026-03-09",
+            "local_date_to": "2026-03-09",
+            "timezone": "America/New_York",
+        },
+    )
+    assert garmin_included.status_code == garmin_excluded.status_code == 200
+    assert any(row["metric_type"] == "steps" for row in garmin_included.json()["records"])
+    assert garmin_excluded.json()["records"] == []
+
+
 def test_timeline_orders_by_experienced_time_with_stable_ties(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from pydantic import BaseModel, Field
 from sqlalchemy import func, literal, select, union_all
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.routers.events import provenance_out, time_out
@@ -183,7 +184,20 @@ def request_sync(
 
 
 @router.get("/records", response_model=GarminRecordsOut)
-def records(session: DbSession, owner: CurrentOwner, pagination: Pagination) -> GarminRecordsOut:
+def records(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
+) -> GarminRecordsOut:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
     models = (
         ("daily", GarminMetricEvent),
         ("sleep", GarminSleepEvent),
@@ -194,13 +208,16 @@ def records(session: DbSession, owner: CurrentOwner, pagination: Pagination) -> 
         superseded = select(model.supersedes_id).where(
             model.owner_id == owner.id, model.supersedes_id.is_not(None)
         )
-        current.append(
-            select(
-                literal(kind).label("kind"),
-                model.id.label("id"),
-                model.occurred_at.label("occurred_at"),
-            ).where(model.owner_id == owner.id, model.id.not_in(superseded))
-        )
+        query = select(
+            literal(kind).label("kind"),
+            model.id.label("id"),
+            model.occurred_at.label("occurred_at"),
+        ).where(model.owner_id == owner.id, model.id.not_in(superseded))
+        if window.start is not None:
+            query = query.where(model.occurred_at >= window.start)
+        if window.end_exclusive is not None:
+            query = query.where(model.occurred_at < window.end_exclusive)
+        current.append(query)
     combined = union_all(*current).subquery()
     total_items = session.scalar(select(func.count()).select_from(combined)) or 0
     metadata = page_metadata(total_items, pagination)

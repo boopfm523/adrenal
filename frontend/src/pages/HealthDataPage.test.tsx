@@ -40,9 +40,9 @@ function page(items: unknown[], revisions: unknown[] = []) {
   return { items, revisions, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } };
 }
 
-function renderPage(): void {
+function renderPage(initialEntry = "/health-data"): void {
   sessionStore.set(session);
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><HealthDataPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><HealthDataPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
 }
 
 describe("Health data page", () => {
@@ -150,5 +150,51 @@ describe("Health data page", () => {
     if (kgRow === null) throw new Error("Expected the converted kilogram record row");
     await userEvent.click(within(kgRow).getByRole("button", { name: "Correct weight" }));
     expect(screen.getByRole("form", { name: "Correct weight" })).toBeVisible();
+  });
+
+  it("shares local-date filters in the URL and preserves them while paging", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      urls.push(url);
+      const pageNumber = Number(new URL(url, "http://healthcurve.test").searchParams.get("page") ?? "1");
+      const metadata = { page: pageNumber, page_size: 25, total_items: 50, total_pages: 2 };
+      if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ ...garminRecords, page: metadata }));
+      return Promise.resolve(json({ items: url.includes("blood-pressure") ? [pressure] : [weight], revisions: [], page: metadata }));
+    });
+    renderPage("/health-data?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=America%2FLos_Angeles");
+
+    expect(await screen.findByLabelText("From date")).toHaveValue("2026-08-09");
+    expect(screen.getByLabelText("Through date")).toHaveValue("2026-08-10");
+    expect(screen.getByLabelText("IANA timezone")).toHaveValue("America/Los_Angeles");
+    await waitFor(() => {
+      expect(urls.filter((url) => url.includes("local_date_from=2026-08-09") && url.includes("local_date_to=2026-08-10") && url.includes("timezone=America%2FLos_Angeles"))).toHaveLength(3);
+    });
+
+    await userEvent.click(within(screen.getByRole("navigation", { name: "Blood pressure records pagination" })).getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(urls.some((url) => url.includes("/blood-pressure?") && url.includes("page=2") && url.includes("local_date_from=2026-08-09") && url.includes("timezone=America%2FLos_Angeles"))).toBe(true);
+    });
+    expect(screen.getByLabelText("From date")).toHaveValue("2026-08-09");
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findByLabelText("From date")).toHaveValue("");
+    expect(screen.getByLabelText("Through date")).toHaveValue("");
+    expect(screen.getByLabelText("IANA timezone")).toHaveValue("America/New_York");
+  });
+
+  it("explains an invalid local-date range without issuing record requests", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ records: [], notice: "Synthetic", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 } }));
+      return Promise.resolve(json(page([])));
+    });
+    renderPage("/health-data?local_date_from=2026-08-11&local_date_to=2026-08-10&timezone=UTC");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("From date must be on or before Through date.");
+    expect(fetchMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => { expect(fetchMock).toHaveBeenCalledTimes(3); });
   });
 });

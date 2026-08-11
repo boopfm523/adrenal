@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.sql.elements import ColumnElement
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, paginate_current_facts
 from healthcurve.api.routers.doses import resolve_time
@@ -64,8 +65,22 @@ def list_blood_pressure(
     pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ):
-    predicates = _date_predicates(BloodPressureEvent, date_from, date_to)
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates = _date_predicates(
+        BloodPressureEvent,
+        window.start or date_from,
+        window.end_exclusive or date_to,
+        end_exclusive=window.end_exclusive is not None,
+    )
     page = paginate_current_facts(
         session,
         BloodPressureEvent,
@@ -126,8 +141,22 @@ def list_weight(
     pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ):
-    predicates = _date_predicates(WeightEvent, date_from, date_to)
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates = _date_predicates(
+        WeightEvent,
+        window.start or date_from,
+        window.end_exclusive or date_to,
+        end_exclusive=window.end_exclusive is not None,
+    )
     page = paginate_current_facts(
         session,
         WeightEvent,
@@ -175,12 +204,14 @@ def _date_predicates[VitalEvent: (BloodPressureEvent, WeightEvent)](
     model: type[VitalEvent],
     start: datetime | None,
     end: datetime | None,
+    *,
+    end_exclusive: bool = False,
 ) -> tuple[ColumnElement[bool], ...]:
     predicates: list[ColumnElement[bool]] = []
     if start is not None:
         predicates.append(model.occurred_at >= start)
     if end is not None:
-        predicates.append(model.occurred_at <= end)
+        predicates.append(model.occurred_at < end if end_exclusive else model.occurred_at <= end)
     return tuple(predicates)
 
 

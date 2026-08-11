@@ -311,8 +311,21 @@ export function createContextEvent(payload: ContextInput): Promise<ContextEvent>
   });
 }
 
-export function getBloodPressure(page = 1): Promise<BloodPressurePage> {
-  return apiRequest<BloodPressurePage>(`/blood-pressure?page=${page.toString()}`);
+export interface HealthDataFilters {
+  dateFrom: string;
+  dateTo: string;
+  timezone: string;
+}
+
+function healthDataQuery(filters: HealthDataFilters, page: number): string {
+  const params = new URLSearchParams({ timezone: filters.timezone, page: page.toString() });
+  if (filters.dateFrom !== "") params.set("local_date_from", filters.dateFrom);
+  if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
+  return params.toString();
+}
+
+export function getBloodPressure(filters: HealthDataFilters, page = 1): Promise<BloodPressurePage> {
+  return apiRequest<BloodPressurePage>(`/blood-pressure?${healthDataQuery(filters, page)}`);
 }
 
 export function createBloodPressure(payload: BloodPressureInput): Promise<BloodPressure> {
@@ -323,8 +336,8 @@ export function correctBloodPressure(id: string, payload: BloodPressureCorrectio
   return apiRequest<BloodPressure>(`/blood-pressure/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getWeight(page = 1): Promise<WeightPage> {
-  return apiRequest<WeightPage>(`/weight?page=${page.toString()}`);
+export function getWeight(filters: HealthDataFilters, page = 1): Promise<WeightPage> {
+  return apiRequest<WeightPage>(`/weight?${healthDataQuery(filters, page)}`);
 }
 
 export function getLabResults(page = 1): Promise<LabResultPage> {
@@ -459,8 +472,8 @@ export function getGarminStatus(): Promise<GarminStatus> {
   return apiRequest<GarminStatus>("/integrations/garmin/status");
 }
 
-export function getGarminRecords(page = 1): Promise<GarminRecords> {
-  return apiRequest<GarminRecords>(`/integrations/garmin/records?page=${page.toString()}`);
+export function getGarminRecords(filters: HealthDataFilters, page = 1): Promise<GarminRecords> {
+  return apiRequest<GarminRecords>(`/integrations/garmin/records?${healthDataQuery(filters, page)}`);
 }
 
 export function getGarminDisconnectPreview(): Promise<GarminDisconnectPreview> {
