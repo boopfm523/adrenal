@@ -113,6 +113,33 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByLabelText("Visible series sample counts")).toHaveTextContent("Dense sample dots are hidden");
   });
 
+  it("calms the respiration line without changing exact samples or bridging gaps", () => {
+    const respiration = [15, 15, 30, 15, 15, 20, 20].map((value, position) => {
+      const index = position < 5 ? position : position + 5;
+      return {
+        ...sample(index),
+        summary: `Respiration: ${value.toString()} breaths/min`,
+        metric_type: "respiration_rate",
+        value: value.toString(),
+        unit: "breaths/min",
+      } satisfies GarminRecord;
+    });
+    render(<DailyHealthCurve data={data({ garmin: respiration })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Respiration" }));
+    const paths = document.querySelectorAll("path.healthcurve-series--respiration_rate");
+    expect(paths).toHaveLength(2);
+    expect(paths[0]).toHaveAttribute("d", expect.stringContaining("236.25"));
+    expect(paths[0]).not.toHaveAttribute("d", expect.stringContaining("112.50"));
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("calmer 5-sample median line");
+    expect(screen.getByLabelText("Visible series sample counts")).toHaveTextContent("fixed 0–40 breaths/min display domain");
+
+    const { tooltip } = hoverAt(2);
+    expect(tooltip).toHaveTextContent("Respiration: 30 breaths/min");
+    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
+    expect(within(table).getByText("30 breaths/min")).toBeInTheDocument();
+  });
+
   it("publishes the executable formula, evidence, and absence of a needed-value model", () => {
     render(<DailyHealthCurve data={data()} />);
 

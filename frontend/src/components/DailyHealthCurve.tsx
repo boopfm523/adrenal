@@ -62,6 +62,9 @@ const TOP = 30;
 const BOTTOM = 70;
 const PLOT_WIDTH = WIDTH - LEFT - RIGHT;
 const PLOT_HEIGHT = HEIGHT - TOP - BOTTOM;
+const RESPIRATION_DISPLAY_MIN = 0;
+const RESPIRATION_DISPLAY_MAX = 40;
+const RESPIRATION_MEDIAN_RADIUS = 2;
 
 const DEFAULT_VISIBLE: Record<LaneKey, boolean> = {
   exposure: true,
@@ -164,8 +167,10 @@ function xPosition(time: string, start: number, end: number): number {
 function relativeValue(lane: Lane, value: number): number {
   const bounds = lane.key === "stress" ? { minimum: 0, maximum: 100 }
     : lane.key === "symptoms" ? { minimum: 0, maximum: 10 }
+      : lane.key === "respiration_rate" ? { minimum: RESPIRATION_DISPLAY_MIN, maximum: RESPIRATION_DISPLAY_MAX }
       : scale(lane.points.map((point) => point.value));
-  return (value - bounds.minimum) / Math.max(bounds.maximum - bounds.minimum, 1) * 100;
+  const relative = (value - bounds.minimum) / Math.max(bounds.maximum - bounds.minimum, 1) * 100;
+  return lane.key === "respiration_rate" ? Math.max(0, Math.min(100, relative)) : relative;
 }
 
 function yPosition(lane: Lane, value: number): number {
@@ -199,6 +204,24 @@ function connectedSegments(lane: Lane): Point[][] {
 
 function path(lane: Lane, points: Point[], start: number, end: number): string {
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${xPosition(point.time, start, end).toFixed(2)} ${yPosition(lane, point.value).toFixed(2)}`).join(" ");
+}
+
+function medianSmoothed(points: Point[], radius: number): Point[] {
+  return points.map((point, index) => {
+    const values = points
+      .slice(Math.max(0, index - radius), Math.min(points.length, index + radius + 1))
+      .map((candidate) => candidate.value)
+      .sort((left, right) => left - right);
+    const middle = Math.floor(values.length / 2);
+    const median = values.length % 2 === 0
+      ? ((values[middle - 1] ?? point.value) + (values[middle] ?? point.value)) / 2
+      : (values[middle] ?? point.value);
+    return { ...point, value: median };
+  });
+}
+
+function displaySegment(lane: Lane, points: Point[]): Point[] {
+  return lane.key === "respiration_rate" ? medianSmoothed(points, RESPIRATION_MEDIAN_RADIUS) : points;
 }
 
 function metricLane(data: DailyHealthCurveData, definition: typeof METRIC_LANES[number]): Lane {
@@ -449,7 +472,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
         symptoms: "Symptoms",
         episodes: "Stress episodes",
       } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset></div>
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}</span>)}</div>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
     {visible.symptoms && data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
       <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; relative display positions share one time axis and exact values follow.`}>
@@ -490,7 +513,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
             return <rect key={episode.id} className="healthcurve-episode" x={x} y={TOP} width={Math.max(4, xEnd - x)} height={PLOT_HEIGHT}><title>{experiencedTime(episode.started_at, data.exposure.timezone)}: {episode.trigger}; {episode.severity ?? "severity missing"}; {episode.status}</title></rect>;
           })}</g> : null}
         {shownLanes.map((lane) => <g key={lane.key} data-series={lane.key}>
-          {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, segment, start, end)} />)}
+          {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, displaySegment(lane, segment), start, end)} />)}
           {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => {
             const x = xPosition(record.time.occurred_at, start, end);
             const systolicY = yPosition(lane, record.systolic_mmhg);
@@ -524,7 +547,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({timezoneAbbreviation(data.exposure.timezone, data.exposure.day_start)})</text>
       </svg>
     </div>
-    <div className="curve-series-summary" aria-label="Visible series sample counts">{shownLanes.map((lane) => lane.key === "symptoms" ? <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p> : <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and table." : ""}</p>)}</div>
+    <div className="curve-series-summary" aria-label="Visible series sample counts">{shownLanes.map((lane) => lane.key === "symptoms" ? <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p> : <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and table.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and table." : ""}</p>)}</div>
     <details className="chart-table"><summary>View exact values and provenance</summary><div className="table-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve exact values"><table><caption>Current recorded facts and deterministic model samples shown in the selected lanes. Timestamped rows sort by experienced instant; aggregates are explicitly untimed.</caption><thead><tr><th scope="col">Local date / time or period</th><th scope="col">Series</th><th scope="col">Exact value</th><th scope="col">Source / provenance</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.time ?? "aggregate"}-${row.series}-${index.toString()}`}><th scope="row">{row.time === null ? `${data.exposure.date} · untimed aggregate` : experiencedTime(row.time, data.exposure.timezone)}</th><td>{row.series}</td><td>{row.value}</td><td>{row.source}</td></tr>)}</tbody></table></div></details>
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
@@ -539,7 +562,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>
       <ul>{REQUIREMENT_EVIDENCE.map((source) => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>{` — ${source.use}.`}</li>)}</ul>
       <h3>Overlay display formula</h3>
-      <p>For every non-stress, non-symptom numeric lane, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. This changes only screen position; exact native values remain in the tooltip and table. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
+      <p>For every non-stress, non-symptom, non-respiration numeric lane, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment; values outside the display domain are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and table. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
     </details>
   </section>;
 }
