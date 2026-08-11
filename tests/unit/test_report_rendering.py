@@ -23,7 +23,18 @@ def snapshot(*, include_ai: bool = False) -> ReportSnapshot:
         "ai": ai_sources,
     }
     content: dict[str, object] = {
-        "fact": [{"id": "fact-1", "amount": "10.0000", "unsafe": "<script>bad()</script>"}],
+        "fact": [
+            {
+                "id": "fact-1",
+                "record_type": "dose",
+                "local_time": "2026-08-09T08:00:00",
+                "medication_name": "Synthetic <script>bad()</script>",
+                "amount": "10.0000",
+                "unit": "mg",
+                "route": "oral",
+                "category": "scheduled",
+            }
+        ],
         "plan": [{"id": "plan-1", "status": "approved"}],
         "patient_note": [{"id": "note-1", "text": "Synthetic question"}],
         "ai": ai_content,
@@ -39,7 +50,7 @@ def snapshot(*, include_ai: bool = False) -> ReportSnapshot:
         date_from=date(2026, 8, 1),
         date_to=date(2026, 8, 9),
         timezone="America/New_York",
-        selected_sections=["doses", "questions"],
+        selected_sections=["doses", "approved_plan", "patient_notes"],
         include_ai=include_ai,
         source_manifest=manifest,
         metric_values=metrics,
@@ -70,7 +81,7 @@ def test_html_json_and_csv_are_deterministic_partitioned_and_ai_off_by_default()
     assert b"Physician-approved plan" in left_html
     assert b"Patient notes and questions" in left_html
     assert b"AI-generated analysis" not in left_html
-    assert b"<strong>Timezone:</strong> EDT" in left_html
+    assert b"<strong>Local timezone:</strong> EDT" in left_html
     assert b"America/New_York" not in left_html
     assert b"<script>bad()" not in left_html
     assert b"&lt;script&gt;bad()&lt;/script&gt;" in left_html
@@ -107,3 +118,47 @@ def test_playwright_pdf_is_letter_sized_printable_and_contains_expected_text() -
     assert "Recorded facts" in text
     assert "Physician-approved plan" in text
     assert "AI-generated analysis" not in text
+
+
+def test_dense_wearable_samples_are_summarized_instead_of_printed_one_per_row() -> None:
+    report = snapshot()
+    records = [
+        {
+            "id": f"garmin-{index}",
+            "record_type": "garmin_metric",
+            "local_time": "2026-08-09T12:00:00",
+            "metric_type": "heart_rate",
+            "value": str(60 + (index % 40)),
+            "unit": "bpm",
+        }
+        for index in range(3_000)
+    ]
+    content = dict(report.snapshot_content)
+    content["fact"] = records
+    manifest = dict(report.source_manifest)
+    manifest["fact"] = [record["id"] for record in records]
+    selected_sections = ["wearables"]
+    payload = canonical_payload(
+        date_from=report.date_from,
+        date_to=report.date_to,
+        timezone=report.timezone,
+        selected_sections=selected_sections,
+        include_ai=False,
+        source_manifest=manifest,
+        metric_values={},
+        snapshot_content=content,
+        render_version=report.render_version,
+    )
+    report.selected_sections = selected_sections
+    report.source_manifest = manifest
+    report.metric_values = {}
+    report.snapshot_content = content
+    report.canonical_sha256 = checksum(payload)
+
+    bundle = render(report)
+    with pdfplumber.open(io.BytesIO(bundle.pdf)) as pdf:
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        assert len(pdf.pages) <= 3
+    assert "3,000" in text
+    assert "avg 79.5; low 60; high 99" in text
+    assert "garmin-2999" not in text

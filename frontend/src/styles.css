@@ -345,6 +345,8 @@ circle.chart-series { fill: white; }
 .category-card--patient { border: 1px solid #a86712; border-left: 0.45rem solid #a86712; }
 .report-layout { display: grid; grid-template-columns: minmax(20rem, 1.15fr) minmax(18rem, 0.85fr); gap: 2rem; align-items: start; }
 .report-layout > section { min-width: 0; }
+.report-layout .filter-panel { grid-template-columns: 1fr; }
+.report-layout .filter-panel input:not([type="checkbox"]) { width: 100%; box-sizing: border-box; min-width: 0; }
 .report-builder { display: grid; gap: 1rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .report-builder fieldset { border: 1px solid #ccd4ce; border-radius: 0.5rem; padding: 1rem; }
 .report-builder legend { padding-inline: 0.4rem; font-weight: 800; }
@@ -355,6 +357,17 @@ circle.chart-series { fill: white; }
 .report-options { display: grid; gap: 0.65rem; }
 .report-history { display: grid; gap: 1rem; }
 .report-record { max-height: 24rem; overflow: auto; border: 1px solid #dce2dd; border-radius: 0.4rem; padding: 0.75rem; background: #fbfcfb; white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-preview-counts { display: grid; grid-template-columns: repeat(3, minmax(8rem, 1fr)); gap: 0.75rem; margin-block: 1rem; }
+.report-preview-counts span, .report-summary-card { border: 1px solid #d2dad5; border-radius: 0.5rem; padding: 0.75rem; background: #f7f9f7; }
+.report-preview-counts strong { display: block; color: #164f3e; font-size: 1.5rem; }
+.report-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(14rem, 1fr)); gap: 0.75rem; }
+.report-summary-card h4, .report-human-list h4 { margin: 0 0 0.35rem; text-transform: capitalize; }
+.report-summary-card ul { margin: 0; padding-left: 1.25rem; }
+.report-human-list { display: grid; gap: 0.6rem; }
+.report-human-list article { border-bottom: 1px solid #dce2dd; padding-bottom: 0.6rem; }
+.report-human-list article:last-child { border-bottom: 0; }
+.report-human-list span { display: block; color: #48554f; }
+.report-audit-details code { overflow-wrap: anywhere; }
 .help-emergency { margin-bottom: 1.5rem; border: 2px solid #8a260f; border-radius: 0.75rem; padding: 1.25rem; background: #fff7e8; }
 .help-emergency h2 { margin-top: 0; color: #8a260f; }
 .help-topics { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-block: 1.5rem; }
@@ -438,7 +451,7 @@ circle.chart-series { fill: white; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
   .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: 1fr; }
   .quality-grid { grid-template-columns: 1fr; }
-  .report-layout, .report-range { grid-template-columns: 1fr; }
+  .report-layout, .report-range, .report-preview-counts, .report-summary-grid { grid-template-columns: 1fr; }
   .help-category-grid, .help-command-grid, .help-workflow-grid { grid-template-columns: 1fr; }
   .vital-entry-grid, .vital-entry-form { grid-template-columns: 1fr; }
   .blood-pressure-table .correction-table-row .correction-form { position: sticky; left: 0; width: calc(100vw - 2rem); max-width: 100%; box-sizing: border-box; }

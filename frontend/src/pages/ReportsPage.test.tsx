@@ -12,7 +12,7 @@ function response(body: unknown, status = 200): Response { return new Response(J
 function url(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 function report(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { id: "11111111-1111-4111-8111-111111111111", date_from: "2026-07-11", date_to: "2026-08-09", timezone: "Europe/London", selected_sections: ["metrics", "doses", "approved_plan"], include_ai: false, canonical_sha256: "a".repeat(64), render_version: "report-v1", created_at: "2026-08-09T12:00:00Z", artifacts: [{ format: "pdf", media_type: "application/pdf", sha256: "b".repeat(64), byte_size: 100, download_url: "/api/v1/reports/11111111-1111-4111-8111-111111111111/artifacts/pdf" }], ...overrides }; }
 function reportPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
-function preview(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { ...report(), source_manifest: { fact: ["fact-1"], plan: ["plan-1"], patient_note: [], ai: [] }, metric_values: { dose_total: { definition: "Synthetic deterministic sum", timezone: "Europe/London", value: "10.0000" } }, snapshot_content: { fact: [{ id: "fact-1", amount: "10.0000" }], plan: [{ id: "plan-1", status: "approved" }], patient_note: [], ai: [] }, ...overrides }; }
+function preview(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { ...report(), source_manifest: { fact: ["fact-1", "garmin-1", "garmin-2"], plan: ["plan-1"], patient_note: [], ai: [] }, metric_values: { daily_doses: { definition: "Synthetic deterministic sum", timezone: "Europe/London", values: [{ date: "2026-08-09", actual_total: "10.0000", planned_total: "10.0000", unit: "mg", recorded_dose_count: 1 }] } }, snapshot_content: { fact: [{ id: "fact-1", record_type: "dose", local_time: "2026-08-09T08:00:00", medication_name: "Synthetic hydrocortisone", amount: "10.0000", unit: "mg", route: "oral", category: "scheduled" }, { id: "garmin-1", record_type: "garmin_metric", local_time: "2026-08-09T09:00:00", metric_type: "heart_rate", value: "60", unit: "bpm" }, { id: "garmin-2", record_type: "garmin_metric", local_time: "2026-08-09T09:02:00", metric_type: "heart_rate", value: "70", unit: "bpm" }], plan: [{ id: "plan-1", record_type: "approved_regimen", version_label: "Synthetic plan", effective_from: "2026-08-01T00:00:00", slots: [] }], patient_note: [], ai: [] }, ...overrides }; }
 function renderPage(initialEntry = "/reports"): void { sessionStore.set(session); render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><ReportsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
 
 describe("Reports page", () => {
@@ -45,7 +45,14 @@ describe("Reports page", () => {
     expect(screen.getByRole("heading", { name: "Physician-approved plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Patient notes and questions" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "AI-generated analysis" })).not.toBeInTheDocument();
-    expect(screen.getAllByText(/"(?:value|amount)": "10"/)).toHaveLength(2);
+    expect(screen.getByText("Synthetic hydrocortisone - 10 mg")).toBeVisible();
+    expect(screen.getByText(/recorded 10 mg in 1 dose/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "heart rate — 2026-08-09" })).toBeVisible();
+    expect(screen.getByText("average 65; low 60; high 70 bpm")).toBeVisible();
+    expect(screen.getByText("2 samples")).toBeVisible();
+    expect(screen.queryByText("heart rate: 60 bpm")).not.toBeInTheDocument();
+    expect(screen.queryByText(/"record_type"/)).not.toBeInTheDocument();
+    expect(screen.queryByText("fact-1")).not.toBeInTheDocument();
     expect(screen.queryByText(/10\.0000/)).not.toBeInTheDocument();
   });
 

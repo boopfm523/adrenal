@@ -6,7 +6,6 @@ import { createReport, getReport, getReports, type RecordedHistoryFilters, type 
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
-import { formatPreviewJson } from "../format";
 import { localDate, timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "../time";
 
 const sectionOptions = [
@@ -34,8 +33,83 @@ function records(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function jsonText(value: unknown): string {
-  return formatPreviewJson(value);
+function object(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function display(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "not recorded";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return value.map(display).join(", ");
+  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "bigint") return "recorded value";
+  const text = typeof value === "string" ? value.replaceAll("_", " ") : value.toString();
+  return /^-?\d+(?:\.\d+)?$/.test(text) ? text.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "") : text;
+}
+
+function recordSummary(value: unknown): { title: string; details: string[] } {
+  const record = object(value);
+  const type = display(record.record_type ?? "recorded fact");
+  const when = display(record.local_time ?? record.started_at ?? record.effective_from ?? record.generated_at);
+  if (record.record_type === "dose") return { title: `${display(record.medication_name)} - ${display(record.amount)} ${display(record.unit)}`, details: [when, `${display(record.category)}; ${display(record.route)}`] };
+  if (record.record_type === "symptom") return { title: display(record.name), details: [when, record.severity === null || record.severity === undefined ? "severity not recorded" : `severity ${display(record.severity)}/10`, record.body_area === null || record.body_area === undefined ? "" : display(record.body_area)] };
+  if (record.record_type === "stress_episode") return { title: display(record.trigger), details: [when, `${display(record.severity)}; ${display(record.status)}`] };
+  if (record.record_type === "blood_pressure") return { title: `Blood pressure ${display(record.systolic_mmhg)}/${display(record.diastolic_mmhg)} mmHg`, details: [when, record.pulse_bpm === null || record.pulse_bpm === undefined ? "" : `pulse ${display(record.pulse_bpm)} bpm`] };
+  if (record.record_type === "garmin_metric") return { title: `${display(record.metric_type)}: ${display(record.value)} ${display(record.unit)}`, details: [when, "Garmin observation"] };
+  if (record.record_type === "garmin_metric_summary") return { title: `${display(record.metric_type)} — ${display(record.local_date)}`, details: [`average ${display(record.average)}; low ${display(record.low)}; high ${display(record.high)} ${display(record.unit)}`, `${display(record.sample_count)} samples`] };
+  if (record.record_type === "approved_regimen") return { title: display(record.version_label), details: [`Effective ${when}`, `${records(record.slots).length.toString()} scheduled slot(s)`] };
+  if (record.record_type === "patient_note") return { title: display(record.text), details: [when] };
+  if (record.record_type === "ai_analysis") return { title: display(record.analysis_type), details: [when, display(record.body)] };
+  const primary = record.title ?? record.name ?? record.text ?? type;
+  return { title: display(primary), details: [when, type] };
+}
+
+function previewRecords(value: unknown, category: "fact" | "plan" | "patient_note" | "ai"): unknown[] {
+  const categoryRecords = records(value);
+  if (category !== "fact") return categoryRecords;
+  const ordinary = categoryRecords.filter((value) => object(value).record_type !== "garmin_metric");
+  const grouped = new Map<string, { local_date: string; metric_type: string; unit: string; values: number[] }>();
+  for (const value of categoryRecords) {
+    const record = object(value);
+    if (record.record_type !== "garmin_metric") continue;
+    const number = Number(record.value);
+    if (!Number.isFinite(number)) continue;
+    const localDate = display(record.local_time).slice(0, 10);
+    const metricType = display(record.metric_type);
+    const unit = display(record.unit);
+    const key = `${localDate}|${metricType}|${unit}`;
+    const current = grouped.get(key) ?? { local_date: localDate, metric_type: metricType, unit, values: [] };
+    current.values.push(number);
+    grouped.set(key, current);
+  }
+  const summaries = [...grouped.values()].sort((left, right) => `${left.local_date}|${left.metric_type}`.localeCompare(`${right.local_date}|${right.metric_type}`)).map((group) => ({
+    record_type: "garmin_metric_summary",
+    local_date: group.local_date,
+    metric_type: group.metric_type,
+    unit: group.unit,
+    average: (group.values.reduce((sum, value) => sum + value, 0) / group.values.length).toFixed(1),
+    low: Math.min(...group.values),
+    high: Math.max(...group.values),
+    sample_count: group.values.length,
+  }));
+  return [...ordinary, ...summaries];
+}
+
+function MetricPreview({ name, value }: { name: string; value: unknown }): React.JSX.Element {
+  const metric = object(value);
+  const lines: string[] = [];
+  if (name === "daily_doses") {
+    for (const rowValue of records(metric.values)) { const row = object(rowValue); lines.push(`${display(row.date)}: recorded ${display(row.actual_total)} ${display(row.unit)} in ${display(row.recorded_dose_count)} dose(s); ${row.planned_total === null || row.planned_total === undefined ? "no approved plan" : `planned ${display(row.planned_total)} ${display(row.unit)}`}`); }
+  } else if (name === "symptoms") {
+    lines.push(`${display(metric.count)} symptom(s); ${display(metric.missing_count)} missing severity`);
+    const frequency = object(metric.frequency); if (Object.keys(frequency).length > 0) lines.push(Object.entries(frequency).map(([label, count]) => `${label} (${display(count)})`).join(", "));
+  } else if (name === "episodes") {
+    lines.push(`${display(metric.count)} episode(s); average resolved duration ${display(metric.average_duration_minutes)} minutes`);
+  } else if (name === "timing") {
+    const totals = { matched: 0, onTime: 0, early: 0, late: 0, unplanned: 0, missing: 0 };
+    for (const rowValue of records(metric.values)) { const row = object(rowValue); totals.matched += Number(row.matched_count ?? 0); totals.onTime += Number(row.on_time ?? 0); totals.early += Number(row.early ?? 0); totals.late += Number(row.late ?? 0); totals.unplanned += Number(row.unplanned ?? 0); totals.missing += Number(row.missing_count ?? 0); }
+    lines.push(`${totals.matched.toString()} matched: ${totals.onTime.toString()} on time, ${totals.early.toString()} early, ${totals.late.toString()} late`); lines.push(`${totals.unplanned.toString()} unmatched dose(s); ${totals.missing.toString()} unmatched plan slot(s)`);
+  }
+  return <article className="report-summary-card"><h4>{name.replaceAll("_", " ")}</h4>{lines.length === 0 ? <p>No concise summary available.</p> : <ul>{lines.map((line) => <li key={line}>{line}</li>)}</ul>}</article>;
 }
 
 function reportDateError(dateFrom: string, dateTo: string): string | null {
@@ -48,13 +122,14 @@ function reportDateError(dateFrom: string, dateTo: string): string | null {
 }
 
 function CategoryPreview({ preview, category, title, className, warning }: { preview: ReportPreview; category: "fact" | "plan" | "patient_note" | "ai"; title: string; className: string; warning?: string }): React.JSX.Element | null {
-  const categoryRecords = records(preview.snapshot_content[category]);
+  const categoryRecords = previewRecords(preview.snapshot_content[category], category);
   if (category === "ai" && !preview.include_ai) return null;
-  return <section className={`category-card ${className}`} aria-labelledby={`report-${category}-heading`}><p className="category-label">{title}</p><h3 id={`report-${category}-heading`}>{title}</h3>{warning === undefined ? null : <p className="category-disclaimer">{warning}</p>}{categoryRecords.length === 0 ? <p>No selected records in this category.</p> : categoryRecords.map((record, index) => <pre className="report-record" key={`${category}-${index.toString()}`}>{jsonText(record)}</pre>)}</section>;
+  return <section className={`category-card ${className}`} aria-labelledby={`report-${category}-heading`}><p className="category-label">{title}</p><h3 id={`report-${category}-heading`}>{title}</h3>{warning === undefined ? null : <p className="category-disclaimer">{warning}</p>}{categoryRecords.length === 0 ? <p>No selected records in this category.</p> : <div className="report-human-list">{categoryRecords.map((record, index) => { const summary = recordSummary(record); return <article key={`${category}-${index.toString()}`}><h4>{summary.title}</h4>{summary.details.filter(Boolean).map((detail) => <span key={detail}>{detail}</span>)}</article>; })}</div>}</section>;
 }
 
 function ReportPreviewPanel({ preview }: { preview: ReportPreview }): React.JSX.Element {
-  return <section aria-labelledby="report-preview-heading"><h2 id="report-preview-heading">Snapshot preview</h2><p><strong>{preview.date_from}</strong> through <strong>{preview.date_to}</strong> in <strong>{timezoneAbbreviationForLocalDate(preview.timezone, preview.date_to)}</strong>. Snapshot <code>{preview.canonical_sha256}</code>.</p><aside className="safety-note">This is frozen report content. Later corrections to source records do not silently rewrite this snapshot.</aside><section className="metric-card"><h3>Deterministic metrics</h3>{Object.keys(preview.metric_values).length === 0 ? <p>No metrics selected.</p> : Object.entries(preview.metric_values).map(([name, metric]) => <details className="metric-definition" key={name}><summary>{name.replaceAll("_", " ")}</summary><pre className="report-record">{jsonText(metric)}</pre></details>)}</section><CategoryPreview preview={preview} category="fact" title="Recorded facts" className="category-card--fact" /><CategoryPreview preview={preview} category="plan" title="Physician-approved plan" className="category-card--plan" warning="Approved plan content is separate from recorded actual doses." /><CategoryPreview preview={preview} category="patient_note" title="Patient notes and questions" className="category-card--patient" /><CategoryPreview preview={preview} category="ai" title="AI-generated analysis" className="category-card--ai" warning="Generated content—not a recorded fact or physician-approved instruction. Review against its cited sources." /></section>;
+  const counts = Object.fromEntries(Object.entries(preview.snapshot_content).map(([key, value]) => [key, records(value).length]));
+  return <section aria-labelledby="report-preview-heading"><h2 id="report-preview-heading">Snapshot preview</h2><p><strong>{preview.date_from}</strong> through <strong>{preview.date_to}</strong> in <strong>{timezoneAbbreviationForLocalDate(preview.timezone, preview.date_to)}</strong>.</p><aside className="safety-note">This frozen preview is organized for human review. Exact source IDs and machine-readable fields stay in optional JSON/CSV companions. Later corrections do not silently rewrite this snapshot.</aside><div className="report-preview-counts"><span><strong>{String(counts.fact ?? 0)}</strong> recorded facts</span><span><strong>{String(counts.plan ?? 0)}</strong> approved plans</span><span><strong>{String(counts.patient_note ?? 0)}</strong> patient notes</span></div><section className="metric-card"><h3>Period overview</h3>{Object.keys(preview.metric_values).length === 0 ? <p>No metrics selected.</p> : <div className="report-summary-grid">{Object.entries(preview.metric_values).map(([name, metric]) => <MetricPreview name={name} value={metric} key={name} />)}</div>}</section><CategoryPreview preview={preview} category="fact" title="Recorded facts" className="category-card--fact" /><CategoryPreview preview={preview} category="plan" title="Physician-approved plan" className="category-card--plan" warning="Approved plan content is separate from recorded actual doses." /><CategoryPreview preview={preview} category="patient_note" title="Patient notes and questions" className="category-card--patient" /><CategoryPreview preview={preview} category="ai" title="AI-generated analysis" className="category-card--ai" warning="Generated content—not a recorded fact or physician-approved instruction. Review against its cited sources." /><details className="report-audit-details"><summary>Snapshot audit details</summary><p>Checksum: <code>{preview.canonical_sha256}</code></p><p>Render version: {preview.render_version}</p></details></section>;
 }
 
 export function ReportsPage(): React.JSX.Element {
