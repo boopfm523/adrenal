@@ -74,16 +74,18 @@ def create_draft(
     notes: str | None = None,
 ) -> RegimenVersion:
     """Create a draft. Drafts are freely editable; approved versions never are."""
-    if effective_to is not None and effective_to <= effective_from:
+    normalized_from = _naive(effective_from)
+    normalized_to = _naive(effective_to) if effective_to is not None else None
+    if normalized_to is not None and normalized_to <= normalized_from:
         raise PlanError("effective_to must be after effective_from")
 
     version = RegimenVersion(
         owner_id=owner_id,
         version_label=version_label,
         status=RegimenStatus.DRAFT,
-        effective_from=effective_from,
-        effective_to=effective_to,
-        effective_period=_period(effective_from, effective_to),
+        effective_from=normalized_from,
+        effective_to=normalized_to,
+        effective_period=_period(normalized_from, normalized_to),
         notes=notes,
     )
     session.add(version)
@@ -103,13 +105,15 @@ def update_draft(
     """Replace editable metadata on a draft; approved history is immutable."""
     if version.status is not RegimenStatus.DRAFT:
         raise PlanError("only an unapproved draft can be edited; create a new version")
-    if effective_to is not None and effective_to <= effective_from:
+    normalized_from = _naive(effective_from)
+    normalized_to = _naive(effective_to) if effective_to is not None else None
+    if normalized_to is not None and normalized_to <= normalized_from:
         raise PlanError("effective_to must be after effective_from")
 
     version.version_label = version_label
-    version.effective_from = effective_from
-    version.effective_to = effective_to
-    version.effective_period = _period(effective_from, effective_to)
+    version.effective_from = normalized_from
+    version.effective_to = normalized_to
+    version.effective_period = _period(normalized_from, normalized_to)
     version.notes = notes
     return version
 
@@ -163,9 +167,12 @@ def retire_version(
     retired_moment = retired_at or datetime.now(UTC)
     version.retired_at = retired_moment
     retired_end = _naive(retired_moment)
-    if version.effective_to is None or version.effective_to > retired_end:
+    version.effective_from = _naive(version.effective_from)
+    current_end = _naive(version.effective_to) if version.effective_to is not None else None
+    version.effective_to = current_end
+    if current_end is None or current_end > retired_end:
         version.effective_to = retired_end
-        version.effective_period = _period(version.effective_from, version.effective_to)
+    version.effective_period = _period(version.effective_from, version.effective_to)
     session.flush()
     return version
 

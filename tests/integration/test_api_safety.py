@@ -3366,6 +3366,118 @@ def test_draft_plan_can_be_replaced_atomically_but_approved_plan_is_immutable(
 
 
 @pytest.mark.safety("SAFE-16")
+def test_regimen_lifecycle_normalizes_aware_effective_dates_in_one_session(
+    engine: Engine,
+) -> None:
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            owner = Owner(
+                email=f"aware-plan-{uuid.uuid4()}@example.test",
+                password_hash="synthetic-non-login-hash",
+                default_timezone="UTC",
+            )
+            session.add(owner)
+            session.flush()
+            draft = medication_service.create_draft(
+                session,
+                owner_id=owner.id,
+                version_label="Synthetic aware plan",
+                effective_from=datetime.fromisoformat("2020-01-01T05:00:00+05:00"),
+                effective_to=datetime.fromisoformat("2030-01-01T05:00:00+05:00"),
+            )
+            assert draft.effective_from == datetime(2020, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+            assert draft.effective_to == datetime(2030, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+            assert draft.effective_period.lower == draft.effective_from
+            assert draft.effective_period.upper == draft.effective_to
+
+            naive_from = datetime(2020, 2, 1, tzinfo=UTC).replace(tzinfo=None)
+            naive_to = datetime(2030, 2, 1, tzinfo=UTC).replace(tzinfo=None)
+            medication_service.update_draft(
+                session,
+                draft,
+                version_label="Synthetic naive plan",
+                effective_from=naive_from,
+                effective_to=naive_to,
+            )
+            assert draft.effective_from == naive_from
+            assert draft.effective_to == naive_to
+
+            medication_service.update_draft(
+                session,
+                draft,
+                version_label="Synthetic aware plan updated",
+                effective_from=datetime.fromisoformat("2020-03-01T00:00:00-04:00"),
+                effective_to=datetime.fromisoformat("2030-03-01T00:00:00-04:00"),
+            )
+            medication_service.approve_version(
+                session,
+                draft,
+                approved_by="Dr Synthetic",
+                approval_source="synthetic fixture",
+            )
+            medication_service.retire_version(
+                session, draft, retired_at=datetime(2022, 1, 1, tzinfo=UTC)
+            )
+            session.flush()
+            assert draft.effective_from == datetime(2020, 3, 1, 4, tzinfo=UTC).replace(tzinfo=None)
+            assert draft.effective_to == datetime(2022, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+            assert draft.effective_period.upper == draft.effective_to
+    finally:
+        transaction.rollback()
+        connection.close()
+
+
+@pytest.mark.safety("SAFE-16")
+def test_api_normalizes_aware_regimen_dates_through_approval_and_retirement(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    created = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            "version_label": "Synthetic aware API plan",
+            "effective_from": "1970-01-01T05:00:00+05:00",
+            "effective_to": "1971-01-01T05:00:00+05:00",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert created.status_code == 201, created.text
+    version_id = created.json()["id"]
+    assert created.json()["effective_from"] == "1970-01-01T00:00:00"
+    assert created.json()["effective_to"] == "1971-01-01T00:00:00"
+
+    updated = client.put(
+        f"/api/v1/regimens/{version_id}",
+        headers=logged_in,
+        json={
+            "version_label": "Synthetic aware API plan updated",
+            "effective_from": "1970-03-01T00:00:00-05:00",
+            "effective_to": "1971-03-01T00:00:00-05:00",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["effective_from"] == "1970-03-01T05:00:00"
+    assert updated.json()["effective_to"] == "1971-03-01T05:00:00"
+
+    approval = client.post(
+        f"/api/v1/regimens/{version_id}/approve",
+        headers=logged_in,
+        json={"approved_by": "Dr Synthetic", "approval_source": "synthetic fixture"},
+    )
+    assert approval.status_code == 200, approval.text
+    retired = client.post(f"/api/v1/regimens/{version_id}/retire", headers=logged_in)
+    assert retired.status_code == 200, retired.text
+    assert retired.json()["status"] == "retired"
+    assert retired.json()["effective_from"] == "1970-03-01T05:00:00"
+    assert retired.json()["effective_to"] == "1971-03-01T05:00:00"
+
+
+@pytest.mark.safety("SAFE-16")
 def test_draft_plan_update_hides_another_owners_version(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
