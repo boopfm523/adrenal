@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Index, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -118,12 +118,25 @@ class AIAnalysis(AIBase):
     computed_inputs: Mapped[dict[str, object] | None] = mapped_column(JSONB)
 
     model_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    model_digest: Mapped[str | None] = mapped_column(String(128))
+    model_digest: Mapped[str] = mapped_column(String(128), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="analysis-v1", server_default=text("'analysis-v1'")
+    )
 
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (AI_SCHEMA,)
+    __table_args__ = (
+        CheckConstraint(
+            "jsonb_typeof(source_record_ids) = 'array' "
+            "AND jsonb_array_length(source_record_ids) > 0",
+            name="source_manifest_nonempty",
+        ),
+        CheckConstraint("char_length(body) > 0", name="body_nonempty"),
+        CheckConstraint("char_length(model_digest) > 0", name="model_digest_nonempty"),
+        CheckConstraint("char_length(schema_version) > 0", name="schema_version_nonempty"),
+        AI_SCHEMA,
+    )

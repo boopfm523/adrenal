@@ -22,12 +22,15 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 from healthcurve import models as all_models
 from healthcurve import privacy
+from healthcurve.ai import analysis as analysis_service
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
+from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
 from healthcurve.config import Environment, Settings, get_settings
@@ -2181,6 +2184,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
             source_record_ids=[str(result_id)],
             computed_inputs={"synthetic": True},
             model_name="synthetic-model",
+            model_digest="a" * 64,
             prompt_version="synthetic-v1",
         )
         session.add(analysis)
@@ -2193,6 +2197,7 @@ def test_pdf_review_correction_confirmation_and_source_page_link_are_idempotent(
             range_end=datetime(2035, 1, 2, tzinfo=UTC),
             computed_inputs={"synthetic": True},
             model_name="synthetic-model",
+            model_digest="a" * 64,
             prompt_version="synthetic-v1",
         )
         unrelated_snapshot = ReportSnapshot(
@@ -2634,6 +2639,122 @@ def test_timeline_orders_by_experienced_time_with_stable_ties(
 
 
 # ---------------------------------------------------------------------------
+# Generated-analysis persistence boundaries
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.safety("SAFE-05")
+def test_database_rejects_uncited_ai_analysis(engine: Engine) -> None:
+    with Session(engine) as session:
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        session.add(
+            AIAnalysis(
+                owner_id=owner_id,
+                analysis_type=AnalysisType.PATTERN_OBSERVATION,
+                body="Synthetic uncited analysis that must not persist.",
+                source_record_ids=[],
+                computed_inputs={"synthetic_value": 1},
+                model_name="synthetic-model",
+                model_digest="a" * 64,
+                prompt_version="synthetic-v1",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+@pytest.mark.safety("SAFE-06")
+def test_generate_and_delete_ai_analysis_leaves_fact_and_plan_rows_bit_identical(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    medication_id = _a_medication(client, logged_in)
+    plan = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            "version_label": "Synthetic analysis isolation plan",
+            "effective_from": "2025-01-01T00:00:00Z",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert plan.status_code == 201, plan.text
+    dose = client.post(
+        "/api/v1/doses",
+        headers=logged_in,
+        json={
+            "medication_id": medication_id,
+            "amount": "10",
+            "unit": "mg",
+            "route": "oral",
+            "category": "scheduled",
+            "time": {"local_time": "2025-01-01T07:00:00", "timezone": "UTC"},
+        },
+    )
+    assert dose.status_code == 201, dose.text
+    plan_id = uuid.UUID(plan.json()["id"])
+    dose_id = uuid.UUID(dose.json()["id"])
+
+    fake_client = mock.Mock(spec=OllamaClient)
+    fake_client.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.OK,
+        data={
+            "refused": False,
+            "refusal_reason": None,
+            "claims": [
+                {
+                    "text": "The synthetic recorded total was 10 mg.",
+                    "source_record_ids": [str(dose_id)],
+                    "numeric_values": ["10.0000"],
+                }
+            ],
+            "missingness": "The deterministic input reports 0 missing records.",
+            "correlation_caution": "This description does not establish causation.",
+        },
+        model_name="synthetic-model",
+        model_digest="a" * 64,
+    )
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        fact_before = dict(
+            session.execute(select(DoseEvent.__table__).where(DoseEvent.id == dose_id))
+            .mappings()
+            .one()
+        )
+        plan_before = dict(
+            session.execute(select(RegimenVersion.__table__).where(RegimenVersion.id == plan_id))
+            .mappings()
+            .one()
+        )
+        generated = analysis_service.generate_analysis(
+            session,
+            owner_id=owner_id,
+            analysis_type=AnalysisType.DAILY_SUMMARY,
+            source_record_ids=[str(dose_id)],
+            computed_inputs={"recorded_total_mg": "10.0000", "missing_records": 0},
+            client=cast(OllamaClient, fake_client),
+        )
+        assert generated.outcome is analysis_service.AnalysisOutcome.CREATED
+        assert generated.analysis is not None
+        session.delete(generated.analysis)
+        session.flush()
+        fact_after = dict(
+            session.execute(select(DoseEvent.__table__).where(DoseEvent.id == dose_id))
+            .mappings()
+            .one()
+        )
+        plan_after = dict(
+            session.execute(select(RegimenVersion.__table__).where(RegimenVersion.id == plan_id))
+            .mappings()
+            .one()
+        )
+        assert fact_after == fact_before
+        assert plan_after == plan_before
+
+
+# ---------------------------------------------------------------------------
 # Development-only medication plan deletion
 # ---------------------------------------------------------------------------
 
@@ -2721,6 +2842,7 @@ def test_development_plan_deletion_preserves_facts_and_handles_derived_reference
             source_record_ids=[version_id],
             computed_inputs={"plan": {"id": version_id}},
             model_name="synthetic-model",
+            model_digest="a" * 64,
             prompt_version="synthetic-v1",
         )
         session.add(analysis)
@@ -3029,6 +3151,7 @@ def test_synthetic_bootstrap_cleanup_refuses_every_retained_reference(
                         source_record_ids=[target_id],
                         computed_inputs={},
                         model_name="synthetic-model",
+                        model_digest="a" * 64,
                         prompt_version="synthetic-v1",
                     )
                 )

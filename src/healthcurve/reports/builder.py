@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from healthcurve.ai.analysis import is_renderable_analysis
 from healthcurve.ai.models import AIAnalysis
 from healthcurve.analytics import service as analytics
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
@@ -400,6 +401,8 @@ def build_snapshot(
             .order_by(AIAnalysis.generated_at, AIAnalysis.id)
         )
         for row in rows:
+            if not is_renderable_analysis(row):
+                continue
             analyses.append(
                 {
                     "id": str(row.id),
@@ -411,6 +414,7 @@ def build_snapshot(
                     "model_name": row.model_name,
                     "model_digest": row.model_digest,
                     "prompt_version": row.prompt_version,
+                    "schema_version": row.schema_version,
                     "generated_at": row.generated_at,
                 }
             )

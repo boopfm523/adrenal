@@ -31,10 +31,12 @@ rules:
     title: AI output cites source records and model/prompt versions
     layer: ai
     test_required: true
+    status: enforced
   - id: SAFE-06
     title: Deleting or regenerating AI never mutates facts or plans
     layer: ai
     test_required: true
+    status: enforced
   - id: SAFE-07
     title: Exports and reports preserve the partition; AI off by default
     layer: export
@@ -100,11 +102,13 @@ rules:
     layer: ai
     test_required: true
     prohibited_ai_action: true
+    status: enforced
   - id: SAFE-18
     title: AI output cannot be promoted into a plan or a fact
     layer: api
     test_required: true
     prohibited_ai_action: true
+    status: enforced
   - id: SAFE-19
     title: Untrusted text cannot instruct the model
     layer: ai
@@ -116,6 +120,7 @@ rules:
     layer: ai
     test_required: true
     prohibited_ai_action: true
+    status: enforced
 
   - id: SAFE-21
     title: Emergency plan renders with AI and integrations unavailable
