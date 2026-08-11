@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import Field, model_validator
 from sqlalchemy import select
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, paginate_current_facts
 from healthcurve.api.routers.events import provenance_out, resolve_time, time_out
@@ -183,12 +184,27 @@ def list_context(
     session: DbSession,
     owner: CurrentOwner,
     pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> ContextPage:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates = []
+    if window.start is not None:
+        predicates.append(ContextEvent.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        predicates.append(ContextEvent.occurred_at < window.end_exclusive)
     page = paginate_current_facts(
         session,
         ContextEvent,
         owner_id=owner.id,
         request=pagination,
+        predicates=tuple(predicates),
     )
     return ContextPage(
         items=[_out(row) for row in page.items],

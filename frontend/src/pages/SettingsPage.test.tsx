@@ -97,7 +97,8 @@ describe("Settings and privacy page", () => {
     });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
 
-    expect(await screen.findByRole("heading", { name: "Synthetic Boston", level: 4 })).toBeVisible();
+    expect(await screen.findByRole("rowheader", { name: "Synthetic Boston" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Context records table" })).toBeVisible();
     expect(screen.getByText("Weather not recorded—not zero and not inferred.")).toBeVisible();
     const precision = screen.getByLabelText("Location precision");
     expect(precision).toHaveValue("coarse");
@@ -110,6 +111,10 @@ describe("Settings and privacy page", () => {
     expect(screen.getByLabelText("Latitude")).toBeEnabled();
     expect(screen.getByLabelText("Longitude")).toBeEnabled();
     fireEvent.change(precision, { target: { value: "coarse" } });
+
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-08-09" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply context filters" }));
+    await waitFor(() => { expect(requests.some((request) => request.method === "GET" && request.url.includes("local_date_from=2026-08-09") && request.url.includes("timezone=Europe%2FLondon"))).toBe(true); });
 
     fireEvent.change(screen.getByLabelText("Experienced local date and time"), { target: { value: "2026-08-09T08:30" } });
     fireEvent.change(screen.getByLabelText("Coarse location label"), { target: { value: "Synthetic Cambridge" } });

@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { correctDose, getDoses, type Dose, type DoseCorrectionInput } from "../api/client";
+import { correctDose, getDoses, type Dose, type DoseCorrectionInput, type RecordedHistoryFilters } from "../api/client";
+import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement } from "../format";
@@ -15,6 +17,22 @@ interface FormValues {
   timezone: string;
   notes: string;
   reason: string;
+}
+
+interface DoseViewState extends RecordedHistoryFilters { page: number }
+
+function viewFromSearch(search: string, profileTimezone: string): DoseViewState {
+  const params = new URLSearchParams(search);
+  const page = params.get("page") ?? "";
+  return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, page: /^\d+$/.test(page) && Number(page) >= 1 ? Number(page) : 1 };
+}
+
+function searchFromView(view: DoseViewState): URLSearchParams {
+  const params = new URLSearchParams({ timezone: view.timezone });
+  if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom);
+  if (view.dateTo !== "") params.set("local_date_to", view.dateTo);
+  if (view.page > 1) params.set("page", view.page.toString());
+  return params;
 }
 
 function initialValues(dose: Dose): FormValues {
@@ -97,8 +115,18 @@ function CorrectionForm({ dose, onCancel }: { dose: Dose; onCancel: () => void }
 }
 
 export function DosesPage(): React.JSX.Element {
-  const [page, setPage] = useState(1);
-  const doses = useQuery({ queryKey: ["doses", page], queryFn: () => getDoses(page) });
+  const { session } = useAuth();
+  const profileTimezone = session?.user.defaultTimezone ?? "UTC";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedSearch = searchParams.toString();
+  const view = useMemo(() => viewFromSearch(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);
+  const filters = useMemo<RecordedHistoryFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone }), [view.dateFrom, view.dateTo, view.timezone]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
+  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
+  const setDraft = (next: RecordedHistoryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
+  const [validation, setValidation] = useState<string | null>(null);
+  const doses = useQuery({ queryKey: ["doses", filters, view.page], queryFn: () => getDoses(filters, view.page), enabled: !invalidRange });
   const [editingId, setEditingId] = useState<string | null>(null);
   const byId = new Map([...(doses.data?.items ?? []), ...(doses.data?.revisions ?? [])].map((dose) => [dose.id, dose]));
   const current = doses.data?.items ?? [];
@@ -117,7 +145,15 @@ export function DosesPage(): React.JSX.Element {
 
   return (
     <Page title="Doses" description="Actual recorded doses and their immutable correction history—not the physician-approved schedule.">
-      {doses.isPending ? <p role="status">Loading recorded doses…</p> : null}
+      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditingId(null); setSearchParams(searchFromView({ ...draft, page: 1 })); }}>
+        <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label>
+        <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label>
+        <label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>
+        {validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}
+        <div className="filter-actions"><button type="submit">Apply filters</button><button className="button-secondary" type="button" onClick={() => { setValidation(null); setEditingId(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone: profileTimezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</button></div>
+      </form>
+      <p className="privacy-note">Inclusive dates use {filters.timezone}. These are actual recorded facts, not scheduled plan entries.</p>
+      {doses.isFetching ? <p role="status">Loading recorded doses…</p> : null}
       {doses.isError ? <p className="error-summary" role="alert">Recorded doses could not be loaded.</p> : null}
       {doses.data?.page.total_items === 0 ? <section className="empty-state"><h2>No doses recorded</h2><p>A missing record is not a recorded zero dose.</p></section> : null}
       {current.length === 0 ? null : <div className="table-scroll dose-table-region" tabIndex={0} role="region" aria-label="Recorded doses table">
@@ -137,7 +173,7 @@ export function DosesPage(): React.JSX.Element {
           })}</tbody>
         </table>
       </div>}
-      {doses.data === undefined ? null : <PaginationControls label="Recorded doses" metadata={doses.data.page} onPageChange={(nextPage) => { setEditingId(null); setPage(nextPage); }} />}
+      {doses.data === undefined ? null : <PaginationControls label="Recorded doses" metadata={doses.data.page} onPageChange={(page) => { setEditingId(null); setSearchParams(searchFromView({ ...view, page })); }} />}
     </Page>
   );
 }

@@ -4,7 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
+import { AuthContext } from "../auth/context";
 import { DosesPage } from "./DosesPage";
+
+const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+
+function renderPage(initialEntry = "/doses"): void {
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><DosesPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
+}
 
 function dose(id: string, amount: string, supersedesId: string | null, reason: string | null, occurredAt = "2026-08-09T11:00:00Z", medicationName = "Synthetic medicine") {
   return {
@@ -39,7 +46,7 @@ describe("Doses page", () => {
   afterEach(() => { sessionStore.clear(); });
 
   it("lists only the current fact, exposes history, and submits an exact correction", async () => {
-    sessionStore.set({ csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } });
+    sessionStore.set(session);
     const original = dose("11111111-1111-4111-8111-111111111111", "10.0000", null, null);
     const current = dose("22222222-2222-4222-8222-222222222222", "10.1250", original.id, "Synthetic first correction");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -49,13 +56,14 @@ describe("Doses page", () => {
       }
       return Promise.resolve(new Response(JSON.stringify(page([current], [original])), { headers: { "Content-Type": "application/json" } }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
+    renderPage("/doses?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=America%2FNew_York");
 
     const table = await screen.findByRole("table", { name: /current recorded dose facts ordered by experienced time/i });
     expect(within(table).getByRole("rowheader", { name: /Synthetic medicine\s*10\.125 mg/ })).toBeVisible();
     expect(within(table).queryByRole("rowheader", { name: /10\.0000 mg/ })).not.toBeInTheDocument();
     const region = screen.getByRole("region", { name: "Recorded doses table" });
     expect(region).toHaveAttribute("tabindex", "0");
+    expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("local_date_from=2026-08-09") && requestUrl(input).includes("local_date_to=2026-08-10") && requestUrl(input).includes("timezone=America%2FNew_York"))).toBe(true);
     await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/10 mg/)).toBeVisible();
 
@@ -81,7 +89,7 @@ describe("Doses page", () => {
     const equalSecond = dose("22222222-2222-4222-8222-222222222222", "2.0000", null, null, "2026-08-09T10:00:00Z", "Equal second");
     const equalFirst = dose("11111111-1111-4111-8111-111111111111", "1.0000", null, null, "2026-08-09T10:00:00Z", "Equal first");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(page([later, equalFirst, equalSecond])), { headers: { "Content-Type": "application/json" } }));
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
 
     const rows = within(await screen.findByRole("table")).getAllByRole("row").slice(1);
     expect(rows.map((row) => within(row).getByRole("rowheader").textContent)).toEqual([
@@ -93,7 +101,7 @@ describe("Doses page", () => {
 
   it("shows a safe empty state without a table", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(page([])), { headers: { "Content-Type": "application/json" } }));
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
+    renderPage();
 
     expect(await screen.findByRole("heading", { name: "No doses recorded" })).toBeVisible();
     expect(screen.getByText("A missing record is not a recorded zero dose.")).toBeVisible();
@@ -107,11 +115,11 @@ describe("Doses page", () => {
       const secondPage = requestUrl(input).includes("page=2");
       return Promise.resolve(new Response(JSON.stringify(secondPage ? page([last], [], 2, 26, 2) : page([first], [], 1, 26, 2)), { headers: { "Content-Type": "application/json" } }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DosesPage /></MemoryRouter></QueryClientProvider>);
+    renderPage("/doses?local_date_from=2026-08-01&timezone=America%2FNew_York");
 
     expect(await screen.findByText("Showing 1–25 of 26. Page 1 of 2.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/doses?page=2"))).toBe(true); });
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/doses?") && requestUrl(input).includes("page=2") && requestUrl(input).includes("local_date_from=2026-08-01"))).toBe(true); });
     expect(await screen.findByText("Showing 26–26 of 26. Page 2 of 2.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();

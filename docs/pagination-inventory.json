@@ -20,21 +20,23 @@
   },
   "frontend_tables": {
     "frontend/src/components/AccessibleLineChart.tsx": { "status": "bounded_reference", "reason": "Exact-value tables render only bounded parent data: a visible record page or the analytics API's enforced 366-day range." },
+    "frontend/src/components/ContextSettings.tsx": { "status": "paginated", "issue": "hc-inbox.20.2" },
     "frontend/src/pages/AnalyticsPage.tsx": { "status": "bounded_reference", "reason": "The analytics API rejects ranges longer than 366 days, bounding every chart and exact-value table." },
     "frontend/src/pages/DosesPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.2" },
+    "frontend/src/pages/EpisodesPage.tsx": { "status": "paginated", "issue": "hc-inbox.20.2" },
     "frontend/src/pages/HealthDataPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/LabsPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/SymptomsDiaryPage.tsx": { "status": "paginated", "issue": "hc-inbox.20.1" },
     "frontend/src/pages/TimelinePage.tsx": { "status": "paginated", "issue": "hc-inbox.10.1" }
   },
   "additional_ui_collections": {
-    "context history": { "status": "paginated", "issue": "hc-inbox.10.2" },
+    "context history": { "status": "paginated", "issue": "hc-inbox.20.2" },
     "data-quality findings": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "diary and life-event history": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "lab document history": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "plan-version history": { "status": "paginated", "issue": "hc-inbox.10.3" },
     "report snapshot history": { "status": "paginated", "issue": "hc-inbox.10.3" },
-    "stress-episode history": { "status": "paginated", "issue": "hc-inbox.10.3" },
+    "stress-episode and emergency-injection history": { "status": "paginated", "issue": "hc-inbox.20.2" },
     "symptom history": { "status": "paginated", "issue": "hc-inbox.10.2" }
   }
 }

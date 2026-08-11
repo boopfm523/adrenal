@@ -7,6 +7,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, paginate_current_facts
 from healthcurve.api.schemas import (
@@ -77,11 +78,22 @@ def list_doses(
     pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ):
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
     predicates = []
-    if date_from is not None:
-        predicates.append(DoseEvent.occurred_at >= date_from)
-    if date_to is not None:
+    if window.start is not None or date_from is not None:
+        predicates.append(DoseEvent.occurred_at >= (window.start or date_from))
+    if window.end_exclusive is not None:
+        predicates.append(DoseEvent.occurred_at < window.end_exclusive)
+    elif date_to is not None:
         predicates.append(DoseEvent.occurred_at <= date_to)
     page = paginate_current_facts(
         session,

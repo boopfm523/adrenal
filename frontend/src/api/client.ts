@@ -9,6 +9,8 @@ export type Episode = components["schemas"]["EpisodeOut"];
 export type EpisodePage = components["schemas"]["EpisodePage"];
 export type EpisodeInput = components["schemas"]["EpisodeIn"];
 export type EpisodeUpdate = components["schemas"]["EpisodeUpdate"];
+export type Injection = components["schemas"]["InjectionOut"];
+export type InjectionPage = components["schemas"]["InjectionPage"];
 export type Dose = components["schemas"]["DoseOut"];
 export type DosePage = components["schemas"]["DosePage"];
 export type DoseInput = components["schemas"]["DoseIn"];
@@ -249,8 +251,27 @@ export function getOpenEpisodes(): Promise<EpisodePage> {
   return apiRequest<EpisodePage>("/stress-episodes?page=1&status_filter=open");
 }
 
-export function getEpisodes(page = 1, status?: "open" | "resolved"): Promise<EpisodePage> {
-  return apiRequest<EpisodePage>(`/stress-episodes?page=${page.toString()}${status === undefined ? "" : `&status_filter=${status}`}`);
+export interface RecordedHistoryFilters {
+  dateFrom: string;
+  dateTo: string;
+  timezone: string;
+}
+
+function recordedHistoryQuery(filters: RecordedHistoryFilters, page: number): URLSearchParams {
+  const params = new URLSearchParams({ timezone: filters.timezone, page: page.toString() });
+  if (filters.dateFrom !== "") params.set("local_date_from", filters.dateFrom);
+  if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
+  return params;
+}
+
+export function getEpisodes(filters: RecordedHistoryFilters, page = 1, status?: "open" | "resolved"): Promise<EpisodePage> {
+  const params = recordedHistoryQuery(filters, page);
+  if (status !== undefined) params.set("status_filter", status);
+  return apiRequest<EpisodePage>(`/stress-episodes?${params.toString()}`);
+}
+
+export function getEmergencyInjections(filters: RecordedHistoryFilters, page = 1): Promise<InjectionPage> {
+  return apiRequest<InjectionPage>(`/emergency-injections?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
 export function createEpisode(payload: EpisodeInput): Promise<Episode> {
@@ -268,8 +289,8 @@ export function recordDose(payload: DoseInput): Promise<Dose> {
   });
 }
 
-export function getDoses(page = 1): Promise<DosePage> {
-  return apiRequest<DosePage>(`/doses?page=${page.toString()}`);
+export function getDoses(filters: RecordedHistoryFilters, page = 1): Promise<DosePage> {
+  return apiRequest<DosePage>(`/doses?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
 export function correctDose(doseId: string, payload: DoseCorrectionInput): Promise<Dose> {
@@ -300,8 +321,8 @@ export function getTimeline(filters: TimelineFilters): Promise<Timeline> {
   return apiRequest<Timeline>(`/timeline?${params.toString()}`);
 }
 
-export function getContextEvents(page = 1): Promise<ContextPage> {
-  return apiRequest<ContextPage>(`/context-events?page=${page.toString()}`);
+export function getContextEvents(filters: RecordedHistoryFilters, page = 1): Promise<ContextPage> {
+  return apiRequest<ContextPage>(`/context-events?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
 export function createContextEvent(payload: ContextInput): Promise<ContextEvent> {

@@ -2848,6 +2848,98 @@ def test_symptom_diary_and_life_local_date_filters_preserve_sensitive_boundaries
     assert invalid.json()["detail"]["code"] == "invalid_local_date_range"
 
 
+def test_dose_episode_injection_and_context_local_date_filters_share_dst_boundaries(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    medication_id = _a_medication(client, logged_in)
+    boundary_time = {"local_time": "2024-03-10T05:00:00", "timezone": "UTC"}
+    late_time = {"local_time": "2024-03-11T03:59:00", "timezone": "UTC"}
+    outside_time = {"local_time": "2024-03-11T04:00:00", "timezone": "UTC"}
+
+    dose = client.post(
+        "/api/v1/doses",
+        headers=logged_in,
+        json={
+            "medication_id": medication_id,
+            "amount": "5",
+            "unit": "mg",
+            "route": "oral",
+            "category": "stress",
+            "time": boundary_time,
+        },
+    )
+    episode = client.post(
+        "/api/v1/stress-episodes",
+        headers=logged_in,
+        json={"trigger": "Synthetic DST episode", "time": boundary_time},
+    )
+    injection = client.post(
+        "/api/v1/emergency-injections",
+        headers=logged_in,
+        json={
+            "medication_id": medication_id,
+            "amount": "100",
+            "unit": "mg",
+            "route": "intramuscular",
+            "time": late_time,
+        },
+    )
+    context = client.post(
+        "/api/v1/context-events",
+        headers=logged_in,
+        json={"time": late_time, "location_precision": "none"},
+    )
+    outside = client.post(
+        "/api/v1/doses",
+        headers=logged_in,
+        json={
+            "medication_id": medication_id,
+            "amount": "6",
+            "unit": "mg",
+            "route": "oral",
+            "category": "stress",
+            "time": outside_time,
+        },
+    )
+    assert all(
+        response.status_code == 201 for response in (dose, episode, injection, context, outside)
+    )
+
+    params = {
+        "local_date_from": "2024-03-10",
+        "local_date_to": "2024-03-10",
+        "timezone": "America/New_York",
+    }
+    paths = {
+        "/api/v1/doses": dose.json()["id"],
+        "/api/v1/stress-episodes": episode.json()["id"],
+        "/api/v1/emergency-injections": injection.json()["id"],
+        "/api/v1/context-events": context.json()["id"],
+    }
+    for path, expected_id in paths.items():
+        response = client.get(path, params=params)
+        assert response.status_code == 200, response.text
+        assert expected_id in {row["id"] for row in response.json()["items"]}
+    dose_ids = {row["id"] for row in client.get("/api/v1/doses", params=params).json()["items"]}
+    assert outside.json()["id"] not in dose_ids
+
+    through_only = client.get(
+        "/api/v1/emergency-injections",
+        params={"local_date_to": "2024-03-10", "timezone": "America/New_York"},
+    )
+    assert injection.json()["id"] in {row["id"] for row in through_only.json()["items"]}
+    invalid = client.get(
+        "/api/v1/context-events",
+        params={
+            "local_date_from": "2024-03-11",
+            "local_date_to": "2024-03-10",
+            "timezone": "UTC",
+        },
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["code"] == "invalid_local_date_range"
+
+
 def test_timeline_orders_by_experienced_time_with_stable_ties(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

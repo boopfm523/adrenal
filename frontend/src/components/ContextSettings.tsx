@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   createContextEvent,
@@ -7,10 +8,10 @@ import {
   getContextEvents,
   type ContextEvent,
   type ContextInput,
+  type RecordedHistoryFilters,
 } from "../api/client";
 import { useAuth } from "../auth/context";
 import { formatDecimal, formatMeasurement } from "../format";
-import { ContextCard } from "./CategoryCards";
 import { PaginationControls } from "./PaginationControls";
 
 type Precision = ContextInput["location_precision"];
@@ -33,6 +34,10 @@ function contextTitle(event: ContextEvent): string {
   return `Timezone context: ${event.time.timezone}`;
 }
 
+interface ContextViewState extends RecordedHistoryFilters { page: number }
+function contextViewFromSearch(search: string, profileTimezone: string): ContextViewState { const params = new URLSearchParams(search); const page = params.get("context_page") ?? ""; return { dateFrom: params.get("context_date_from") ?? "", dateTo: params.get("context_date_to") ?? "", timezone: params.get("context_timezone") ?? profileTimezone, page: /^\d+$/.test(page) && Number(page) >= 1 ? Number(page) : 1 }; }
+function searchWithContext(current: URLSearchParams, view: ContextViewState): URLSearchParams { const params = new URLSearchParams(current); for (const name of ["context_date_from", "context_date_to", "context_timezone", "context_page"]) params.delete(name); if (view.dateFrom !== "") params.set("context_date_from", view.dateFrom); if (view.dateTo !== "") params.set("context_date_to", view.dateTo); params.set("context_timezone", view.timezone); if (view.page > 1) params.set("context_page", view.page.toString()); return params; }
+
 function WeatherDetails({ event }: { event: ContextEvent }): React.JSX.Element {
   if (event.weather_provider === undefined || event.weather_provider === null) {
     return <p className="missing-value">Weather not recorded—not zero and not inferred.</p>;
@@ -52,12 +57,21 @@ function WeatherDetails({ event }: { event: ContextEvent }): React.JSX.Element {
 
 export function ContextSettings(): React.JSX.Element {
   const { session } = useAuth();
+  const profileTimezone = session?.user.defaultTimezone ?? "UTC";
   const queryClient = useQueryClient();
   const [precision, setPrecision] = useState<Precision>("coarse");
   const [exactConsent, setExactConsent] = useState(false);
   const [includeWeather, setIncludeWeather] = useState(false);
-  const [page, setPage] = useState(1);
-  const contexts = useQuery({ queryKey: ["context-events", page], queryFn: () => getContextEvents(page) });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedSearch = searchParams.toString();
+  const view = useMemo(() => contextViewFromSearch(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);
+  const filters = useMemo<RecordedHistoryFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone }), [view.dateFrom, view.dateTo, view.timezone]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
+  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
+  const setDraft = (next: RecordedHistoryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
+  const [validation, setValidation] = useState<string | null>(null);
+  const contexts = useQuery({ queryKey: ["context-events", filters, view.page], queryFn: () => getContextEvents(filters, view.page), enabled: !invalidRange });
   const create = useMutation({
     mutationFn: createContextEvent,
     onSuccess: () => {
@@ -72,7 +86,7 @@ export function ContextSettings(): React.JSX.Element {
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       deleteContextEvent(id, password),
     onSuccess: () => {
-      if (page > 1 && contexts.data?.items.length === 1) setPage((current) => current - 1);
+      if (view.page > 1 && contexts.data?.items.length === 1) setSearchParams(searchWithContext(searchParams, { ...view, page: view.page - 1 }));
       void queryClient.invalidateQueries({ queryKey: ["context-events"] });
       void queryClient.invalidateQueries({ queryKey: ["timeline"] });
     },
@@ -127,7 +141,7 @@ export function ContextSettings(): React.JSX.Element {
       <form className="settings-card context-entry-form" onSubmit={submit}>
         <h3>Record context</h3>
         <label>Experienced local date and time<input name="local_time" type="datetime-local" required /></label>
-        <label>IANA timezone<input name="timezone" defaultValue={session?.user.defaultTimezone ?? "UTC"} required /></label>
+        <label>IANA timezone<input name="timezone" defaultValue={profileTimezone} required /></label>
         <label>Location precision
           <select value={precision} onChange={(event) => { const next = event.target.value as Precision; setPrecision(next); if (next !== "exact") setExactConsent(false); }}>
             <option value="coarse">Coarse label (recommended)</option>
@@ -163,22 +177,13 @@ export function ContextSettings(): React.JSX.Element {
 
       <div>
         <h3>Recorded context</h3>
-        {contexts.isPending ? <p role="status">Loading recorded context…</p> : null}
+        <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSearchParams(searchWithContext(searchParams, { ...draft, page: 1 })); }}><label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>Context history IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply context filters</button><button className="button-secondary" type="button" onClick={() => { setValidation(null); const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setDraftState({ search: "", filters: reset }); setSearchParams(searchWithContext(searchParams, { ...reset, page: 1 })); }}>Clear context filters</button></div></form>
+        <p className="privacy-note">Inclusive dates use {filters.timezone}. Context is descriptive and remains separate from health facts, physician plans, and AI analysis.</p>
+        {contexts.isFetching ? <p role="status">Loading recorded context…</p> : null}
         {contexts.isError ? <p className="error-summary" role="alert">Recorded context could not be loaded.</p> : null}
         {contexts.data?.page.total_items === 0 ? <p className="empty-state">No context has been recorded. This is optional.</p> : null}
-        {contexts.data?.items.map((item) => <ContextCard key={item.id} headingLevel={4} title={contextTitle(item)} metadata={<span>{item.provenance.is_correction ? "Corrected record" : "Original record"} · {item.time.local_time.replace("T", " ").slice(0, 16)} · {item.time.timezone}</span>}>
-          <dl className="provenance-grid">
-            <div><dt>Precision</dt><dd>{item.location_precision}</dd></div>
-            <div><dt>Location</dt><dd>{item.location_precision === "exact" ? `${item.latitude ?? "Unavailable"}, ${item.longitude ?? "Unavailable"}` : item.coarse_location_label ?? "Not recorded"}</dd></div>
-          </dl>
-          <WeatherDetails event={item} />
-          <form className="context-delete-form danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); remove.mutate({ id: item.id, password: formValue(data, "password") }); }}>
-            <label>Current password<input name="password" type="password" required autoComplete="current-password" /></label>
-            <button type="submit" disabled={remove.isPending}>Delete this context record</button>
-          </form>
-          {remove.isError && remove.variables.id === item.id ? <p className="error-summary" role="alert">Context was not deleted. Check your password.</p> : null}
-        </ContextCard>)}
-        {contexts.data === undefined ? null : <PaginationControls label="Context records" metadata={contexts.data.page} onPageChange={setPage} />}
+        {contexts.data === undefined || contexts.data.items.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Context records table"><table><caption>Recorded environmental context, latest experienced time first, with source and privacy provenance.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Context</th><th scope="col">Location precision</th><th scope="col">Weather and notes</th><th scope="col">Provenance and actions</th></tr></thead><tbody>{contexts.data.items.map((item) => <tr key={item.id}><td className="timeline-time">{item.time.local_time.replace("T", " ").slice(0, 16)}<span>{item.time.timezone}</span></td><th scope="row">{contextTitle(item)}</th><td><span>{item.location_precision}</span><span>{item.location_precision === "exact" ? `${item.latitude ?? "Unavailable"}, ${item.longitude ?? "Unavailable"}` : item.coarse_location_label ?? "Not recorded"}</span></td><td><WeatherDetails event={item} />{item.notes === null ? null : <span>Notes: {item.notes}</span>}</td><td><span>{item.provenance.source_type.replaceAll("_", " ")}</span><span>{item.provenance.confirmation_state.replaceAll("_", " ")}</span><span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span><form className="context-delete-form danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); remove.mutate({ id: item.id, password: formValue(data, "password") }); }}><label>Current password<input name="password" type="password" required autoComplete="current-password" /></label><button type="submit" disabled={remove.isPending}>Delete this context record</button></form>{remove.isError && remove.variables.id === item.id ? <p className="error-summary" role="alert">Context was not deleted. Check your password.</p> : null}</td></tr>)}</tbody></table></div>}
+        {contexts.data === undefined ? null : <PaginationControls label="Context records" metadata={contexts.data.page} onPageChange={(page) => { setSearchParams(searchWithContext(searchParams, { ...view, page })); }} />}
       </div>
     </section>
   );

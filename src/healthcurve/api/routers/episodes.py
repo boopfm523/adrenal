@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
 from healthcurve.api.routers.doses import resolve_time
@@ -67,8 +68,21 @@ def list_episodes(
     pagination: Pagination,
     status_filter: EpisodeStatus | None = None,
     open_only: bool = False,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> EpisodePage:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
     query = select(StressEpisode).where(StressEpisode.owner_id == owner.id)
+    if window.start is not None:
+        query = query.where(StressEpisode.started_at >= window.start)
+    if window.end_exclusive is not None:
+        query = query.where(StressEpisode.started_at < window.end_exclusive)
     if status_filter is not None:
         query = query.where(StressEpisode.status == status_filter)
     elif open_only:
@@ -157,13 +171,30 @@ def log_injection(payload: InjectionIn, session: DbSession, owner: CurrentOwner)
 
 @router.get("/emergency-injections", response_model=InjectionPage)
 def list_injections(
-    session: DbSession, owner: CurrentOwner, pagination: Pagination
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> InjectionPage:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates = []
+    if window.start is not None:
+        predicates.append(EmergencyInjectionEvent.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        predicates.append(EmergencyInjectionEvent.occurred_at < window.end_exclusive)
     page = paginate_current_facts(
         session,
         EmergencyInjectionEvent,
         owner_id=owner.id,
         request=pagination,
+        predicates=tuple(predicates),
     )
     return InjectionPage(
         items=[_injection_out(row) for row in page.items],
