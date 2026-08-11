@@ -32,7 +32,7 @@ _TEMPLATE: Final = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>HealthCurve physician report</title>
+<title>HealthCurve.ai physician report</title>
 <style>
   @page { size: Letter; margin: 0.55in 0.55in 0.65in; }
   * { box-sizing: border-box; }
@@ -65,7 +65,7 @@ _TEMPLATE: Final = """<!doctype html>
 </head>
 <body>
 <header>
-  <h1>HealthCurve physician report</h1>
+  <h1>HealthCurve.ai physician report</h1>
   <p class="subtitle">Recorded medication use and health context for clinical review</p>
   <p><strong>Period:</strong> {{ date_from }} through {{ date_to }} &nbsp; <strong>Local timezone:</strong> {{ timezone }}</p>
   <p class="boundary"><strong>Scope and safety:</strong> This report organizes recorded facts and deterministic summaries. It does not measure cortisol, diagnose a condition, establish causation, or recommend medication changes. Missing observations remain missing, never zero.</p>
@@ -189,7 +189,7 @@ def render_pdf(html: bytes) -> bytes:
                 header_template="<span></span>",
                 footer_template=(
                     '<div style="width:100%;font:8px Arial;color:#59645f;padding:0 0.55in;display:flex;justify-content:space-between">'
-                    '<span>HealthCurve - private health record</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>'
+                    '<span>HealthCurve.ai - private health record</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>'
                 ),
             )
         finally:

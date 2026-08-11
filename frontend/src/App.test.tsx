@@ -28,13 +28,14 @@ describe("primary HealthCurve route", () => {
   it.each(["/", "/analytics"])("routes %s to the daily HealthCurve", async (entry) => {
     renderApp(entry);
     await waitFor(() => { expect(screen.getByLabelText("Current route")).toHaveTextContent("/healthcurve"); });
-    expect(await screen.findByRole("heading", { name: "HealthCurve", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "HealthCurve" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: "HealthCurve.ai", level: 1 })).toBeVisible();
+    expect(screen.getByRole("link", { name: "HealthCurve.ai home" })).toHaveAttribute("aria-current", "page");
+    expect(document.title).toBe("HealthCurve.ai");
     cleanup();
   });
 
   it.each([
-    ["/healthcurve", "HealthCurve"],
+    ["/healthcurve", "HealthCurve.ai"],
     ["/today", "Today"],
     ["/timeline", "Timeline"],
     ["/doses", "Doses"],

@@ -24,7 +24,7 @@ function json(body: unknown): Response {
 async function expectNoHighImpactViolations(): Promise<void> {
   // Vitest's synthetic document does not load index.html, which supplies these in production.
   document.documentElement.lang = "en";
-  document.title = "HealthCurve";
+  document.title = "HealthCurve.ai";
   const result = await axe.run(document, { resultTypes: ["violations"], rules: { "color-contrast": { enabled: false } } });
   const highImpact = result.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious");
   expect(highImpact.map((violation) => ({ id: violation.id, help: violation.help, targets: violation.nodes.map((node) => node.target) }))).toEqual([]);
@@ -67,7 +67,7 @@ describe("automated accessibility audit", () => {
     skipLink.focus();
     expect(skipLink).toHaveFocus();
     await user.tab();
-    expect(screen.getByRole("link", { name: "HealthCurve home" })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "HealthCurve.ai home" })).toHaveFocus();
     const approvalButton = screen.getByRole("button", { name: "Record physician approval" });
     approvalButton.focus();
     await user.keyboard("[Enter]");

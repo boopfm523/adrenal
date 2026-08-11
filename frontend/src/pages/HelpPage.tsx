@@ -76,10 +76,14 @@ export function HelpPage(): React.JSX.Element {
   const importWorkflows: Workflow[] = helpContent.importWorkflows;
 
   return (
-    <Page title="Help" description="Practical, current instructions for recording, reviewing, importing, correcting, and exporting HealthCurve data.">
+    <Page title="Help" description="Practical, current instructions for recording, reviewing, importing, correcting, and exporting HealthCurve.ai data.">
+      <section className="settings-card" aria-labelledby="help-brand-title">
+        <h2 id="help-brand-title">AI for AI</h2>
+        <p><strong>Artificial intelligence for adrenal insufficiency.</strong> HealthCurve.ai helps organize and review your recorded information. Its AI output stays separate from recorded facts and physician-approved plans and is not diagnosis, emergency care, or medication advice.</p>
+      </section>
       <aside className="help-emergency" aria-labelledby="help-emergency-title">
-        <h2 id="help-emergency-title">HealthCurve is not emergency care or dosing advice</h2>
-        <p>If you may be having an emergency, contact local emergency services and follow your dated physician-authored instructions. HealthCurve records what happened; it does not decide whether, when, or how much medication you should take.</p>
+        <h2 id="help-emergency-title">HealthCurve.ai is not emergency care or dosing advice</h2>
+        <p>If you may be having an emergency, contact local emergency services and follow your dated physician-authored instructions. HealthCurve.ai records what happened; it does not decide whether, when, or how much medication you should take.</p>
         <a className="button-link button-link--urgent" href="/emergency">Open emergency plan</a>
       </aside>
 

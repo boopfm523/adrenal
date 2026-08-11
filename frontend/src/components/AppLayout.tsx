@@ -25,7 +25,7 @@ export function AppLayout(): React.JSX.Element {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="app-header">
-        <NavLink className="brand" to="/healthcurve" aria-label="HealthCurve home">HealthCurve</NavLink>
+        <NavLink className="brand" to="/healthcurve" aria-label="HealthCurve.ai home">HealthCurve.ai</NavLink>
         <a className="emergency-link" href="/emergency">
           <span aria-hidden="true">!</span> Emergency plan
         </a>

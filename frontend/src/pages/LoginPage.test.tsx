@@ -13,6 +13,9 @@ describe("Login page", () => {
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "synthetic-password" } });
     expect(screen.queryByText(/authenticator|recovery code|passkey/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sign in to HealthCurve.ai" })).toBeVisible();
+    expect(screen.getByText(/Artificial intelligence for adrenal insufficiency/)).toBeVisible();
+    expect(document.title).toBe("Sign in · HealthCurve.ai");
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => { expect(signIn).toHaveBeenCalledWith("owner@example.test", "synthetic-password"); });

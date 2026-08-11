@@ -114,7 +114,7 @@ def test_playwright_pdf_is_letter_sized_printable_and_contains_expected_text() -
         assert round(float(pdf.pages[0].width)) == 612
         assert round(float(pdf.pages[0].height)) == 792
         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-    assert "HealthCurve physician report" in text
+    assert "HealthCurve.ai physician report" in text
     assert "Recorded facts" in text
     assert "Physician-approved plan" in text
     assert "AI-generated analysis" not in text

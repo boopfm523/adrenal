@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from "react";
+import { useEffect, useState, type SyntheticEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
@@ -17,6 +17,10 @@ export function LoginPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const state = location.state as LocationState | null;
+
+  useEffect(() => {
+    document.title = "Sign in · HealthCurve.ai";
+  }, []);
 
   if (status === "authenticated") return <Navigate to="/healthcurve" replace />;
 
@@ -39,7 +43,9 @@ export function LoginPage(): React.JSX.Element {
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-heading">
         <p className="eyebrow">Private health record</p>
-        <h1 id="login-heading">Sign in to HealthCurve</h1>
+        <h1 id="login-heading">Sign in to HealthCurve.ai</h1>
+        <p className="brand-tagline"><strong>AI for AI:</strong> Artificial intelligence for adrenal insufficiency.</p>
+        <p className="privacy-note">For organizing and reviewing your records—not diagnosis, emergency care, or medication advice.</p>
         <p>Your session stays on this device. Health details are never placed in the page title or URL.</p>
         {error === null ? null : <div className="error-summary" role="alert" tabIndex={-1}>{error}</div>}
         <form onSubmit={(event) => { void submit(event); }}>

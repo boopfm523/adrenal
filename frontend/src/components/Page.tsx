@@ -12,7 +12,7 @@ export function Page({ title, description, children }: PageProps): React.JSX.Ele
 
   useEffect(() => {
     heading.current?.focus();
-    document.title = `${title} · HealthCurve`;
+    document.title = title === "HealthCurve.ai" ? title : `${title} · HealthCurve.ai`;
   }, [location.key, title]);
 
   return (

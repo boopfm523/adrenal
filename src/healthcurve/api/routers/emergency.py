@@ -75,7 +75,7 @@ def _page(body: str) -> HTMLResponse:
     html = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Emergency plan — HealthCurve</title>"
+        "<title>Emergency plan — HealthCurve.ai</title>"
         f"<style>{_STYLE}</style></head><body><main>{body}</main></body></html>"
     )
     response = HTMLResponse(html)
