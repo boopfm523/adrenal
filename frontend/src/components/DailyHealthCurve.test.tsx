@@ -80,6 +80,26 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(4);
   });
 
+  it("shows a daily Garmin summary as one exact point without inventing a curve", () => {
+    const dailyStress: GarminRecord = {
+      ...sample(0),
+      id: "20000000-0000-4000-8000-000000000001",
+      kind: "daily" as const,
+      summary: "Stress: 31",
+      metric_type: "stress",
+      value: "31",
+      unit: "garmin_score",
+      aggregation: "daily_summary",
+      sample_interval_seconds: null,
+    };
+    render(<DailyHealthCurve data={data({ garmin: [dailyStress] })} />);
+
+    expect(document.querySelectorAll("circle.healthcurve-point--stress.healthcurve-point--daily-summary")).toHaveLength(1);
+    expect(document.querySelectorAll("path.healthcurve-series--stress")).toHaveLength(0);
+    expect(screen.getByRole("status")).toHaveTextContent("Garmin stress: 31 score");
+    expect(screen.getByRole("status")).toHaveTextContent("daily summary");
+  });
+
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
     render(<DailyHealthCurve data={data()} />);
 
@@ -97,7 +117,7 @@ describe("Daily HealthCurve", () => {
 
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(1_000);
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(within(table).getAllByText(/Heart rate:/)).toHaveLength(1_000);
+    expect(within(table).getAllByText("Heart rate")).toHaveLength(1_000);
   });
 
   it("keeps a symptom with missing severity out of the numeric chart without hiding the fact", () => {

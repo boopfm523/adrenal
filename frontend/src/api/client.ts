@@ -554,6 +554,25 @@ export function getDailyGarminSamples(day: string, timezone: string): Promise<Ga
   });
 }
 
+export async function getDailyGarminContext(day: string, timezone: string): Promise<GarminRecord[]> {
+  const [dailyRecords, samples] = await Promise.all([
+    collectPages(async (page) => {
+      const response = await apiRequest<GarminRecords>(
+        `/integrations/garmin/records?${selectedDayParams(day, timezone, page).toString()}`,
+      );
+      return {
+        items: response.records.filter((record) => record.kind === "daily"),
+        totalPages: response.page.total_pages,
+      };
+    }),
+    getDailyGarminSamples(day, timezone),
+  ]);
+  const currentById = new Map([...dailyRecords, ...samples].map((record) => [record.id, record]));
+  return [...currentById.values()].sort(
+    (left, right) => Date.parse(left.time.occurred_at) - Date.parse(right.time.occurred_at),
+  );
+}
+
 export function getDailySymptoms(day: string, timezone: string): Promise<Symptom[]> {
   return collectPages(async (page) => {
     const response = await apiRequest<SymptomPage>(`/symptoms?${selectedDayParams(day, timezone, page).toString()}`);

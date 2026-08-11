@@ -241,6 +241,7 @@ circle.chart-series { fill: white; }
 .healthcurve-point--respiration_rate { fill: #25677a; }
 .healthcurve-point--blood_pressure { fill: #1c5a34; }
 .healthcurve-point--symptoms { fill: #bd2f6b; }
+.healthcurve-point--daily-summary { fill: white; stroke: #17221e; stroke-width: 3; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
 .healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
 .healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }

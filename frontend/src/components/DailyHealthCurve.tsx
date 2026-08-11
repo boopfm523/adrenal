@@ -25,6 +25,7 @@ interface Point {
   label: string;
   source: string;
   cadenceSeconds?: number;
+  dailySummary?: boolean;
 }
 
 interface Lane {
@@ -160,9 +161,10 @@ function metricLane(data: DailyHealthCurveData, definition: typeof METRIC_LANES[
     return [{
       time: record.time.occurred_at,
       value,
-      label: `${definition.label}: ${formatMeasurement(record.value, record.unit)}`,
-      source: `Garmin ${record.provenance.confirmation_state}${record.sample_interval_seconds == null ? "" : `; observed cadence ${record.sample_interval_seconds.toString()} seconds`}`,
+      label: formatMeasurement(record.value, record.unit),
+      source: `Garmin ${record.provenance.confirmation_state}${record.kind === "daily" ? "; daily summary" : record.sample_interval_seconds == null ? "" : `; observed cadence ${record.sample_interval_seconds.toString()} seconds`}`,
       ...(record.sample_interval_seconds == null ? {} : { cadenceSeconds: record.sample_interval_seconds }),
+      ...(record.kind === "daily" ? { dailySummary: true } : {}),
     }];
   });
   return { key: definition.key, label: definition.label, unit: definition.unit, points };
@@ -176,7 +178,7 @@ function lanes(data: DailyHealthCurveData): Lane[] {
     points: data.exposure.samples.map((sample) => ({
       time: sample.occurred_at,
       value: Number(sample.theoretical_exposure_reu),
-      label: `Theoretical exposure: ${formatMeasurement(sample.theoretical_exposure_reu, "REU")}`,
+      label: formatMeasurement(sample.theoretical_exposure_reu, "REU"),
       source: data.exposure.model.version,
       cadenceSeconds: data.exposure.model.sample_interval_minutes * 60,
     })),
@@ -316,7 +318,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
           })}</g> : null}
         {shownLanes.map((lane) => <g key={lane.key} data-series={lane.key}>
           {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, segment, start, end)} />)}
-          {lane.key === "exposure" ? null : lane.points.map((point, index) => <circle key={`${point.time}-${index.toString()}`} className={`healthcurve-point healthcurve-point--${lane.key}`} cx={xPosition(point.time, start, end)} cy={yPosition(lane, point.value)} r={lane.key === "symptoms" ? 6 : 3}><title>{experiencedTime(point.time, data.exposure.timezone)}: {point.label}; source {point.source}</title></circle>)}
+          {lane.key === "exposure" ? null : lane.points.map((point, index) => <circle key={`${point.time}-${index.toString()}`} className={`healthcurve-point healthcurve-point--${lane.key}${point.dailySummary === true ? " healthcurve-point--daily-summary" : ""}`} cx={xPosition(point.time, start, end)} cy={yPosition(lane, point.value)} r={lane.key === "symptoms" || point.dailySummary === true ? 6 : 3}><title>{experiencedTime(point.time, data.exposure.timezone)}: {point.label}; source {point.source}</title></circle>)}
         </g>)}
         {visible.exposure ? data.exposure.dose_markers.map((dose) => {
           const x = xPosition(dose.occurred_at, start, end);
@@ -329,7 +331,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       </svg>
     </div>
     <label className="healthcurve-time-explorer">Explore the chart by time<input aria-label="Explore daily HealthCurve by time" type="range" min="0" max={elapsedMinutes} step="1" value={Math.min(cursorMinute, elapsedMinutes)} onChange={(event) => { setCursorMinute(Number(event.target.value)); }} /></label>
-    <div className="healthcurve-readout" role="status" aria-live="polite"><strong>{experiencedTime(new Date(cursorTime).toISOString(), data.exposure.timezone)}</strong>{cursorPoints.length === 0 ? <p>No exact observation at this time. Nearby missing data remains missing.</p> : <ul>{cursorPoints.map(({ lane, point }) => <li key={`${lane.key}-${point.time}`}><strong>{lane.label}:</strong> {point.label} <span>at {experiencedTime(point.time, data.exposure.timezone)}</span></li>)}</ul>}</div>
+    <div className="healthcurve-readout" role="status" aria-live="polite"><strong>{experiencedTime(new Date(cursorTime).toISOString(), data.exposure.timezone)}</strong>{cursorPoints.length === 0 ? <p>No exact observation at this time. Nearby missing data remains missing.</p> : <ul>{cursorPoints.map(({ lane, point }) => <li key={`${lane.key}-${point.time}`}><strong>{lane.label}:</strong> {point.label} <span>at {experiencedTime(point.time, data.exposure.timezone)}; {point.source}</span></li>)}</ul>}</div>
     <div className="curve-series-summary" aria-label="Visible series sample counts">{shownLanes.map((lane) => <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.</p>)}</div>
     <details className="chart-table"><summary>View exact values and provenance</summary><div className="table-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve exact values"><table><caption>Current recorded facts and deterministic model samples shown in the selected lanes. Sorting uses the experienced instant.</caption><thead><tr><th scope="col">Local date / time</th><th scope="col">Series</th><th scope="col">Exact value</th><th scope="col">Source / provenance</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.time}-${row.series}-${index.toString()}`}><th scope="row">{experiencedTime(row.time, data.exposure.timezone)}</th><td>{row.series}</td><td>{row.value}</td><td>{row.source}</td></tr>)}</tbody></table></div></details>
     <details className="metric-definition"><summary>Definitions and limitations</summary><p>{data.exposure.definition}</p><p>The overlay normalizes theoretical exposure, heart rate, HRV, respiration, and blood pressure to each series’ observed daily minimum and maximum. Garmin stress already uses 0–100. Symptoms retain their original 0–10 severity and are displayed at severity × 10 as discrete markers. Exact native values remain in the readout and table. These values are not converted into cortisol demand or a coverage ratio.</p></details>

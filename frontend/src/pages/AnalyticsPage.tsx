@@ -6,7 +6,7 @@ import {
   getDailyPatterns,
   getDailyBloodPressure,
   getDailyEpisodes,
-  getDailyGarminSamples,
+  getDailyGarminContext,
   getDailySymptoms,
   getSteroidExposure,
   type AnalyticsSummary,
@@ -85,7 +85,7 @@ export function AnalyticsPage(): React.JSX.Element {
     queryFn: async () => {
       const [exposure, garmin, symptoms, bloodPressure, episodes] = await Promise.all([
         getSteroidExposure(dayFilter.day, dayFilter.timezone),
-        getDailyGarminSamples(dayFilter.day, dayFilter.timezone),
+        getDailyGarminContext(dayFilter.day, dayFilter.timezone),
         getDailySymptoms(dayFilter.day, dayFilter.timezone),
         getDailyBloodPressure(dayFilter.day, dayFilter.timezone),
         getDailyEpisodes(dayFilter.day, dayFilter.timezone),

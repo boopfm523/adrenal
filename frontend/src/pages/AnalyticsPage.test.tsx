@@ -18,6 +18,9 @@ function response(url: string): Response {
     { metric_type: "hrv", unit: null, sample_count: 0, samples_without_cadence: 0, observed_coverage_minutes: "0", observed_coverage_percent: "0", missingness_state: "no_samples", incompatible_units: false, minimum: null, average: null, maximum: null },
     { metric_type: "respiration_rate", unit: null, sample_count: 0, samples_without_cadence: 0, observed_coverage_minutes: "0", observed_coverage_percent: "0", missingness_state: "no_samples", incompatible_units: false, minimum: null, average: null, maximum: null },
   ], blood_pressure: { sample_count: 1, pulse_sample_count: 0, pulse_missing_count: 1, systolic: { minimum: "110", average: "110", maximum: "110" }, diastolic: { minimum: "70", average: "70", maximum: "70" }, pulse: { minimum: null, average: null, maximum: null } }, stress_episodes: { count: 1, open_count: 0, overlap_minutes: "60" } }] });
+  if (url.includes("/integrations/garmin/records")) return jsonResponse({ records: [
+    { id: "20111111-1111-4111-8111-111111111111", kind: "daily", summary: "Stress: 28", time: { ...eventTime, occurred_at: "2026-07-31T23:00:00Z", local_time: "2026-08-01T00:00:00" }, provenance, metric_type: "stress", value: "28", unit: "garmin_score", aggregation: "daily_summary", sample_interval_seconds: null },
+  ], page: { page: 1, page_size: 100, total_items: 1, total_pages: 1 }, notice: "Missing values remain unavailable." });
   if (url.includes("/integrations/garmin/samples")) return jsonResponse({ records: [
     { id: "21111111-1111-4111-8111-111111111111", kind: "sample", summary: "Stress: 31", time: eventTime, provenance, metric_type: "stress", value: "31", unit: "garmin_score", aggregation: "provider_sample", sample_interval_seconds: 180 },
     { id: "31111111-1111-4111-8111-111111111111", kind: "sample", summary: "Heart rate: 72", time: eventTime, provenance, metric_type: "heart_rate", value: "72", unit: "bpm", aggregation: "provider_sample", sample_interval_seconds: 120 },
@@ -42,7 +45,7 @@ describe("Analytics page", () => {
     expect(screen.getByText(/One time axis, relative display scales/)).toBeVisible();
     expect(screen.getByLabelText("Garmin stress")).toBeChecked();
     const seriesSummary = screen.getByLabelText("Visible series sample counts");
-    expect(within(seriesSummary).getByText(/Garmin stress:/).parentElement).toHaveTextContent("1 exact point");
+    expect(within(seriesSummary).getByText(/Garmin stress:/).parentElement).toHaveTextContent("2 exact point");
     expect(within(seriesSummary).getByText(/Symptoms:/).parentElement).toHaveTextContent("1 exact point");
     expect(await screen.findByRole("heading", { name: "Daily medication totals versus plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Compare daily patterns" })).toBeVisible();

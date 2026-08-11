@@ -371,8 +371,9 @@ its keyboard/mobile time control shows exact nearby observations with their orig
 units and timestamps. Continuous shapes use a clearly labeled relative 0–100 display
 position so unlike units can be compared in time without implying that their values
 are equivalent. Lines connect only samples with an observed contiguous cadence;
-unknown and interrupted intervals remain gaps. The exact-value/provenance table is
-authoritative.
+unknown and interrupted intervals remain gaps. A Garmin daily summary is shown as one
+outlined point at its recorded day timestamp; HealthCurve does not stretch an average
+across hours or invent a curve. The exact-value/provenance table is authoritative.
 
 These observations do not alter the actual-dose exposure trace and are not converted
 into a cortisol requirement, medication-demand multiplier, or adequacy/shortfall
