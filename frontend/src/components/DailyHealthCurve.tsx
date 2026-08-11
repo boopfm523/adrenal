@@ -9,7 +9,6 @@ import type {
 } from "../api/client";
 import {
   formatDecimal,
-  formatGarminDailyValue,
   formatMeasurement,
   garminMetricLabel,
 } from "../format";
@@ -233,6 +232,24 @@ function metricLane(data: DailyHealthCurveData, definition: typeof METRIC_LANES[
   return { key: definition.key, label: definition.label, unit: definition.unit, points };
 }
 
+function dailyAggregatesForLane(data: DailyHealthCurveData, lane: Lane): GarminRecord[] {
+  if (lane.key === "heart_rate") {
+    return data.garmin.filter(
+      (record) => record.kind === "daily" && ["heart_rate", "resting_heart_rate"].includes(record.metric_type ?? ""),
+    );
+  }
+  const definition = METRIC_LANES.find((candidate) => candidate.key === lane.key);
+  if (definition === undefined) return [];
+  return data.garmin.filter(
+    (record) => record.kind === "daily" && record.metric_type === definition.metric,
+  );
+}
+
+function dailyAggregateValue(record: GarminRecord): string {
+  if (record.metric_type === "stress") return formatDecimal(record.value);
+  return formatMeasurement(record.value, record.unit);
+}
+
 function lanes(data: DailyHealthCurveData): Lane[] {
   const exposure: Lane = {
     key: "exposure",
@@ -323,11 +340,6 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
   const allLanes = useMemo(() => lanes(data), [data]);
   const shownLanes = allLanes.filter((lane) => visible[lane.key]);
   const ticks = timeTicks(start, end, data.exposure.timezone);
-  const dailyAggregates = data.garmin.filter((record) => {
-    if (record.kind !== "daily") return false;
-    const lane = METRIC_LANES.find((definition) => definition.metric === record.metric_type);
-    return lane !== undefined && visible[lane.key];
-  });
   const sleepRecords = data.garmin.filter((record) => record.kind === "sleep" && record.ended_at != null);
   const missingWakeTiming = sleepRecords.some(
     (record) => (record.awakenings ?? 0) > 0 && (record.sleep_intervals ?? []).length === 0,
@@ -378,7 +390,6 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     <p>{data.exposure.safety_label}</p>
     <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
-    {dailyAggregates.length === 0 ? null : <section className="garmin-aggregate-context" aria-labelledby="garmin-aggregate-context-title"><h3 id="garmin-aggregate-context-title">Garmin aggregate context</h3><p>These values summarize a provider-defined period. They have no exact intraday observation time, so they are not positioned on or connected within the chart.</p><dl>{dailyAggregates.map((record) => <div key={record.id}><dt>{record.measurement_label ?? garminMetricLabel(record.metric_type)}</dt><dd><strong>{formatGarminDailyValue(record.metric_type, record.value, record.unit)}</strong><span>{record.period_label === null || record.period_label === undefined ? "Untimed aggregate" : `Untimed · ${record.period_label}`} · Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</span></dd></div>)}</dl></section>}
     <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
     <div className="healthcurve-controls" aria-label="HealthCurve chart controls"><div className="healthcurve-focus" role="group" aria-label="Choose a focused HealthCurve comparison"><span>Quick focus:</span>{FOCUS_PRESETS.map((preset) => <button key={preset.label} type="button" className={isPresetVisible(visible, preset.keys) ? undefined : "button-secondary"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</button>)}</div>
       <fieldset className="curve-toggles"><legend>Show or hide chart series</legend>{Object.entries({
@@ -466,7 +477,11 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       </svg>
     </div>
     {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
-    <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => lane.key === "symptoms" ? <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p> : <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and Timeline.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and Timeline." : ""}</p>)}</div>
+    <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => {
+      if (lane.key === "symptoms") return <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p>;
+      const aggregates = dailyAggregatesForLane(data, lane);
+      return <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{aggregates.map((record) => <span key={record.id}> <strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)} ({record.period_label ?? "provider-defined period"}; untimed).</span>)}{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and Timeline.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and Timeline." : ""}</p>;
+    })}</div>
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
       <h3>Exact implemented exposure formula</h3>

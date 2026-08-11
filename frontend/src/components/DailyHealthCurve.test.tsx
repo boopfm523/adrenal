@@ -179,7 +179,7 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("Blood-pressure pulse: 88 bpm");
   });
 
-  it("shows a daily Garmin summary as untimed context without inventing a chart point", () => {
+  it("shows Garmin daily aggregates in their persistent series cards without inventing chart points", () => {
     const dailyStress: GarminRecord = {
       ...sample(0),
       id: "20000000-0000-4000-8000-000000000001",
@@ -216,20 +216,29 @@ describe("Daily HealthCurve", () => {
       measurement_label: "Average waking respiration",
       period_label: "waking period",
     };
-    render(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration] })} />);
+    const restingHeartRate: GarminRecord = {
+      ...dailyStress,
+      id: "20000000-0000-4000-8000-000000000004",
+      summary: "Resting heart rate: 59 bpm",
+      metric_type: "resting_heart_rate",
+      value: "59",
+      unit: "bpm",
+      garmin_field_name: "restingHeartRate",
+      measurement_label: "Resting heart rate",
+      period_label: "daily summary",
+    };
+    render(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration, restingHeartRate] })} />);
 
     expect(document.querySelectorAll("circle.healthcurve-point--stress")).toHaveLength(0);
     expect(document.querySelectorAll("path.healthcurve-series--stress")).toHaveLength(0);
     expect(document.querySelectorAll("circle.healthcurve-point--hrv")).toHaveLength(0);
     expect(document.querySelectorAll("circle.healthcurve-point--respiration_rate")).toHaveLength(0);
-    const context = screen.getByRole("region", { name: "Garmin aggregate context" });
-    expect(context).toHaveTextContent("Stress: 31");
-    expect(context).toHaveTextContent("Untimed · daily average");
-    expect(context).not.toHaveTextContent("Nightly average HRV");
-    fireEvent.click(screen.getByRole("button", { name: "All series (busy)" }));
-    expect(context).toHaveTextContent("Nightly average HRV41 msUntimed · previous night");
-    expect(context).toHaveTextContent("Average waking respiration14.2 breaths/minUntimed · waking period");
-    expect(context).toHaveTextContent("no exact intraday observation time");
+    expect(screen.queryByRole("region", { name: "Garmin aggregate context" })).not.toBeInTheDocument();
+    const summaries = screen.getByLabelText("Series sample counts");
+    expect(within(summaries).getByText(/Garmin stress:/).parentElement).toHaveTextContent("Stress: 31 (daily average; untimed)");
+    expect(within(summaries).getByText(/Heart rate:/).parentElement).toHaveTextContent("Resting heart rate: 59 bpm (daily summary; untimed)");
+    expect(within(summaries).getByText(/^HRV:$/).parentElement).toHaveTextContent("Nightly average HRV: 41 ms (previous night; untimed)");
+    expect(within(summaries).getByText(/Respiration:/).parentElement).toHaveTextContent("Average waking respiration: 14.2 breaths/min (waking period; untimed)");
     expect(hoverAt(0).tooltip).not.toHaveTextContent("Garmin stress: 31 score");
   });
 
