@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "./auth/context";
 import { AppLayout } from "./components/AppLayout";
+import { AccessibleLineChart } from "./components/AccessibleLineChart";
 import { LoginPage } from "./pages/LoginPage";
 import { PlanPage } from "./pages/PlanPage";
 
@@ -31,6 +32,10 @@ async function expectNoHighImpactViolations(): Promise<void> {
 
 function renderRoute(element: React.JSX.Element): void {
   render(<AuthContext.Provider value={auth}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/plan"]}><Routes><Route element={<AppLayout />}><Route path="/plan" element={element} /></Route></Routes></MemoryRouter></QueryClientProvider></AuthContext.Provider>);
+}
+
+function LocationProbe(): React.JSX.Element {
+  return <h1>{useLocation().pathname}</h1>;
 }
 
 describe("automated accessibility audit", () => {
@@ -80,5 +85,37 @@ describe("automated accessibility audit", () => {
     await user.keyboard("[Space]");
     await user.tab();
     expect(approvalButton).toHaveFocus();
+  });
+
+  it("activates every primary route by keyboard", async () => {
+    render(<AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/today"]}><Routes><Route element={<AppLayout />}><Route path="*" element={<LocationProbe />} /></Route></Routes></MemoryRouter></AuthContext.Provider>);
+    const routes = [
+      ["Today", "/today"], ["Timeline", "/timeline"], ["Doses", "/doses"], ["Plan", "/plan"], ["Episodes", "/episodes"],
+      ["Symptoms & diary", "/symptoms-diary"], ["Health data", "/health-data"], ["Labs", "/labs"], ["Analytics", "/analytics"],
+      ["Reports", "/reports"], ["Data quality", "/data-quality"], ["Settings & privacy", "/settings"], ["Help", "/help"],
+    ] as const;
+    const user = userEvent.setup();
+    for (const [label, path] of routes) {
+      const link = screen.getByRole("link", { name: label });
+      link.focus();
+      await user.keyboard("[Enter]");
+      expect(await screen.findByRole("heading", { name: path })).toBeVisible();
+      expect(link).toHaveAttribute("aria-current", "page");
+    }
+  });
+
+  it("keeps an exact chart table keyboard-operable and free of high-impact violations", async () => {
+    render(<AccessibleLineChart title="Synthetic accessibility chart" summary="Synthetic values with one explicit gap." unit="mg" timezone="America/New_York" dateRange="2026-08-01 through 2026-08-03" definition="Each point is synthetic." sampleCount={3} missingCount={1} series={[{ name: "Recorded facts", source: "synthetic fixture", values: [{ label: "2026-08-01", value: "5" }, { label: "2026-08-02", value: null }, { label: "2026-08-03", value: "7" }] }]} />);
+    await expectNoHighImpactViolations();
+    const user = userEvent.setup();
+    const disclosure = screen.getByText("View data table");
+    disclosure.focus();
+    expect(disclosure.tagName).toBe("SUMMARY");
+    expect(disclosure).toHaveFocus();
+    await user.keyboard("[Enter]");
+    // jsdom does not implement the native <summary> toggle default action.
+    disclosure.closest("details")?.setAttribute("open", "");
+    expect(screen.getByRole("region", { name: "Synthetic accessibility chart data table" })).toBeVisible();
+    expect(screen.getByRole("cell", { name: "Gap—no value" })).toBeVisible();
   });
 });
