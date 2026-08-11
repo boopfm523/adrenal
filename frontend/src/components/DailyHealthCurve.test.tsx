@@ -88,6 +88,9 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("Heart rate: 80 bpm");
     expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(tooltip).not.toHaveTextContent(/at 2026-/);
+    expect(tooltip).not.toHaveTextContent(/hc-exposure-v1|provider_imported|observed cadence/i);
+    expect(screen.getByRole("status")).toHaveTextContent("provider_imported");
+    expect(within(screen.getByRole("region", { name: "Daily HealthCurve exact values" })).getAllByText(/provider_imported/).length).toBeGreaterThan(0);
     expect(screen.getByRole("img").querySelector(":scope > title")).toBeNull();
     const tickLabels = [...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent);
     expect(tickLabels.every((label) => /^\d{2}:\d{2}$/.test(label))).toBe(true);

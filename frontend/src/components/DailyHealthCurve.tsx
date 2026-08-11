@@ -414,7 +414,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
   const cursorX = LEFT + (cursorTime - start) / Math.max(end - start, 1) * PLOT_WIDTH;
   const tooltipWidth = 280;
   const tooltipX = Math.min(WIDTH - tooltipWidth - 8, Math.max(LEFT + 8, cursorX + (cursorX > WIDTH * 0.62 ? -tooltipWidth - 12 : 12)));
-  const tooltipHeight = Math.min(PLOT_HEIGHT - 24, 52 + Math.max(1, cursorRows.length) * 42);
+  const tooltipHeight = Math.min(PLOT_HEIGHT - 24, 52 + Math.max(1, cursorRows.length) * 26);
 
   function moveCursor(clientX: number, left: number, width: number): void {
     const ratio = Math.max(0, Math.min(1, (clientX - left) / Math.max(width, 1)));
@@ -509,7 +509,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
         })}</g> : null}
         <line className="healthcurve-cursor" x1={cursorX} y1={TOP} x2={cursorX} y2={TOP + PLOT_HEIGHT} />
         <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} onPointerEnter={() => { setHoveringChart(true); }} onPointerLeave={() => { setHoveringChart(false); }} onPointerMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
-        {hoveringChart ? <foreignObject className="healthcurve-hover-tooltip" x={tooltipX} y={TOP + 12} width={tooltipWidth} height={tooltipHeight}><div className="healthcurve-hover-tooltip-card" role="tooltip"><strong>{cursorLabel}</strong>{cursorRows.length === 0 ? <p>No exact observation at this time.</p> : <ul>{cursorRows.map((row) => <li key={`tooltip-${row.key}`}><strong>{row.series}:</strong> {row.value}<span>{row.source}</span></li>)}</ul>}</div></foreignObject> : null}
+        {hoveringChart ? <foreignObject className="healthcurve-hover-tooltip" x={tooltipX} y={TOP + 12} width={tooltipWidth} height={tooltipHeight}><div className="healthcurve-hover-tooltip-card" role="tooltip"><strong>{cursorLabel}</strong>{cursorRows.length === 0 ? <p>No exact observation at this time.</p> : <ul>{cursorRows.map((row) => <li key={`tooltip-${row.key}`}><strong>{row.series}:</strong> {row.value}</li>)}</ul>}</div></foreignObject> : null}
         <text transform={`translate(18 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="healthcurve-axis-title">Relative display position (0–100)</text>
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({timezoneAbbreviation(data.exposure.timezone, data.exposure.day_start)})</text>
       </svg>

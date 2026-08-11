@@ -298,7 +298,6 @@ circle.chart-series { fill: white; }
 .healthcurve-hover-tooltip-card p, .healthcurve-hover-tooltip-card ul { margin: 0; }
 .healthcurve-hover-tooltip-card ul { padding-left: 1rem; }
 .healthcurve-hover-tooltip-card li + li { margin-top: 0.35rem; }
-.healthcurve-hover-tooltip-card li span { display: block; color: #47554f; }
 .healthcurve-time-explorer { display: grid; gap: 0.35rem; margin-block: 0.8rem; font-weight: 700; }
 .healthcurve-time-explorer input { width: 100%; }
 .healthcurve-readout { min-height: 4.5rem; padding: 0.8rem; border: 1px solid #ccd4ce; border-radius: 0.45rem; background: #f4f7f5; }
