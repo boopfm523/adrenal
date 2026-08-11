@@ -1149,6 +1149,455 @@
         "title": "DailyDoseValue",
         "type": "object"
       },
+      "DailyPatternBloodPressureOut": {
+        "additionalProperties": false,
+        "properties": {
+          "diastolic": {
+            "$ref": "#/components/schemas/DecimalRangeOut"
+          },
+          "pulse": {
+            "$ref": "#/components/schemas/DecimalRangeOut"
+          },
+          "pulse_missing_count": {
+            "minimum": 0.0,
+            "title": "Pulse Missing Count",
+            "type": "integer"
+          },
+          "pulse_sample_count": {
+            "minimum": 0.0,
+            "title": "Pulse Sample Count",
+            "type": "integer"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "systolic": {
+            "$ref": "#/components/schemas/DecimalRangeOut"
+          }
+        },
+        "required": [
+          "sample_count",
+          "pulse_sample_count",
+          "pulse_missing_count",
+          "systolic",
+          "diastolic",
+          "pulse"
+        ],
+        "title": "DailyPatternBloodPressureOut",
+        "type": "object"
+      },
+      "DailyPatternDayOut": {
+        "additionalProperties": false,
+        "properties": {
+          "average_symptom_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Symptom Severity"
+          },
+          "blood_pressure": {
+            "$ref": "#/components/schemas/DailyPatternBloodPressureOut"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "dose_plan_version_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Dose Plan Version Ids",
+            "type": "array"
+          },
+          "elapsed_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Hours"
+          },
+          "excluded_dose_count": {
+            "minimum": 0.0,
+            "title": "Excluded Dose Count",
+            "type": "integer"
+          },
+          "exposure_auc_reu_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exposure Auc Reu Hours"
+          },
+          "exposure_model_version": {
+            "title": "Exposure Model Version",
+            "type": "string"
+          },
+          "exposure_peak_at": {
+            "format": "date-time",
+            "title": "Exposure Peak At",
+            "type": "string"
+          },
+          "exposure_peak_reu": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exposure Peak Reu"
+          },
+          "feature_version": {
+            "const": "hc-daily-pattern-v1",
+            "title": "Feature Version",
+            "type": "string"
+          },
+          "source_revision_watermark_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision Watermark Sha256",
+            "type": "string"
+          },
+          "stress_episodes": {
+            "$ref": "#/components/schemas/DailyPatternEpisodesOut"
+          },
+          "supported_dose_count": {
+            "minimum": 0.0,
+            "title": "Supported Dose Count",
+            "type": "integer"
+          },
+          "symptom_count": {
+            "minimum": 0.0,
+            "title": "Symptom Count",
+            "type": "integer"
+          },
+          "symptom_severity_missing_count": {
+            "minimum": 0.0,
+            "title": "Symptom Severity Missing Count",
+            "type": "integer"
+          },
+          "symptom_severity_sample_count": {
+            "minimum": 0.0,
+            "title": "Symptom Severity Sample Count",
+            "type": "integer"
+          },
+          "symptom_timings": {
+            "items": {
+              "$ref": "#/components/schemas/DailyPatternSymptomTimingOut"
+            },
+            "title": "Symptom Timings",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "wearables": {
+            "items": {
+              "$ref": "#/components/schemas/DailyPatternWearableOut"
+            },
+            "title": "Wearables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "elapsed_hours",
+          "feature_version",
+          "exposure_model_version",
+          "dose_plan_version_ids",
+          "source_revision_watermark_sha256",
+          "supported_dose_count",
+          "excluded_dose_count",
+          "exposure_peak_reu",
+          "exposure_peak_at",
+          "exposure_auc_reu_hours",
+          "symptom_count",
+          "symptom_severity_sample_count",
+          "symptom_severity_missing_count",
+          "symptom_timings",
+          "wearables",
+          "blood_pressure",
+          "stress_episodes"
+        ],
+        "title": "DailyPatternDayOut",
+        "type": "object"
+      },
+      "DailyPatternEpisodesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "open_count": {
+            "minimum": 0.0,
+            "title": "Open Count",
+            "type": "integer"
+          },
+          "overlap_minutes": {
+            "title": "Overlap Minutes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "open_count",
+          "overlap_minutes"
+        ],
+        "title": "DailyPatternEpisodesOut",
+        "type": "object"
+      },
+      "DailyPatternSymptomTimingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "minutes_since_previous_supported_dose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes Since Previous Supported Dose"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "previous_supported_dose_event_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Previous Supported Dose Event Ids",
+            "type": "array"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "symptom_event_id": {
+            "format": "uuid",
+            "title": "Symptom Event Id",
+            "type": "string"
+          },
+          "theoretical_exposure_reu": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theoretical Exposure Reu"
+          }
+        },
+        "required": [
+          "symptom_event_id",
+          "occurred_at",
+          "name",
+          "previous_supported_dose_event_ids",
+          "theoretical_exposure_reu"
+        ],
+        "title": "DailyPatternSymptomTimingOut",
+        "type": "object"
+      },
+      "DailyPatternWearableOut": {
+        "additionalProperties": false,
+        "properties": {
+          "average": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average"
+          },
+          "incompatible_units": {
+            "title": "Incompatible Units",
+            "type": "boolean"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "metric_type": {
+            "$ref": "#/components/schemas/GarminMetricType"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "missingness_state": {
+            "enum": [
+              "no_samples",
+              "cadence_unavailable",
+              "partial_observed_coverage",
+              "full_observed_coverage"
+            ],
+            "title": "Missingness State",
+            "type": "string"
+          },
+          "observed_coverage_minutes": {
+            "title": "Observed Coverage Minutes",
+            "type": "string"
+          },
+          "observed_coverage_percent": {
+            "title": "Observed Coverage Percent",
+            "type": "string"
+          },
+          "sample_count": {
+            "minimum": 0.0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "samples_without_cadence": {
+            "minimum": 0.0,
+            "title": "Samples Without Cadence",
+            "type": "integer"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "minimum",
+          "average",
+          "maximum",
+          "metric_type",
+          "unit",
+          "sample_count",
+          "samples_without_cadence",
+          "observed_coverage_minutes",
+          "observed_coverage_percent",
+          "missingness_state",
+          "incompatible_units"
+        ],
+        "title": "DailyPatternWearableOut",
+        "type": "object"
+      },
+      "DailyPatternsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DailyPatternDayOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "definitions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Definitions",
+            "type": "object"
+          },
+          "exposure_model_versions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exposure Model Versions",
+            "type": "array"
+          },
+          "feature_version": {
+            "const": "hc-daily-pattern-v1",
+            "title": "Feature Version",
+            "type": "string"
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "timezone",
+          "feature_version",
+          "safety_label",
+          "definitions",
+          "exposure_model_versions",
+          "days"
+        ],
+        "title": "DailyPatternsOut",
+        "type": "object"
+      },
       "DataQualityFindingOut": {
         "properties": {
           "action_label": {
@@ -1232,6 +1681,51 @@
           "page"
         ],
         "title": "DataQualityOut",
+        "type": "object"
+      },
+      "DecimalRangeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "average": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          }
+        },
+        "required": [
+          "minimum",
+          "average",
+          "maximum"
+        ],
+        "title": "DecimalRangeOut",
         "type": "object"
       },
       "DiaryIn": {
@@ -2323,6 +2817,21 @@
         ],
         "title": "GarminDisconnectPreviewOut",
         "type": "object"
+      },
+      "GarminMetricType": {
+        "enum": [
+          "heart_rate",
+          "resting_heart_rate",
+          "hrv",
+          "respiration_rate",
+          "stress",
+          "body_battery",
+          "steps",
+          "moderate_intensity_minutes",
+          "vigorous_intensity_minutes"
+        ],
+        "title": "GarminMetricType",
+        "type": "string"
       },
       "GarminRecordOut": {
         "properties": {
@@ -6609,6 +7118,174 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/analytics/daily-patterns": {
+      "get": {
+        "description": "Return comparable deterministic features for at most 366 local days.",
+        "operationId": "daily_patterns_api_v1_analytics_daily_patterns_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyPatternsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Daily Patterns",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/daily-patterns.csv": {
+      "get": {
+        "description": "Export the same current daily-feature projection as a flat CSV.",
+        "operationId": "daily_patterns_csv_api_v1_analytics_daily_patterns_csv_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Daily Patterns Csv",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/v1/analytics/steroid-exposure": {
       "get": {
         "description": "Return a theoretical relative exposure curve from current recorded doses.",

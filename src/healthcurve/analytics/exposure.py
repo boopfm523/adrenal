@@ -107,6 +107,11 @@ def contribution_reu(dose: ExposureDose, instant: datetime) -> float:
     return float(dose.amount) * normalized_shape(elapsed)
 
 
+def exposure_reu_at(doses: Iterable[ExposureDose], instant: datetime) -> Decimal:
+    """Evaluate the versioned exposure model directly at one instant."""
+    return _display_decimal(math.fsum(contribution_reu(dose, instant) for dose in doses))
+
+
 def _display_decimal(value: float) -> Decimal:
     if not math.isfinite(value) or value < 0.0:
         raise ValueError("invalid theoretical exposure result")

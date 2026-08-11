@@ -371,6 +371,22 @@ cortisol requirement, medication-demand multiplier, or adequacy/shortfall judgme
 Missing measurements remain visible gaps. See
 [ADR-0015](adr/0015-recorded-context-not-cortisol-demand.md).
 
+`GET /api/v1/analytics/daily-patterns?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&timezone=Area%2FCity`
+derives up to 366 comparable local-day rows from current facts. Each row states
+`hc-daily-pattern-v1`, its exposure-model version, actual dose-linked plan-version
+IDs, a correction/provider-revision-sensitive source fingerprint, exposure peak and
+REU-hours, symptom timing relative to the latest supported dose and theoretical
+exposure, native-unit Garmin ranges with cadence-derived observed coverage, discrete
+blood-pressure ranges, and stress-episode overlap. Missing samples and unavailable
+cadence stay explicit; expected Garmin samples are never invented. The endpoint
+recomputes rather than storing derived features, so a fact correction or provider
+revision changes the values and fingerprint without rewriting a recorded fact.
+
+The Analytics page renders these rows in an exact-value comparison table beneath the
+selected-day HealthCurve. The same bounded projection is downloadable from
+`GET /api/v1/analytics/daily-patterns.csv`; the CSV is derived content and contains no
+credentials or AI interpretation.
+
 Historical dose timing is resolved against the physician-approved plan whose half-open
 effective interval contained each scheduled or recorded instant, including retired
 plans and a plan transition within a day. The timing result shows signed minutes

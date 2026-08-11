@@ -18,6 +18,7 @@ After one warm-up request, the median of seven runs must meet these service budg
 | Timeline | 750 ms | Merge and serialize the latest 200 items across every timeline fact type |
 | Today | 250 ms | Resolve the historical plan, load one local day of doses, and compare slots |
 | Plan comparison | 100 ms | Load two versions and produce their deterministic slot diff |
+| Daily pattern features | 2,000 ms | Derive and serialize 366 local days of current-fact exposure, context ranges, coverage, and revision fingerprints |
 
 These deliberately include ORM loading and deterministic transformation, but exclude
 browser/network latency. The test also requires PostgreSQL to choose an index-backed

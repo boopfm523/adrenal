@@ -44,7 +44,12 @@ from healthcurve.development_cleanup import (
     preview_synthetic_bootstrap,
 )
 from healthcurve.document_worker import process_available, validate_one
-from healthcurve.episodes.models import EmergencyInjectionEvent
+from healthcurve.episodes.models import (
+    EmergencyInjectionEvent,
+    EpisodeSeverity,
+    EpisodeStatus,
+    StressEpisode,
+)
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import DiaryEvent, SymptomEvent
@@ -65,8 +70,10 @@ from healthcurve.integrations.garmin.models import (
     GarminConnectionState,
     GarminImportBatch,
     GarminMetricEvent,
+    GarminMetricType,
     GarminSleepEvent,
     GarminSyncRun,
+    GarminSyncStatus,
 )
 from healthcurve.labs.cleanup_jobs import (
     LAB_DOCUMENT_CLEANUP_TASK,
@@ -260,6 +267,8 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/blood-pressure",
         "/api/v1/weight",
         "/api/v1/analytics/steroid-exposure?day=2026-08-11&timezone=UTC",
+        "/api/v1/analytics/daily-patterns?date_from=2026-08-11&date_to=2026-08-11&timezone=UTC",
+        "/api/v1/analytics/daily-patterns.csv?date_from=2026-08-11&date_to=2026-08-11&timezone=UTC",
     ):
         assert client.get(path).status_code == 401, path
 
@@ -4973,6 +4982,303 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         params={"day": selected_day, "timezone": "Not/A_Zone"},
     )
     assert invalid.status_code == 422
+
+
+def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
+    client: TestClient, engine: Engine
+) -> None:
+    owner_email = f"dp-{uuid.uuid4().hex[:12]}@example.com"
+    day = date(2026, 3, 8)
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email=owner_email,
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="America/New_York",
+        )
+        session.add(owner)
+        session.flush()
+        medication = Medication(
+            owner_id=owner.id,
+            name="Hydrocortisone",
+            normalized_name="hydrocortisone",
+            formulation="tablet",
+            strength=Decimal("10"),
+            strength_unit="mg",
+            default_unit=DoseUnit.MG,
+            default_route=Route.ORAL,
+        )
+        session.add(medication)
+        session.flush()
+        first_plan = medication_service.create_draft(
+            session,
+            owner_id=owner.id,
+            version_label="Synthetic pre-transition plan",
+            effective_from=datetime(2026, 1, 1),  # noqa: DTZ001
+            effective_to=datetime(2026, 3, 8, 3),  # noqa: DTZ001
+        )
+        medication_service.approve_version(
+            session,
+            first_plan,
+            approved_by="Synthetic clinician",
+            approval_source="Synthetic dated source",
+        )
+        second_plan = medication_service.create_draft(
+            session,
+            owner_id=owner.id,
+            version_label="Synthetic post-transition plan",
+            effective_from=datetime(2026, 3, 8, 3),  # noqa: DTZ001
+        )
+        medication_service.approve_version(
+            session,
+            second_plan,
+            approved_by="Synthetic clinician",
+            approval_source="Synthetic dated source",
+        )
+
+        events.create_event(
+            session,
+            DoseEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 3, 8, 1, 30),  # noqa: DTZ001
+                "America/New_York",
+            ),
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            medication_id=medication.id,
+            amount=Decimal("10"),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            category=DoseCategory.SCHEDULED,
+            regimen_version_id=first_plan.id,
+            slot_id=None,
+            episode_id=None,
+        )
+        second_dose = events.create_event(
+            session,
+            DoseEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 3, 8, 3, 30),  # noqa: DTZ001
+                "America/New_York",
+            ),
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            medication_id=medication.id,
+            amount=Decimal("5"),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            category=DoseCategory.SCHEDULED,
+            regimen_version_id=second_plan.id,
+            slot_id=None,
+            episode_id=None,
+        )
+        symptom = events.create_event(
+            session,
+            SymptomEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 3, 8, 4),  # noqa: DTZ001
+                "America/New_York",
+            ),
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            name="Synthetic dizziness",
+            severity=7,
+            body_area=None,
+            ended_at=None,
+            episode_id=None,
+            notes=None,
+        )
+        events.create_event(
+            session,
+            BloodPressureEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 3, 8, 4, 10),  # noqa: DTZ001
+                "America/New_York",
+            ),
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            systolic_mmhg=110,
+            diastolic_mmhg=70,
+            pulse_bpm=None,
+            notes=None,
+        )
+        session.add(
+            StressEpisode(
+                owner_id=owner.id,
+                trigger="Synthetic DST interval",
+                status=EpisodeStatus.RESOLVED,
+                severity=EpisodeSeverity.MODERATE,
+                started_at=resolve_event_time(
+                    datetime(2026, 3, 8, 1, 45),  # noqa: DTZ001
+                    "America/New_York",
+                ).occurred_at,
+                ended_at=resolve_event_time(
+                    datetime(2026, 3, 8, 3, 15),  # noqa: DTZ001
+                    "America/New_York",
+                ).occurred_at,
+                timezone="America/New_York",
+                recorded_at=datetime.now(UTC),
+            )
+        )
+        sync_run = GarminSyncRun(
+            owner_id=owner.id,
+            requested_start_date=day,
+            requested_end_date=day,
+            timezone="America/New_York",
+            status=GarminSyncStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            finished_at=datetime.now(UTC),
+            counts={},
+            warning_codes=[],
+            client_version="synthetic",
+        )
+        session.add(sync_run)
+        session.flush()
+
+        heart_samples = []
+        for index, value in enumerate((Decimal("70"), Decimal("75"))):
+            sample = events.create_event(
+                session,
+                GarminMetricEvent,
+                owner_id=owner.id,
+                event_time=resolve_event_time(
+                    datetime(2026, 3, 8, 3, index * 5),  # noqa: DTZ001
+                    "America/New_York",
+                ),
+                source_type=SourceType.PROVIDER,
+                confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+                provider_id=f"synthetic-pattern-heart-{index}",
+                source_revision="hr-v1",
+                import_batch_id=None,
+                garmin_import_batch_id=None,
+                garmin_sync_run_id=sync_run.id,
+                garmin_source_member="synthetic-intraday",
+                garmin_manufacturer="Garmin",
+                garmin_product_name=None,
+                garmin_device_serial_hash=None,
+                metric_type=GarminMetricType.HEART_RATE,
+                value=value,
+                unit="bpm",
+                period_end_at=None,
+                aggregation="provider_sample",
+                sample_interval_seconds=300,
+                garmin_field_name="heartrate",
+                notes=None,
+            )
+            heart_samples.append(sample)
+        symptom_id = symptom.id
+        first_sample_id = heart_samples[0].id
+        second_dose_id = second_dose.id
+        expected_plan_ids = {str(first_plan.id), str(second_plan.id)}
+
+    login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    response = client.get(
+        "/api/v1/analytics/daily-patterns",
+        params={
+            "date_from": day.isoformat(),
+            "date_to": (day + timedelta(days=1)).isoformat(),
+            "timezone": "America/New_York",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["feature_version"] == "hc-daily-pattern-v1"
+    assert body["exposure_model_versions"] == ["hc-exposure-v1"]
+    assert "do not establish causation" in body["safety_label"]
+    selected = body["days"][0]
+    assert selected["elapsed_hours"] == "23.0"
+    assert set(selected["dose_plan_version_ids"]) == expected_plan_ids
+    assert selected["supported_dose_count"] == 2
+    assert Decimal(selected["exposure_auc_reu_hours"]) > 0
+    assert selected["symptom_count"] == 1
+    timing = selected["symptom_timings"][0]
+    assert timing["symptom_event_id"] == str(symptom_id)
+    assert timing["previous_supported_dose_event_ids"] == [str(second_dose_id)]
+    assert timing["minutes_since_previous_supported_dose"] == "30.0000"
+    assert Decimal(timing["theoretical_exposure_reu"]) > 0
+    heart = next(row for row in selected["wearables"] if row["metric_type"] == "heart_rate")
+    assert heart["sample_count"] == 2
+    assert heart["average"] == "72.5000"
+    assert heart["observed_coverage_minutes"] == "10.0000"
+    assert heart["observed_coverage_percent"] == "0.7246"
+    hrv = next(row for row in selected["wearables"] if row["metric_type"] == "hrv")
+    assert hrv["sample_count"] == 0
+    assert hrv["minimum"] is None
+    assert hrv["missingness_state"] == "no_samples"
+    assert selected["blood_pressure"]["pulse_missing_count"] == 1
+    assert selected["blood_pressure"]["pulse"]["average"] is None
+    assert selected["stress_episodes"]["overlap_minutes"] == "30.0000"
+    assert body["days"][1]["symptom_count"] == 0
+    original_watermark = selected["source_revision_watermark_sha256"]
+
+    export = client.get(
+        "/api/v1/analytics/daily-patterns.csv",
+        params={
+            "date_from": day.isoformat(),
+            "date_to": (day + timedelta(days=1)).isoformat(),
+            "timezone": "America/New_York",
+        },
+    )
+    assert export.status_code == 200, export.text
+    assert export.headers["content-type"].startswith("text/csv")
+    assert "attachment;" in export.headers["content-disposition"]
+    assert "source_revision_watermark_sha256" in export.text
+    assert "heart_rate_observed_coverage_percent" in export.text
+
+    with Session(engine) as session, session.begin():
+        original_sample = session.get(GarminMetricEvent, first_sample_id)
+        assert original_sample is not None
+        events.correct_event(
+            session,
+            GarminMetricEvent,
+            original_sample,
+            reason="Synthetic provider revision",
+            changes={"value": Decimal("80"), "source_revision": "hr-v2"},
+        )
+
+    revised = client.get(
+        "/api/v1/analytics/daily-patterns",
+        params={
+            "date_from": day.isoformat(),
+            "date_to": day.isoformat(),
+            "timezone": "America/New_York",
+        },
+    )
+    assert revised.status_code == 200, revised.text
+    revised_day = revised.json()["days"][0]
+    revised_heart = next(
+        row for row in revised_day["wearables"] if row["metric_type"] == "heart_rate"
+    )
+    assert revised_heart["sample_count"] == 2
+    assert revised_heart["average"] == "77.5000"
+    assert revised_day["source_revision_watermark_sha256"] != original_watermark
+
+    too_long = client.get(
+        "/api/v1/analytics/daily-patterns",
+        params={"date_from": "2025-01-01", "date_to": "2026-01-02", "timezone": "UTC"},
+    )
+    assert too_long.status_code == 422
+
+    performance_params = {
+        "date_from": (day - timedelta(days=365)).isoformat(),
+        "date_to": day.isoformat(),
+        "timezone": "America/New_York",
+    }
+    assert (
+        client.get("/api/v1/analytics/daily-patterns", params=performance_params).status_code == 200
+    )
+    elapsed = []
+    for _ in range(3):
+        started = perf_counter()
+        measured = client.get("/api/v1/analytics/daily-patterns", params=performance_params)
+        elapsed.append(perf_counter() - started)
+        assert measured.status_code == 200
+        assert len(measured.json()["days"]) == 366
+    assert median(elapsed) < 2.0
 
 
 def test_data_quality_distinguishes_problems_from_provider_absence(

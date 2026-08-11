@@ -3,6 +3,7 @@ import { useState, type PropsWithChildren } from "react";
 
 import {
   getAnalyticsSummary,
+  getDailyPatterns,
   getDailyBloodPressure,
   getDailyEpisodes,
   getDailyGarminSamples,
@@ -14,6 +15,7 @@ import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
 import { DailyHealthCurve } from "../components/DailyHealthCurve";
+import { DailyPatternsTable } from "../components/DailyPatternsTable";
 import { formatDecimal, formatMeasurement } from "../format";
 import { localDate } from "../time";
 
@@ -92,6 +94,7 @@ export function AnalyticsPage(): React.JSX.Element {
     },
   });
   const summary = useQuery({ queryKey: ["analytics", filters], queryFn: () => getAnalyticsSummary(filters.dateFrom, filters.dateTo, filters.timezone) });
+  const patterns = useQuery({ queryKey: ["daily-patterns", filters], queryFn: () => getDailyPatterns(filters.dateFrom, filters.dateTo, filters.timezone) });
 
   return <Page title="Analytics" description="Review one day's HealthCurve from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
     <aside className="safety-note"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
@@ -101,6 +104,8 @@ export function AnalyticsPage(): React.JSX.Element {
     {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} />}
     <section className="analytics-history" aria-labelledby="analytics-history-title"><h2 id="analytics-history-title">Longer-range summaries</h2><p>Use these deterministic totals to compare days across a longer period. Daily pattern analysis will build on the selected-day view.</p></section>
     <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><label>From date<input required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Calculate metrics</button></form>
+    {patterns.isPending ? <p role="status">Deriving comparable daily features…</p> : null}{patterns.isError ? <p className="error-summary" role="alert">Daily pattern features could not be calculated. Check the date range and IANA timezone.</p> : null}
+    {patterns.data === undefined ? null : <DailyPatternsTable data={patterns.data} />}
     {summary.isPending ? <p role="status">Calculating deterministic metrics…</p> : null}{summary.isError ? <p className="error-summary" role="alert">Metrics could not be calculated. Check the date range and IANA timezone.</p> : null}
     {summary.data === undefined ? null : <><p className="analytics-range">Results for <strong>{summary.data.date_from}</strong> through <strong>{summary.data.date_to}</strong> in <strong>{summary.data.timezone}</strong>.</p><DailyDoses summary={summary.data} /><Timing summary={summary.data} /><Episodes summary={summary.data} /><Symptoms summary={summary.data} /></>}
   </Page>;

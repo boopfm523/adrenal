@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_valid
 from healthcurve.episodes.models import EpisodeSeverity, EpisodeStatus
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import LifeEventCategory
+from healthcurve.integrations.garmin.models import GarminMetricType
 from healthcurve.medications.models import (
     DoseCategory,
     DoseUnit,
@@ -912,3 +913,109 @@ class SteroidExposureCurveOut(ApiModel):
     @field_serializer("elapsed_hours")
     def _elapsed(self, value: Decimal) -> str:
         return str(value)
+
+
+class DecimalRangeOut(ApiModel):
+    minimum: Decimal | None
+    average: Decimal | None
+    maximum: Decimal | None
+
+    @field_serializer("minimum", "average", "maximum")
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class DailyPatternWearableOut(DecimalRangeOut):
+    metric_type: GarminMetricType
+    unit: str | None
+    sample_count: int = Field(ge=0)
+    samples_without_cadence: int = Field(ge=0)
+    observed_coverage_minutes: Decimal = Field(ge=0)
+    observed_coverage_percent: Decimal = Field(ge=0, le=100)
+    missingness_state: Literal[
+        "no_samples",
+        "cadence_unavailable",
+        "partial_observed_coverage",
+        "full_observed_coverage",
+    ]
+    incompatible_units: bool
+
+    @field_serializer("observed_coverage_minutes", "observed_coverage_percent")
+    def _coverage(self, value: Decimal) -> str:
+        return str(value)
+
+
+class DailyPatternSymptomTimingOut(ApiModel):
+    symptom_event_id: uuid.UUID
+    occurred_at: datetime
+    name: str
+    severity: int | None = Field(default=None, ge=0, le=10)
+    previous_supported_dose_event_ids: list[uuid.UUID]
+    minutes_since_previous_supported_dose: Decimal | None = Field(default=None, ge=0)
+    theoretical_exposure_reu: Decimal = Field(ge=0)
+
+    @field_serializer("minutes_since_previous_supported_dose", "theoretical_exposure_reu")
+    def _decimal_values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class DailyPatternBloodPressureOut(ApiModel):
+    sample_count: int = Field(ge=0)
+    pulse_sample_count: int = Field(ge=0)
+    pulse_missing_count: int = Field(ge=0)
+    systolic: DecimalRangeOut
+    diastolic: DecimalRangeOut
+    pulse: DecimalRangeOut
+
+
+class DailyPatternEpisodesOut(ApiModel):
+    count: int = Field(ge=0)
+    open_count: int = Field(ge=0)
+    overlap_minutes: Decimal = Field(ge=0)
+
+    @field_serializer("overlap_minutes")
+    def _duration(self, value: Decimal) -> str:
+        return str(value)
+
+
+class DailyPatternDayOut(ApiModel):
+    date: date
+    timezone: str
+    elapsed_hours: Decimal = Field(gt=0)
+    feature_version: Literal["hc-daily-pattern-v1"]
+    exposure_model_version: str
+    dose_plan_version_ids: list[uuid.UUID]
+    source_revision_watermark_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    supported_dose_count: int = Field(ge=0)
+    excluded_dose_count: int = Field(ge=0)
+    exposure_peak_reu: Decimal = Field(ge=0)
+    exposure_peak_at: datetime
+    exposure_auc_reu_hours: Decimal = Field(ge=0)
+    symptom_count: int = Field(ge=0)
+    symptom_severity_sample_count: int = Field(ge=0)
+    symptom_severity_missing_count: int = Field(ge=0)
+    average_symptom_severity: Decimal | None = Field(default=None, ge=0, le=10)
+    symptom_timings: list[DailyPatternSymptomTimingOut]
+    wearables: list[DailyPatternWearableOut]
+    blood_pressure: DailyPatternBloodPressureOut
+    stress_episodes: DailyPatternEpisodesOut
+
+    @field_serializer(
+        "elapsed_hours",
+        "exposure_peak_reu",
+        "exposure_auc_reu_hours",
+        "average_symptom_severity",
+    )
+    def _daily_decimals(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class DailyPatternsOut(ApiModel):
+    date_from: date
+    date_to: date
+    timezone: str
+    feature_version: Literal["hc-daily-pattern-v1"]
+    safety_label: str
+    definitions: dict[str, str]
+    exposure_model_versions: list[str]
+    days: list[DailyPatternDayOut]

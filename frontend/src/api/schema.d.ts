@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/v1/analytics/daily-patterns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily Patterns
+         * @description Return comparable deterministic features for at most 366 local days.
+         */
+        get: operations["daily_patterns_api_v1_analytics_daily_patterns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/daily-patterns.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily Patterns Csv
+         * @description Export the same current daily-feature projection as a flat CSV.
+         */
+        get: operations["daily_patterns_csv_api_v1_analytics_daily_patterns_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/steroid-exposure": {
         parameters: {
             query?: never;
@@ -1504,6 +1544,157 @@ export interface components {
             /** Unit */
             unit: string | null;
         };
+        /** DailyPatternBloodPressureOut */
+        DailyPatternBloodPressureOut: {
+            diastolic: components["schemas"]["DecimalRangeOut"];
+            pulse: components["schemas"]["DecimalRangeOut"];
+            /** Pulse Missing Count */
+            pulse_missing_count: number;
+            /** Pulse Sample Count */
+            pulse_sample_count: number;
+            /** Sample Count */
+            sample_count: number;
+            systolic: components["schemas"]["DecimalRangeOut"];
+        };
+        /** DailyPatternDayOut */
+        DailyPatternDayOut: {
+            /** Average Symptom Severity */
+            average_symptom_severity?: string | null;
+            blood_pressure: components["schemas"]["DailyPatternBloodPressureOut"];
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Dose Plan Version Ids */
+            dose_plan_version_ids: string[];
+            /** Elapsed Hours */
+            elapsed_hours: string | null;
+            /** Excluded Dose Count */
+            excluded_dose_count: number;
+            /** Exposure Auc Reu Hours */
+            exposure_auc_reu_hours: string | null;
+            /** Exposure Model Version */
+            exposure_model_version: string;
+            /**
+             * Exposure Peak At
+             * Format: date-time
+             */
+            exposure_peak_at: string;
+            /** Exposure Peak Reu */
+            exposure_peak_reu: string | null;
+            /**
+             * Feature Version
+             * @constant
+             */
+            feature_version: "hc-daily-pattern-v1";
+            /** Source Revision Watermark Sha256 */
+            source_revision_watermark_sha256: string;
+            stress_episodes: components["schemas"]["DailyPatternEpisodesOut"];
+            /** Supported Dose Count */
+            supported_dose_count: number;
+            /** Symptom Count */
+            symptom_count: number;
+            /** Symptom Severity Missing Count */
+            symptom_severity_missing_count: number;
+            /** Symptom Severity Sample Count */
+            symptom_severity_sample_count: number;
+            /** Symptom Timings */
+            symptom_timings: components["schemas"]["DailyPatternSymptomTimingOut"][];
+            /** Timezone */
+            timezone: string;
+            /** Wearables */
+            wearables: components["schemas"]["DailyPatternWearableOut"][];
+        };
+        /** DailyPatternEpisodesOut */
+        DailyPatternEpisodesOut: {
+            /** Count */
+            count: number;
+            /** Open Count */
+            open_count: number;
+            /** Overlap Minutes */
+            overlap_minutes: string;
+        };
+        /** DailyPatternSymptomTimingOut */
+        DailyPatternSymptomTimingOut: {
+            /** Minutes Since Previous Supported Dose */
+            minutes_since_previous_supported_dose?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Previous Supported Dose Event Ids */
+            previous_supported_dose_event_ids: string[];
+            /** Severity */
+            severity?: number | null;
+            /**
+             * Symptom Event Id
+             * Format: uuid
+             */
+            symptom_event_id: string;
+            /** Theoretical Exposure Reu */
+            theoretical_exposure_reu: string | null;
+        };
+        /** DailyPatternWearableOut */
+        DailyPatternWearableOut: {
+            /** Average */
+            average: string | null;
+            /** Incompatible Units */
+            incompatible_units: boolean;
+            /** Maximum */
+            maximum: string | null;
+            metric_type: components["schemas"]["GarminMetricType"];
+            /** Minimum */
+            minimum: string | null;
+            /**
+             * Missingness State
+             * @enum {string}
+             */
+            missingness_state: "no_samples" | "cadence_unavailable" | "partial_observed_coverage" | "full_observed_coverage";
+            /** Observed Coverage Minutes */
+            observed_coverage_minutes: string;
+            /** Observed Coverage Percent */
+            observed_coverage_percent: string;
+            /** Sample Count */
+            sample_count: number;
+            /** Samples Without Cadence */
+            samples_without_cadence: number;
+            /** Unit */
+            unit: string | null;
+        };
+        /** DailyPatternsOut */
+        DailyPatternsOut: {
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /** Days */
+            days: components["schemas"]["DailyPatternDayOut"][];
+            /** Definitions */
+            definitions: {
+                [key: string]: string;
+            };
+            /** Exposure Model Versions */
+            exposure_model_versions: string[];
+            /**
+             * Feature Version
+             * @constant
+             */
+            feature_version: "hc-daily-pattern-v1";
+            /** Safety Label */
+            safety_label: string;
+            /** Timezone */
+            timezone: string;
+        };
         /** DataQualityFindingOut */
         DataQualityFindingOut: {
             /** Action Label */
@@ -1535,6 +1726,15 @@ export interface components {
             /** Findings */
             findings: components["schemas"]["DataQualityFindingOut"][];
             page: components["schemas"]["PageMetadata"];
+        };
+        /** DecimalRangeOut */
+        DecimalRangeOut: {
+            /** Average */
+            average: string | null;
+            /** Maximum */
+            maximum: string | null;
+            /** Minimum */
+            minimum: string | null;
         };
         /** DiaryIn */
         DiaryIn: {
@@ -1907,6 +2107,11 @@ export interface components {
             /** Sync Run Rows */
             sync_run_rows: number;
         };
+        /**
+         * GarminMetricType
+         * @enum {string}
+         */
+        GarminMetricType: "heart_rate" | "resting_heart_rate" | "hrv" | "respiration_rate" | "stress" | "body_battery" | "steps" | "moderate_intensity_minutes" | "vigorous_intensity_minutes";
         /** GarminRecordOut */
         GarminRecordOut: {
             /** Activity Type */
@@ -3303,6 +3508,76 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    daily_patterns_api_v1_analytics_daily_patterns_get: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+                timezone?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyPatternsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    daily_patterns_csv_api_v1_analytics_daily_patterns_csv_get: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+                timezone?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     steroid_exposure_curve_api_v1_analytics_steroid_exposure_get: {
         parameters: {
             query: {

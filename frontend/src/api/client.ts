@@ -31,6 +31,7 @@ export type Medication = components["schemas"]["MedicationOut"];
 export type MedicationInput = components["schemas"]["MedicationIn"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
 export type SteroidExposureCurve = components["schemas"]["SteroidExposureCurveOut"];
+export type DailyPatterns = components["schemas"]["DailyPatternsOut"];
 export type DataQuality = components["schemas"]["DataQualityOut"];
 export type ReportSummary = components["schemas"]["ReportOut"];
 export type ReportPage = components["schemas"]["ReportPage"];
@@ -506,6 +507,22 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
 export function getSteroidExposure(day: string, timezone: string): Promise<SteroidExposureCurve> {
   const params = new URLSearchParams({ day, timezone });
   return apiRequest<SteroidExposureCurve>(`/analytics/steroid-exposure?${params.toString()}`);
+}
+
+export function getDailyPatterns(dateFrom: string, dateTo: string, timezone: string): Promise<DailyPatterns> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
+  return apiRequest<DailyPatterns>(`/analytics/daily-patterns?${params.toString()}`);
+}
+
+export async function downloadDailyPatternsCsv(dateFrom: string, dateTo: string, timezone: string): Promise<Blob> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
+  const response = await fetch(`/api/v1/analytics/daily-patterns.csv?${params.toString()}`, {
+    headers: { Accept: "text/csv" },
+    credentials: "include",
+  });
+  if (response.status === 401) sessionStore.clear();
+  if (!response.ok) throw await parseError(response);
+  return response.blob();
 }
 
 async function collectPages<T>(
