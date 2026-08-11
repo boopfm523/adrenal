@@ -28,8 +28,10 @@ Caddy (`127.0.0.1:8080`) -> API/web -> PostgreSQL, Redis, workers
 
 Tailscale Serve owns the private HTTPS endpoint and certificate lifecycle. Caddy does
 not bind a LAN, Tailscale, or wildcard host address; Docker publishes it only on
-loopback. PostgreSQL, Redis, API, workers, and container Ollama publish no host ports.
-The host-native Ollama used for Metal acceleration listens only on loopback.
+loopback. PostgreSQL, Redis, API, and workers publish no host ports. The optional
+`container-ollama` profile is stopped in the normal owner runtime. Host-native Ollama
+uses Metal acceleration and listens only on loopback; API and worker containers reach
+it through Docker Desktop's private `host.docker.internal` bridge.
 
 The older `deploy/tailscale.compose.yml` direct-certificate topology remains a tested
 alternative, but it is not the owner's normal Mac command and is not required for this
@@ -90,6 +92,11 @@ docker compose \
   -f deploy/google-drive-backup.compose.yml \
   up -d --build
 ```
+
+This command does not start the profiled Docker Ollama service. The ignored `.env`
+should keep `HC_OLLAMA_BASE_URL=http://host.docker.internal:11434`. Confirm the native
+service is running with `ollama list`; a missing service or model produces HealthCurve's
+safe model-unavailable fallback and does not block recorded facts or emergency content.
 
 Tailscale Serve normally persists independently of the containers. Re-run the
 one-time Serve command if `serve status` does not show the loopback proxy. Restarting

@@ -58,6 +58,10 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
         if services.get(name, {}).get("ports"):
             errors.append(f"{name} must not publish ports")
 
+    ollama = services.get("ollama")
+    if isinstance(ollama, dict) and "container-ollama" not in ollama.get("profiles", []):
+        errors.append("containerized ollama must require the container-ollama profile")
+
     documents = services.get("document-worker", {})
     if documents.get("network_mode") != "none":
         errors.append("document-worker must have no network")

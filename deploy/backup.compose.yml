@@ -70,7 +70,7 @@ services:
     environment:
       HC_ENVIRONMENT: ${HC_ENVIRONMENT:-dev}
       HC_DATABASE_URL: postgresql+psycopg://healthcurve_backup:${POSTGRES_BACKUP_PASSWORD:?set POSTGRES_BACKUP_PASSWORD}@postgres:5432/healthcurve
-      HC_OLLAMA_BASE_URL: http://ollama:11434
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       HC_JOB_POLL_INTERVAL_S: ${HC_JOB_POLL_INTERVAL_S:-2}
       HC_BACKUP_LOCAL_DIR: /backup
       HC_BACKUP_WORK_ROOT: /work

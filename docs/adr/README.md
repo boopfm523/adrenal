@@ -10,7 +10,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 |---|---|---|
 | [0001](0001-postgresql-datastore.md) | PostgreSQL as the datastore | Accepted |
 | [0002](0002-modular-monolith-topology.md) | Modular monolith on Docker Compose behind Caddy | Accepted; edge portions superseded by 0007 |
-| [0003](0003-private-ollama-connectivity.md) | Private Ollama connectivity | Accepted |
+| [0003](0003-private-ollama-connectivity.md) | Private Ollama connectivity | Superseded by 0017 |
 | [0004](0004-job-queue-behind-interface.md) | Database-backed job queue behind an interface | Accepted |
 | [0005](0005-react-spa-frontend.md) | React + TypeScript + Vite frontend | Accepted |
 | [0006](0006-python-runtime-version.md) | Python 3.13 as the pinned runtime | Accepted |
@@ -24,6 +24,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0014](0014-garmin-intraday-read-contract.md) | Read-only Garmin intraday metric contract | Accepted |
 | [0015](0015-recorded-context-not-cortisol-demand.md) | Recorded context overlays without inferred cortisol demand | Accepted |
 | [0016](0016-garmin-sleep-interval-contract.md) | Explicit Garmin sleep intervals on the selected-day HealthCurve | Accepted |
+| [0017](0017-host-native-ollama-default.md) | Host-native Ollama is the owner runtime default | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

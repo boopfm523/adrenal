@@ -1,8 +1,8 @@
 # Local development stack (ADR-0002).
 #
-# Only `caddy` declares `ports:`. PostgreSQL, Redis, and Ollama are reachable by
-# service name on the internal network and from nowhere else -- this is threat model
-# T2's primary control, and a release check verifies it from outside the host.
+# Only `caddy` declares `ports:`. PostgreSQL and Redis are reachable by service name
+# on the internal network and from nowhere else. The normal Mac runtime reaches
+# host-native Ollama through Docker Desktop's private host bridge (ADR-0017).
 #
 # Images are pinned by digest so a silent upstream change cannot alter the runtime
 # (threat model T6).
@@ -43,11 +43,9 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       # Used only where model output becomes a draft (SAFE-15/16).
       HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
-      # Defaults to the bundled container. Override in .env to use a host-native
-      # Ollama -- on macOS, Docker cannot reach the Metal GPU, so a model running
-      # in this container is CPU-only. Must still resolve to a private address
-      # (ADR-0003); the app refuses to start otherwise.
-      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
+      # Host-native Ollama is the owner runtime so Apple Metal remains available and
+      # large model storage is not duplicated in Docker. Must remain private.
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_OLLAMA_VISION_MODEL: ${HC_OLLAMA_VISION_MODEL:-qwen3-vl:30b}
       HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
@@ -128,11 +126,8 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       # Used only where model output becomes a draft. Denied writes on fact and plan.
       HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
-      # Defaults to the bundled container. Override in .env to use a host-native
-      # Ollama -- on macOS, Docker cannot reach the Metal GPU, so a model running
-      # in this container is CPU-only. Must still resolve to a private address
-      # (ADR-0003); the app refuses to start otherwise.
-      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
+      # Same private host-native model endpoint used by the API (ADR-0017).
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
       HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
       HC_OLLAMA_READ_TIMEOUT_S: ${HC_OLLAMA_READ_TIMEOUT_S:-60}
@@ -235,8 +230,9 @@ services:
     # No `ports:`.
 
   ollama:
-    # ADR-0003 topology A (co-located). Unauthenticated by default, so it is
-    # reachable only on the internal network -- never published, in any environment.
+    # Explicit compatibility topology only. The owner runtime uses host-native
+    # Ollama for Metal acceleration and does not start this service (ADR-0017).
+    profiles: [container-ollama]
     image: ollama/ollama@sha256:b88c73ace3e115f8ec53dc8761ae1c0aabfa675406e3681786b98757ce050f42
     <<: *restart
     volumes:

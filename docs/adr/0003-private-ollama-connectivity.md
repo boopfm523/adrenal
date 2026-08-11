@@ -1,6 +1,6 @@
 # ADR-0003: Private Ollama connectivity
 
-**Status:** Accepted — 2026-08-08
+**Status:** Superseded by ADR-0017 — 2026-08-11
 
 ## Context
 

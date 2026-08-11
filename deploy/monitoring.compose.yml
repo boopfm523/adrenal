@@ -14,7 +14,7 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
       HC_REDIS_URL: redis://redis:6379/0
-      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://ollama:11434}
+      HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
       HC_OLLAMA_READ_TIMEOUT_S: ${HC_OLLAMA_READ_TIMEOUT_S:-60}
       HC_OLLAMA_MAX_RETRIES: ${HC_OLLAMA_MAX_RETRIES:-2}

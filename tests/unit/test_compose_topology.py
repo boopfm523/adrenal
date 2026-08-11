@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
+import yaml
 from scripts.check_compose_topology import validate
 
 
@@ -35,7 +37,7 @@ def _config(*, production: bool) -> dict[str, Any]:
             },
             "postgres": {"networks": {"hc-internal": None, "hc-cleanup": None, "hc-garmin": None}},
             "redis": {},
-            "ollama": {},
+            "ollama": {"profiles": ["container-ollama"]},
             "document-worker": {
                 "network_mode": "none",
                 "read_only": True,
@@ -50,6 +52,16 @@ def _config(*, production: bool) -> dict[str, Any]:
 def test_accepts_loopback_development_and_tailnet_production() -> None:
     assert validate(_config(production=False), production=False) == []
     assert validate(_config(production=True), production=True) == []
+
+
+def test_base_compose_defaults_to_host_native_ollama() -> None:
+    root = Path(__file__).resolve().parents[2]
+    compose = yaml.safe_load((root / "docker-compose.yml").read_text(encoding="utf-8"))
+    services = compose["services"]
+    assert services["ollama"]["profiles"] == ["container-ollama"]
+    for name in ("api", "worker"):
+        endpoint = services[name]["environment"]["HC_OLLAMA_BASE_URL"]
+        assert "host.docker.internal:11434" in endpoint
 
 
 def test_base_topology_preserves_the_garmin_database_path_without_the_worker() -> None:
