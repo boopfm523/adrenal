@@ -286,7 +286,7 @@ def timeline(
     local_date_to: date | None = None,
     include_sensitive: bool = False,
     sort_order: Literal["asc", "desc"] = Query(
-        default="asc",
+        default="desc",
         description="Order by experienced event time: asc is earliest first, desc is latest first",
     ),
     limit: int = Query(default=200, ge=1, le=1000),

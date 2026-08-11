@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthContext } from "../auth/context";
 import { TimelinePage } from "./TimelinePage";
@@ -17,12 +17,23 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
-function renderPage(): void {
+function CurrentQuery(): React.JSX.Element {
+  return <output aria-label="Current query">{useLocation().search}</output>;
+}
+
+function BrowserBack(): React.JSX.Element {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => { void navigate(-1); }}>Browser back</button>;
+}
+
+function renderPage(initialEntry = "/timeline"): void {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}>
           <TimelinePage />
+          <CurrentQuery />
+          <BrowserBack />
         </AuthContext.Provider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -74,7 +85,7 @@ describe("Timeline page", () => {
           correction_reason: null,
           is_correction: false,
         },
-      }],
+      }].reverse(),
     }), { headers: { "Content-Type": "application/json" } }));
 
     renderPage();
@@ -83,29 +94,60 @@ describe("Timeline page", () => {
     expect(screen.getByText("2026-08-09 07:00")).toBeVisible();
     expect(screen.getByText("telegram")).toBeVisible();
     expect(screen.getByText("user confirmed")).toBeVisible();
-    expect(screen.getByRole("table", { name: /earliest first/i })).toBeVisible();
+    expect(screen.getByRole("table", { name: /latest first/i })).toBeVisible();
+    expect(screen.getByLabelText("Order")).toHaveValue("desc");
     const region = screen.getByRole("region", { name: "Timeline records table" });
     expect(region).toHaveAttribute("tabindex", "0");
     const [, firstRow, secondRow] = within(region).getAllByRole("row");
     if (firstRow === undefined || secondRow === undefined) throw new Error("timeline rows missing");
-    expect(within(firstRow).getByText("Synthetic medicine 10.0000 mg")).toBeVisible();
+    expect(within(firstRow).getByText("Synthetic later symptom severity 2/10")).toBeVisible();
     expect(within(firstRow).getByText("Original record")).toBeVisible();
-    expect(within(secondRow).getByText("Synthetic later symptom severity 2/10")).toBeVisible();
+    expect(within(secondRow).getByText("Synthetic medicine 10.0000 mg")).toBeVisible();
     const firstInput = fetchMock.mock.calls[0]?.[0];
     const firstUrl = firstInput === undefined ? "" : requestUrl(firstInput);
     expect(firstUrl).not.toContain("include_sensitive");
-    expect(firstUrl).toContain("sort_order=asc");
+    expect(firstUrl).toContain("sort_order=desc");
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Include sensitive diary entries" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("include_sensitive=true"))).toBe(true);
     });
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("include_sensitive=true");
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("sort_order=desc");
 
-    await userEvent.selectOptions(screen.getByLabelText("Order"), "desc");
+    await userEvent.selectOptions(screen.getByLabelText("Order"), "asc");
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
     await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("sort_order=desc"))).toBe(true);
+      expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("sort_order=asc"))).toBe(true);
+    });
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("sort_order=asc");
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByLabelText("Order")).toHaveValue("desc");
+    expect(screen.getByLabelText("Current query")).toBeEmptyDOMElement();
+
+    await userEvent.click(screen.getByRole("button", { name: "Browser back" }));
+    await waitFor(() => { expect(screen.getByLabelText("Order")).toHaveValue("asc"); });
+    expect(screen.getByRole("checkbox", { name: "Include sensitive diary entries" })).toBeChecked();
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("sort_order=asc");
+  });
+
+  it("hydrates shareable filter and oldest-first state from the URL", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      timezone: "America/Chicago", next_cursor: null, items: [],
+    }), { headers: { "Content-Type": "application/json" } }));
+
+    renderPage("/timeline?types=symptom&local_date_from=2026-08-01&local_date_to=2026-08-02&timezone=America%2FChicago&include_sensitive=true&sort_order=asc");
+
+    expect(screen.getByLabelText("Record type")).toHaveValue("symptom");
+    expect(screen.getByLabelText("From date")).toHaveValue("2026-08-01");
+    expect(screen.getByLabelText("Through date")).toHaveValue("2026-08-02");
+    expect(screen.getByLabelText("Order")).toHaveValue("asc");
+    expect(screen.getByRole("checkbox", { name: "Include sensitive diary entries" })).toBeChecked();
+    await waitFor(() => {
+      const firstInput = fetchMock.mock.calls[0]?.[0];
+      expect(firstInput === undefined ? "" : requestUrl(firstInput)).toContain("sort_order=asc");
     });
   });
 

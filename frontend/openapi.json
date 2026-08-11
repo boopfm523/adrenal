@@ -10748,7 +10748,7 @@
             "name": "sort_order",
             "required": false,
             "schema": {
-              "default": "asc",
+              "default": "desc",
               "description": "Order by experienced event time: asc is earliest first, desc is latest first",
               "enum": [
                 "asc",

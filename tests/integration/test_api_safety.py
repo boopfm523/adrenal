@@ -2581,7 +2581,15 @@ def test_timeline_orders_by_experienced_time_with_stable_ties(
         "timezone": "UTC",
     }
 
-    ascending = client.get("/api/v1/timeline", params=params)
+    default_descending = client.get("/api/v1/timeline", params=params)
+    assert default_descending.status_code == 200, default_descending.text
+    assert [item["id"] for item in default_descending.json()["items"]] == [
+        late_id,
+        *tie_ids,
+        early_id,
+    ]
+
+    ascending = client.get("/api/v1/timeline", params={**params, "sort_order": "asc"})
     assert ascending.status_code == 200, ascending.text
     assert [item["id"] for item in ascending.json()["items"]] == [
         early_id,
@@ -2599,6 +2607,21 @@ def test_timeline_orders_by_experienced_time_with_stable_ties(
 
     invalid = client.get("/api/v1/timeline", params={**params, "sort_order": "recorded_at"})
     assert invalid.status_code == 422
+
+    correction = client.post(
+        f"/api/v1/symptoms/{early_id}/correct",
+        json={
+            "reason": "Synthetic experienced-time correction",
+            "changes": {"time": {"local_time": "2024-02-03T22:00:00", "timezone": "UTC"}},
+        },
+        headers=logged_in,
+    )
+    assert correction.status_code == 201, correction.text
+    corrected_id = correction.json()["id"]
+    corrected_timeline = client.get("/api/v1/timeline", params=params).json()["items"]
+    assert corrected_timeline[0]["id"] == corrected_id
+    assert corrected_timeline[0]["provenance"]["is_correction"] is True
+    assert early_id not in {item["id"] for item in corrected_timeline}
 
 
 # ---------------------------------------------------------------------------

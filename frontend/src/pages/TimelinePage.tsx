@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { getTimeline, type TimelineFilters } from "../api/client";
 import { useAuth } from "../auth/context";
@@ -39,18 +40,49 @@ function categoryNote(category: "fact" | "plan" | "ai", eventType: string): stri
   return null;
 }
 
+function defaultFilters(timezone: string): TimelineFilters {
+  return { type: "", dateFrom: "", dateTo: "", timezone, includeSensitive: false, sortOrder: "desc" };
+}
+
+function filtersFromSearch(search: string, profileTimezone: string): TimelineFilters {
+  const params = new URLSearchParams(search);
+  return {
+    type: params.get("types") ?? "",
+    dateFrom: params.get("local_date_from") ?? "",
+    dateTo: params.get("local_date_to") ?? "",
+    timezone: params.get("timezone") ?? profileTimezone,
+    includeSensitive: params.get("include_sensitive") === "true",
+    sortOrder: params.get("sort_order") === "asc" ? "asc" : "desc",
+  };
+}
+
+function searchFromFilters(filters: TimelineFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.type !== "") params.set("types", filters.type);
+  if (filters.dateFrom !== "") params.set("local_date_from", filters.dateFrom);
+  if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
+  params.set("timezone", filters.timezone);
+  if (filters.includeSensitive) params.set("include_sensitive", "true");
+  params.set("sort_order", filters.sortOrder);
+  return params;
+}
+
 export function TimelinePage(): React.JSX.Element {
   const { session } = useAuth();
   const timezone = session?.user.defaultTimezone ?? "UTC";
-  const emptyFilters: TimelineFilters = { type: "", dateFrom: "", dateTo: "", timezone, includeSensitive: false, sortOrder: "asc" };
-  const [draft, setDraft] = useState(emptyFilters);
-  const [filters, setFilters] = useState(emptyFilters);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedSearch = searchParams.toString();
+  const emptyFilters = useMemo(() => defaultFilters(timezone), [timezone]);
+  const filters = useMemo(() => filtersFromSearch(appliedSearch, timezone), [appliedSearch, timezone]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
+  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
+  const setDraft = (next: TimelineFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
   const timeline = useQuery({ queryKey: ["timeline", filters], queryFn: () => getTimeline(filters) });
   const filtered = filters.type !== "" || filters.dateFrom !== "" || filters.dateTo !== "" || filters.includeSensitive;
 
   return (
     <Page title="Timeline" description="The authoritative chronology of recorded facts, with source and correction provenance.">
-      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}>
+      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setSearchParams(searchFromFilters(draft)); }}>
         <label>Record type
           <select value={draft.type} onChange={(event) => { setDraft({ ...draft, type: event.target.value }); }}>
             {eventTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -64,8 +96,8 @@ export function TimelinePage(): React.JSX.Element {
         </label>
         <label>Order
           <select value={draft.sortOrder} onChange={(event) => { setDraft({ ...draft, sortOrder: event.target.value as TimelineFilters["sortOrder"] }); }}>
-            <option value="asc">Earliest first</option>
             <option value="desc">Latest first</option>
+            <option value="asc">Oldest first</option>
           </select>
         </label>
         <label className="checkbox-label">
@@ -74,7 +106,7 @@ export function TimelinePage(): React.JSX.Element {
         </label>
         <div className="filter-actions">
           <button type="submit">Apply filters</button>
-          <button className="button-secondary" type="button" onClick={() => { setDraft(emptyFilters); setFilters(emptyFilters); }}>Clear filters</button>
+          <button className="button-secondary" type="button" onClick={() => { setDraftState({ search: "", filters: emptyFilters }); setSearchParams(new URLSearchParams()); }}>Clear filters</button>
         </div>
       </form>
       <p className="privacy-note">Sensitive diary entries are hidden by default. Dates use {timezone}.</p>
