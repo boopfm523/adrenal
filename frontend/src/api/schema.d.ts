@@ -311,6 +311,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-quality/garmin-syncs/{sync_run_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge Garmin Sync Finding */
+        post: operations["acknowledge_garmin_sync_finding_api_v1_data_quality_garmin_syncs__sync_run_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diary-events": {
         parameters: {
             query?: never;
@@ -1758,6 +1775,8 @@ export interface components {
         DataQualityFindingOut: {
             /** Action Label */
             action_label: string;
+            /** Can Acknowledge */
+            can_acknowledge: boolean;
             /** Detail */
             detail: string;
             /** Finding Kind */
@@ -4408,6 +4427,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DataQualityOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_garmin_sync_finding_api_v1_data_quality_garmin_syncs__sync_run_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                sync_run_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

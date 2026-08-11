@@ -17,6 +17,8 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncRun,
 )
 from healthcurve.labs.models import LabDocument, LabDocumentStatus
+from healthcurve.operations import audit
+from healthcurve.operations.audit import AuditEntry
 from healthcurve.operations.jobs import dead_letters
 
 
@@ -31,6 +33,48 @@ class Finding:
     record_id: uuid.UUID | None
     href: str
     action_label: str
+    can_acknowledge: bool = False
+
+
+GARMIN_WARNING_LABELS = {
+    "intraday_heart_rate_missing_or_invalid": "intraday heart rate was missing or unusable",
+    "intraday_respiration_rate_missing_or_invalid": "intraday respiration was missing or unusable",
+    "intraday_stress_missing_or_invalid": "intraday stress was missing or unusable",
+    "intraday_hrv_missing_or_invalid": "intraday HRV was missing or unusable",
+    "hrv_nightly_average_shape_invalid": "nightly-average HRV used an unexpected response format",
+}
+
+
+def _garmin_warning_label(code: str) -> str:
+    known = GARMIN_WARNING_LABELS.get(code)
+    if known is not None:
+        return known
+    if code.startswith("intraday_") and code.endswith("_shape_invalid"):
+        metric = code.removeprefix("intraday_").removesuffix("_shape_invalid")
+        return f"intraday {metric.replace('_', ' ')} used an unexpected response format"
+    if code.startswith("intraday_") and code.endswith("_truncated"):
+        metric = code.removeprefix("intraday_").removesuffix("_truncated")
+        return f"intraday {metric.replace('_', ' ')} may be incomplete"
+    if code.startswith("intraday_") and code.endswith("_duplicate_timestamp"):
+        metric = code.removeprefix("intraday_").removesuffix("_duplicate_timestamp")
+        return f"intraday {metric.replace('_', ' ')} included duplicate timestamps"
+    return code.replace("_", " ")
+
+
+def _garmin_sync_acknowledged(
+    session: Session, *, owner_id: uuid.UUID, sync_run_id: uuid.UUID
+) -> bool:
+    return (
+        session.scalar(
+            select(AuditEntry.id).where(
+                AuditEntry.actor == audit.actor_for_owner(owner_id),
+                AuditEntry.action == audit.AuditAction.DATA_QUALITY_ACKNOWLEDGED,
+                AuditEntry.target_type == "garmin_sync_run",
+                AuditEntry.target_id == sync_run_id,
+            )
+        )
+        is not None
+    )
 
 
 def findings_for_owner(session: Session, owner_id: uuid.UUID) -> list[Finding]:
@@ -171,21 +215,43 @@ def findings_for_owner(session: Session, owner_id: uuid.UUID) -> list[Finding]:
             .order_by(GarminSyncRun.finished_at.desc(), GarminSyncRun.id.desc())
             .limit(1)
         )
-        if latest_sync is not None:
-            for warning in latest_sync.warning_codes:
-                findings.append(
-                    Finding(
-                        id=f"garmin-sync:{latest_sync.id}:{warning}",
-                        finding_kind="problem",
-                        severity="attention",
-                        source="Garmin Connect",
-                        title="Garmin supplied a partial or changed response",
-                        detail=f"Safe reason code: {warning}.",
-                        record_id=latest_sync.id,
-                        href="/settings#garmin-connection",
-                        action_label="Review Garmin sync status",
-                    )
+        if (
+            latest_sync is not None
+            and latest_sync.warning_codes
+            and not _garmin_sync_acknowledged(
+                session, owner_id=owner_id, sync_run_id=latest_sync.id
+            )
+        ):
+            warnings = sorted({_garmin_warning_label(code) for code in latest_sync.warning_codes})
+            count = len(warnings)
+            finished = latest_sync.finished_at.isoformat(timespec="minutes")
+            window = (
+                f"{latest_sync.requested_start_date.isoformat()} through "
+                f"{latest_sync.requested_end_date.isoformat()} ({latest_sync.timezone})"
+            )
+            imported = latest_sync.counts.get("created", 0)
+            corrected = latest_sync.counts.get("corrected", 0)
+            unchanged = latest_sync.counts.get("unchanged", 0)
+            warning_word = "warning" if count == 1 else "warnings"
+            findings.append(
+                Finding(
+                    id=f"garmin-sync:{latest_sync.id}",
+                    finding_kind="problem",
+                    severity="attention",
+                    source="Garmin Connect · completed sync",
+                    title=f"Garmin sync completed with {count} data {warning_word}",
+                    detail=(
+                        f"Completed {finished} for {window}. This is a completed sync notice, "
+                        "not queued or running work. Other supplied Garmin data was saved "
+                        f"({imported} new, {corrected} corrected, {unchanged} unchanged). "
+                        f"Review: {'; '.join(warnings)}. Missing values remain missing, never zero."
+                    ),
+                    record_id=latest_sync.id,
+                    href="/settings#garmin-connection",
+                    action_label="Open Garmin sync settings",
+                    can_acknowledge=True,
                 )
+            )
 
     for job in dead_letters(session):
         findings.append(

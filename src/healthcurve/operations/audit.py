@@ -58,6 +58,7 @@ class AuditAction(StrEnum):
     INTEGRATION_DISCONNECTED = "integration_disconnected"
     INTEGRATION_IMPORT_CONFIRMED = "integration_import_confirmed"
     INTEGRATION_SYNC_COMPLETED = "integration_sync_completed"
+    DATA_QUALITY_ACKNOWLEDGED = "data_quality_acknowledged"
 
     AI_ANALYSIS_GENERATED = "ai_analysis_generated"
     AI_ANALYSIS_DELETED = "ai_analysis_deleted"

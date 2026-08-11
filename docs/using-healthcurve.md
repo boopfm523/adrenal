@@ -540,6 +540,12 @@ The page is a review queue, not a clinical completeness check. “No known data-
 findings” only means that the implemented deterministic checks found nothing current;
 it does not establish that every health event or measurement was recorded.
 
+A Garmin warning row represents the latest completed sync run, not another queued
+request. Warnings from that run are grouped together with its covered date window and
+completion time. “Clear reviewed notice” records that the owner reviewed that sync and
+hides the notice without deleting imported facts or sync provenance. A later completed
+sync with warnings is a new review item and appears again.
+
 What you have today for answering questions:
 
 1. **`/analytics/steroid-exposure`** — theoretical actual-dose exposure for one local day.

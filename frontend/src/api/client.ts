@@ -622,6 +622,12 @@ export function getDataQuality(page = 1): Promise<DataQuality> {
   return apiRequest<DataQuality>(`/data-quality?page=${page.toString()}`);
 }
 
+export async function acknowledgeGarminSyncFinding(syncRunId: string): Promise<void> {
+  await apiRequest<unknown>(`/data-quality/garmin-syncs/${encodeURIComponent(syncRunId)}/acknowledge`, {
+    method: "POST",
+  });
+}
+
 export function getGarminStatus(): Promise<GarminStatus> {
   return apiRequest<GarminStatus>("/integrations/garmin/status");
 }

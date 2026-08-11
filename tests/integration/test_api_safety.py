@@ -5534,6 +5534,103 @@ def test_data_quality_distinguishes_problems_from_provider_absence(
     assert "does not mean" in body["completeness_notice"]
 
 
+def test_data_quality_groups_and_acknowledges_latest_garmin_sync_warning(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        session.add(
+            GarminConnection(
+                owner_id=owner_id,
+                state=GarminConnectionState.CONNECTED,
+                connected_at=datetime(2026, 8, 1, tzinfo=UTC),
+                capabilities={},
+                client_version="synthetic",
+            )
+        )
+        run = GarminSyncRun(
+            owner_id=owner_id,
+            requested_start_date=date(2026, 8, 5),
+            requested_end_date=date(2026, 8, 11),
+            timezone="America/New_York",
+            status=GarminSyncStatus.COMPLETED_WITH_WARNINGS,
+            started_at=datetime(2026, 8, 11, 8, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 11, 8, 1, tzinfo=UTC),
+            counts={"created": 9, "corrected": 2, "unchanged": 40},
+            warning_codes=[
+                "intraday_heart_rate_missing_or_invalid",
+                "intraday_respiration_rate_missing_or_invalid",
+                "intraday_stress_missing_or_invalid",
+            ],
+            client_version="synthetic",
+        )
+        session.add(run)
+        session.flush()
+        run_id = run.id
+
+        other = Owner(
+            email="other-quality-owner@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        other_run = GarminSyncRun(
+            owner_id=other.id,
+            requested_start_date=date(2026, 8, 11),
+            requested_end_date=date(2026, 8, 11),
+            timezone="UTC",
+            status=GarminSyncStatus.COMPLETED_WITH_WARNINGS,
+            started_at=datetime(2026, 8, 11, 9, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 11, 9, 1, tzinfo=UTC),
+            counts={},
+            warning_codes=["intraday_stress_missing_or_invalid"],
+            client_version="synthetic",
+        )
+        session.add(other_run)
+        session.flush()
+        other_run_id = other_run.id
+
+    response = client.get("/api/v1/data-quality")
+    assert response.status_code == 200
+    garmin_findings = [
+        finding
+        for finding in response.json()["findings"]
+        if finding["id"] == f"garmin-sync:{run_id}"
+    ]
+    assert len(garmin_findings) == 1
+    finding = garmin_findings[0]
+    assert finding["title"] == "Garmin sync completed with 3 data warnings"
+    assert finding["can_acknowledge"] is True
+    assert "not queued or running work" in finding["detail"]
+    assert "2026-08-05 through 2026-08-11" in finding["detail"]
+    assert "intraday respiration was missing or unusable" in finding["detail"]
+    assert "9 new, 2 corrected, 40 unchanged" in finding["detail"]
+
+    forbidden = client.post(
+        f"/api/v1/data-quality/garmin-syncs/{other_run_id}/acknowledge", headers=logged_in
+    )
+    assert forbidden.status_code == 404
+    acknowledged = client.post(
+        f"/api/v1/data-quality/garmin-syncs/{run_id}/acknowledge", headers=logged_in
+    )
+    assert acknowledged.status_code == 204
+    assert all(
+        item["id"] != f"garmin-sync:{run_id}"
+        for item in client.get("/api/v1/data-quality").json()["findings"]
+    )
+    with Session(engine) as session:
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.DATA_QUALITY_ACKNOWLEDGED,
+                AuditEntry.target_id == run_id,
+            )
+        )
+        assert entry is not None
+        assert entry.change_summary == "reviewed Garmin sync warning notice"
+
+
 def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

@@ -45,6 +45,42 @@ describe("Data quality page", () => {
     expect(screen.queryByLabelText(/from date/i)).not.toBeInTheDocument();
   });
 
+  it("explains and clears a reviewed Garmin sync notice without implying data deletion", async () => {
+    const requests: { method: string; url: string }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? "GET";
+      requests.push({ method, url });
+      if (method === "POST") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(jsonResponse({
+        completeness_notice: "Synthetic completeness boundary.",
+        findings: [{
+          id: "garmin-sync:22222222-2222-4222-8222-222222222222",
+          finding_kind: "problem",
+          severity: "attention",
+          source: "Garmin Connect · completed sync",
+          title: "Garmin sync completed with 3 data warnings",
+          detail: "Completed for a synthetic window. This is a completed sync notice, not queued or running work.",
+          record_id: "22222222-2222-4222-8222-222222222222",
+          href: "/settings#garmin-connection",
+          action_label: "Open Garmin sync settings",
+          can_acknowledge: true,
+        }],
+        page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 },
+      }));
+    });
+    renderPage();
+
+    expect(await screen.findByText(/not another queued run/i)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Clear reviewed notice" }));
+    await waitFor(() => { expect(screen.queryByText("Garmin sync completed with 3 data warnings")).not.toBeInTheDocument(); });
+    expect(screen.getByText(/without deleting sync history or health data/i)).toBeVisible();
+    expect(requests).toContainEqual({
+      method: "POST",
+      url: "/api/v1/data-quality/garmin-syncs/22222222-2222-4222-8222-222222222222/acknowledge",
+    });
+  });
+
   it("shows a bounded empty state instead of claiming completeness", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ completeness_notice: "No known findings does not mean the health record is clinically complete.", findings: [], page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 } }));
     renderPage();
