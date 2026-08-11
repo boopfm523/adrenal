@@ -1471,9 +1471,18 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             "/api/v1/integrations/garmin/sync?date_from=2026-01-10&date_to=2026-01-11",
             headers={**headers, "Idempotency-Key": "synthetic-manual-sync"},
         )
+        equivalent_sync = client.post(
+            "/api/v1/integrations/garmin/sync?date_from=2026-01-10&date_to=2026-01-11",
+            headers={**headers, "Idempotency-Key": "synthetic-manual-sync-new-key"},
+        )
         assert requested_sync.status_code == 202
         assert duplicate_sync.status_code == 202
+        assert equivalent_sync.status_code == 202
         assert requested_sync.json()["job_id"] == duplicate_sync.json()["job_id"]
+        assert requested_sync.json()["job_id"] == equivalent_sync.json()["job_id"]
+        assert requested_sync.json()["disposition"] == "queued"
+        assert duplicate_sync.json()["disposition"] == "coalesced_active"
+        assert equivalent_sync.json()["disposition"] == "coalesced_active"
     finally:
         settings.garmin_enabled = False
 

@@ -195,6 +195,7 @@ circle.chart-series { fill: white; }
 .chart-table summary { cursor: pointer; font-weight: 750; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(16rem, 1fr)); gap: 1rem; }
 .settings-card { border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
+.button-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .integration-status { display: grid; grid-template-columns: repeat(2, minmax(10rem, 1fr)); gap: 0.6rem; }
 .integration-status div { border-top: 1px solid #dce2dd; padding-top: 0.5rem; }
 .integration-status dt { color: #48554f; font-size: 0.85rem; font-weight: 700; }

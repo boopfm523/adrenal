@@ -114,16 +114,30 @@ the same current recorded facts.
 
 ## Scheduling and reconciliation
 
-The worker queues one bounded daily window and re-reads the configured lookback, with
-a maximum of 31 days per job. Reads are rate-spaced and durable jobs have bounded
-retries. Stable provider identifiers and revision hashes make overlapping windows
-idempotent. If Garmin later changes a value, HealthCurve creates a correction linked to
-the original row; it never silently rewrites history.
+The worker queues one bounded window per owner and local calendar day, with a maximum
+of 31 days per job. The initial window uses the configured lookback. After a successful
+checkpoint, the daily scheduler deliberately re-reads the checkpoint day and the two
+preceding days, bounded by that lookback, so late or corrected Garmin values are still
+detected. Reads are rate-spaced and durable jobs have bounded retries. Stable provider
+identifiers and revision hashes make overlapping windows idempotent. If Garmin later
+changes a value, HealthCurve creates a correction linked to the original row; it never
+silently rewrites history.
+
+Equivalent work is coalesced by exact owner, timezone, start date, and end date. A
+manual click, a newly generated browser request key, and worker scheduler startup all
+reuse one queued or running durable job for that exact window. A different window,
+including the next local day, remains separate and is never discarded. This
+coordination is serialized by the owner connection row, so concurrent requests cannot
+both create provider reads.
 
 Use **Sync Garmin now** for a bounded manual job. It does not run inside the web
-request. Future-dated and over-31-day windows are rejected. A queued sync that races
-with disconnect becomes a no-op, so Garmin is not contacted after consent is
-withdrawn.
+request. After an exact window completes, ordinary manual requests reuse that result
+for 30 minutes rather than reading Garmin again. Settings reports whether a request
+was newly queued, shared with active work, or suppressed by this cooldown and shows
+the requested dates. **Refresh recent Garmin window** deliberately bypasses only the
+completed-window cooldown; it still coalesces with equivalent queued or running work.
+Future-dated and over-31-day windows are rejected. A queued sync that races with
+disconnect becomes a no-op, so Garmin is not contacted after consent is withdrawn.
 
 ## Reauthentication and failures
 

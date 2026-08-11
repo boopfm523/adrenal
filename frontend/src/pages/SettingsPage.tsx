@@ -9,6 +9,7 @@ import {
   getGarminStatus,
   requestGarminSync,
   revokeAllSessions,
+  type GarminSyncRequest,
 } from "../api/client";
 import { sessionStore } from "../api/session";
 import { useAuth } from "../auth/context";
@@ -27,6 +28,25 @@ function requestKey(): string {
   return `web-${Date.now().toString()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function syncResultMessage(result: GarminSyncRequest): string {
+  const window = `${result.requested_start_date} through ${result.requested_end_date}`;
+  if (result.disposition === "coalesced_active") {
+    return `An equivalent Garmin sync for ${window} is already queued or running. No duplicate provider read was added.`;
+  }
+  if (result.disposition === "cooldown_reused") {
+    const until = result.cooldown_until === null
+      ? "the cooldown ends"
+      : result.cooldown_until.replace("T", " ").replace("Z", " UTC");
+    return `Garmin already completed ${window} recently. No duplicate provider read was added; the cooldown lasts until ${until}. Use Refresh recent Garmin window only if you deliberately need another read now.`;
+  }
+  if (result.disposition === "idempotent_replay") {
+    return `This exact request for ${window} was already accepted. No duplicate provider read was added.`;
+  }
+  return result.disposition === "refresh_queued"
+    ? `A deliberate refresh of ${window} was queued.`
+    : `Garmin sync for ${window} was queued.`;
+}
+
 function GarminControl(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [deleteData, setDeleteData] = useState(true);
@@ -36,7 +56,7 @@ function GarminControl(): React.JSX.Element {
     queryFn: getGarminDisconnectPreview,
   });
   const sync = useMutation({
-    mutationFn: () => requestGarminSync(requestKey()),
+    mutationFn: (refresh: boolean) => requestGarminSync(requestKey(), refresh),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
     },
@@ -72,8 +92,12 @@ function GarminControl(): React.JSX.Element {
     </dl>}
     {capabilities.length === 0 ? null : <details><summary>Latest metric availability</summary><ul>{capabilities.map(([name, value]) => <li key={name}>{name.replaceAll("_", " ")}: {value}</li>)}</ul></details>}
     {warningCodes.length === 0 ? null : <p className="privacy-note">Latest safe warning codes: {warningCodes.join(", ")}. Missing values remain unavailable, never zero.</p>}
-    <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(); }}>{sync.isPending ? "Queueing sync…" : "Sync Garmin now"}</button>
-    {sync.isSuccess ? <p className="success-message" role="status">Garmin sync queued. Refresh status after the worker finishes.</p> : null}
+    <p>Automatic sync runs once per local day. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
+    <div className="button-row">
+      <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(false); }}>{sync.isPending ? "Queueing sync…" : "Sync Garmin now"}</button>
+      <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</button>
+    </div>
+    {sync.isSuccess ? <p className="success-message" role="status">{syncResultMessage(sync.data)}</p> : null}
     {sync.isError ? <p className="error-summary" role="alert">The Garmin sync was not queued. Review the connection status.</p> : null}
     <form className="privacy-action danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); disconnect.mutate({ password: data.get("password") as string, confirmation: data.get("confirmation") as string }); }}>
       <h4>Disconnect Garmin</h4>

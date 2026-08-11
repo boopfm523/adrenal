@@ -2441,6 +2441,64 @@
         "title": "GarminStatusOut",
         "type": "object"
       },
+      "GarminSyncDisposition": {
+        "enum": [
+          "queued",
+          "refresh_queued",
+          "coalesced_active",
+          "cooldown_reused",
+          "idempotent_replay"
+        ],
+        "title": "GarminSyncDisposition",
+        "type": "string"
+      },
+      "GarminSyncRequestOut": {
+        "properties": {
+          "cooldown_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Until"
+          },
+          "disposition": {
+            "$ref": "#/components/schemas/GarminSyncDisposition"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "requested_end_date": {
+            "format": "date",
+            "title": "Requested End Date",
+            "type": "string"
+          },
+          "requested_start_date": {
+            "format": "date",
+            "title": "Requested Start Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "disposition",
+          "requested_start_date",
+          "requested_end_date"
+        ],
+        "title": "GarminSyncRequestOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -7758,6 +7816,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "Idempotency-Key",
             "required": true,
@@ -7806,11 +7874,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Request Sync Api V1 Integrations Garmin Sync Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GarminSyncRequestOut"
                 }
               }
             },

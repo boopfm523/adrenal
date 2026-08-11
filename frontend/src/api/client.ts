@@ -456,8 +456,17 @@ export function getGarminDisconnectPreview(): Promise<GarminDisconnectPreview> {
   return apiRequest<GarminDisconnectPreview>("/integrations/garmin/disconnect-preview");
 }
 
-export function requestGarminSync(idempotencyKey: string): Promise<{ job_id: string; status: string }> {
-  return apiRequest<{ job_id: string; status: string }>("/integrations/garmin/sync", {
+export interface GarminSyncRequest {
+  job_id: string;
+  status: string;
+  disposition: "queued" | "refresh_queued" | "coalesced_active" | "cooldown_reused" | "idempotent_replay";
+  requested_start_date: string;
+  requested_end_date: string;
+  cooldown_until: string | null;
+}
+
+export function requestGarminSync(idempotencyKey: string, refresh = false): Promise<GarminSyncRequest> {
+  return apiRequest<GarminSyncRequest>(`/integrations/garmin/sync${refresh ? "?refresh=true" : ""}`, {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
   });

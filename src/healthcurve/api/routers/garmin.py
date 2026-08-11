@@ -21,7 +21,7 @@ from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_c
 from healthcurve.api.routers.events import provenance_out, time_out
 from healthcurve.api.schemas import EventTimeOut, ProvenanceOut
 from healthcurve.events import service as events
-from healthcurve.integrations.garmin.connect_jobs import enqueue_sync
+from healthcurve.integrations.garmin.connect_jobs import GarminSyncDisposition, enqueue_sync
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminConnection,
@@ -93,6 +93,15 @@ class GarminDisconnectPreviewOut(BaseModel):
     retain_data_confirmation: str = "DISCONNECT GARMIN"
 
 
+class GarminSyncRequestOut(BaseModel):
+    job_id: uuid.UUID
+    status: str
+    disposition: GarminSyncDisposition
+    requested_start_date: date
+    requested_end_date: date
+    cooldown_until: datetime | None = None
+
+
 @router.get("/status", response_model=GarminStatusOut)
 def connection_status(
     session: DbSession, owner: CurrentOwner, settings: AppSettings
@@ -119,7 +128,12 @@ def connection_status(
     )
 
 
-@router.post("/sync", dependencies=[Depends(require_csrf)], status_code=202)
+@router.post(
+    "/sync",
+    dependencies=[Depends(require_csrf)],
+    status_code=202,
+    response_model=GarminSyncRequestOut,
+)
 def request_sync(
     session: DbSession,
     owner: CurrentOwner,
@@ -127,7 +141,8 @@ def request_sync(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=120)],
     date_from: date | None = None,
     date_to: date | None = None,
-) -> dict[str, str]:
+    refresh: bool = False,
+) -> GarminSyncRequestOut:
     connection = session.scalar(
         select(GarminConnection).where(GarminConnection.owner_id == owner.id)
     )
@@ -143,19 +158,27 @@ def request_sync(
     if end > local_today:
         raise HTTPException(status_code=422, detail={"code": "garmin_sync_future_window"})
     try:
-        job = enqueue_sync(
+        result = enqueue_sync(
             session,
             owner_id=owner.id,
             start_date=start,
             end_date=end,
             timezone=owner.default_timezone,
             idempotency_key=f"manual:{owner.id}:{idempotency_key}",
+            force_refresh=refresh,
         )
     except JobQueueError as exc:
         if exc.reason_code == "garmin_sync_window_invalid":
             raise HTTPException(status_code=422, detail={"code": exc.reason_code}) from exc
         raise HTTPException(status_code=409, detail={"code": exc.reason_code}) from exc
-    return {"job_id": str(job.id), "status": job.status.value}
+    return GarminSyncRequestOut(
+        job_id=result.job.id,
+        status=result.job.status.value,
+        disposition=result.disposition,
+        requested_start_date=start,
+        requested_end_date=end,
+        cooldown_until=result.cooldown_until,
+    )
 
 
 @router.get("/records", response_model=GarminRecordsOut)

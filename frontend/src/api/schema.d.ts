@@ -1898,6 +1898,34 @@ export interface components {
             /** State */
             state: string;
         };
+        /**
+         * GarminSyncDisposition
+         * @enum {string}
+         */
+        GarminSyncDisposition: "queued" | "refresh_queued" | "coalesced_active" | "cooldown_reused" | "idempotent_replay";
+        /** GarminSyncRequestOut */
+        GarminSyncRequestOut: {
+            /** Cooldown Until */
+            cooldown_until?: string | null;
+            disposition: components["schemas"]["GarminSyncDisposition"];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Requested End Date
+             * Format: date
+             */
+            requested_end_date: string;
+            /**
+             * Requested Start Date
+             * Format: date
+             */
+            requested_start_date: string;
+            /** Status */
+            status: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -3949,6 +3977,7 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
+                refresh?: boolean;
             };
             header: {
                 "Idempotency-Key": string;
@@ -3967,9 +3996,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["GarminSyncRequestOut"];
                 };
             };
             /** @description Validation Error */

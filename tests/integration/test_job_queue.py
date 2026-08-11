@@ -6,17 +6,34 @@ import hashlib
 import json
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Event
+from typing import Any
 
 import pytest
-from sqlalchemy import Engine, create_engine, select, text
+from sqlalchemy import Engine, create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from healthcurve.ai.models import DraftState, ExtractionDraft
+from healthcurve.config import Settings
 from healthcurve.db import SCHEMAS, Base
+from healthcurve.identity.models import Owner
+from healthcurve.integrations.garmin.connect_jobs import (
+    GARMIN_SYNC_TASK,
+    GarminSyncDisposition,
+    enqueue_sync,
+    make_garmin_handler,
+    schedule_garmin_sync,
+)
+from healthcurve.integrations.garmin.models import (
+    GarminConnection,
+    GarminConnectionState,
+    GarminSyncRun,
+)
 from healthcurve.integrations.telegram.draft_jobs import (
     DRAFT_EXPIRY_TASK,
     draft_expiry_health,
@@ -42,6 +59,29 @@ pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 NOW = datetime(2026, 8, 9, 12, tzinfo=UTC)
 
 
+class _SyntheticGarminClient:
+    def __init__(self) -> None:
+        self.login_count = 0
+
+    def login(self) -> None:
+        self.login_count += 1
+
+    def get_stats(self, day: str) -> dict[str, Any]:
+        del day
+        return {"totalSteps": 1_234}
+
+    def get_sleep_data(self, day: str) -> dict[str, Any]:
+        del day
+        return {}
+
+    def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+        del start, end
+        return []
+
+    def logout(self) -> None:
+        return None
+
+
 @pytest.fixture(scope="module")
 def engine() -> Iterator[Engine]:
     with PostgresContainer("postgres:16-alpine", driver="psycopg") as container:
@@ -63,6 +103,27 @@ def factory(engine: Engine) -> Iterator[sessionmaker[Session]]:
         session.query(ExtractionDraft).delete()
         session.query(Job).delete()
     yield maker
+
+
+def _connected_garmin_owner(factory: sessionmaker[Session], *, email: str) -> uuid.UUID:
+    with factory() as session, session.begin():
+        owner = Owner(
+            email=email,
+            password_hash=hashlib.sha256(email.encode("utf-8")).hexdigest(),
+            default_timezone="UTC",
+        )
+        session.add(owner)
+        session.flush()
+        session.add(
+            GarminConnection(
+                owner_id=owner.id,
+                state=GarminConnectionState.CONNECTED,
+                connected_at=NOW,
+                capabilities={},
+                client_version="synthetic",
+            )
+        )
+        return owner.id
 
 
 def test_enqueue_uses_the_callers_transaction(factory: sessionmaker[Session]) -> None:
@@ -286,6 +347,237 @@ def test_worker_rolls_back_handler_writes_before_recording_failure(
         assert child is None
         assert parent is not None and parent.status is JobStatus.DEAD_LETTER
         assert parent.last_error_code == "handler_failed"
+
+
+def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email="garmin-coalescing@example.test")
+    settings = Settings.model_validate({"garmin_enabled": True, "garmin_sync_lookback_days": 7})
+    client = _SyntheticGarminClient()
+    initial_start = NOW.date() - timedelta(days=6)
+
+    with factory() as session, session.begin():
+        manual = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=initial_start,
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:synthetic-a",
+            now=NOW,
+        )
+        assert manual.disposition is GarminSyncDisposition.QUEUED
+    for _restart in range(2):
+        with factory() as session, session.begin():
+            schedule_garmin_sync(session, NOW, settings=settings)
+
+    with factory() as session:
+        jobs = list(session.scalars(select(Job).where(Job.task == GARMIN_SYNC_TASK)))
+        assert len(jobs) == 1
+        assert jobs[0].id == manual.job.id
+
+    claimed = run_once(
+        factory,
+        {GARMIN_SYNC_TASK: make_garmin_handler(settings, client_factory=lambda: client)},
+        worker_id="garmin-coalescing-test",
+    )
+    assert claimed is not None and claimed.id == manual.job.id
+    assert (
+        run_once(
+            factory,
+            {GARMIN_SYNC_TASK: make_garmin_handler(settings, client_factory=lambda: client)},
+            worker_id="garmin-coalescing-test",
+        )
+        is None
+    )
+    assert client.login_count == 1
+
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(GarminSyncRun)) == 1
+        stored = session.get(Job, manual.job.id)
+        assert stored is not None and stored.status is JobStatus.COMPLETED
+
+    # A successful broad read advances the checkpoint and narrows the next poll's
+    # overlap window. That narrower window is already covered, even after the manual
+    # cooldown has expired, so the scheduler must not perform a second same-day read.
+    with factory() as session, session.begin():
+        schedule_garmin_sync(session, NOW + timedelta(minutes=31), settings=settings)
+    with factory() as session:
+        jobs = list(session.scalars(select(Job).where(Job.task == GARMIN_SYNC_TASK)))
+        assert len(jobs) == 1
+
+    next_day = NOW + timedelta(days=1)
+    with factory() as session, session.begin():
+        schedule_garmin_sync(session, next_day, settings=settings)
+    with factory() as session:
+        windows = {
+            (job.payload["start_date"], job.payload["end_date"])
+            for job in session.scalars(select(Job).where(Job.task == GARMIN_SYNC_TASK))
+        }
+    assert windows == {
+        (initial_start.isoformat(), NOW.date().isoformat()),
+        ((NOW.date() - timedelta(days=2)).isoformat(), next_day.date().isoformat()),
+    }
+
+
+def test_concurrent_garmin_requests_with_different_keys_coalesce(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email="garmin-concurrent@example.test")
+    second_started = Event()
+
+    def enqueue_second() -> tuple[uuid.UUID, GarminSyncDisposition]:
+        with factory() as session, session.begin():
+            second_started.set()
+            result = enqueue_sync(
+                session,
+                owner_id=owner_id,
+                start_date=NOW.date(),
+                end_date=NOW.date(),
+                timezone="UTC",
+                idempotency_key=f"manual:{owner_id}:concurrent-b",
+                now=NOW,
+            )
+            return result.job.id, result.disposition
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with factory() as first_session, first_session.begin():
+            first = enqueue_sync(
+                first_session,
+                owner_id=owner_id,
+                start_date=NOW.date(),
+                end_date=NOW.date(),
+                timezone="UTC",
+                idempotency_key=f"manual:{owner_id}:concurrent-a",
+                now=NOW,
+            )
+            future = executor.submit(enqueue_second)
+            assert second_started.wait(timeout=5)
+            assert not future.done()
+        second_id, second_disposition = future.result(timeout=5)
+
+    assert second_id == first.job.id
+    assert second_disposition is GarminSyncDisposition.COALESCED_ACTIVE
+    with factory() as session:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(Job).where(Job.task == GARMIN_SYNC_TASK)
+            )
+            == 1
+        )
+
+    with factory() as session, session.begin():
+        claimed = claim(session, worker_id="garmin-running", now=NOW, tasks={GARMIN_SYNC_TASK})
+        assert claimed is not None
+    lock_session = factory()
+    lock_transaction = lock_session.begin()
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        locked = lock_session.scalar(
+            select(GarminConnection).where(GarminConnection.owner_id == owner_id).with_for_update()
+        )
+        assert locked is not None
+        running_duplicate = executor.submit(enqueue_second).result(timeout=2)
+        assert running_duplicate == (first.job.id, GarminSyncDisposition.COALESCED_ACTIVE)
+    finally:
+        lock_transaction.rollback()
+        lock_session.close()
+        executor.shutdown(wait=True)
+
+
+def test_garmin_completed_cooldown_refresh_and_distinct_windows_are_deterministic(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email="garmin-cooldown@example.test")
+    with factory() as session, session.begin():
+        first = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:cooldown-a",
+            now=NOW,
+        )
+    with factory() as session, session.begin():
+        claimed = claim(session, worker_id="garmin-cooldown", now=NOW, tasks={GARMIN_SYNC_TASK})
+        assert claimed is not None
+        complete(session, claimed, now=NOW + timedelta(seconds=1))
+
+    with factory() as session, session.begin():
+        cooled = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:cooldown-b",
+            now=NOW + timedelta(minutes=1),
+        )
+        assert cooled.job.id == first.job.id
+        assert cooled.disposition is GarminSyncDisposition.COOLDOWN_REUSED
+        assert cooled.cooldown_until == NOW + timedelta(minutes=30, seconds=1)
+
+    after_cooldown = NOW + timedelta(minutes=31)
+    with factory() as session, session.begin():
+        next_job = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:cooldown-c",
+            now=after_cooldown,
+        )
+        assert next_job.job.id != first.job.id
+        assert next_job.disposition is GarminSyncDisposition.QUEUED
+    with factory() as session, session.begin():
+        claimed = claim(
+            session,
+            worker_id="garmin-cooldown",
+            now=after_cooldown,
+            tasks={GARMIN_SYNC_TASK},
+        )
+        assert claimed is not None
+        complete(session, claimed, now=after_cooldown + timedelta(seconds=1))
+
+    with factory() as session, session.begin():
+        refresh = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:refresh",
+            force_refresh=True,
+            now=after_cooldown + timedelta(minutes=1),
+        )
+        replay = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:refresh-replay",
+            force_refresh=True,
+            now=after_cooldown + timedelta(minutes=1),
+        )
+        distinct = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date() + timedelta(days=1),
+            end_date=NOW.date() + timedelta(days=1),
+            timezone="UTC",
+            idempotency_key=f"manual:{owner_id}:different-window",
+            now=after_cooldown + timedelta(minutes=1),
+        )
+
+    assert refresh.disposition is GarminSyncDisposition.REFRESH_QUEUED
+    assert replay.job.id == refresh.job.id
+    assert replay.disposition is GarminSyncDisposition.COALESCED_ACTIVE
+    assert distinct.job.id != refresh.job.id
+    assert distinct.disposition is GarminSyncDisposition.QUEUED
 
 
 def test_nightly_schedule_is_singleton_and_task_restricted(
