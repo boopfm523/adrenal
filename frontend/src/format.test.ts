@@ -36,7 +36,7 @@ describe("health value presentation formatting", () => {
     expect(humanizeUnit("custom_provider_unit")).toBe("custom provider unit");
     expect(formatMeasurement("15.0000", "mg")).toBe("15 mg");
     expect(garminMetricLabel("resting_heart_rate")).toBe("Resting heart rate");
-    expect(formatGarminDailyValue("stress", "28.0000", "garmin_score")).toBe("Stress score: 28");
+    expect(formatGarminDailyValue("stress", "28.0000", "garmin_score")).toBe("Stress: 28");
     expect(formatGarminDailyValue("steps", "6099.0000", "steps")).toBe("6,099 steps");
     expect(formatGarminDailyValue("resting_heart_rate", "53.0000", "bpm")).toBe("53 bpm");
   });

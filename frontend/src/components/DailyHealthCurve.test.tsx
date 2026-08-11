@@ -181,7 +181,7 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll("circle.healthcurve-point--hrv")).toHaveLength(0);
     expect(document.querySelectorAll("circle.healthcurve-point--respiration_rate")).toHaveLength(0);
     const context = screen.getByRole("region", { name: "Garmin aggregate context" });
-    expect(context).toHaveTextContent("Stress score: 31");
+    expect(context).toHaveTextContent("Stress: 31");
     expect(context).toHaveTextContent("Untimed · daily average");
     expect(context).not.toHaveTextContent("Nightly average HRV");
     fireEvent.click(screen.getByRole("button", { name: "All series (busy)" }));

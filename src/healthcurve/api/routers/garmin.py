@@ -45,6 +45,7 @@ from healthcurve.integrations.garmin.parser import (
 from healthcurve.integrations.garmin.presentation import (
     aggregate_period_label,
     measurement_label,
+    measurement_summary,
 )
 from healthcurve.integrations.garmin.service import confirm_import
 from healthcurve.operations.jobs import JobQueueError
@@ -336,7 +337,12 @@ def _garmin_record_out(
         return GarminRecordOut(
             id=row.id,
             kind="sample" if row.aggregation == "provider_sample" else "daily",
-            summary=f"{label}: {row.value} {row.unit}",
+            summary=measurement_summary(
+                row.metric_type,
+                row.garmin_field_name,
+                row.value,
+                row.unit,
+            ),
             time=time_out(row),
             provenance=provenance_out(row),
             metric_type=row.metric_type.value,

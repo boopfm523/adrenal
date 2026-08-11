@@ -123,7 +123,7 @@ describe("Health data page", () => {
     expect(within(pressureTable).getByText("Corrected · Synthetic correction")).toBeVisible();
     const garminTable = screen.getByRole("region", { name: "Garmin recorded observations table" });
     expect(within(garminTable).getByRole("cell", { name: /8,765 steps/ })).toBeVisible();
-    expect(within(garminTable).getByRole("cell", { name: "Stress score: 28" })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: "Stress: 28" })).toBeVisible();
     expect(within(garminTable).getByText("Nightly average HRV")).toBeVisible();
     expect(within(garminTable).getByRole("cell", { name: "41 ms" })).toBeVisible();
     expect(within(garminTable).getByText("Untimed aggregate · previous night")).toBeVisible();

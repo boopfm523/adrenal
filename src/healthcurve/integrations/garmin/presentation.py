@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from healthcurve.integrations.garmin.models import GarminMetricType
 
 _FIELD_PRESENTATION: dict[str, tuple[str, str]] = {
@@ -26,3 +28,18 @@ def measurement_label(metric_type: GarminMetricType, field_name: str) -> str:
 def aggregate_period_label(field_name: str) -> str | None:
     presentation = _FIELD_PRESENTATION.get(field_name)
     return None if presentation is None else presentation[1]
+
+
+def measurement_summary(
+    metric_type: GarminMetricType,
+    field_name: str,
+    value: Decimal,
+    unit: str,
+) -> str:
+    """Return a human-facing summary without leaking provider unit tokens."""
+
+    label = measurement_label(metric_type, field_name)
+    if metric_type is GarminMetricType.STRESS:
+        display_value = format(value, "f").rstrip("0").rstrip(".")
+        return f"{label}: {display_value}"
+    return f"{label}: {value} {unit}"

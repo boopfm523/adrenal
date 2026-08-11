@@ -77,7 +77,7 @@ export function garminMetricLabel(metricType: string | null | undefined): string
 
 export function formatGarminDailyValue(metricType: string | null | undefined, value: NumericDisplayValue, unit: string | null | undefined): string {
   if (value == null) return "Unavailable";
-  if (metricType === "stress") return `Stress score: ${formatDecimal(value)}`;
+  if (metricType === "stress") return `Stress: ${formatDecimal(value)}`;
   if (metricType === "resting_heart_rate") return `${formatDecimal(value)} bpm`;
   if (metricType === "steps") return `${formatDecimal(value)} steps`;
   return formatMeasurement(value, unit);

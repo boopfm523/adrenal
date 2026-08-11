@@ -41,6 +41,40 @@ function renderPage(initialEntry = "/timeline"): void {
 }
 
 describe("Timeline page", () => {
+  it("renders the Garmin stress summary without provider unit text", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      timezone: "America/New_York",
+      page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 },
+      items: [{
+        id: "99999999-9999-4999-8999-999999999999",
+        category: "fact",
+        event_type: "garmin_daily",
+        summary: "Stress: 31",
+        is_sensitive: false,
+        time: {
+          occurred_at: "2026-08-11T04:00:00Z",
+          local_time: "2026-08-11T00:00:00",
+          timezone: "America/New_York",
+          utc_offset_minutes: -240,
+        },
+        provenance: {
+          recorded_at: "2026-08-11T08:00:00Z",
+          source_type: "provider",
+          confirmation_state: "provider_imported",
+          supersedes_id: null,
+          correction_reason: null,
+          is_correction: false,
+        },
+      }],
+    }), { headers: { "Content-Type": "application/json" } }));
+
+    renderPage();
+
+    const timeline = await screen.findByRole("region", { name: "Timeline records table" });
+    expect(within(timeline).getByRole("rowheader", { name: /^Stress: 31garmin daily$/ })).toBeVisible();
+    expect(within(timeline).queryByText(/garmin_score/)).not.toBeInTheDocument();
+  });
+
   it("shows provenance and only requests sensitive entries after explicit reveal", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       timezone: "America/New_York",
