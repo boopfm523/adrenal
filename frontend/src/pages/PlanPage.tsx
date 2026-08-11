@@ -54,6 +54,14 @@ const blankInstruction = (): InstructionDraft => ({
   authored_on: "",
 });
 
+function medicationOptionLabel(medication: Medication): string {
+  const formulation = medication.formulation === null ? "" : ` ${medication.formulation}`;
+  const strength = medication.strength === null
+    ? "formulation strength not recorded"
+    : `formulation strength: ${formatMeasurement(medication.strength, medication.strength_unit)}`;
+  return `${medication.name}${formulation} — ${strength}`;
+}
+
 function localInput(value: string | null): string {
   return value === null ? "" : value.replace(/Z$/, "").slice(0, 16);
 }
@@ -206,10 +214,10 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
       <fieldset><legend>Scheduled medication slots</legend>
         <p>These are scheduled plan entries—not records of medicine actually taken.</p>
         {slots.map((slot, index) => <div className="repeatable-row" key={index}>
-          <label>Medication<select required value={slot.medication_id} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, medication_id: event.target.value } : item)); }}><option value="">Choose medication</option>{available.map((medication) => <option value={medication.id} key={medication.id}>{medication.name}{medication.strength === null ? "" : ` ${formatMeasurement(medication.strength, medication.strength_unit)}`}</option>)}</select></label>
+          <label>Medication and formulation<select required value={slot.medication_id} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, medication_id: event.target.value } : item)); }}><option value="">Choose medication and formulation</option>{available.map((medication) => <option value={medication.id} key={medication.id}>{medicationOptionLabel(medication)}</option>)}</select></label>
           <label>Time<input type="time" required value={slot.scheduled_local_time} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, scheduled_local_time: event.target.value } : item)); }} /></label>
-          <label>Amount<input type="number" required min="0.0001" step="any" inputMode="decimal" value={slot.amount} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item)); }} /></label>
-          <label>Unit<select value={slot.unit} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value as SlotDraft["unit"] } : item)); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">mL</option><option value="tablet">tablet</option></select></label>
+          <div className="field-group"><label htmlFor={`scheduled-dose-amount-${String(index)}`}>Scheduled dose amount</label><input id={`scheduled-dose-amount-${String(index)}`} aria-describedby={`scheduled-dose-help-${String(index)}`} type="number" required min="0.0001" step="any" inputMode="decimal" value={slot.amount} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item)); }} /><small className="field-hint" id={`scheduled-dose-help-${String(index)}`}>This planned dose may differ from the formulation strength. Enter only the amount in the physician-approved plan.</small></div>
+          <label>Scheduled dose unit<select value={slot.unit} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value as SlotDraft["unit"] } : item)); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">mL</option><option value="tablet">tablet</option></select></label>
           <label>Route<select value={slot.route} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, route: event.target.value as SlotDraft["route"] } : item)); }}><option value="oral">Oral</option><option value="intramuscular">Intramuscular</option><option value="subcutaneous">Subcutaneous</option><option value="intravenous">Intravenous</option></select></label>
           <label>Condition (optional)<input maxLength={500} value={slot.condition} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, condition: event.target.value } : item)); }} /></label>
           <button type="button" className="secondary-button" onClick={() => { setSlots((items) => items.filter((_, itemIndex) => itemIndex !== index)); }}>Remove slot</button>

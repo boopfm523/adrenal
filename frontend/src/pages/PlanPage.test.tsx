@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -146,9 +146,24 @@ describe("Medication plan page", () => {
     expect(screen.getByRole("heading", { name: "Create your first plan draft" })).toHaveFocus();
     await userEvent.type(screen.getByLabelText("Version label"), "My real plan");
     await userEvent.type(screen.getByLabelText("Effective from"), "2026-08-15T07:00");
-    await userEvent.selectOptions(screen.getByLabelText("Medication"), medication.id);
-    await userEvent.clear(screen.getByLabelText("Amount"));
-    await userEvent.type(screen.getByLabelText("Amount"), "10");
+    const medicationSelect = screen.getByLabelText("Medication and formulation");
+    expect(within(medicationSelect).getByRole("option", { name: "Synthetic medicine tablet — formulation strength: 10 mg" })).toBeInTheDocument();
+    medicationSelect.focus();
+    await userEvent.tab();
+    expect(screen.getByLabelText("Time")).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByLabelText("Scheduled dose amount")).toHaveFocus();
+    await userEvent.selectOptions(medicationSelect, medication.id);
+    const scheduledAmount = screen.getByLabelText("Scheduled dose amount");
+    expect(scheduledAmount).toHaveAccessibleDescription(/may differ from the formulation strength/i);
+    await userEvent.clear(scheduledAmount);
+    await userEvent.type(scheduledAmount, "0");
+    expect(scheduledAmount).toBeInvalid();
+    await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
+    expect(requests.some((request) => request.method === "POST" && request.url.endsWith("/regimens"))).toBe(false);
+    await userEvent.clear(scheduledAmount);
+    await userEvent.type(scheduledAmount, "5");
+    expect(scheduledAmount).toBeValid();
     await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Unapproved plan draft created");
@@ -156,7 +171,7 @@ describe("Medication plan page", () => {
     expect(creation?.body).toMatchObject({
       version_label: "My real plan",
       effective_from: "2026-08-15T07:00",
-      slots: [{ medication_id: medication.id, amount: "10", unit: "mg", route: "oral" }],
+      slots: [{ medication_id: medication.id, amount: "5", unit: "mg", route: "oral" }],
       instructions: [],
     });
     expect(requests.some((request) => request.url.includes("/approve"))).toBe(false);
