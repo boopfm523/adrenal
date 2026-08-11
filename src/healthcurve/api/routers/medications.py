@@ -12,18 +12,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from healthcurve import privacy
-from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
     DoseSlotOut,
     InstructionOut,
     MedicationIn,
     MedicationOut,
     RegimenApprovalIn,
-    RegimenDraftDeleteIn,
     RegimenVersionIn,
     RegimenVersionOut,
 )
-from healthcurve.identity import service as auth
+from healthcurve.config import Environment
 from healthcurve.medications import service
 from healthcurve.medications.models import (
     ApprovedInstruction,
@@ -102,17 +101,23 @@ def _medication_out(m: Medication) -> MedicationOut:
 
 @router.get("/regimens", response_model=list[RegimenVersionOut])
 def list_regimens(
-    session: DbSession, owner: CurrentOwner, status_filter: RegimenStatus | None = None
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+    status_filter: RegimenStatus | None = None,
 ):
     query = select(RegimenVersion).where(RegimenVersion.owner_id == owner.id)
     if status_filter is not None:
         query = query.where(RegimenVersion.status == status_filter)
     query = query.order_by(RegimenVersion.effective_from.desc())
-    return [_regimen_out(v) for v in session.scalars(query)]
+    return [
+        _regimen_out(v, deletion_allowed=settings.environment is Environment.DEV)
+        for v in session.scalars(query)
+    ]
 
 
 @router.get("/regimens/active", response_model=RegimenVersionOut | None)
-def active_regimen(session: DbSession, owner: CurrentOwner):
+def active_regimen(session: DbSession, owner: CurrentOwner, settings: AppSettings):
     """The approved version in force now, or null.
 
     Null is a real answer and the UI must say "no approved plan" rather than falling
@@ -121,7 +126,11 @@ def active_regimen(session: DbSession, owner: CurrentOwner):
     from datetime import UTC, datetime
 
     version = service.active_version_at(session, owner.id, datetime.now(UTC))
-    return _regimen_out(version) if version else None
+    return (
+        _regimen_out(version, deletion_allowed=settings.environment is Environment.DEV)
+        if version
+        else None
+    )
 
 
 @router.post(
@@ -130,7 +139,12 @@ def active_regimen(session: DbSession, owner: CurrentOwner):
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_csrf)],
 )
-def create_regimen(payload: RegimenVersionIn, session: DbSession, owner: CurrentOwner):
+def create_regimen(
+    payload: RegimenVersionIn,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+):
     """Create a *draft*. Drafts are never in force; approval is a separate act."""
     try:
         version = service.create_draft(
@@ -188,7 +202,7 @@ def create_regimen(payload: RegimenVersionIn, session: DbSession, owner: Current
         target_type="regimen_version",
         target_id=version.id,
     )
-    return _regimen_out(version)
+    return _regimen_out(version, deletion_allowed=settings.environment is Environment.DEV)
 
 
 @router.put(
@@ -201,6 +215,7 @@ def update_regimen_draft(
     payload: RegimenVersionIn,
     session: DbSession,
     owner: CurrentOwner,
+    settings: AppSettings,
 ):
     """Atomically replace an unapproved draft's editable plan content."""
     version = _owned_version(session, owner.id, version_id)
@@ -262,7 +277,7 @@ def update_regimen_draft(
         target_id=version.id,
         change_summary="draft metadata, slots, and instructions replaced",
     )
-    return _regimen_out(version)
+    return _regimen_out(version, deletion_allowed=settings.environment is Environment.DEV)
 
 
 @router.post(
@@ -275,6 +290,7 @@ def approve_regimen(
     payload: RegimenApprovalIn,
     session: DbSession,
     owner: CurrentOwner,
+    settings: AppSettings,
 ):
     """Record a physician's approval.
 
@@ -303,7 +319,7 @@ def approve_regimen(
         target_id=version.id,
         change_summary="approval provenance recorded",
     )
-    return _regimen_out(version)
+    return _regimen_out(version, deletion_allowed=settings.environment is Environment.DEV)
 
 
 @router.post(
@@ -311,7 +327,12 @@ def approve_regimen(
     response_model=RegimenVersionOut,
     dependencies=[Depends(require_csrf)],
 )
-def retire_regimen(version_id: uuid.UUID, session: DbSession, owner: CurrentOwner):
+def retire_regimen(
+    version_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+):
     version = _owned_version(session, owner.id, version_id)
     service.retire_version(session, version)
     audit.record(
@@ -321,7 +342,7 @@ def retire_regimen(version_id: uuid.UUID, session: DbSession, owner: CurrentOwne
         target_type="regimen_version",
         target_id=version.id,
     )
-    return _regimen_out(version)
+    return _regimen_out(version, deletion_allowed=settings.environment is Environment.DEV)
 
 
 @router.delete(
@@ -329,22 +350,25 @@ def retire_regimen(version_id: uuid.UUID, session: DbSession, owner: CurrentOwne
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_csrf)],
 )
-def delete_regimen_draft(
+def delete_development_regimen(
     version_id: uuid.UUID,
-    payload: RegimenDraftDeleteIn,
     session: DbSession,
     owner: CurrentOwner,
+    settings: AppSettings,
 ) -> None:
-    """Physically remove an unapproved draft, never approved plan history."""
-    if not auth.verify_password(owner.password_hash, payload.password):
-        raise HTTPException(status_code=403, detail="current password is incorrect")
+    """Physically remove one plan only in the private development runtime."""
+    if settings.environment is not Environment.DEV:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="plan deletion is available only in development",
+        )
     try:
-        deleted = privacy.delete_regimen_draft(
+        deleted = privacy.delete_development_regimen(
             session,
             owner_id=owner.id,
             version_id=version_id,
         )
-    except privacy.RegimenDraftDeletionError as exc:
+    except privacy.RegimenDeletionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if deleted is None:
         raise HTTPException(
@@ -374,7 +398,7 @@ def _owned_version(
     return version
 
 
-def _regimen_out(v: RegimenVersion) -> RegimenVersionOut:
+def _regimen_out(v: RegimenVersion, *, deletion_allowed: bool) -> RegimenVersionOut:
     return RegimenVersionOut(
         id=v.id,
         version_label=v.version_label,
@@ -386,6 +410,7 @@ def _regimen_out(v: RegimenVersion) -> RegimenVersionOut:
         approval_source=v.approval_source,
         retired_at=v.retired_at,
         notes=v.notes,
+        deletion_allowed=deletion_allowed,
         slots=[
             DoseSlotOut(
                 id=s.id,

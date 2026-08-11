@@ -13,6 +13,7 @@ function version(id: string, label: string, status: "draft" | "approved" | "reti
     approval_source: status === "approved" ? "Synthetic clinic letter" : null,
     retired_at: status === "retired" ? "2026-07-01T00:00:00Z" : null,
     notes: null,
+    deletion_allowed: true,
     slots: [{ id: `${id.slice(0, 8)}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, medication_id: "99999999-9999-4999-8999-999999999999", medication_name: "Synthetic medicine", scheduled_local_time: "07:00:00", amount: "10.0000", unit: "mg", route: "oral", condition: null, sort_order: 0, category: "plan" }],
     instructions: [],
   };
@@ -46,13 +47,13 @@ describe("Medication plan page", () => {
     expect(screen.getByText("No removed schedule entries.")).toBeVisible();
   });
 
-  it("deletes only a draft after password and exact high-friction confirmation", async () => {
+  it("deletes any development plan after one ordinary confirmation", async () => {
     const draft = version("33333333-3333-4333-8333-333333333333", "Disposable synthetic draft", "draft", "2026-09-01T00:00:00");
     const approved = version("22222222-2222-4222-8222-222222222222", "Approved synthetic plan", "approved", "2026-08-01T00:00:00");
     const retired = version("11111111-1111-4111-8111-111111111111", "Retired synthetic plan", "retired", "2026-01-01T00:00:00");
     const requests: { url: string; method: string; body: unknown }[] = [];
-    const submittedPassword = ["synthetic", "password"].join("-");
     let removed = false;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       const method = init?.method ?? "GET";
@@ -70,22 +71,15 @@ describe("Medication plan page", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
 
     expect(await screen.findByRole("heading", { name: "Disposable synthetic draft" })).toBeVisible();
-    expect(screen.getAllByText("Delete this unapproved draft")).toHaveLength(1);
-    await userEvent.click(screen.getByText("Delete this unapproved draft"));
-    const password = screen.getByLabelText("Current password");
-    const confirmation = screen.getByLabelText("Type DELETE DRAFT PLAN");
-    const submit = screen.getByRole("button", { name: "Permanently delete draft" });
-    await userEvent.tab();
-    expect(password).toHaveFocus();
-    await userEvent.type(password, submittedPassword);
-    await userEvent.tab();
-    expect(confirmation).toHaveFocus();
-    await userEvent.type(confirmation, "DELETE DRAFT PLAN");
-    await userEvent.tab();
-    expect(submit).toHaveFocus();
-    await userEvent.click(submit);
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete plan" });
+    expect(deleteButtons).toHaveLength(3);
+    const draftDelete = deleteButtons[0];
+    if (draftDelete === undefined) throw new Error("draft delete button is missing");
+    await userEvent.click(draftDelete);
 
-    expect(await screen.findByRole("status")).toHaveTextContent("unapproved draft was permanently deleted");
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Disposable synthetic draft"));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Recorded doses stay in HealthCurve"));
+    expect(await screen.findByRole("status")).toHaveTextContent("selected development plan was permanently deleted");
     expect(screen.queryByRole("heading", { name: "Disposable synthetic draft" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Approved synthetic plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Retired synthetic plan" })).toBeVisible();
@@ -93,8 +87,39 @@ describe("Medication plan page", () => {
     expect(deletion).toEqual({
       url: `/api/v1/regimens/${draft.id}`,
       method: "DELETE",
-      body: { password: submittedPassword, confirmation: "DELETE DRAFT PLAN" },
+      body: undefined,
     });
+  });
+
+  it("does nothing when plan deletion is cancelled and hides deletion outside development", async () => {
+    const draft = { ...version("33333333-3333-4333-8333-333333333333", "Synthetic plan", "draft", "2026-09-01T00:00:00"), deletion_allowed: false };
+    const requests: string[] = [];
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (init?.method === "DELETE") requests.push(url);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/regimens")) return Promise.resolve(response([draft]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<QueryClientProvider client={queryClient}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+
+    expect(await screen.findByRole("heading", { name: "Synthetic plan" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Delete plan" })).not.toBeInTheDocument();
+    view.unmount();
+
+    const developmentDraft = { ...draft, deletion_allowed: true };
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (init?.method === "DELETE") requests.push(url);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/regimens")) return Promise.resolve(response([developmentDraft]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete plan" }));
+    expect(requests).toHaveLength(0);
   });
 
   it("creates an unapproved draft from the guided form without recording approval", async () => {

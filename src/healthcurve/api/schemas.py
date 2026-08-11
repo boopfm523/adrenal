@@ -201,13 +201,6 @@ class RegimenApprovalIn(ApiModel):
     source_document_checksum: str | None = Field(default=None, max_length=128)
 
 
-class RegimenDraftDeleteIn(ApiModel):
-    """High-friction deletion request for an unapproved plan draft."""
-
-    password: str = Field(min_length=1, max_length=512)
-    confirmation: Literal["DELETE DRAFT PLAN"]
-
-
 class RegimenVersionOut(PlanResource):
     id: uuid.UUID
     version_label: str
@@ -219,6 +212,7 @@ class RegimenVersionOut(PlanResource):
     approval_source: str | None
     retired_at: datetime | None
     notes: str | None
+    deletion_allowed: bool
     slots: list[DoseSlotOut] = Field(default_factory=list)
     instructions: list[InstructionOut] = Field(default_factory=list)
 

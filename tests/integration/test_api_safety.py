@@ -2634,20 +2634,23 @@ def test_timeline_orders_by_experienced_time_with_stable_ties(
 
 
 # ---------------------------------------------------------------------------
-# Unapproved plan draft deletion
+# Development-only medication plan deletion
 # ---------------------------------------------------------------------------
 
 
-def test_unreferenced_regimen_draft_deletion_reauthenticates_and_preserves_history(
-    client: TestClient, logged_in: dict[str, str], engine: Engine
+@pytest.mark.parametrize("plan_status", ["draft", "approved", "retired"])
+def test_development_plan_deletion_preserves_facts_and_handles_derived_references(
+    plan_status: str, client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
     medication_id = _a_medication(client, logged_in)
+    year = {"draft": 1981, "approved": 1982, "retired": 1983}[plan_status]
     created = client.post(
         "/api/v1/regimens",
         headers=logged_in,
         json={
-            "version_label": "Synthetic disposable draft",
-            "effective_from": "2034-01-01T00:00:00",
+            "version_label": f"Synthetic disposable {plan_status} plan",
+            "effective_from": f"{year}-01-01T00:00:00",
+            "effective_to": f"{year}-01-02T00:00:00",
             "slots": [
                 {
                     "medication_id": medication_id,
@@ -2661,10 +2664,10 @@ def test_unreferenced_regimen_draft_deletion_reauthenticates_and_preserves_histo
             "instructions": [
                 {
                     "category": "general",
-                    "title": "Synthetic draft instruction",
-                    "body": "Synthetic content that is never approved.",
+                    "title": "Synthetic instruction",
+                    "body": "Synthetic physician-authored test content.",
                     "authored_by": "Dr Synthetic",
-                    "authored_on": "2033-12-01",
+                    "authored_on": f"{year - 1}-12-01",
                     "sort_order": 0,
                 }
             ],
@@ -2672,41 +2675,82 @@ def test_unreferenced_regimen_draft_deletion_reauthenticates_and_preserves_histo
     )
     assert created.status_code == 201, created.text
     version_id = created.json()["id"]
-    path = f"/api/v1/regimens/{version_id}"
-
-    assert (
-        client.request(
-            "DELETE",
-            path,
-            json={"password": PASSWORD, "confirmation": "DELETE DRAFT PLAN"},
-        ).status_code
-        == 403
-    )
-    assert (
-        client.request(
-            "DELETE",
-            path,
+    assert created.json()["deletion_allowed"] is True
+    slot_id = created.json()["slots"][0]["id"]
+    if plan_status != "draft":
+        approved = client.post(
+            f"/api/v1/regimens/{version_id}/approve",
             headers=logged_in,
-            json={"password": PASSWORD + "-wrong", "confirmation": "DELETE DRAFT PLAN"},
-        ).status_code
-        == 403
-    )
-    assert (
-        client.request(
-            "DELETE",
-            path,
-            headers=logged_in,
-            json={"password": PASSWORD, "confirmation": "delete draft"},
-        ).status_code
-        == 422
-    )
+            json={
+                "approved_by": "Dr Synthetic",
+                "approval_source": "Synthetic historical letter",
+                "approved_at": f"{year}-01-01T00:00:00Z",
+            },
+        )
+        assert approved.status_code == 200, approved.text
+        if plan_status == "retired":
+            retired = client.post(f"/api/v1/regimens/{version_id}/retire", headers=logged_in)
+            assert retired.status_code == 200, retired.text
 
-    deleted = client.request(
-        "DELETE",
-        path,
+    dose = client.post(
+        "/api/v1/doses",
         headers=logged_in,
-        json={"password": PASSWORD, "confirmation": "DELETE DRAFT PLAN"},
+        json={
+            "medication_id": medication_id,
+            "amount": "1",
+            "unit": "mg",
+            "route": "oral",
+            "category": "scheduled",
+            "time": {"local_time": f"{year}-01-01T07:00:00", "timezone": "UTC"},
+        },
     )
+    assert dose.status_code == 201, dose.text
+    dose_id = uuid.UUID(dose.json()["id"])
+
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        dose_row = session.get(DoseEvent, dose_id)
+        assert dose_row is not None
+        dose_row.regimen_version_id = uuid.UUID(version_id)
+        dose_row.slot_id = uuid.UUID(slot_id)
+        analysis = AIAnalysis(
+            owner_id=owner_id,
+            analysis_type=AnalysisType.PATTERN_OBSERVATION,
+            body="Synthetic referenced analysis.",
+            source_record_ids=[version_id],
+            computed_inputs={"plan": {"id": version_id}},
+            model_name="synthetic-model",
+            prompt_version="synthetic-v1",
+        )
+        session.add(analysis)
+        snapshot = report_service.create_snapshot(
+            session,
+            owner_id=owner_id,
+            date_from=date(year, 1, 1),
+            date_to=date(year, 1, 2),
+            timezone="UTC",
+            selected_sections=["approved_plan"],
+            include_ai=False,
+            source_manifest={
+                "fact": [],
+                "plan": [version_id],
+                "patient_note": [],
+                "ai": [],
+            },
+            metric_values={},
+            snapshot_content={
+                "fact": [],
+                "plan": [{"regimen_version_id": version_id}],
+                "patient_note": [],
+                "ai": [],
+            },
+        )
+        session.flush()
+        analysis_id = analysis.id
+        snapshot_id = snapshot.id
+
+    deleted = client.delete(f"/api/v1/regimens/{version_id}", headers=logged_in)
     assert deleted.status_code == 204, deleted.text
 
     with Session(engine) as session:
@@ -2728,198 +2772,44 @@ def test_unreferenced_regimen_draft_deletion_reauthenticates_and_preserves_histo
             )
             == 0
         )
+        retained_dose = session.get(DoseEvent, dose_id)
+        assert retained_dose is not None
+        assert retained_dose.regimen_version_id is None
+        assert retained_dose.slot_id is None
         assert session.get(Medication, uuid.UUID(medication_id)) is not None
+        invalid_analysis = session.get(AIAnalysis, analysis_id)
+        assert invalid_analysis is not None
+        assert invalid_analysis.hidden_at is not None
+        assert session.get(ReportSnapshot, snapshot_id) is not None
         entry = session.scalar(
             select(AuditEntry).where(
-                AuditEntry.action == AuditAction.REGIMEN_DRAFT_DELETED,
+                AuditEntry.action == AuditAction.REGIMEN_DELETED,
                 AuditEntry.target_id == target,
             )
         )
         assert entry is not None
         assert entry.change_summary is not None
+        assert f"status={plan_status}" in entry.change_summary
         assert "Synthetic" not in entry.change_summary
-        assert "10" not in entry.change_summary
+        assert "Dr" not in entry.change_summary
 
 
-@pytest.mark.parametrize("reference_kind", ["dose_version", "dose_slot", "report", "analysis"])
-def test_regimen_draft_deletion_refuses_every_retained_reference(
-    reference_kind: str,
-    client: TestClient,
-    logged_in: dict[str, str],
-    engine: Engine,
-) -> None:
-    medication_id = _a_medication(client, logged_in)
-    created = client.post(
-        "/api/v1/regimens",
-        headers=logged_in,
-        json={
-            "version_label": f"Synthetic referenced draft {reference_kind}",
-            "effective_from": "2024-06-01T00:00:00",
-            "slots": (
-                [
-                    {
-                        "medication_id": medication_id,
-                        "scheduled_local_time": "07:00:00",
-                        "amount": "1",
-                        "unit": "mg",
-                        "route": "oral",
-                        "sort_order": 0,
-                    }
-                ]
-                if reference_kind == "dose_slot"
-                else []
-            ),
-            "instructions": [],
-        },
-    )
-    assert created.status_code == 201, created.text
-    version_id = created.json()["id"]
-    reference_id: uuid.UUID
-
-    if reference_kind in {"dose_version", "dose_slot"}:
-        dose = client.post(
-            "/api/v1/doses",
-            headers=logged_in,
-            json={
-                "medication_id": medication_id,
-                "amount": "1",
-                "unit": "mg",
-                "route": "oral",
-                "category": "scheduled",
-                "time": {"local_time": "2024-06-02T07:00:00", "timezone": "UTC"},
-            },
-        )
-        assert dose.status_code == 201, dose.text
-        reference_id = uuid.UUID(dose.json()["id"])
-        with Session(engine) as session, session.begin():
-            row = session.get(DoseEvent, reference_id)
-            assert row is not None
-            if reference_kind == "dose_version":
-                row.regimen_version_id = uuid.UUID(version_id)
-            else:
-                row.slot_id = uuid.UUID(created.json()["slots"][0]["id"])
-    else:
-        with Session(engine) as session, session.begin():
-            owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
-            assert owner_id is not None
-            if reference_kind == "report":
-                snapshot = report_service.create_snapshot(
-                    session,
-                    owner_id=owner_id,
-                    date_from=date(2024, 6, 1),
-                    date_to=date(2024, 6, 2),
-                    timezone="UTC",
-                    selected_sections=["approved_plan"],
-                    include_ai=False,
-                    source_manifest={
-                        "fact": [],
-                        "plan": [version_id],
-                        "patient_note": [],
-                        "ai": [],
-                    },
-                    metric_values={},
-                    snapshot_content={
-                        "fact": [],
-                        "plan": [],
-                        "patient_note": [],
-                        "ai": [],
-                    },
-                )
-                session.flush()
-                reference_id = snapshot.id
-            else:
-                analysis = AIAnalysis(
-                    owner_id=owner_id,
-                    analysis_type=AnalysisType.PATTERN_OBSERVATION,
-                    body="Synthetic referenced analysis.",
-                    source_record_ids=[version_id],
-                    computed_inputs={},
-                    model_name="synthetic-model",
-                    prompt_version="synthetic-v1",
-                )
-                session.add(analysis)
-                session.flush()
-                reference_id = analysis.id
-
-    refused = client.request(
-        "DELETE",
-        f"/api/v1/regimens/{version_id}",
-        headers=logged_in,
-        json={"password": PASSWORD, "confirmation": "DELETE DRAFT PLAN"},
-    )
-    assert refused.status_code == 409, refused.text
-    with Session(engine) as session, session.begin():
-        version = session.get(RegimenVersion, uuid.UUID(version_id))
-        assert version is not None
-        reference_model = {
-            "dose_version": DoseEvent,
-            "dose_slot": DoseEvent,
-            "report": ReportSnapshot,
-            "analysis": AIAnalysis,
-        }[reference_kind]
-        reference = session.get(reference_model, reference_id)
-        assert reference is not None
-        session.delete(reference)
-        session.flush()
-        session.delete(version)
-
-
-def test_regimen_draft_deletion_hides_other_owner_and_retains_historical_versions(
+def test_development_plan_deletion_is_csrf_owner_scoped_and_disabled_in_production(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
-    retired = client.post(
+    own = client.post(
         "/api/v1/regimens",
         headers=logged_in,
         json={
-            "version_label": "Synthetic retired plan",
-            "effective_from": "2023-01-01T00:00:00",
+            "version_label": "Synthetic protected plan",
+            "effective_from": "2044-01-01T00:00:00",
             "slots": [],
             "instructions": [],
         },
     )
-    assert retired.status_code == 201, retired.text
-    retired_id = retired.json()["id"]
-    assert (
-        client.post(f"/api/v1/regimens/{retired_id}/retire", headers=logged_in).status_code == 200
-    )
-    historical = client.request(
-        "DELETE",
-        f"/api/v1/regimens/{retired_id}",
-        headers=logged_in,
-        json={"password": PASSWORD, "confirmation": "DELETE DRAFT PLAN"},
-    )
-    assert historical.status_code == 409
-
-    approved = client.post(
-        "/api/v1/regimens",
-        headers=logged_in,
-        json={
-            "version_label": "Synthetic approved history",
-            "effective_from": "1990-01-01T00:00:00",
-            "effective_to": "1990-01-02T00:00:00",
-            "slots": [],
-            "instructions": [],
-        },
-    )
-    assert approved.status_code == 201, approved.text
-    approved_id = approved.json()["id"]
-    approval = client.post(
-        f"/api/v1/regimens/{approved_id}/approve",
-        headers=logged_in,
-        json={
-            "approved_by": "Dr Synthetic",
-            "approval_source": "Synthetic historical letter",
-            "approved_at": "1990-01-01T00:00:00Z",
-        },
-    )
-    assert approval.status_code == 200, approval.text
-    approved_delete = client.request(
-        "DELETE",
-        f"/api/v1/regimens/{approved_id}",
-        headers=logged_in,
-        json={"password": PASSWORD, "confirmation": "DELETE DRAFT PLAN"},
-    )
-    assert approved_delete.status_code == 409
+    assert own.status_code == 201, own.text
+    own_id = uuid.UUID(own.json()["id"])
+    assert client.delete(f"/api/v1/regimens/{own_id}").status_code == 403
 
     with Session(engine) as session, session.begin():
         other = Owner(
@@ -2941,11 +2831,28 @@ def test_regimen_draft_deletion_hides_other_owner_and_retains_historical_version
         "DELETE",
         f"/api/v1/regimens/{other_id}",
         headers=logged_in,
-        json={"password": PASSWORD, "confirmation": "DELETE DRAFT PLAN"},
     )
     assert hidden.status_code == 404
+
+    app = cast(FastAPI, client.app)
+    development_settings = app.state.settings
+    app.state.settings = development_settings.model_copy(update={"environment": Environment.PROD})
+    try:
+        listed = client.get("/api/v1/regimens")
+        assert listed.status_code == 200
+        own_payload = next(row for row in listed.json() if row["id"] == str(own_id))
+        assert own_payload["deletion_allowed"] is False
+        refused = client.delete(f"/api/v1/regimens/{own_id}", headers=logged_in)
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == "plan deletion is available only in development"
+    finally:
+        app.state.settings = development_settings
+
     with Session(engine) as session:
         assert session.get(RegimenVersion, other_id) is not None
+        assert session.get(RegimenVersion, own_id) is not None
+
+    assert client.delete(f"/api/v1/regimens/{own_id}", headers=logged_in).status_code == 204
 
 
 # ---------------------------------------------------------------------------

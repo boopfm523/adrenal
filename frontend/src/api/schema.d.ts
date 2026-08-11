@@ -792,10 +792,10 @@ export interface paths {
         put: operations["update_regimen_draft_api_v1_regimens__version_id__put"];
         post?: never;
         /**
-         * Delete Regimen Draft
-         * @description Physically remove an unapproved draft, never approved plan history.
+         * Delete Development Regimen
+         * @description Physically remove one plan only in the private development runtime.
          */
-        delete: operations["delete_regimen_draft_api_v1_regimens__version_id__delete"];
+        delete: operations["delete_development_regimen_api_v1_regimens__version_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2555,19 +2555,6 @@ export interface components {
             source_document_checksum?: string | null;
         };
         /**
-         * RegimenDraftDeleteIn
-         * @description High-friction deletion request for an unapproved plan draft.
-         */
-        RegimenDraftDeleteIn: {
-            /**
-             * Confirmation
-             * @constant
-             */
-            confirmation: "DELETE DRAFT PLAN";
-            /** Password */
-            password: string;
-        };
-        /**
          * RegimenStatus
          * @description Only a human can move a version to ``APPROVED`` (SAFE-16).
          * @enum {string}
@@ -2605,6 +2592,8 @@ export interface components {
              * @constant
              */
             category: "plan";
+            /** Deletion Allowed */
+            deletion_allowed: boolean;
             /**
              * Effective From
              * Format: date-time
@@ -4901,7 +4890,7 @@ export interface operations {
             };
         };
     };
-    delete_regimen_draft_api_v1_regimens__version_id__delete: {
+    delete_development_regimen_api_v1_regimens__version_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -4914,11 +4903,7 @@ export interface operations {
                 hc_session?: string | null;
             };
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegimenDraftDeleteIn"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {

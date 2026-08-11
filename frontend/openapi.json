@@ -4519,29 +4519,6 @@
         "title": "RegimenApprovalIn",
         "type": "object"
       },
-      "RegimenDraftDeleteIn": {
-        "additionalProperties": false,
-        "description": "High-friction deletion request for an unapproved plan draft.",
-        "properties": {
-          "confirmation": {
-            "const": "DELETE DRAFT PLAN",
-            "title": "Confirmation",
-            "type": "string"
-          },
-          "password": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Password",
-            "type": "string"
-          }
-        },
-        "required": [
-          "password",
-          "confirmation"
-        ],
-        "title": "RegimenDraftDeleteIn",
-        "type": "object"
-      },
       "RegimenStatus": {
         "description": "Only a human can move a version to ``APPROVED`` (SAFE-16).",
         "enum": [
@@ -4654,6 +4631,10 @@
             "title": "Category",
             "type": "string"
           },
+          "deletion_allowed": {
+            "title": "Deletion Allowed",
+            "type": "boolean"
+          },
           "effective_from": {
             "format": "date-time",
             "title": "Effective From",
@@ -4731,7 +4712,8 @@
           "approved_by",
           "approval_source",
           "retired_at",
-          "notes"
+          "notes",
+          "deletion_allowed"
         ],
         "title": "RegimenVersionOut",
         "type": "object"
@@ -9558,8 +9540,8 @@
     },
     "/api/v1/regimens/{version_id}": {
       "delete": {
-        "description": "Physically remove an unapproved draft, never approved plan history.",
-        "operationId": "delete_regimen_draft_api_v1_regimens__version_id__delete",
+        "description": "Physically remove one plan only in the private development runtime.",
+        "operationId": "delete_development_regimen_api_v1_regimens__version_id__delete",
         "parameters": [
           {
             "in": "path",
@@ -9604,16 +9586,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegimenDraftDeleteIn"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -9629,7 +9601,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Regimen Draft",
+        "summary": "Delete Development Regimen",
         "tags": [
           "medications"
         ]

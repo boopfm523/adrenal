@@ -139,7 +139,7 @@ export function HelpPage(): React.JSX.Element {
             <p>Run the local operator command from the project directory. Review the generated YAML against your prescription and physician’s written instructions. Loading creates a <strong>draft plan</strong>, never an approved one.</p>
             <CopyableExample label="Medication template" value="docker compose run --rm api python -m healthcurve.cli init-medications-file medications.yaml" />
             <CopyableExample label="Load medications" value={'docker compose run --rm -v "$PWD/medications.yaml:/tmp/medications.yaml:ro" api python -m healthcurve.cli load-medications /tmp/medications.yaml'} />
-            <p>On Plan, an unapproved draft can be permanently deleted only after password reauthentication and typing <code>DELETE DRAFT PLAN</code>. Referenced drafts and all approved or retired history are retained.</p>
+            <p>In the private development runtime, any draft, approved, or retired plan can be permanently deleted from Plan after one standard confirmation. Its slots and physician instructions are removed; recorded doses remain but are detached from the deleted plan, dependent AI analysis is hidden, and saved reports remain frozen historical snapshots. This cleanup control is not offered outside development.</p>
             <Link to="/plan">Review plan versions</Link>
           </article>
           <article className="help-workflow">

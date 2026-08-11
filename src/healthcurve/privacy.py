@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, false, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,8 +33,6 @@ from healthcurve.labs.models import LabDocument, LabPanel, LabResult
 from healthcurve.medications.models import (
     DoseEvent,
     Medication,
-    RegimenDoseSlot,
-    RegimenStatus,
     RegimenVersion,
 )
 from healthcurve.operations import audit
@@ -50,8 +49,8 @@ class CorrectionHistoryError(DeletionError):
     pass
 
 
-class RegimenDraftDeletionError(DeletionError):
-    """A plan draft cannot be physically removed without losing provenance."""
+class RegimenDeletionError(DeletionError):
+    """A development plan could not be removed without corrupting retained data."""
 
 
 DELETABLE_RECORDS: dict[str, type] = {
@@ -76,95 +75,112 @@ class IntegrationDeletion:
 
 
 @dataclass(frozen=True, slots=True)
-class RegimenDraftDeletion:
+class RegimenDeletion:
     slots: int
     instructions: int
+    detached_doses: int
+    hidden_analyses: int
+    retained_reports: int
 
 
-def delete_regimen_draft(
+def _contains_reference(value: object, target: str) -> bool:
+    if isinstance(value, dict):
+        return any(_contains_reference(item, target) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_contains_reference(item, target) for item in value)
+    return value == target
+
+
+def delete_development_regimen(
     session: Session,
     *,
     owner_id: uuid.UUID,
     version_id: uuid.UUID,
-) -> RegimenDraftDeletion | None:
-    """Delete only an unapproved, owner-owned, completely unreferenced draft.
+) -> RegimenDeletion | None:
+    """Delete an owner-owned development plan without deleting recorded facts.
 
-    Draft-owned slots and instructions are part of the same plan draft and may cascade.
-    Facts, immutable report snapshots, and AI source manifests are independent records;
-    any reference from them refuses the deletion instead of silently orphaning history.
-    The caller owns the transaction, so an unexpected database reference rolls back the
-    draft deletion and its audit entry together.
+    Dose facts are detached from the deleted plan and slots so later analytics cannot
+    compare them with a plan that no longer exists. Generated analyses citing the plan
+    are hidden. Immutable reports remain frozen historical artifacts and may explicitly
+    retain the deleted plan in their snapshot.
     """
-    version = session.get(RegimenVersion, version_id)
+    version = session.scalar(
+        select(RegimenVersion).where(RegimenVersion.id == version_id).with_for_update()
+    )
     if version is None or version.owner_id != owner_id:
         return None
-    if version.status is not RegimenStatus.DRAFT:
-        raise RegimenDraftDeletionError(
-            "approved and retired plan history cannot be deleted; retire an approved plan instead"
-        )
 
-    dose_references = (
-        session.scalar(
-            select(func.count())
-            .select_from(DoseEvent)
-            .where(
-                DoseEvent.owner_id == owner_id,
-                or_(
-                    DoseEvent.regimen_version_id == version_id,
-                    DoseEvent.slot_id.in_(
-                        select(RegimenDoseSlot.id).where(
-                            RegimenDoseSlot.regimen_version_id == version_id
-                        )
-                    ),
-                ),
-            )
-        )
-        or 0
-    )
+    slot_ids = tuple(slot.id for slot in version.slots)
     version_key = str(version_id)
     report_references = sum(
-        version_key in (manifest or {}).get("plan", [])
-        for manifest in session.scalars(
-            select(ReportSnapshot.source_manifest).where(ReportSnapshot.owner_id == owner_id)
+        _contains_reference(snapshot.source_manifest, version_key)
+        or _contains_reference(snapshot.snapshot_content, version_key)
+        for snapshot in session.scalars(
+            select(ReportSnapshot).where(ReportSnapshot.owner_id == owner_id)
         )
     )
-    ai_references = sum(
-        version_key in (source_ids or [])
-        for source_ids in session.scalars(
-            select(AIAnalysis.source_record_ids).where(AIAnalysis.owner_id == owner_id)
-        )
-    )
-    if dose_references or report_references or ai_references:
-        kinds = [
-            label
-            for count, label in (
-                (dose_references, "recorded doses"),
-                (report_references, "saved reports"),
-                (ai_references, "AI analyses"),
-            )
-            if count
-        ]
-        raise RegimenDraftDeletionError(
-            f"draft is referenced by {', '.join(kinds)} and cannot be deleted"
-        )
 
-    result = RegimenDraftDeletion(slots=len(version.slots), instructions=len(version.instructions))
-    session.delete(version)
     try:
-        session.flush()
+        with session.begin_nested():
+            dose_query = (
+                select(DoseEvent)
+                .where(
+                    DoseEvent.owner_id == owner_id,
+                    or_(
+                        DoseEvent.regimen_version_id == version_id,
+                        DoseEvent.slot_id.in_(slot_ids) if slot_ids else false(),
+                    ),
+                )
+                .with_for_update(of=DoseEvent)
+            )
+            doses = tuple(session.scalars(dose_query))
+            for dose in doses:
+                if dose.regimen_version_id == version_id:
+                    dose.regimen_version_id = None
+                if dose.slot_id in slot_ids:
+                    dose.slot_id = None
+
+            analyses = tuple(
+                session.scalars(
+                    select(AIAnalysis)
+                    .where(AIAnalysis.owner_id == owner_id, AIAnalysis.hidden_at.is_(None))
+                    .with_for_update()
+                )
+            )
+            invalid_analyses = tuple(
+                analysis
+                for analysis in analyses
+                if _contains_reference(analysis.source_record_ids, version_key)
+                or _contains_reference(analysis.computed_inputs, version_key)
+            )
+            invalidated_at = datetime.now(UTC)
+            for analysis in invalid_analyses:
+                analysis.hidden_at = invalidated_at
+
+            result = RegimenDeletion(
+                slots=len(version.slots),
+                instructions=len(version.instructions),
+                detached_doses=len(doses),
+                hidden_analyses=len(invalid_analyses),
+                retained_reports=report_references,
+            )
+            status_value = version.status.value
+            session.delete(version)
+            session.flush()
     except IntegrityError as exc:
-        raise RegimenDraftDeletionError(
-            "draft has an unexpected retained reference and cannot be deleted"
+        raise RegimenDeletionError(
+            "plan has an unexpected retained reference and cannot be deleted"
         ) from exc
     audit.record(
         session,
         actor=audit.actor_for_owner(owner_id),
-        action=audit.AuditAction.REGIMEN_DRAFT_DELETED,
+        action=audit.AuditAction.REGIMEN_DELETED,
         target_type="regimen_version",
         target_id=version_id,
         change_summary=(
-            f"unapproved draft physically deleted; slots={result.slots}; "
-            f"instructions={result.instructions}"
+            f"development plan deleted; status={status_value}; slots={result.slots}; "
+            f"instructions={result.instructions}; detached_doses={result.detached_doses}; "
+            f"hidden_analyses={result.hidden_analyses}; retained_reports={result.retained_reports}"
         ),
     )
     return result

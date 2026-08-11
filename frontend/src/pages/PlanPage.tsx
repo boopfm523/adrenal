@@ -5,7 +5,7 @@ import {
   approveRegimen,
   createMedication,
   createRegimen,
-  deleteRegimenDraft,
+  deleteRegimen,
   getActiveRegimen,
   getMedications,
   getRegimenDiff,
@@ -258,10 +258,14 @@ function RetirementForm({ version, onComplete }: { version: RegimenVersion; onCo
   return <details><summary>Retire this approved version</summary><p>Retirement ends an ongoing version now and preserves it as history. It does not delete recorded doses.</p><form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}><label className="checkbox-label"><input type="checkbox" required /> I understand this will remove the version from active use.</label><button type="submit" disabled={mutation.isPending}>Retire and preserve history</button>{mutation.isError ? <p className="error-summary" role="alert">The plan version was not retired.</p> : null}</form></details>;
 }
 
-function DraftDeletionForm({ versionId, onDeleted }: { versionId: string; onDeleted: () => void }): React.JSX.Element {
+function PlanDeletionButton({ version, onDeleted }: { version: RegimenVersion; onDeleted: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const mutation = useMutation({ mutationFn: ({ password, confirmation }: { password: string; confirmation: "DELETE DRAFT PLAN" }) => deleteRegimenDraft(versionId, password, confirmation), onSuccess: async () => { onDeleted(); await invalidatePlans(queryClient); } });
-  return <details className="draft-delete danger-zone"><summary>Delete this unapproved draft</summary><p>This permanently removes only this draft and its draft slots/instructions. Approved or retired plan history cannot be deleted.</p><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ password: data.get("password") as string, confirmation: data.get("confirmation") as "DELETE DRAFT PLAN" }); }}><label>Current password<input name="password" type="password" required autoComplete="current-password" /></label><label>Type DELETE DRAFT PLAN<input name="confirmation" required autoComplete="off" pattern="DELETE DRAFT PLAN" /></label><button type="submit" disabled={mutation.isPending}>Permanently delete draft</button></form>{mutation.isError ? <p className="error-summary" role="alert">Draft was not deleted. Check the password and phrase; referenced or historical plans cannot be deleted.</p> : null}</details>;
+  const mutation = useMutation({ mutationFn: () => deleteRegimen(version.id), onSuccess: async () => { onDeleted(); await invalidatePlans(queryClient); } });
+  const confirmDeletion = (): void => {
+    const confirmed = window.confirm(`Permanently delete “${version.version_label}”?\n\nThis deletes the selected plan, its schedule slots, and its physician instructions. Recorded doses stay in HealthCurve but will no longer be linked to this plan. Saved reports remain frozen historical snapshots.`);
+    if (confirmed) mutation.mutate();
+  };
+  return <div className="draft-delete danger-zone"><button type="button" className="danger-button" disabled={mutation.isPending} onClick={confirmDeletion}>Delete plan</button>{mutation.isError ? <p className="error-summary" role="alert">The plan was not deleted. This action is available only in the private development runtime.</p> : null}</div>;
 }
 
 export function PlanPage(): React.JSX.Element {
@@ -289,7 +293,7 @@ export function PlanPage(): React.JSX.Element {
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
       {history.data?.length === 0 ? <p>No plan versions recorded.</p> : null}
-      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} onComplete={complete} /><DraftDeletionForm versionId={version.id} onDeleted={() => { complete("The unapproved draft was permanently deleted. Approved plan history and recorded doses were unchanged."); }} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}</article>)}</div>
+      <div className="version-history">{history.data?.map((version) => <article className={`version-card version-card--${version.status}`} key={version.id}><p className="category-label">{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved plan" : "Retired plan version"}</p><h3>{version.version_label}</h3><ApprovalProvenance version={version} /><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</article>)}</div>
     </section>
 
     <section aria-labelledby="diff-heading"><h2 id="diff-heading">Compare versions</h2>

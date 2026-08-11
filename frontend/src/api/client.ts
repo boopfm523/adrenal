@@ -424,14 +424,9 @@ export function getRegimenDiff(olderId: string, newerId: string): Promise<Record
   return apiRequest<Record<string, string[]>>(`/regimens/${olderId}/diff/${newerId}`);
 }
 
-export async function deleteRegimenDraft(
-  versionId: string,
-  password: string,
-  confirmation: "DELETE DRAFT PLAN",
-): Promise<void> {
+export async function deleteRegimen(versionId: string): Promise<void> {
   await apiRequest<unknown>(`/regimens/${versionId}`, {
     method: "DELETE",
-    body: JSON.stringify({ password, confirmation }),
   });
 }
 
