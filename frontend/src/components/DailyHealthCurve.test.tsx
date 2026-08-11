@@ -120,14 +120,18 @@ describe("Daily HealthCurve", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Blood pressure" }));
     expect(document.querySelectorAll("circle.healthcurve-point--blood_pressure")).toHaveLength(2);
+    expect(document.querySelectorAll("line.healthcurve-blood-pressure-link")).toHaveLength(1);
+    expect(document.querySelector(".healthcurve-point--systolic")).not.toBeNull();
+    expect(document.querySelector(".healthcurve-point--diastolic")).not.toBeNull();
+    expect(screen.getByRole("img")).toHaveTextContent("Blood pressure 121/81 mmHg");
     fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "660" } });
     const readout = screen.getByRole("status");
-    expect(readout).toHaveTextContent("Systolic: 121 mmHg");
-    expect(readout).toHaveTextContent("Diastolic: 81 mmHg");
+    expect(readout).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
+    expect(readout).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
     expect(readout).not.toHaveTextContent("88 bpm");
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
-    expect(table).toHaveTextContent("Systolic: 121 mmHg");
-    expect(table).toHaveTextContent("Diastolic: 81 mmHg");
+    expect(table).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
+    expect(table).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(screen.getByRole("status")).toHaveTextContent("Blood-pressure pulse: 88 bpm");

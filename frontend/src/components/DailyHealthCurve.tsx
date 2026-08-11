@@ -237,8 +237,8 @@ function lanes(data: DailyHealthCurveData): Lane[] {
     label: "Blood pressure",
     unit: "mmHg",
     points: data.bloodPressure.flatMap((record) => [
-      { time: record.time.occurred_at, value: record.systolic_mmhg, label: `Systolic: ${record.systolic_mmhg.toString()} mmHg`, source: `${record.provenance.source_type}; ${record.provenance.confirmation_state}` },
-      { time: record.time.occurred_at, value: record.diastolic_mmhg, label: `Diastolic: ${record.diastolic_mmhg.toString()} mmHg`, source: `${record.provenance.source_type}; ${record.provenance.confirmation_state}` },
+      { time: record.time.occurred_at, value: record.systolic_mmhg, label: `${record.systolic_mmhg.toString()}/${record.diastolic_mmhg.toString()} mmHg — systolic point: ${record.systolic_mmhg.toString()} mmHg`, source: `${record.provenance.source_type}; ${record.provenance.confirmation_state}` },
+      { time: record.time.occurred_at, value: record.diastolic_mmhg, label: `${record.systolic_mmhg.toString()}/${record.diastolic_mmhg.toString()} mmHg — diastolic point: ${record.diastolic_mmhg.toString()} mmHg`, source: `${record.provenance.source_type}; ${record.provenance.confirmation_state}` },
     ]),
   };
   const symptoms: Lane = {
@@ -384,7 +384,22 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
           })}</g> : null}
         {shownLanes.map((lane) => <g key={lane.key} data-series={lane.key}>
           {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, segment, start, end)} />)}
-          {lane.key === "blood_pressure" || lane.key === "symptoms" ? lane.points.map((point, index) => <circle key={`${point.time}-${index.toString()}`} className={`healthcurve-point healthcurve-point--${lane.key}`} cx={xPosition(point.time, start, end)} cy={yPosition(lane, point.value)} r={lane.key === "symptoms" ? 6 : 4}><title>{experiencedTime(point.time, data.exposure.timezone)}: {point.label}; source {point.source}</title></circle>) : null}
+          {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => {
+            const x = xPosition(record.time.occurred_at, start, end);
+            const systolicY = yPosition(lane, record.systolic_mmhg);
+            const diastolicY = yPosition(lane, record.diastolic_mmhg);
+            const pair = `${record.systolic_mmhg.toString()}/${record.diastolic_mmhg.toString()} mmHg`;
+            const source = `${record.provenance.source_type}; ${record.provenance.confirmation_state}`;
+            return <g key={record.id} className="healthcurve-blood-pressure-pair">
+              <title>{experiencedTime(record.time.occurred_at, data.exposure.timezone)}: Blood pressure {pair}; source {source}</title>
+              <line className="healthcurve-blood-pressure-link" x1={x} y1={systolicY} x2={x} y2={diastolicY} />
+              <circle className="healthcurve-point healthcurve-point--blood_pressure healthcurve-point--systolic" cx={x} cy={systolicY} r="5" />
+              <text aria-hidden="true" className="healthcurve-blood-pressure-label" x={x + 8} y={Math.max(TOP + 12, Math.min(TOP + PLOT_HEIGHT - 4, systolicY + 4))}>S</text>
+              <circle className="healthcurve-point healthcurve-point--blood_pressure healthcurve-point--diastolic" cx={x} cy={diastolicY} r="5" />
+              <text aria-hidden="true" className="healthcurve-blood-pressure-label" x={x + 8} y={Math.max(TOP + 12, Math.min(TOP + PLOT_HEIGHT - 4, diastolicY + 4))}>D</text>
+            </g>;
+          }) : null}
+          {lane.key === "symptoms" ? lane.points.map((point, index) => <circle key={`${point.time}-${index.toString()}`} className={`healthcurve-point healthcurve-point--${lane.key}`} cx={xPosition(point.time, start, end)} cy={yPosition(lane, point.value)} r="6"><title>{experiencedTime(point.time, data.exposure.timezone)}: {point.label}; source {point.source}</title></circle>) : null}
         </g>)}
         {visible.exposure ? data.exposure.dose_markers.map((dose) => {
           const x = xPosition(dose.occurred_at, start, end);
