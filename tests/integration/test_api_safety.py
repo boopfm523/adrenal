@@ -2767,6 +2767,82 @@ def test_health_data_local_date_filters_compose_with_pagination_and_corrections(
     assert garmin_excluded.json()["records"] == []
 
 
+def test_symptom_diary_and_life_local_date_filters_preserve_sensitive_boundaries(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    def event_time(local_time: str) -> dict[str, str]:
+        return {"local_time": local_time, "timezone": "UTC"}
+
+    symptom = client.post(
+        "/api/v1/symptoms",
+        json={"name": "Synthetic boundary symptom", "time": event_time("2026-03-08T05:00:00")},
+        headers=logged_in,
+    )
+    diary = client.post(
+        "/api/v1/diary-events",
+        json={
+            "text": "Synthetic sensitive boundary diary",
+            "is_sensitive": True,
+            "time": event_time("2026-03-09T03:59:00"),
+        },
+        headers=logged_in,
+    )
+    life = client.post(
+        "/api/v1/life-events",
+        json={
+            "title": "Synthetic boundary life event",
+            "category": "other",
+            "is_sensitive": False,
+            "time": event_time("2026-03-09T03:59:00"),
+        },
+        headers=logged_in,
+    )
+    outside = client.post(
+        "/api/v1/symptoms",
+        json={"name": "Synthetic outside symptom", "time": event_time("2026-03-09T04:00:00")},
+        headers=logged_in,
+    )
+    assert all(response.status_code == 201 for response in (symptom, diary, life, outside))
+
+    params = {
+        "local_date_from": "2026-03-08",
+        "local_date_to": "2026-03-08",
+        "timezone": "America/New_York",
+    }
+    symptom_page = client.get("/api/v1/symptoms", params=params)
+    diary_hidden = client.get("/api/v1/diary-events", params=params)
+    diary_revealed = client.get(
+        "/api/v1/diary-events", params={**params, "include_sensitive": True}
+    )
+    life_page = client.get("/api/v1/life-events", params=params)
+    assert all(
+        response.status_code == 200
+        for response in (symptom_page, diary_hidden, diary_revealed, life_page)
+    )
+    assert symptom.json()["id"] in {row["id"] for row in symptom_page.json()["items"]}
+    assert outside.json()["id"] not in {row["id"] for row in symptom_page.json()["items"]}
+    assert diary.json()["id"] not in {row["id"] for row in diary_hidden.json()["items"]}
+    assert diary.json()["id"] in {row["id"] for row in diary_revealed.json()["items"]}
+    assert life.json()["id"] in {row["id"] for row in life_page.json()["items"]}
+
+    from_only = client.get(
+        "/api/v1/symptoms",
+        params={"local_date_from": "2026-03-09", "timezone": "America/New_York"},
+    )
+    invalid = client.get(
+        "/api/v1/life-events",
+        params={
+            "local_date_from": "2026-03-09",
+            "local_date_to": "2026-03-08",
+            "timezone": "UTC",
+        },
+    )
+    assert outside.json()["id"] in {row["id"] for row in from_only.json()["items"]}
+    assert symptom.json()["id"] not in {row["id"] for row in from_only.json()["items"]}
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["code"] == "invalid_local_date_range"
+
+
 def test_timeline_orders_by_experienced_time_with_stable_ties(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

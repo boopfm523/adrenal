@@ -9,7 +9,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, literal, select, union_all
+from sqlalchemy.sql.elements import ColumnElement
 
+from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
 from healthcurve.api.routers.doses import resolve_time
@@ -102,11 +104,22 @@ def list_symptoms(
     pagination: Pagination,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ):
-    predicates = []
-    if date_from:
-        predicates.append(SymptomEvent.occurred_at >= date_from)
-    if date_to:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates: list[ColumnElement[bool]] = []
+    if window.start is not None or date_from is not None:
+        predicates.append(SymptomEvent.occurred_at >= (window.start or date_from))
+    if window.end_exclusive is not None:
+        predicates.append(SymptomEvent.occurred_at < window.end_exclusive)
+    elif date_to is not None:
         predicates.append(SymptomEvent.occurred_at <= date_to)
     page = paginate_current_facts(
         session,
@@ -198,14 +211,29 @@ def list_diary(
     include_sensitive: bool = Query(
         default=False, description="Sensitive entries are excluded from default views (T7)."
     ),
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> DiaryPage:
-    predicates = () if include_sensitive else (DiaryEvent.is_sensitive.is_(False),)
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates: list[ColumnElement[bool]] = (
+        [] if include_sensitive else [DiaryEvent.is_sensitive.is_(False)]
+    )
+    if window.start is not None:
+        predicates.append(DiaryEvent.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        predicates.append(DiaryEvent.occurred_at < window.end_exclusive)
     page = paginate_current_facts(
         session,
         DiaryEvent,
         owner_id=owner.id,
         request=pagination,
-        predicates=predicates,
+        predicates=tuple(predicates),
         include_revisions=False,
     )
     return DiaryPage(
@@ -260,14 +288,29 @@ def list_life_events(
     owner: CurrentOwner,
     pagination: Pagination,
     include_sensitive: bool = False,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
 ) -> LifeEventPage:
-    predicates = () if include_sensitive else (LifeEvent.is_sensitive.is_(False),)
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates: list[ColumnElement[bool]] = (
+        [] if include_sensitive else [LifeEvent.is_sensitive.is_(False)]
+    )
+    if window.start is not None:
+        predicates.append(LifeEvent.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        predicates.append(LifeEvent.occurred_at < window.end_exclusive)
     page = paginate_current_facts(
         session,
         LifeEvent,
         owner_id=owner.id,
         request=pagination,
-        predicates=predicates,
+        predicates=tuple(predicates),
         include_revisions=False,
     )
     return LifeEventPage(

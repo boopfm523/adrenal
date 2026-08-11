@@ -401,20 +401,37 @@ export async function deleteContextEvent(id: string, password: string): Promise<
   });
 }
 
-export function getSymptoms(page = 1): Promise<SymptomPage> {
-  return apiRequest<SymptomPage>(`/symptoms?page=${page.toString()}`);
+export interface SymptomsDiaryFilters {
+  dateFrom: string;
+  dateTo: string;
+  timezone: string;
+  includeSensitive: boolean;
+}
+
+function symptomsDiaryQuery(filters: SymptomsDiaryFilters, page: number): URLSearchParams {
+  const params = new URLSearchParams({ timezone: filters.timezone, page: page.toString() });
+  if (filters.dateFrom !== "") params.set("local_date_from", filters.dateFrom);
+  if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
+  if (filters.includeSensitive) params.set("include_sensitive", "true");
+  return params;
+}
+
+export function getSymptoms(filters: SymptomsDiaryFilters, page = 1): Promise<SymptomPage> {
+  const params = symptomsDiaryQuery(filters, page);
+  params.delete("include_sensitive");
+  return apiRequest<SymptomPage>(`/symptoms?${params.toString()}`);
 }
 
 export function correctSymptom(id: string, payload: SymptomCorrectionInput): Promise<Symptom> {
   return apiRequest<Symptom>(`/symptoms/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getDiaryEntries(page = 1, includeSensitive = false): Promise<DiaryPage> {
-  return apiRequest<DiaryPage>(`/diary-events?page=${page.toString()}${includeSensitive ? "&include_sensitive=true" : ""}`);
+export function getDiaryEntries(filters: SymptomsDiaryFilters, page = 1): Promise<DiaryPage> {
+  return apiRequest<DiaryPage>(`/diary-events?${symptomsDiaryQuery(filters, page).toString()}`);
 }
 
-export function getLifeEvents(page = 1, includeSensitive = false): Promise<LifeEventPage> {
-  return apiRequest<LifeEventPage>(`/life-events?page=${page.toString()}${includeSensitive ? "&include_sensitive=true" : ""}`);
+export function getLifeEvents(filters: SymptomsDiaryFilters, page = 1): Promise<LifeEventPage> {
+  return apiRequest<LifeEventPage>(`/life-events?${symptomsDiaryQuery(filters, page).toString()}`);
 }
 
 export function getRegimens(page = 1): Promise<RegimenVersionPage> {

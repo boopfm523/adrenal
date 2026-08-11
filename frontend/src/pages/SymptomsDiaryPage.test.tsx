@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
+import { AuthContext } from "../auth/context";
 import { SymptomsDiaryPage } from "./SymptomsDiaryPage";
 
 const time = { occurred_at: "2026-08-09T13:00:00Z", local_time: "2026-08-09T09:00:00", timezone: "America/New_York", utc_offset_minutes: -240 };
@@ -17,7 +18,8 @@ describe("Symptoms and diary page", () => {
   afterEach(() => { sessionStore.clear(); });
 
   it("preserves symptom history and reveals sensitive text only after explicit action", async () => {
-    sessionStore.set({ csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } });
+    const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+    sessionStore.set(session);
     const prior = { id: "11111111-1111-4111-8111-111111111111", category: "fact", name: "Synthetic fatigue", severity: 4, body_area: null, time, provenance, episode_id: null, notes: null };
     const current = { ...prior, id: "22222222-2222-4222-8222-222222222222", severity: 6, provenance: { ...provenance, supersedes_id: prior.id, correction_reason: "Synthetic correction", is_correction: true } };
     const publicDiary = { id: "33333333-3333-4333-8333-333333333333", category: "fact", text: "Synthetic public note", is_sensitive: false, tags: null, time, provenance };
@@ -27,24 +29,32 @@ describe("Symptoms and diary page", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.includes(`/symptoms/${current.id}/correct`) && init?.method === "POST") return Promise.resolve(response({ ...current, severity: 7 }, 201));
-      if (url.includes("/symptoms")) return Promise.resolve(response({ items: [current], revisions: [prior], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }));
+      if (url.includes("/symptoms")) { const pageNumber = Number(new URL(url, "http://healthcurve.test").searchParams.get("page") ?? "1"); return Promise.resolve(response({ items: [current], revisions: [prior], page: { page: pageNumber, page_size: 25, total_items: 50, total_pages: 2 } })); }
       if (url.includes("/diary-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicDiary, privateDiary] : [publicDiary])));
       if (url.includes("/life-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife])));
       return Promise.resolve(response({ detail: "not found" }, 404));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><SymptomsDiaryPage /></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><SymptomsDiaryPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
 
     expect(await screen.findByText("Synthetic public note")).toBeVisible();
     expect(screen.getByText("Synthetic public event")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Symptom records table" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Diary records table" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Life event records table" })).toBeVisible();
     expect(screen.queryByText("Synthetic private note")).not.toBeInTheDocument();
     expect(screen.queryByText("Synthetic private event")).not.toBeInTheDocument();
     await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/severity 4\/10/)).toBeVisible();
 
+    await userEvent.type(screen.getByLabelText("From date"), "2026-08-09");
+    await userEvent.type(screen.getByLabelText("Through date"), "2026-08-10");
     await userEvent.click(screen.getByRole("checkbox", { name: "Reveal sensitive diary and life-event entries" }));
+    await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(await screen.findByText("Synthetic private note")).toBeVisible();
     expect(await screen.findByText("Synthetic private event")).toBeVisible();
     expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("include_sensitive=true"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("local_date_from=2026-08-09") && requestUrl(input).includes("local_date_to=2026-08-10") && requestUrl(input).includes("timezone=America%2FNew_York"))).toBe(true);
+    expect(fetchMock.mock.calls.every(([input]) => !requestUrl(input).includes("Synthetic private"))).toBe(true);
 
     await userEvent.click(screen.getByRole("button", { name: "Correct recorded symptom" }));
     const form = screen.getByRole("form", { name: "Correct Synthetic fatigue symptom" });
@@ -57,5 +67,8 @@ describe("Symptoms and diary page", () => {
     const write = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).includes(`/symptoms/${current.id}/correct`) && init?.method === "POST");
     const body = write?.[1]?.body;
     expect(JSON.parse(typeof body === "string" ? body : "{}") as unknown).toEqual({ reason: "Synthetic second correction", changes: { severity: 7 } });
+
+    await userEvent.click(within(screen.getByRole("navigation", { name: "Symptom records pagination" })).getByRole("button", { name: "Next" }));
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/symptoms?") && requestUrl(input).includes("page=2") && requestUrl(input).includes("local_date_from=2026-08-09"))).toBe(true); });
   });
 });

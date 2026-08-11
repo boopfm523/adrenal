@@ -24,6 +24,7 @@
     "frontend/src/pages/DosesPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.2" },
     "frontend/src/pages/HealthDataPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.4" },
     "frontend/src/pages/LabsPage.tsx": { "status": "paginated", "issue": "hc-inbox.10.4" },
+    "frontend/src/pages/SymptomsDiaryPage.tsx": { "status": "paginated", "issue": "hc-inbox.20.1" },
     "frontend/src/pages/TimelinePage.tsx": { "status": "paginated", "issue": "hc-inbox.10.1" }
   },
   "additional_ui_collections": {
