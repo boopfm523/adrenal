@@ -51,8 +51,12 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       HC_OLLAMA_BASE_URL: http://127.0.0.1:11434
       HC_GARMIN_ENABLED: "true"
-      HC_GARMIN_EMAIL: ${HC_GARMIN_EMAIL:?set HC_GARMIN_EMAIL for one-time login}
-      HC_GARMIN_PASSWORD: ${HC_GARMIN_PASSWORD:?set HC_GARMIN_PASSWORD for one-time login}
+      # Compose interpolates every service before it applies profiles. Empty
+      # defaults let the token-only worker start after these one-time credentials
+      # are removed; garmin_cli rejects an interactive connect attempt when either
+      # value is absent.
+      HC_GARMIN_EMAIL: ${HC_GARMIN_EMAIL:-}
+      HC_GARMIN_PASSWORD: ${HC_GARMIN_PASSWORD:-}
       HC_GARMIN_TOKEN_STORE: /run/secrets/garmin
     volumes:
       - type: bind

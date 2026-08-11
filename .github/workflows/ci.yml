@@ -167,6 +167,17 @@ jobs:
           docker compose --env-file /dev/null config --format json > /tmp/healthcurve-dev.json
           python3 scripts/check_compose_topology.py /tmp/healthcurve-dev.json
 
+          # Profiles are applied after interpolation. The scheduled Garmin worker
+          # must therefore render after one-time credentials have been removed;
+          # the connector itself performs the fail-closed credential check.
+          POSTGRES_PASSWORD=ci-placeholder-not-a-secret \
+          POSTGRES_AI_PASSWORD=ci-placeholder-not-a-secret \
+          HC_GARMIN_TOKEN_STORE_HOST=/tmp/healthcurve-validation-garmin \
+          docker compose --env-file /dev/null \
+            -f docker-compose.yml -f deploy/garmin.compose.yml \
+            --profile garmin config --format json > /tmp/healthcurve-garmin.json
+          python3 scripts/check_compose_topology.py /tmp/healthcurve-garmin.json
+
           POSTGRES_PASSWORD=ci-placeholder-not-a-secret \
           POSTGRES_AI_PASSWORD=ci-placeholder-not-a-secret \
           HC_CADDY_BIND_IP=100.64.0.1 \

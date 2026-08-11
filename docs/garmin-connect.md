@@ -84,12 +84,26 @@ commit, Bead, screenshot, or chat.
 5. Immediately remove the values of `HC_GARMIN_EMAIL` and `HC_GARMIN_PASSWORD` from
    `.env`. Leave the enable flag, host token path, and lookback configured.
 
+   Do not add empty placeholders for the removed credentials. The scheduled worker
+   starts from the protected token store alone. If the one-time connector is run
+   again without both real credentials, it exits with
+   `garmin_credentials_not_configured` and does not access the database or Garmin.
+
 6. Start or rebuild the API and isolated worker:
 
    ```bash
    docker compose up -d --build api caddy
    docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
      --profile garmin up -d --build garmin-worker
+   ```
+
+   The same credential-free boundary applies to routine operations:
+
+   ```bash
+   docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
+     --profile garmin restart garmin-worker
+   docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
+     --profile garmin ps garmin-worker
    ```
 
 The Settings page shows safe connection state, last success, capability availability,

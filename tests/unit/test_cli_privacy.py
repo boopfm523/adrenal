@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from healthcurve.cli import telegram_status
+from healthcurve.garmin_cli import connect as garmin_connect
 
 
 def test_telegram_status_reports_state_without_identifiers_or_provider_error_text(
@@ -57,3 +58,29 @@ def test_telegram_status_reports_state_without_identifiers_or_provider_error_tex
         "provider detail that must not be displayed",
     ):
         assert private_value not in output
+
+
+@pytest.mark.parametrize(
+    ("email", "password"),
+    ((None, None), ("configured", None), (None, "configured")),
+)
+def test_garmin_connect_fails_closed_before_database_access_without_credentials(
+    capsys: pytest.CaptureFixture[str],
+    email: str | None,
+    password: str | None,
+) -> None:
+    settings = SimpleNamespace(
+        garmin_email=email,
+        garmin_password=password,
+        garmin_token_store=None,
+    )
+    factory = MagicMock()
+
+    with (
+        patch("healthcurve.garmin_cli.get_settings", return_value=settings),
+        patch("healthcurve.garmin_cli.get_session_factory", factory),
+    ):
+        assert garmin_connect() == 2
+
+    assert capsys.readouterr().out == "garmin_credentials_not_configured\n"
+    factory.assert_not_called()
