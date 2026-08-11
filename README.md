@@ -8,6 +8,36 @@ medication adviser. Its first obligation is a trustworthy longitudinal record.
 Analytics and AI are derived views, never substitutes for medical facts or a
 physician-approved plan.
 
+## What HealthCurve does today
+
+HealthCurve brings the parts of a day onto one private, owner-only timeline:
+actual medication doses, symptoms and diary entries, stress episodes, blood
+pressure and pulse, Garmin observations, sleep, labs, and the medication plan that
+was effective at the time.
+
+Its defining view is **HealthCurve**, a selected-day, interactive comparison built
+from actual recorded dose times. It plots a versioned theoretical exposure shape for
+supported immediate-release oral hydrocortisone, including absorption, half-life,
+carryover from the prior day, and the summed effect of doses taken close together.
+Focused controls compare that shape with Garmin stress, heart rate, HRV,
+respiration, blood pressure, symptoms, stress episodes, and sleep on the same local
+time axis. Hover, keyboard, and mobile controls reveal the exact time and native
+value; the adjacent table remains authoritative. Daily and nightly Garmin summaries
+without an observation time are shown as context rather than invented as intraday
+points.
+
+The exposure line is in relative exposure units (REU). It is not a cortisol
+measurement, a conclusion about adequate coverage, or dosing advice. Recorded stress
+and symptoms currently remain overlays: HealthCurve does **not** convert them into a
+personal cortisol “needed” or medication-demand curve. The formulas, parameters,
+evidence, limitations, and this deliberate boundary are published in the Analytics
+page and [the user guide](docs/using-healthcurve.md#exact-healthcurve-formulas-and-evidence).
+
+For longer review, HealthCurve compares deterministic day-level features across up
+to 366 days, keeps missing data explicit, and can optionally ask the private local
+model to draft a cited descriptive summary. That draft remains labeled AI analysis;
+it cannot change facts, plans, or medication instructions.
+
 ## The three categories
 
 Everything stored belongs to exactly one of three categories, kept separate in
@@ -28,6 +58,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | Document | What it is |
 |---|---|
 | [docs/HealthCurve_Project_Plan.md](docs/HealthCurve_Project_Plan.md) | Product intent and architecture (the source document) |
+| [docs/using-healthcurve.md](docs/using-healthcurve.md) | Current owner workflows, HealthCurve formulas, and shipped limitations |
 | [docs/safety-spec.md](docs/safety-spec.md) | Normative safety rules `SAFE-01`…`SAFE-29` |
 | [docs/safety-rules.yaml](docs/safety-rules.yaml) | Machine-readable rule index used by the CI gate |
 | [docs/threat-model.md](docs/threat-model.md) | Threats `T1`…`T7` and data classification `C0`…`C13` |
@@ -41,6 +72,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/garmin-connect.md](docs/garmin-connect.md) | Configure isolated read-only automatic Garmin sync |
 | [docs/backup-runbook.md](docs/backup-runbook.md) | Encrypted backup setup, monitoring, retention, and recovery operations |
 | [docs/private-release-checklist.md](docs/private-release-checklist.md) | Executable gates before relying on the private localhost/Tailscale deployment |
+| [docs/frontend-bundle-budget.md](docs/frontend-bundle-budget.md) | Frontend route-loading strategy and enforced size budget |
 
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work, and
 read [docs/roadmap.md](docs/roadmap.md) for what remains and in what order.
@@ -48,7 +80,9 @@ read [docs/roadmap.md](docs/roadmap.md) for what remains and in what order.
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) — provisions Python 3.13 (ADR-0006) and locks deps
-- Docker with Compose — PostgreSQL, Redis, Ollama, Caddy
+- Docker with Compose — PostgreSQL, Redis, Caddy, API, and background workers
+- Native [Ollama](https://ollama.com/) — optional private model-backed drafts;
+  deterministic recording, analytics, and emergency information work without it
 - Node.js 24 or newer — builds and tests the locked React client
 - [Beads](https://github.com/gastownhall/beads) (`bd`) — issue tracking, mandatory
 
@@ -66,6 +100,13 @@ make migrate               # apply migrations (never automatic -- ADR-0002)
 ```
 
 `make help` lists every target.
+
+On the normal macOS installation, Ollama runs natively on loopback and containers
+reach it through `http://host.docker.internal:11434`; ordinary `make up` does not
+start or download a model container. Run `ollama list` on the host to verify the
+configured model. The old container topology remains an explicit compatibility
+profile only. See [the private hosting guide](docs/tailscale-hosting.md) and
+[ADR-0017](docs/adr/0017-host-native-ollama-default.md).
 
 The web client is a React/TypeScript SPA in `frontend/`; the emergency page remains
 server-rendered by FastAPI. `make frontend-generate` refreshes the committed OpenAPI
@@ -98,18 +139,29 @@ docker compose run --rm api python -m healthcurve.cli approve-regimen <id> \
 
 Then connect Telegram by following [docs/telegram-setup.md](docs/telegram-setup.md).
 
-If an automated development bootstrap created the owner but its credentials were not
-handed off, use the reviewed local recovery command below. It updates the same owner
-row and revokes all sessions; it does not delete health data. The command refuses to
-run outside development or when legacy MFA data exists, and the password is accepted
-only at a hidden prompt.
+## Telegram, Garmin, and Beads
 
-```bash
-docker compose run --rm api python -m healthcurve.cli recover-owner-access
-```
+**Telegram** is an optional fast capture interface. HealthCurve polls Telegram
+outbound, so no webhook or public application endpoint is required. Deterministic
+commands record facts; supported free text becomes a reviewable draft that requires
+confirmation before high-impact fields become facts. The local Ollama model can help
+structure those drafts but cannot approve a plan or write directly to the record.
+Telegram itself retains chat history on Telegram's servers, so use the web app when
+that external copy is undesirable. `/beads-add` creates a structured product request
+for later review; it does not automatically implement or deploy anything.
 
-Normal operation uses the password-change flow; this command is only for correcting
-an inaccessible development bootstrap account.
+**Garmin Connect** is an owner-selected, unofficial, read-only integration isolated
+in its own worker. It imports supported daily and intraday stress, heart rate, HRV,
+respiration, and sleep/awake observations with provider provenance. Missing data stays
+missing. Garmin can change its private interface without notice, so reviewed
+FIT/CSV/ZIP import remains available as a fallback. See
+[Garmin Connect](docs/garmin-connect.md) and [Garmin import](docs/garmin-import.md).
+
+**Beads** (`bd`) is the repository's durable engineering task and project-memory
+system—not part of the personal health record. Priorities, dependencies, blockers,
+claims, verification evidence, and multi-session handoffs live there instead of in
+README task lists. `bd prime` restores project context and `bd ready` shows concrete
+unblocked work. See [the Beads workflow](docs/beads-workflow.md).
 
 ## Layout
 
