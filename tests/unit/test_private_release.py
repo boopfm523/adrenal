@@ -31,7 +31,9 @@ def test_private_env_accepts_owner_only_distinct_secrets_and_dev_runtime(tmp_pat
 def test_private_env_rejects_unsafe_permissions_debug_and_shared_roles(tmp_path: Path) -> None:
     path = _write(
         tmp_path / ".env",
-        "HC_DEBUG=true\nPOSTGRES_PASSWORD=password\nPOSTGRES_AI_PASSWORD=password\n",
+        "HC_DEBUG=true\n"
+        "POSTGRES_PASSWORD=password\n"  # pragma: allowlist secret
+        "POSTGRES_AI_PASSWORD=password\n",  # pragma: allowlist secret
         mode=0o644,
     )
     assert set(check(path)) == {
