@@ -396,11 +396,24 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     ? nearbySymptomObservations(unscoredSymptoms, cursorTime)
     : [];
   const cursorRows = [
-    ...cursorPoints.map(({ lane, point }) => ({
-      key: `${lane.key}-${point.time}-${point.label}`,
-      series: lane.label,
-      value: lane.key === "exposure" ? `${point.value.toFixed(3)} REU` : point.label,
-    })),
+    ...cursorPoints.flatMap(({ lane, point }, index, points) => {
+      if (lane.key === "blood_pressure") {
+        const firstPointForReading = points.findIndex(
+          (candidate) => candidate.lane.key === lane.key && candidate.point.time === point.time,
+        );
+        if (index !== firstPointForReading) return [];
+        return [{
+          key: `${lane.key}-${point.time}`,
+          series: lane.label,
+          value: point.label.split(" — ")[0] ?? point.label,
+        }];
+      }
+      return [{
+        key: `${lane.key}-${point.time}-${point.label}`,
+        series: lane.label,
+        value: lane.key === "exposure" ? `${point.value.toFixed(3)} REU` : point.label,
+      }];
+    }),
     ...cursorUnscoredSymptoms.map((symptom) => ({
       key: `unscored-symptom-${symptom.id}`,
       series: "Symptoms",

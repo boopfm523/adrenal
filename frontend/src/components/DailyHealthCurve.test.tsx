@@ -148,8 +148,9 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelector(".healthcurve-point--diastolic")).not.toBeNull();
     expect(screen.getByRole("img")).toHaveTextContent("Blood pressure 121/81 mmHg");
     const { tooltip } = hoverAt(660);
-    expect(tooltip).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
-    expect(tooltip).toHaveTextContent("121/81 mmHg — diastolic point: 81 mmHg");
+    expect(within(tooltip).getAllByText("Blood pressure:")).toHaveLength(1);
+    expect(tooltip).toHaveTextContent("Blood pressure: 121/81 mmHg");
+    expect(tooltip).not.toHaveTextContent(/systolic point|diastolic point/);
     expect(tooltip).not.toHaveTextContent("88 bpm");
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(table).toHaveTextContent("121/81 mmHg — systolic point: 121 mmHg");
