@@ -1358,7 +1358,9 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             )
         )
 
-    def fetched(steps: int, heart_rate: int) -> FetchedWindow:
+    def fetched(
+        steps: int, heart_rate: int, nightly_hrv: int = 41, highest_respiration: float = 18.4
+    ) -> FetchedWindow:
         daily = map_day(
             day=date(2026, 1, 10),
             stats={"totalSteps": steps},
@@ -1382,6 +1384,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         )
         start_ms = int(datetime(2026, 1, 10, 8, tzinfo=UTC).timestamp() * 1_000)
         intraday = map_intraday_day(
+            day=date(2026, 1, 10),
             heart_rate={
                 "heartRateValueDescriptors": [
                     {"index": 0, "key": "timestamp"},
@@ -1402,12 +1405,17 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
                     {"index": 1, "key": "respiration"},
                 ],
                 "respirationValuesArray": [[start_ms + 240_000, 14.5]],
+                "avgWakingRespirationValue": 14.2,
+                "avgSleepRespirationValue": 12.8,
+                "lowestRespirationValue": 10.1,
+                "highestRespirationValue": highest_respiration,
             },
             hrv={
+                "hrvSummary": {"lastNightAvg": nightly_hrv},
                 "hrvReadings": [
                     {"readingTimeGMT": "2026-01-10T08:00:00Z", "hrvValue": 40},
                     {"readingTimeGMT": "2026-01-10T08:05:00Z", "hrvValue": 42},
-                ]
+                ],
             },
             timezone="UTC",
         )
@@ -1415,7 +1423,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             start_date=date(2026, 1, 10),
             end_date=date(2026, 1, 10),
             timezone="UTC",
-            metrics=daily.metrics,
+            metrics=(*daily.metrics, *intraday.aggregates),
             intraday_metrics=intraday.observations,
             sleeps=(),
             activities=activities,
@@ -1431,26 +1439,47 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
 
     with Session(engine) as session, session.begin():
         first = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
-        assert (first.created, first.corrected, first.unchanged) == (8, 0, 0)
+        assert (first.created, first.corrected, first.unchanged) == (13, 0, 0)
     with Session(engine) as session, session.begin():
         duplicate = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
-        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 8)
+        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 13)
     with Session(engine) as session, session.begin():
-        corrected = persist_window(session, owner_id=owner_id, fetched=fetched(120, 73))
-        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 2, 6)
+        corrected = persist_window(session, owner_id=owner_id, fetched=fetched(120, 73, 43, 19.2))
+        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 4, 9)
 
     with Session(engine) as session:
         metrics = list(
             session.scalars(select(GarminMetricEvent).where(GarminMetricEvent.owner_id == owner_id))
         )
         current = events.current_only(session, GarminMetricEvent, metrics)
-        assert len(metrics) == 9
-        assert len(current) == 7
+        assert len(metrics) == 16
+        assert len(current) == 12
         daily_current = [row for row in current if row.aggregation == "daily_summary"]
-        assert len(daily_current) == 1
-        assert daily_current[0].value == Decimal(120)
-        assert daily_current[0].supersedes_id is not None
-        assert daily_current[0].garmin_sync_run_id is not None
+        assert len(daily_current) == 6
+        steps = next(row for row in daily_current if row.metric_type is GarminMetricType.STEPS)
+        assert steps.value == Decimal(120)
+        assert steps.supersedes_id is not None
+        assert steps.garmin_sync_run_id is not None
+        assert {
+            row.garmin_field_name
+            for row in daily_current
+            if row.metric_type is GarminMetricType.HRV
+        } == {"lastNightAvg"}
+        nightly_hrv_row = next(
+            row for row in daily_current if row.garmin_field_name == "lastNightAvg"
+        )
+        assert nightly_hrv_row.value == Decimal(43)
+        assert nightly_hrv_row.supersedes_id is not None
+        assert {
+            row.garmin_field_name
+            for row in daily_current
+            if row.metric_type is GarminMetricType.RESPIRATION_RATE
+        } == {
+            "avgWakingRespirationValue",
+            "avgSleepRespirationValue",
+            "lowestRespirationValue",
+            "highestRespirationValue",
+        }
         samples = [row for row in current if row.aggregation == "provider_sample"]
         assert len(samples) == 6
         assert any(row.value == 0 and row.metric_type.value == "stress" for row in samples)
@@ -1477,6 +1506,20 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert records.status_code == 200
     assert {row["kind"] for row in records.json()["records"]} == {"daily", "activity"}
     assert any(row["distance_miles"] == "1.0000" for row in records.json()["records"])
+    nightly_hrv = next(
+        row for row in records.json()["records"] if row["garmin_field_name"] == "lastNightAvg"
+    )
+    assert nightly_hrv["measurement_label"] == "Nightly average HRV"
+    assert nightly_hrv["period_label"] == "previous night"
+    assert nightly_hrv["value"] == "43.0000"
+    assert nightly_hrv["unit"] == "ms"
+    waking_respiration = next(
+        row
+        for row in records.json()["records"]
+        if row["garmin_field_name"] == "avgWakingRespirationValue"
+    )
+    assert waking_respiration["measurement_label"] == "Average waking respiration"
+    assert waking_respiration["period_label"] == "waking period"
     secondary_record_ids = {row["id"] for row in records.json()["records"]}
     sample_response = client.get(
         "/api/v1/integrations/garmin/samples",
@@ -1499,18 +1542,27 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "connected"
     assert status_response.json()["last_success_at"] is not None
+    assert status_response.json()["capabilities"]["hrv_daily_average"] == "unsupported"
+    assert status_response.json()["capabilities"]["hrv_nightly_average"] == "available"
     garmin_timeline = client.get(
         "/api/v1/timeline?types=garmin_daily,garmin_activity&sort_order=asc"
     )
     assert garmin_timeline.status_code == 200
-    assert [item["event_type"] for item in garmin_timeline.json()["items"]] == [
-        "garmin_daily",
-        "garmin_activity",
-    ]
-    assert [item["summary"] for item in garmin_timeline.json()["items"]] == [
+    assert [item["event_type"] for item in garmin_timeline.json()["items"]].count(
+        "garmin_daily"
+    ) == 6
+    assert [item["event_type"] for item in garmin_timeline.json()["items"]].count(
+        "garmin_activity"
+    ) == 1
+    assert {item["summary"] for item in garmin_timeline.json()["items"]} == {
         "Steps: 120.0000 steps",
+        "Nightly average HRV: 43.0000 ms",
+        "Average waking respiration: 14.2000 breaths/min",
+        "Average sleeping respiration: 12.8000 breaths/min",
+        "Lowest respiration: 10.1000 breaths/min",
+        "Highest respiration: 19.2000 breaths/min",
         "Activity: Walking; 1.0000 mi",
-    ]
+    }
     assert all(
         item["provenance"]["source_type"] == "provider" for item in garmin_timeline.json()["items"]
     )
@@ -1528,7 +1580,11 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     garmin_export = private_export.json()["integrations"]["garmin"]
     assert len(garmin_export["connection_state"]) == 1
     assert len(garmin_export["sync_runs"]) == 3
-    assert len(private_export.json()["facts"]["garmin_metrics"]) == 9
+    assert len(private_export.json()["facts"]["garmin_metrics"]) == 16
+    assert any(
+        row["garmin_field_name"] == "lastNightAvg" and row["aggregation"] == "daily_summary"
+        for row in private_export.json()["facts"]["garmin_metrics"]
+    )
     assert "credentials" not in garmin_export
 
     disabled_sync = client.post(
@@ -1589,7 +1645,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     )
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["disconnect_requested"] is True
-    assert deleted.json()["data_rows_deleted"] == 13
+    assert deleted.json()["data_rows_deleted"] == 20
 
     class LogoutClient:
         logged_out = False

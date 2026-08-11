@@ -2913,6 +2913,17 @@
             ],
             "title": "Ended At"
           },
+          "garmin_field_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garmin Field Name"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2928,6 +2939,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "measurement_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Label"
+          },
           "metric_type": {
             "anyOf": [
               {
@@ -2938,6 +2960,17 @@
               }
             ],
             "title": "Metric Type"
+          },
+          "period_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Label"
           },
           "provenance": {
             "$ref": "#/components/schemas/ProvenanceOut"

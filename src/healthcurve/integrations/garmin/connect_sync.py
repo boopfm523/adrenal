@@ -122,6 +122,7 @@ def fetch_window(
             already_available = capabilities.get(name) == "available"
             capabilities[name] = "available" if state == "available" or already_available else state
         intraday = map_intraday_day(
+            day=current,
             heart_rate=call(lambda day_text=day_text: client.get_heart_rates(day_text)),
             stress=call(lambda day_text=day_text: client.get_stress_data(day_text)),
             respiration=call(lambda day_text=day_text: client.get_respiration_data(day_text)),
@@ -129,6 +130,7 @@ def fetch_window(
             timezone=timezone,
         )
         intraday_metrics.extend(intraday.observations)
+        metrics.extend(intraday.aggregates)
         warnings.extend(intraday.warnings)
         for name, state in intraday.capabilities.items():
             already_available = capabilities.get(name) == "available"

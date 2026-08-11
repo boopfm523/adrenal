@@ -19,6 +19,9 @@ HealthCurve stores only these fields when Garmin supplies them:
 - workouts: provider activity ID, activity type, experienced start time and timezone,
   elapsed duration, and optional distance converted deterministically to miles;
 - daily steps, resting heart rate in bpm, and average Garmin stress score;
+- provider-defined aggregate facts for nightly-average HRV; waking- and sleeping-
+  period average respiration; and daily low/high respiration;
+- timestamped heart rate, stress, respiration, and nightly HRV samples when available;
 - sleep start, wake time, duration, duration source, number of awakenings, and sleep
   score.
 
@@ -26,7 +29,7 @@ Missing stays missing. HealthCurve never substitutes zero. Intensity minutes, Bo
 Battery, Pulse Ox, calories, Garmin weight, sleep stages, GPS routes, and every other
 provider field are deferred unless a later Bead explicitly adds them.
 
-## Verified intraday contract (implementation in progress)
+## Verified intraday and aggregate contract
 
 The isolated client can read timestamped heart rate, stress, respiration, and nightly
 HRV. A privacy-safe configured-account probe verified predominant sample spacing of 2,
@@ -35,13 +38,20 @@ Heart rate is bpm, respiration is breaths/min, HRV is ms, and stress is Garmin's
 score. Negative stress/respiration sentinels and null values mean missing; stress zero
 is a valid reading.
 
+The same responses expose a provider `lastNightAvg` HRV value and separate waking and
+sleeping respiration averages plus daily respiration low/high. HealthCurve records
+each with its exact provider field and period label. The client does **not** expose a
+distinct all-day HRV average: capability status reports that value as unsupported,
+rather than relabeling Garmin's weekly average or calculating a substitute. Aggregate
+facts are visible as untimed daily/nightly context and in exact-value tables, never as
+invented midnight samples or intraday curves.
+
 Garmin supplies no stable sample ID, revision token, or per-sample IANA timezone for
 these responses. [ADR-0014](adr/0014-garmin-intraday-read-contract.md) therefore defines
 deterministic metric-plus-UTC-timestamp identities, content revisions, timezone
 handling, bounded parsing, and separation between timestamped readings and daily or
-nightly aggregates. The current automatic-sync release still stores the first-release
-fields above; intraday persistence and chart exposure are delivered by the dependent
-HealthCurve analytics Beads.
+nightly aggregates. Re-reading the same provider field is idempotent; a changed value
+creates a provider correction while retaining provenance.
 
 ## Security boundary
 

@@ -215,6 +215,9 @@ circle.chart-series { fill: white; }
 .healthcurve-axis-title { fill: #26332e; font-size: 12px; font-weight: 700; }
 .healthcurve-legend { display: flex; flex-wrap: wrap; gap: 0.55rem 1rem; margin-block: 0.8rem; }
 .healthcurve-legend span { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; }
+.healthcurve-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-block: 1rem; }
+.healthcurve-focus > span { font-weight: 800; margin-right: 0.25rem; }
+.healthcurve-focus button { min-height: 2.35rem; padding: 0.4rem 0.7rem; }
 .healthcurve-key { display: inline-block; width: 1.6rem; border-top: 0.24rem solid #153cc1; }
 .healthcurve-key--stress { border-color: #a14c12; border-top-style: dashed; }
 .healthcurve-key--heart_rate { border-color: #a32038; }
@@ -241,7 +244,13 @@ circle.chart-series { fill: white; }
 .healthcurve-point--respiration_rate { fill: #25677a; }
 .healthcurve-point--blood_pressure { fill: #1c5a34; }
 .healthcurve-point--symptoms { fill: #bd2f6b; }
-.healthcurve-point--daily-summary { fill: white; stroke: #17221e; stroke-width: 3; }
+.garmin-aggregate-context { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid #ccd4ce; border-radius: 0.5rem; background: #f4f7f5; }
+.garmin-aggregate-context h3 { margin-top: 0; }
+.garmin-aggregate-context dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem; margin-bottom: 0; }
+.garmin-aggregate-context dl div { padding-top: 0.5rem; border-top: 1px solid #ccd4ce; }
+.garmin-aggregate-context dt { font-weight: 700; }
+.garmin-aggregate-context dd { margin: 0.25rem 0 0; }
+.garmin-aggregate-context dd span { display: block; color: var(--muted); font-size: 0.9rem; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
 .healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
 .healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }

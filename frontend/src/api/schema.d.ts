@@ -2128,6 +2128,8 @@ export interface components {
             duration_source?: string | null;
             /** Ended At */
             ended_at?: string | null;
+            /** Garmin Field Name */
+            garmin_field_name?: string | null;
             /**
              * Id
              * Format: uuid
@@ -2138,8 +2140,12 @@ export interface components {
              * @enum {string}
              */
             kind: "daily" | "sample" | "sleep" | "activity";
+            /** Measurement Label */
+            measurement_label?: string | null;
             /** Metric Type */
             metric_type?: string | null;
+            /** Period Label */
+            period_label?: string | null;
             provenance: components["schemas"]["ProvenanceOut"];
             /** Sample Interval Seconds */
             sample_interval_seconds?: number | null;

@@ -370,10 +370,21 @@ and stress-episode windows on one local-time graph. Hovering over the graph or u
 its keyboard/mobile time control shows exact nearby observations with their original
 units and timestamps. Continuous shapes use a clearly labeled relative 0–100 display
 position so unlike units can be compared in time without implying that their values
-are equivalent. Lines connect only samples with an observed contiguous cadence;
-unknown and interrupted intervals remain gaps. A Garmin daily summary is shown as one
-outlined point at its recorded day timestamp; HealthCurve does not stretch an average
-across hours or invent a curve. The exact-value/provenance table is authoritative.
+are equivalent. The initial focused view compares theoretical exposure with Garmin
+stress; one-click controls switch to heart rate, HRV, respiration, blood pressure,
+recorded events, or an intentionally busy all-series view. Dense wearable sample dots
+are hidden from the graph while every exact value remains available through hover and
+the table. Lines connect only samples with an observed contiguous cadence;
+unknown and interrupted intervals remain gaps. Garmin daily or nightly summaries are
+shown as untimed aggregate context and in the exact-value table; HealthCurve does not
+place them on the intraday axis, stretch an average across hours, or invent a curve.
+The exact-value/provenance table is authoritative.
+
+Garmin aggregate context can include nightly-average HRV, waking- and sleeping-period
+average respiration, and daily respiration low/high. Garmin's current client does not
+provide a distinct all-day HRV average, so HealthCurve reports it as unsupported and
+does not calculate or relabel another value as a substitute. Missing aggregate fields
+stay missing rather than appearing as zero.
 
 These observations do not alter the actual-dose exposure trace and are not converted
 into a cortisol requirement, medication-demand multiplier, or adequacy/shortfall

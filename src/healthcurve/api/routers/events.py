@@ -41,6 +41,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminSleepEvent,
 )
+from healthcurve.integrations.garmin.presentation import measurement_label
 from healthcurve.medications.models import DoseEvent
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
@@ -518,7 +519,7 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             )
             return f"Weight {pounds} lb{entered}"
         case "garmin_daily":
-            metric = row.metric_type.value.replace("_", " ").title()  # type: ignore[attr-defined]
+            metric = measurement_label(row.metric_type, row.garmin_field_name)  # type: ignore[attr-defined]
             return f"{metric}: {row.value} {row.unit}"  # type: ignore[attr-defined]
         case "garmin_sleep":
             duration = row.duration_seconds  # type: ignore[attr-defined]

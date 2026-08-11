@@ -288,7 +288,19 @@ def build_snapshot(
 
     if "wearables" in selected_sections:
         for model, record_type, fields in (
-            (GarminMetricEvent, "garmin_metric", ("metric_type", "value", "unit", "period_end_at")),
+            (
+                GarminMetricEvent,
+                "garmin_metric",
+                (
+                    "metric_type",
+                    "value",
+                    "unit",
+                    "period_end_at",
+                    "aggregation",
+                    "sample_interval_seconds",
+                    "garmin_field_name",
+                ),
+            ),
             (
                 GarminSleepEvent,
                 "garmin_sleep",

@@ -288,6 +288,7 @@ def test_read_only_adapter_exposes_approved_intraday_methods(
 def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -> None:
     start = _milliseconds(datetime(2026, 1, 9, 5, 0, tzinfo=UTC))
     mapped = map_intraday_day(
+        day=date(2026, 1, 9),
         heart_rate={
             "heartRateValueDescriptors": [
                 {"index": 1, "key": "heartrate"},
@@ -313,6 +314,10 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
                 {"index": 1, "key": "respiration"},
             ],
             "respirationValuesArray": [[start, -2], [start + 120_000, 14.5]],
+            "avgWakingRespirationValue": 14.2,
+            "avgSleepRespirationValue": 12.7,
+            "lowestRespirationValue": 10.1,
+            "highestRespirationValue": 18.9,
         },
         hrv={
             "hrvSummary": {"lastNightAvg": 45},
@@ -335,6 +340,14 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
     ]
     assert all(item.event_time.timezone == "America/New_York" for item in mapped.observations)
     assert all(item.provider_id.startswith("intraday:") for item in mapped.observations)
+    assert [(item.field_name, item.value, item.unit) for item in mapped.aggregates] == [
+        ("lastNightAvg", Decimal("45"), "ms"),
+        ("avgWakingRespirationValue", Decimal("14.2"), "breaths/min"),
+        ("avgSleepRespirationValue", Decimal("12.7"), "breaths/min"),
+        ("lowestRespirationValue", Decimal("10.1"), "breaths/min"),
+        ("highestRespirationValue", Decimal("18.9"), "breaths/min"),
+    ]
+    assert all(item.event_time.local_time.date() == date(2026, 1, 9) for item in mapped.aggregates)
     assert [item.sample_interval_seconds for item in mapped.observations] == [
         None,
         None,
@@ -348,6 +361,12 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
         "intraday_stress": "available",
         "intraday_respiration_rate": "available",
         "intraday_hrv": "available",
+        "hrv_daily_average": "unsupported",
+        "hrv_nightly_average": "available",
+        "respiration_waking_average": "available",
+        "respiration_sleep_average": "available",
+        "respiration_daily_low": "available",
+        "respiration_daily_high": "available",
     }
     assert "intraday_heart_rate_missing_or_invalid" in mapped.warnings
     assert "intraday_stress_missing_or_invalid" in mapped.warnings
@@ -364,36 +383,54 @@ def test_intraday_contract_is_deterministic_and_rejects_ambiguous_duplicates() -
         "heartRateValues": [[start, 70], [start, 71]],
     }
     first = map_intraday_day(
+        day=date(2026, 11, 1),
         heart_rate=heart_rate,
         stress={},
         respiration={},
-        hrv={},
+        hrv={"hrvSummary": {"lastNightAvg": 44}},
         timezone="America/New_York",
     )
     second = map_intraday_day(
+        day=date(2026, 11, 1),
         heart_rate=heart_rate,
         stress={},
         respiration={},
-        hrv={},
+        hrv={"hrvSummary": {"lastNightAvg": 44}},
         timezone="America/New_York",
     )
 
     assert first == second
     assert len(first.observations) == 1
     assert first.observations[0].event_time.utc_offset_minutes == -240
+    assert len(first.aggregates) == 1
+    assert first.aggregates[0].event_time.utc_offset_minutes == -240
+    assert first.aggregates[0].provider_id == "aggregate:2026-11-01:hrv:lastNightAvg"
     assert "intraday_heart_rate_duplicate_timestamp" in first.warnings
     assert first.capabilities["intraday_hrv"] == "unavailable"
 
 
 def test_intraday_contract_requires_provider_descriptors() -> None:
     mapped = map_intraday_day(
+        day=date(2026, 1, 9),
         heart_rate={"heartRateValues": [[1_767_938_400_000, 70]]},
         stress={},
-        respiration={},
-        hrv={"hrvReadings": "not-a-list"},
+        respiration={
+            "avgWakingRespirationValue": -2,
+            "highestRespirationValue": 18,
+        },
+        hrv={"hrvReadings": "not-a-list", "hrvSummary": ["invalid"]},
         timezone="UTC",
     )
 
     assert mapped.observations == ()
+    assert [(item.field_name, item.value) for item in mapped.aggregates] == [
+        ("highestRespirationValue", Decimal(18))
+    ]
     assert "intraday_heart_rate_shape_invalid" in mapped.warnings
     assert "intraday_hrv_shape_invalid" in mapped.warnings
+    assert "hrv_nightly_average_shape_invalid" in mapped.warnings
+    assert "respiration_waking_average_invalid" in mapped.warnings
+    assert mapped.capabilities["hrv_daily_average"] == "unsupported"
+    assert mapped.capabilities["hrv_nightly_average"] == "unavailable"
+    assert mapped.capabilities["respiration_daily_high"] == "available"
+    assert mapped.capabilities["respiration_daily_low"] == "unavailable"

@@ -10,12 +10,13 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from healthcurve.events.timekeeping import EventTime
+from healthcurve.events.timekeeping import EventTime, resolve_event_time
+from healthcurve.integrations.garmin.connect_mapping import DailyObservation
 from healthcurve.integrations.garmin.models import GarminMetricType
 
 MAX_SAMPLES_PER_SERIES: Final = 10_000
@@ -36,12 +37,14 @@ class IntradayObservation:
 @dataclass(frozen=True)
 class MappedIntraday:
     observations: tuple[IntradayObservation, ...]
+    aggregates: tuple[DailyObservation, ...]
     warnings: tuple[str, ...]
     capabilities: dict[str, str]
 
 
 def map_intraday_day(
     *,
+    day: date,
     heart_rate: dict[str, Any],
     stress: dict[str, Any],
     respiration: dict[str, Any],
@@ -106,12 +109,119 @@ def map_intraday_day(
     mapped_hrv = _map_hrv(hrv, zone=zone, warnings=warnings)
     observations.extend(mapped_hrv)
     capabilities["intraday_hrv"] = "available" if mapped_hrv else "unavailable"
+    aggregates = _map_aggregates(
+        day=day,
+        respiration=respiration,
+        hrv=hrv,
+        timezone=zone.key,
+        warnings=warnings,
+        capabilities=capabilities,
+    )
     observations = _with_observed_intervals(observations)
     observations.sort(key=lambda value: (value.event_time.occurred_at, value.metric_type.value))
     return MappedIntraday(
         observations=tuple(observations),
+        aggregates=tuple(aggregates),
         warnings=tuple(sorted(set(warnings))),
         capabilities=capabilities,
+    )
+
+
+def _map_aggregates(
+    *,
+    day: date,
+    respiration: dict[str, Any],
+    hrv: dict[str, Any],
+    timezone: str,
+    warnings: list[str],
+    capabilities: dict[str, str],
+) -> list[DailyObservation]:
+    """Select provider-defined aggregates without inventing an intraday instant."""
+
+    output: list[DailyObservation] = []
+    capabilities["hrv_daily_average"] = "unsupported"
+    hrv_summary = hrv.get("hrvSummary")
+    if hrv_summary is not None and not isinstance(hrv_summary, dict):
+        warnings.append("hrv_nightly_average_shape_invalid")
+        hrv_summary = {}
+    hrv_summary = hrv_summary if isinstance(hrv_summary, dict) else {}
+    _append_aggregate(
+        output,
+        day=day,
+        payload=hrv_summary,
+        field_name="lastNightAvg",
+        capability="hrv_nightly_average",
+        metric_type=GarminMetricType.HRV,
+        unit="ms",
+        minimum=Decimal("0.1"),
+        maximum=Decimal(1_000),
+        timezone=timezone,
+        warnings=warnings,
+        capabilities=capabilities,
+    )
+    for field_name, capability in (
+        ("avgWakingRespirationValue", "respiration_waking_average"),
+        ("avgSleepRespirationValue", "respiration_sleep_average"),
+        ("lowestRespirationValue", "respiration_daily_low"),
+        ("highestRespirationValue", "respiration_daily_high"),
+    ):
+        _append_aggregate(
+            output,
+            day=day,
+            payload=respiration,
+            field_name=field_name,
+            capability=capability,
+            metric_type=GarminMetricType.RESPIRATION_RATE,
+            unit="breaths/min",
+            minimum=Decimal("0.1"),
+            maximum=Decimal(100),
+            timezone=timezone,
+            warnings=warnings,
+            capabilities=capabilities,
+        )
+    return output
+
+
+def _append_aggregate(
+    output: list[DailyObservation],
+    *,
+    day: date,
+    payload: dict[str, Any],
+    field_name: str,
+    capability: str,
+    metric_type: GarminMetricType,
+    unit: str,
+    minimum: Decimal,
+    maximum: Decimal,
+    timezone: str,
+    warnings: list[str],
+    capabilities: dict[str, str],
+) -> None:
+    value = _bounded_decimal(payload.get(field_name), minimum, maximum)
+    if value is None:
+        capabilities[capability] = "unavailable"
+        if field_name in payload and payload.get(field_name) is not None:
+            warnings.append(f"{capability}_invalid")
+        return
+    capabilities[capability] = "available"
+    selected = {
+        "day": day.isoformat(),
+        "field": field_name,
+        "metric_type": metric_type.value,
+        "unit": unit,
+        "value": str(value),
+    }
+    output.append(
+        DailyObservation(
+            day=day,
+            event_time=resolve_event_time(datetime.combine(day, datetime.min.time()), timezone),
+            metric_type=metric_type,
+            value=value,
+            unit=unit,
+            field_name=field_name,
+            provider_id=f"aggregate:{day.isoformat()}:{metric_type.value}:{field_name}",
+            revision=_revision(selected),
+        )
     )
 
 

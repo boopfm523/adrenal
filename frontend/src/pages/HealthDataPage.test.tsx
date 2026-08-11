@@ -17,10 +17,12 @@ const garminProvenance = { ...provenance, source_type: "provider", confirmation_
 const correctedGarminProvenance = { ...garminProvenance, supersedes_id: "88888888-8888-4888-8888-888888888888", correction_reason: "Synthetic provider revision", is_correction: true };
 const garminRecords = {
   notice: "Unavailable provider values remain missing rather than zero.",
-  page: { page: 1, page_size: 25, total_items: 4, total_pages: 1 },
+  page: { page: 1, page_size: 25, total_items: 6, total_pages: 1 },
   records: [
     { id: "55555555-5555-4555-8555-555555555555", kind: "daily", summary: "Steps", time, provenance: garminProvenance, metric_type: "steps", value: "8765.0000", unit: "steps", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
     { id: "99999999-9999-4999-8999-999999999999", kind: "daily", summary: "Stress", time: { ...time, occurred_at: "2026-08-09T13:00:00Z", local_time: "2026-08-09T09:00:00" }, provenance: garminProvenance, metric_type: "stress", value: "28.0000", unit: "garmin_score", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
+    { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", kind: "daily", summary: "Nightly average HRV: 41 ms", time, provenance: garminProvenance, metric_type: "hrv", value: "41.0000", unit: "ms", aggregation: "daily_summary", garmin_field_name: "lastNightAvg", measurement_label: "Nightly average HRV", period_label: "previous night", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
+    { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", kind: "daily", summary: "Average waking respiration: 14.2 breaths/min", time, provenance: garminProvenance, metric_type: "respiration_rate", value: "14.2000", unit: "breaths/min", aggregation: "daily_summary", garmin_field_name: "avgWakingRespirationValue", measurement_label: "Average waking respiration", period_label: "waking period", ended_at: null, duration_seconds: null, duration_source: null, awakenings: null, sleep_score: null, activity_type: null, distance_miles: null },
     { id: "66666666-6666-4666-8666-666666666666", kind: "sleep", summary: "Sleep", time: { ...time, occurred_at: "2026-08-10T04:00:00Z", local_time: "2026-08-10T00:00:00" }, provenance: garminProvenance, metric_type: null, value: null, unit: null, ended_at: "2026-08-10T12:00:00Z", duration_seconds: 28800, duration_source: "provider", awakenings: 2, sleep_score: 82, activity_type: null, distance_miles: null },
     { id: "77777777-7777-4777-8777-777777777777", kind: "activity", summary: "Walking", time: { ...time, occurred_at: "2026-08-10T14:00:00Z", local_time: "2026-08-10T10:00:00" }, provenance: correctedGarminProvenance, metric_type: null, value: null, unit: null, ended_at: "2026-08-10T14:30:00Z", duration_seconds: 1800, duration_source: null, awakenings: null, sleep_score: null, activity_type: "walking", distance_miles: "3.1000" },
   ],
@@ -122,6 +124,12 @@ describe("Health data page", () => {
     const garminTable = screen.getByRole("region", { name: "Garmin recorded observations table" });
     expect(within(garminTable).getByRole("cell", { name: /8,765 steps/ })).toBeVisible();
     expect(within(garminTable).getByRole("cell", { name: "Stress score: 28" })).toBeVisible();
+    expect(within(garminTable).getByText("Nightly average HRV")).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: "41 ms" })).toBeVisible();
+    expect(within(garminTable).getByText("Untimed aggregate · previous night")).toBeVisible();
+    expect(within(garminTable).getByText("Average waking respiration")).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: "14.2 breaths/min" })).toBeVisible();
+    expect(within(garminTable).getByText("Untimed aggregate · waking period")).toBeVisible();
     expect(within(garminTable).queryByText(/garmin_score/)).not.toBeInTheDocument();
     expect(within(garminTable).getByRole("cell", { name: /Sleep score: 82/ })).toBeVisible();
     expect(within(garminTable).getByRole("cell", { name: /Distance: 3\.1 mi/ })).toBeVisible();

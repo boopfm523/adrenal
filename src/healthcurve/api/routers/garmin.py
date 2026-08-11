@@ -41,6 +41,10 @@ from healthcurve.integrations.garmin.parser import (
     SleepCandidate,
     parse_upload,
 )
+from healthcurve.integrations.garmin.presentation import (
+    aggregate_period_label,
+    measurement_label,
+)
 from healthcurve.integrations.garmin.service import confirm_import
 from healthcurve.operations.jobs import JobQueueError
 
@@ -70,6 +74,9 @@ class GarminRecordOut(BaseModel):
     unit: str | None = None
     aggregation: str | None = None
     sample_interval_seconds: int | None = None
+    garmin_field_name: str | None = None
+    measurement_label: str | None = None
+    period_label: str | None = None
     ended_at: datetime | None = None
     duration_seconds: int | None = None
     duration_source: str | None = None
@@ -282,10 +289,11 @@ def _garmin_record_out(
     row: GarminMetricEvent | GarminSleepEvent | GarminActivityEvent,
 ) -> GarminRecordOut:
     if isinstance(row, GarminMetricEvent):
+        label = measurement_label(row.metric_type, row.garmin_field_name)
         return GarminRecordOut(
             id=row.id,
             kind="sample" if row.aggregation == "provider_sample" else "daily",
-            summary=f"{row.metric_type.value.replace('_', ' ').title()}: {row.value} {row.unit}",
+            summary=f"{label}: {row.value} {row.unit}",
             time=time_out(row),
             provenance=provenance_out(row),
             metric_type=row.metric_type.value,
@@ -293,6 +301,13 @@ def _garmin_record_out(
             unit=row.unit,
             aggregation=row.aggregation,
             sample_interval_seconds=row.sample_interval_seconds,
+            garmin_field_name=row.garmin_field_name,
+            measurement_label=label,
+            period_label=(
+                aggregate_period_label(row.garmin_field_name)
+                if row.aggregation != "provider_sample"
+                else None
+            ),
         )
     if isinstance(row, GarminSleepEvent):
         return GarminRecordOut(

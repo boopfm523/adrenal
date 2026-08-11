@@ -58,6 +58,14 @@ describe("Daily HealthCurve", () => {
     expect(screen.getAllByRole("img")).toHaveLength(1);
     expect(screen.getByRole("img")).toHaveAccessibleName(/interactive selected-day HealthCurve overlay/i);
     expect(document.querySelectorAll("[data-series='exposure']")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Stress" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
+    expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Heart rate" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Heart rate" }));
+    expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Heart rate" }));
     expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
 
     fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "60" } });
@@ -76,11 +84,40 @@ describe("Daily HealthCurve", () => {
   it("breaks recorded curves across missing cadence intervals", () => {
     render(<DailyHealthCurve data={data({ garmin: [sample(0), sample(1), sample(10), sample(11)] })} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
-    expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(4);
+    expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
+    expect(screen.getByLabelText("Visible series sample counts")).toHaveTextContent("Dense sample dots are hidden");
   });
 
-  it("shows a daily Garmin summary as one exact point without inventing a curve", () => {
+  it("shows systolic and diastolic together while keeping pulse in heart rate", () => {
+    render(<DailyHealthCurve data={data({ bloodPressure: [{
+      id: "30000000-0000-4000-8000-000000000001",
+      category: "fact",
+      systolic_mmhg: 121,
+      diastolic_mmhg: 81,
+      pulse_bpm: 88,
+      time: { occurred_at: "2026-03-08T16:00:00Z", local_time: "2026-03-08T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+      provenance: { ...provenance, source_type: "telegram", confirmation_state: "confirmed_from_draft" },
+      notes: null,
+    }] })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Blood pressure" }));
+    expect(document.querySelectorAll("circle.healthcurve-point--blood_pressure")).toHaveLength(2);
+    fireEvent.change(screen.getByRole("slider", { name: "Explore daily HealthCurve by time" }), { target: { value: "660" } });
+    const readout = screen.getByRole("status");
+    expect(readout).toHaveTextContent("Systolic: 121 mmHg");
+    expect(readout).toHaveTextContent("Diastolic: 81 mmHg");
+    expect(readout).not.toHaveTextContent("88 bpm");
+    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
+    expect(table).toHaveTextContent("Systolic: 121 mmHg");
+    expect(table).toHaveTextContent("Diastolic: 81 mmHg");
+
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Blood-pressure pulse: 88 bpm");
+  });
+
+  it("shows a daily Garmin summary as untimed context without inventing a chart point", () => {
     const dailyStress: GarminRecord = {
       ...sample(0),
       id: "20000000-0000-4000-8000-000000000001",
@@ -91,13 +128,50 @@ describe("Daily HealthCurve", () => {
       unit: "garmin_score",
       aggregation: "daily_summary",
       sample_interval_seconds: null,
+      garmin_field_name: "averageStressLevel",
+      measurement_label: "Stress",
+      period_label: "daily average",
     };
-    render(<DailyHealthCurve data={data({ garmin: [dailyStress] })} />);
+    const nightlyHrv: GarminRecord = {
+      ...dailyStress,
+      id: "20000000-0000-4000-8000-000000000002",
+      summary: "Nightly average HRV: 41 ms",
+      metric_type: "hrv",
+      value: "41",
+      unit: "ms",
+      garmin_field_name: "lastNightAvg",
+      measurement_label: "Nightly average HRV",
+      period_label: "previous night",
+    };
+    const wakingRespiration: GarminRecord = {
+      ...dailyStress,
+      id: "20000000-0000-4000-8000-000000000003",
+      summary: "Average waking respiration: 14.2 breaths/min",
+      metric_type: "respiration_rate",
+      value: "14.2",
+      unit: "breaths/min",
+      garmin_field_name: "avgWakingRespirationValue",
+      measurement_label: "Average waking respiration",
+      period_label: "waking period",
+    };
+    render(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration] })} />);
 
-    expect(document.querySelectorAll("circle.healthcurve-point--stress.healthcurve-point--daily-summary")).toHaveLength(1);
+    expect(document.querySelectorAll("circle.healthcurve-point--stress")).toHaveLength(0);
     expect(document.querySelectorAll("path.healthcurve-series--stress")).toHaveLength(0);
-    expect(screen.getByRole("status")).toHaveTextContent("Garmin stress: 31 score");
-    expect(screen.getByRole("status")).toHaveTextContent("daily summary");
+    expect(document.querySelectorAll("circle.healthcurve-point--hrv")).toHaveLength(0);
+    expect(document.querySelectorAll("circle.healthcurve-point--respiration_rate")).toHaveLength(0);
+    const context = screen.getByRole("region", { name: "Garmin aggregate context" });
+    expect(context).toHaveTextContent("Stress score: 31");
+    expect(context).toHaveTextContent("Untimed · daily average");
+    expect(context).not.toHaveTextContent("Nightly average HRV");
+    fireEvent.click(screen.getByRole("button", { name: "All series (busy)" }));
+    expect(context).toHaveTextContent("Nightly average HRV41 msUntimed · previous night");
+    expect(context).toHaveTextContent("Average waking respiration14.2 breaths/minUntimed · waking period");
+    expect(context).toHaveTextContent("no exact intraday observation time");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Garmin stress: 31 score");
+    const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
+    expect(table).toHaveTextContent("2026-03-08 · untimed aggregate");
+    expect(table).toHaveTextContent("Garmin provider imported; untimed daily summary");
   });
 
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
@@ -115,7 +189,9 @@ describe("Daily HealthCurve", () => {
     const garmin = Array.from({ length: 1_000 }, (_, index) => sample(index));
     render(<DailyHealthCurve data={data({ garmin })} />);
 
-    expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(1_000);
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
+    expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
+    expect(document.querySelectorAll("path.healthcurve-series--heart_rate").length).toBeGreaterThan(0);
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(within(table).getAllByText("Heart rate")).toHaveLength(1_000);
   });
@@ -133,6 +209,7 @@ describe("Daily HealthCurve", () => {
       notes: null,
     }] })} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Recorded events" }));
     expect(document.querySelectorAll("circle.healthcurve-point--symptoms")).toHaveLength(0);
     const table = screen.getByRole("region", { name: "Daily HealthCurve exact values" });
     expect(within(table).getByText("Synthetic fatigue: severity missing")).toBeInTheDocument();
