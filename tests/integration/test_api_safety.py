@@ -86,6 +86,7 @@ from healthcurve.operations.rate_limit import (
     RateLimitExceeded,
     RateLimitResult,
 )
+from healthcurve.operations.restore_drill import assert_restore_sentinel
 from healthcurve.operations.telemetry import OperationalEvent
 from healthcurve.reports import service as report_service
 from healthcurve.reports.cleanup_jobs import (
@@ -202,6 +203,35 @@ def logged_in(client: TestClient) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Authentication and CSRF
 # ---------------------------------------------------------------------------
+
+
+def test_migrated_restore_sentinel_matches_exactly(engine: Engine) -> None:
+    """The real PostgreSQL migration installs the canary consumed by restore drills."""
+
+    assert assert_restore_sentinel(engine) is None
+
+
+def test_restore_sentinel_migration_downgrades_and_reinstalls(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "f6d81a2c4b90",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT to_regclass('ops.restore_sentinel')")) is None
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+    assert assert_restore_sentinel(engine) is None
 
 
 def test_health_data_requires_authentication(client: TestClient) -> None:

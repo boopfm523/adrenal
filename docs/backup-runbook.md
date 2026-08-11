@@ -466,8 +466,50 @@ it only if the owner changes the recovery objective.
 
 ## Restore drill cadence
 
-Run `hc-cbs.2` at least quarterly and after changes to PostgreSQL major version,
-encryption, artifact storage, backup format, or deployment topology. The drill must use
-the newest offsite set, exercise separately held recovery material, meet the four-hour
-RTO, prove the 24-hour RPO, and remove isolated plaintext afterward. A failed drill
-blocks release and creates a remediation Beads issue.
+Run the drill at least quarterly and after changes to PostgreSQL major version,
+encryption, artifact storage, backup format, or deployment topology. It retrieves the
+newest offsite set, verifies both remote checksum sidecars and the public envelope, and
+asks for the separately stored age recovery identity through a hidden terminal prompt:
+
+```bash
+cd /Users/jeff/Documents/adrenal
+uv run python scripts/run_restore_drill.py \
+  --config /Users/jeff/.config/healthcurve/rclone.conf \
+  --prompt-identity
+```
+
+Open the recovery-key entry in the macOS Passwords application, copy only the
+`AGE-SECRET-KEY-...` value, paste it at the hidden prompt, and press Return. Nothing is
+displayed while pasting. Do not place the key in a command, `.env`, repository file,
+Docker environment variable, screenshot, Beads note, or chat. Clear the clipboard when
+the command finishes.
+
+The host process writes the pasted identity only to a mode-0600 file inside a
+mode-0700 temporary directory. Docker mounts it read-only only into the one-shot
+restore runner. The encrypted download is also temporary. Decryption occurs in the
+runner's tmpfs, PostgreSQL uses a separate tmpfs, the Compose network is internal-only,
+and no port is published. The runner:
+
+1. matches the recovered identity fingerprint to both envelope and manifest;
+2. rejects traversal, links, special files, extras, missing components, and any size or
+   checksum mismatch before restore;
+3. opens and schema-checks a deterministic non-health JSON artifact canary, so an
+   otherwise empty development artifact store still exercises file recovery;
+4. restores the PostgreSQL 16 custom dump with no live credentials;
+5. checks Alembic head, schemas, extensions, constraints, owner/audit/job presence,
+   restored artifact checksums, and the non-health restore sentinel's exact decimal,
+   source, correction provenance, timestamp, timezone, and UTC offset;
+6. proves the restricted AI role can read but cannot write any fact or plan table and
+   cannot use the identity schema; and
+7. uses a temporary password only in the restored copy to run liveness, readiness,
+   authenticated timeline, and private-export smoke checks with Redis, integrations,
+   and Ollama disabled.
+
+Success prints operational booleans, component/schema counts, backup age, elapsed
+seconds, and explicit 24-hour RPO/four-hour RTO results—never filenames, health values,
+account identity, credentials, or recovery material. A `finally` path tears down the
+isolated containers, network, database tmpfs, decrypted tmpfs, and temporary identity
+on success or failure, then verifies no project container remains.
+
+Any failure fails the drill. Record only its stable reason code in Beads, create a P0
+remediation issue, and rerun after repair rather than waiting for the next quarter.

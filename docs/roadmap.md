@@ -30,7 +30,7 @@ Before closing anything: `make check` must exit 0.
 | **P2 Telegram + AI** | In progress. Capture, long polling, safe fallback, and live local extraction work; draft editing, expiry, and evaluation remain |
 | **P3 Dashboard, labs, reports** | Complete. Today, timeline, plan, episode, symptom/diary, analytics/chart, data-quality, settings/privacy, and report-builder views are live with immutable local PDF/CSV/JSON snapshots |
 | **P4 Integrations** | Garmin export ingestion and isolated read-only personal sync are implemented; official provider API access remains conditional |
-| **P5 Production** | In progress. Hosting, credential, and local backup foundations exist; launch controls remain |
+| **P5 Production** | In progress. Private Tailscale hosting and encrypted local/offsite recovery are verified; release checklist remains |
 | **P6 Hardening** | Not started |
 
 The API, Telegram capture, and authenticated web shell are operational. Beads is the
@@ -165,8 +165,10 @@ Grouped by why it matters rather than by phase.
 - **Integration tokens are not encrypted at rest.** Fine while Telegram's token lives
   in the environment; not fine once Garmin OAuth tokens are in the database. Class C8
   requires keys held outside the database. `hc-cbs.7`.
-- **No backups.** The design issue is still open and nothing is implemented. Today a
-  disk failure loses everything. `hc-34v.11`, then `hc-cbs.8`.
+- **Backup recovery is implemented and drilled.** Nightly age-encrypted local and
+  Google Drive copies are operational, and a newest-offsite isolated restore passed
+  the documented RPO/RTO and safety checks. The owner accepted that declining an
+  external drive means this is not strict 3-2-1. See `docs/backup-runbook.md`.
 - **Deletion does not exist.** Export works; you cannot delete a record, an
   integration's data, or your account. `hc-cbs.10`.
 

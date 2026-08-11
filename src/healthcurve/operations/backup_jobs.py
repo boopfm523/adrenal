@@ -81,6 +81,7 @@ class ScheduledBackupConfig:
                     "docker-compose-yml": project_dir / "docker-compose.yml",
                     "alembic-ini": project_dir / "alembic.ini",
                     "caddyfile": project_dir / "deploy/Caddyfile",
+                    "restore-canary-json": project_dir / "deploy/restore-canary.json",
                 },
             ),
             offsite=offsite,

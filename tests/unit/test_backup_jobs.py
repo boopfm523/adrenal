@@ -119,6 +119,21 @@ def test_scheduled_config_rejects_invalid_retention_switch(tmp_path: Path) -> No
         ScheduledBackupConfig.from_env(values)
 
 
+def test_scheduled_config_includes_non_health_restore_canary(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    values = {
+        "HC_BACKUP_LOCAL_DIR": str(tmp_path / "backups"),
+        "HC_BACKUP_AGE_RECIPIENT": "age1synthetic",
+        "HC_UPLOADS_DIR": str(tmp_path / "uploads"),
+        "HC_REPORT_ARTIFACTS_DIR": str(tmp_path / "reports"),
+        "HC_BACKUP_PROJECT_DIR": str(project),
+    }
+    config = ScheduledBackupConfig.from_env(values)
+    assert config.backup.restore_files["restore-canary-json"] == (
+        project / "deploy/restore-canary.json"
+    )
+
+
 def test_scheduled_config_rejects_relative_storage_paths(tmp_path: Path) -> None:
     values = {
         "HC_BACKUP_LOCAL_DIR": "relative/backups",

@@ -15,6 +15,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 COPY src ./src
 COPY README.md ./
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 FROM python:3.13-slim-bookworm AS runtime
@@ -30,6 +32,8 @@ COPY --from=postgres-client /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin
 COPY --from=rclone-client /usr/local/bin/rclone /usr/local/bin/rclone
 COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
 COPY --from=builder --chown=10001:10001 /app/src /app/src
+COPY --from=builder --chown=10001:10001 /app/alembic.ini /app/alembic.ini
+COPY --from=builder --chown=10001:10001 /app/migrations /app/migrations
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

@@ -1,0 +1,78 @@
+# One-shot isolated restore drill. This file is intentionally standalone: it never
+# joins HealthCurve's live Compose network, publishes no ports, and stores PostgreSQL
+# and decrypted plaintext only in tmpfs. The host orchestrator must use a unique
+# project name and always run `down --volumes` in a finally path.
+
+services:
+  restore-postgres:
+    image: postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    restart: "no"
+    environment:
+      POSTGRES_DB: healthcurve
+      POSTGRES_USER: healthcurve
+      POSTGRES_PASSWORD: ${HC_RESTORE_POSTGRES_PASSWORD:?set an ephemeral restore password}
+      POSTGRES_AI_PASSWORD: ${HC_RESTORE_AI_PASSWORD:?set an ephemeral restore AI password}
+      POSTGRES_BACKUP_PASSWORD: ${HC_RESTORE_BACKUP_PASSWORD:?set an ephemeral restore backup password}
+    volumes:
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql/data:rw,nosuid,nodev,size=2g
+      - /var/run/postgresql:rw,nosuid,nodev,size=16m
+      - /tmp:rw,nosuid,nodev,size=64m
+    networks: [restore-internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthcurve -d healthcurve"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+
+  restore-runner:
+    build:
+      context: ..
+      dockerfile: deploy/backup.Dockerfile
+    restart: "no"
+    user: "10001:10001"
+    entrypoint: ["python", "-m", "healthcurve.restore_drill"]
+    environment:
+      HC_ENVIRONMENT: dev
+      HC_RESTORE_DRILL_ENVELOPE: /input/${HC_RESTORE_DRILL_ENVELOPE_NAME:?set envelope basename}
+      HC_RESTORE_DRILL_IDENTITY: /run/secrets/age-identity
+      HC_RESTORE_DRILL_WORK_ROOT: /work
+      HC_RESTORE_DATABASE_URL: postgresql+psycopg://healthcurve:${HC_RESTORE_POSTGRES_PASSWORD:?set restore password}@restore-postgres:5432/healthcurve
+      HC_RESTORE_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${HC_RESTORE_AI_PASSWORD:?set restore AI password}@restore-postgres:5432/healthcurve
+      PGHOST: restore-postgres
+      PGPORT: "5432"
+      PGDATABASE: healthcurve
+      PGUSER: healthcurve
+      PGPASSWORD: ${HC_RESTORE_POSTGRES_PASSWORD:?set restore password}
+    volumes:
+      - type: bind
+        source: ${HC_RESTORE_DRILL_INPUT_DIR:?set private encrypted input directory}
+        target: /input
+        read_only: true
+      - type: bind
+        source: ${HC_RESTORE_DRILL_IDENTITY_FILE:?set private recovery identity path}
+        target: /run/secrets/age-identity
+        read_only: true
+    tmpfs:
+      - /work:rw,noexec,nosuid,nodev,size=2g,uid=10001,gid=10001,mode=0700
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
+    networks: [restore-internal]
+    depends_on:
+      restore-postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 2g
+    cpus: 2.0
+
+networks:
+  restore-internal:
+    driver: bridge
+    internal: true

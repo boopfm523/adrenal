@@ -216,15 +216,17 @@ when your device is locked, this host is down, or Tailscale is unavailable. See
 
 ## Encrypted backups
 
-Nightly encrypted local backups, checksum verification, retention, and privacy-safe
-age/dead-letter status are implemented through a dedicated worker. Setup is deliberately
-not automatic because you must choose a separate backup medium and create recovery
-material away from this host. Follow [backup-runbook.md](backup-runbook.md) before
-putting data you care about into HealthCurve.
+Nightly encrypted local and Google Drive backups, checksum verification, retention,
+and privacy-safe age/dead-letter status are implemented through a dedicated worker.
+The recovery identity remains separately stored in macOS Passwords and is never kept
+with the backup or in HealthCurve configuration. The first newest-offsite isolated
+restore drill passed on 2026-08-10, including key recovery, exact sentinel and artifact
+checks, database and API smoke tests, the 24-hour RPO, the four-hour RTO, and teardown.
+Follow [backup-runbook.md](backup-runbook.md) for status checks and quarterly drills.
 
-The concrete offsite provider and first isolated restore drill are still outstanding.
-Until both are complete, the backup system does not satisfy the production three-copy
-or proven-recovery requirements.
+The owner declined a separate external drive, so this is an accepted two-failure-domain
+layout rather than strict 3-2-1: loss of the Mac disk removes both the live database and
+local encrypted copy, while the independently encrypted Google Drive copy remains.
 
 ## Lab PDF source documents
 
@@ -506,9 +508,11 @@ connected to first; never use it against an installation containing real records
 
 So you don't go looking for it:
 
-- **No configured offsite backup or passing restore drill.** Encrypted local backup is
-  implemented; follow [backup-runbook.md](backup-runbook.md). Production recovery is
-  not proven until an offsite provider and `hc-cbs.2` restore drill are complete.
+- **Backups are configured and recovery is proven.** Encrypted local and Google Drive
+  copies run through the dedicated worker, and the first isolated restore drill passed.
+  Follow [backup-runbook.md](backup-runbook.md); the next quarterly drill is tracked in
+  Beads. This owner-approved layout is not strict 3-2-1 because there is no external
+  local drive.
 - **No official Garmin Health API or automatic weather enrichment.** Isolated
   read-only personal Garmin Connect sync, reviewed Garmin FIT/CSV/ZIP import, and
   manual context recording are implemented. Official Garmin Developer API access
@@ -523,7 +527,7 @@ So you don't go looking for it:
   password sessions, and integration-token encryption are implemented. HealthCurve
   intentionally has no MFA/passkey option because access is owner-only through
   Tailscale; any public exposure is prohibited until a new authentication/security
-  review. The Tailscale identity/hostname and restore drill still require deployment
-  verification.
+  review. Tailscale access and the isolated restore path have been deployment-verified;
+  the remaining release checklist is tracked in Beads.
 
 `bd ready` lists what's actually next.

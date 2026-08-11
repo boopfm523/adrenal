@@ -38,6 +38,8 @@ services:
       - /restore-config/alembic.ini
       - --restore-file
       - /restore-config/Caddyfile
+      - --restore-file
+      - /restore-config/restore-canary.json
     volumes:
       - ${HC_BACKUP_LOCAL_DIR:?set HC_BACKUP_LOCAL_DIR}:/backup
       - ${HC_UPLOADS_DIR:-./var/uploads}:/sources/uploads:ro
@@ -45,6 +47,7 @@ services:
       - ./docker-compose.yml:/restore-config/docker-compose.yml:ro
       - ./alembic.ini:/restore-config/alembic.ini:ro
       - ./deploy/Caddyfile:/restore-config/Caddyfile:ro
+      - ./deploy/restore-canary.json:/restore-config/restore-canary.json:ro
     # Plaintext exists only while this process runs. Ownership matches the postgres
     # user declared above; mode 0700 excludes every other container user.
     tmpfs:
@@ -92,6 +95,7 @@ services:
       - ./docker-compose.yml:/restore-config/docker-compose.yml:ro
       - ./alembic.ini:/restore-config/alembic.ini:ro
       - ./deploy/Caddyfile:/restore-config/deploy/Caddyfile:ro
+      - ./deploy/restore-canary.json:/restore-config/deploy/restore-canary.json:ro
     tmpfs:
       - /work:uid=10001,gid=10001,mode=0700
     networks: [hc-internal]
