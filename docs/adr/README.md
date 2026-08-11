@@ -25,6 +25,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0015](0015-recorded-context-not-cortisol-demand.md) | Recorded context overlays without inferred cortisol demand | Accepted |
 | [0016](0016-garmin-sleep-interval-contract.md) | Explicit Garmin sleep intervals on the selected-day HealthCurve | Accepted |
 | [0017](0017-host-native-ollama-default.md) | Host-native Ollama is the owner runtime default | Accepted |
+| [0018](0018-population-cortisol-reference-band.md) | Do not compare relative hydrocortisone exposure with population cortisol reference bands | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.
