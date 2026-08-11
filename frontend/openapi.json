@@ -5318,6 +5318,329 @@
         "title": "SourceType",
         "type": "string"
       },
+      "SteroidExposureCurveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "day_end": {
+            "format": "date-time",
+            "title": "Day End",
+            "type": "string"
+          },
+          "day_start": {
+            "format": "date-time",
+            "title": "Day Start",
+            "type": "string"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "dose_markers": {
+            "items": {
+              "$ref": "#/components/schemas/SteroidExposureDoseMarker"
+            },
+            "title": "Dose Markers",
+            "type": "array"
+          },
+          "elapsed_hours": {
+            "title": "Elapsed Hours",
+            "type": "string"
+          },
+          "excluded_dose_count": {
+            "minimum": 0.0,
+            "title": "Excluded Dose Count",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/SteroidExposureModelOut"
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/SteroidExposureSample"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "series_name": {
+            "const": "Theoretical hydrocortisone exposure",
+            "title": "Series Name",
+            "type": "string"
+          },
+          "series_unit": {
+            "const": "REU",
+            "title": "Series Unit",
+            "type": "string"
+          },
+          "supported_dose_count": {
+            "minimum": 0.0,
+            "title": "Supported Dose Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "day_start",
+          "day_end",
+          "elapsed_hours",
+          "series_name",
+          "series_unit",
+          "safety_label",
+          "definition",
+          "model",
+          "dose_markers",
+          "samples",
+          "supported_dose_count",
+          "excluded_dose_count"
+        ],
+        "title": "SteroidExposureCurveOut",
+        "type": "object"
+      },
+      "SteroidExposureDoseMarker": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "carryover": {
+            "title": "Carryover",
+            "type": "boolean"
+          },
+          "confirmation_state": {
+            "$ref": "#/components/schemas/ConfirmationState"
+          },
+          "dose_event_id": {
+            "format": "uuid",
+            "title": "Dose Event Id",
+            "type": "string"
+          },
+          "exclusion_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unsupported_medication",
+                  "unsupported_formulation",
+                  "unsupported_route",
+                  "unsupported_unit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclusion Reason"
+          },
+          "formulation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formulation"
+          },
+          "local_time": {
+            "format": "date-time",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "medication_name": {
+            "title": "Medication Name",
+            "type": "string"
+          },
+          "modeled_peak_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modeled Peak At"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "route": {
+            "$ref": "#/components/schemas/Route"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceType"
+          },
+          "supersedes_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Id"
+          },
+          "supported": {
+            "title": "Supported",
+            "type": "boolean"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/DoseUnit"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dose_event_id",
+          "occurred_at",
+          "local_time",
+          "timezone",
+          "utc_offset_minutes",
+          "medication_name",
+          "formulation",
+          "amount",
+          "unit",
+          "route",
+          "source_type",
+          "confirmation_state",
+          "supersedes_id",
+          "supported",
+          "exclusion_reason",
+          "carryover",
+          "modeled_peak_at"
+        ],
+        "title": "SteroidExposureDoseMarker",
+        "type": "object"
+      },
+      "SteroidExposureModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "absorption_rate_per_hour": {
+            "title": "Absorption Rate Per Hour",
+            "type": "string"
+          },
+          "amount_unit": {
+            "$ref": "#/components/schemas/DoseUnit"
+          },
+          "contribution_horizon_hours": {
+            "exclusiveMinimum": 0.0,
+            "title": "Contribution Horizon Hours",
+            "type": "integer"
+          },
+          "elimination_half_life_hours": {
+            "title": "Elimination Half Life Hours",
+            "type": "string"
+          },
+          "elimination_rate_per_hour": {
+            "title": "Elimination Rate Per Hour",
+            "type": "string"
+          },
+          "peak_time_hours": {
+            "title": "Peak Time Hours",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "sample_interval_minutes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sample Interval Minutes",
+            "type": "integer"
+          },
+          "supported_formulation": {
+            "title": "Supported Formulation",
+            "type": "string"
+          },
+          "supported_medication": {
+            "title": "Supported Medication",
+            "type": "string"
+          },
+          "supported_route": {
+            "$ref": "#/components/schemas/Route"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "supported_medication",
+          "supported_formulation",
+          "supported_route",
+          "amount_unit",
+          "absorption_rate_per_hour",
+          "elimination_half_life_hours",
+          "elimination_rate_per_hour",
+          "peak_time_hours",
+          "contribution_horizon_hours",
+          "sample_interval_minutes",
+          "references"
+        ],
+        "title": "SteroidExposureModelOut",
+        "type": "object"
+      },
+      "SteroidExposureSample": {
+        "additionalProperties": false,
+        "properties": {
+          "local_time": {
+            "format": "date-time",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "theoretical_exposure_reu": {
+            "title": "Theoretical Exposure Reu",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "local_time",
+          "utc_offset_minutes",
+          "theoretical_exposure_reu"
+        ],
+        "title": "SteroidExposureSample",
+        "type": "object"
+      },
       "SymptomCorrectionChanges": {
         "additionalProperties": false,
         "properties": {
@@ -6263,6 +6586,82 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/analytics/steroid-exposure": {
+      "get": {
+        "description": "Return a theoretical relative exposure curve from current recorded doses.",
+        "operationId": "steroid_exposure_curve_api_v1_analytics_steroid_exposure_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Day",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SteroidExposureCurveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Steroid Exposure Curve",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/v1/analytics/summary": {
       "get": {
         "operationId": "analytics_summary_api_v1_analytics_summary_get",

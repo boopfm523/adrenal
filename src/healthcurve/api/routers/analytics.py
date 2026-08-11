@@ -7,12 +7,28 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException
 
-from healthcurve.analytics import service
+from healthcurve.analytics import exposure, service
 from healthcurve.api.deps import CurrentOwner, DbSession
-from healthcurve.api.schemas import AnalyticsSummaryOut
+from healthcurve.api.schemas import AnalyticsSummaryOut, SteroidExposureCurveOut
 
 router = APIRouter(tags=["analytics"])
 MAX_RANGE_DAYS = 366
+
+
+@router.get("/analytics/steroid-exposure", response_model=SteroidExposureCurveOut)
+def steroid_exposure_curve(
+    session: DbSession,
+    owner: CurrentOwner,
+    day: date,
+    timezone: str | None = None,
+):
+    """Return a theoretical relative exposure curve from current recorded doses."""
+    zone_name = timezone or owner.default_timezone
+    try:
+        ZoneInfo(zone_name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="invalid timezone") from exc
+    return exposure.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
 
 
 @router.get("/analytics/summary", response_model=AnalyticsSummaryOut)

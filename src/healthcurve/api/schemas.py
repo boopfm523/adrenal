@@ -824,3 +824,91 @@ class AnalyticsSummaryOut(ApiModel):
     timing: TimingMetric
     episodes: EpisodeMetric
     symptoms: SymptomMetric
+
+
+class SteroidExposureModelOut(ApiModel):
+    version: str
+    supported_medication: str
+    supported_formulation: str
+    supported_route: Route
+    amount_unit: DoseUnit
+    absorption_rate_per_hour: Decimal
+    elimination_half_life_hours: Decimal
+    elimination_rate_per_hour: Decimal
+    peak_time_hours: Decimal
+    contribution_horizon_hours: int = Field(gt=0)
+    sample_interval_minutes: int = Field(gt=0)
+    references: list[str]
+
+    @field_serializer(
+        "absorption_rate_per_hour",
+        "elimination_half_life_hours",
+        "elimination_rate_per_hour",
+        "peak_time_hours",
+    )
+    def _parameters(self, value: Decimal) -> str:
+        return str(value)
+
+
+class SteroidExposureDoseMarker(ApiModel):
+    dose_event_id: uuid.UUID
+    occurred_at: datetime
+    local_time: datetime
+    timezone: str
+    utc_offset_minutes: int
+    medication_name: str
+    formulation: str | None
+    amount: Decimal
+    unit: DoseUnit
+    route: Route
+    source_type: SourceType
+    confirmation_state: ConfirmationState
+    supersedes_id: uuid.UUID | None
+    supported: bool
+    exclusion_reason: (
+        Literal[
+            "unsupported_medication",
+            "unsupported_formulation",
+            "unsupported_route",
+            "unsupported_unit",
+        ]
+        | None
+    )
+    carryover: bool
+    modeled_peak_at: datetime | None
+
+    @field_serializer("amount")
+    def _amount(self, value: Decimal) -> str:
+        return str(value)
+
+
+class SteroidExposureSample(ApiModel):
+    occurred_at: datetime
+    local_time: datetime
+    utc_offset_minutes: int
+    theoretical_exposure_reu: Decimal = Field(ge=0)
+
+    @field_serializer("theoretical_exposure_reu")
+    def _exposure(self, value: Decimal) -> str:
+        return str(value)
+
+
+class SteroidExposureCurveOut(ApiModel):
+    date: date
+    timezone: str
+    day_start: datetime
+    day_end: datetime
+    elapsed_hours: Decimal
+    series_name: Literal["Theoretical hydrocortisone exposure"]
+    series_unit: Literal["REU"]
+    safety_label: str
+    definition: str
+    model: SteroidExposureModelOut
+    dose_markers: list[SteroidExposureDoseMarker]
+    samples: list[SteroidExposureSample]
+    supported_dose_count: int = Field(ge=0)
+    excluded_dose_count: int = Field(ge=0)
+
+    @field_serializer("elapsed_hours")
+    def _elapsed(self, value: Decimal) -> str:
+        return str(value)

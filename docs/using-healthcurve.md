@@ -353,6 +353,17 @@ insights or causal claims. Daily plan-versus-actual totals also have a local SVG
 whose adjacent semantic table is authoritative and preserves gaps. The report API
 freezes those deterministic values for reproducible physician reports.
 
+`GET /api/v1/analytics/steroid-exposure?day=YYYY-MM-DD&timezone=Area%2FCity`
+returns the selected local day's versioned theoretical hydrocortisone-exposure series
+from current actual dose facts, including the preceding 24-hour carryover window. It
+keeps each administration marker separate from its modeled peak and pointwise-sums
+distinct doses even when they were recorded close together or at the same instant.
+Version 1 supports only conventional immediate-release oral hydrocortisone tablets in
+mg; unsupported medication/formulation/route/unit combinations remain visible as dose
+markers with a reason and do not silently borrow parameters. The series is in relative
+exposure units (REU), not serum cortisol, biological effect, clinical coverage, or
+dosing advice. See [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
+
 Historical dose timing is resolved against the physician-approved plan whose half-open
 effective interval contained each scheduled or recorded instant, including retired
 plans and a plan transition within a day. The timing result shows signed minutes
@@ -404,11 +415,12 @@ it does not establish that every health event or measurement was recorded.
 
 What you have today for answering questions:
 
-1. **`/analytics/summary`** — deterministic metrics for an inclusive date range.
-2. **`/doses/plan-comparison`** — plan comparison for a single day.
-3. **`/timeline`** — everything, newest first, paged.
-4. **`/exports`** — the whole record as JSON, for analysis in whatever you like.
-5. **SQL** — the honest answer for anything else.
+1. **`/analytics/steroid-exposure`** — theoretical actual-dose exposure for one local day.
+2. **`/analytics/summary`** — deterministic metrics for an inclusive date range.
+3. **`/doses/plan-comparison`** — plan comparison for a single day.
+4. **`/timeline`** — everything, newest first, paged.
+5. **`/exports`** — the whole record as JSON, for analysis in whatever you like.
+6. **SQL** — the honest answer for anything else.
 
 ### Querying directly
 

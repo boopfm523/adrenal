@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/analytics/steroid-exposure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Steroid Exposure Curve
+         * @description Return a theoretical relative exposure curve from current recorded doses.
+         */
+        get: operations["steroid_exposure_curve_api_v1_analytics_steroid_exposure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/summary": {
         parameters: {
             query?: never;
@@ -2849,6 +2869,135 @@ export interface components {
          * @enum {string}
          */
         SourceType: "web" | "telegram" | "csv_import" | "file_import" | "provider" | "migration";
+        /** SteroidExposureCurveOut */
+        SteroidExposureCurveOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Day End
+             * Format: date-time
+             */
+            day_end: string;
+            /**
+             * Day Start
+             * Format: date-time
+             */
+            day_start: string;
+            /** Definition */
+            definition: string;
+            /** Dose Markers */
+            dose_markers: components["schemas"]["SteroidExposureDoseMarker"][];
+            /** Elapsed Hours */
+            elapsed_hours: string;
+            /** Excluded Dose Count */
+            excluded_dose_count: number;
+            model: components["schemas"]["SteroidExposureModelOut"];
+            /** Safety Label */
+            safety_label: string;
+            /** Samples */
+            samples: components["schemas"]["SteroidExposureSample"][];
+            /**
+             * Series Name
+             * @constant
+             */
+            series_name: "Theoretical hydrocortisone exposure";
+            /**
+             * Series Unit
+             * @constant
+             */
+            series_unit: "REU";
+            /** Supported Dose Count */
+            supported_dose_count: number;
+            /** Timezone */
+            timezone: string;
+        };
+        /** SteroidExposureDoseMarker */
+        SteroidExposureDoseMarker: {
+            /** Amount */
+            amount: string;
+            /** Carryover */
+            carryover: boolean;
+            confirmation_state: components["schemas"]["ConfirmationState"];
+            /**
+             * Dose Event Id
+             * Format: uuid
+             */
+            dose_event_id: string;
+            /** Exclusion Reason */
+            exclusion_reason: ("unsupported_medication" | "unsupported_formulation" | "unsupported_route" | "unsupported_unit") | null;
+            /** Formulation */
+            formulation: string | null;
+            /**
+             * Local Time
+             * Format: date-time
+             */
+            local_time: string;
+            /** Medication Name */
+            medication_name: string;
+            /** Modeled Peak At */
+            modeled_peak_at: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            route: components["schemas"]["Route"];
+            source_type: components["schemas"]["SourceType"];
+            /** Supersedes Id */
+            supersedes_id: string | null;
+            /** Supported */
+            supported: boolean;
+            /** Timezone */
+            timezone: string;
+            unit: components["schemas"]["DoseUnit"];
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
+        };
+        /** SteroidExposureModelOut */
+        SteroidExposureModelOut: {
+            /** Absorption Rate Per Hour */
+            absorption_rate_per_hour: string;
+            amount_unit: components["schemas"]["DoseUnit"];
+            /** Contribution Horizon Hours */
+            contribution_horizon_hours: number;
+            /** Elimination Half Life Hours */
+            elimination_half_life_hours: string;
+            /** Elimination Rate Per Hour */
+            elimination_rate_per_hour: string;
+            /** Peak Time Hours */
+            peak_time_hours: string;
+            /** References */
+            references: string[];
+            /** Sample Interval Minutes */
+            sample_interval_minutes: number;
+            /** Supported Formulation */
+            supported_formulation: string;
+            /** Supported Medication */
+            supported_medication: string;
+            supported_route: components["schemas"]["Route"];
+            /** Version */
+            version: string;
+        };
+        /** SteroidExposureSample */
+        SteroidExposureSample: {
+            /**
+             * Local Time
+             * Format: date-time
+             */
+            local_time: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Theoretical Exposure Reu */
+            theoretical_exposure_reu: string;
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
+        };
         /** SymptomCorrectionChanges */
         SymptomCorrectionChanges: {
             /** Body Area */
@@ -3130,6 +3279,40 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    steroid_exposure_curve_api_v1_analytics_steroid_exposure_get: {
+        parameters: {
+            query: {
+                day: string;
+                timezone?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SteroidExposureCurveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     analytics_summary_api_v1_analytics_summary_get: {
         parameters: {
             query: {

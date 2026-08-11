@@ -258,6 +258,7 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/context-events",
         "/api/v1/blood-pressure",
         "/api/v1/weight",
+        "/api/v1/analytics/steroid-exposure?day=2026-08-11&timezone=UTC",
     ):
         assert client.get(path).status_code == 401, path
 
@@ -4736,6 +4737,136 @@ def test_analytics_states_definitions_timezone_and_missingness(
     invalid = client.get(
         "/api/v1/analytics/summary",
         params={"date_from": "2030-01-02", "date_to": "2030-01-01", "timezone": "UTC"},
+    )
+    assert invalid.status_code == 422
+
+
+@pytest.mark.safety("SAFE-27")
+def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+) -> None:
+    selected_day = "2024-02-01"
+    medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Hydrocortisone",
+            "formulation": "tablet",
+            "strength": "7.1234",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "oral",
+        },
+        headers=logged_in,
+    )
+    assert medication.status_code == 201, medication.text
+    medication_id = medication.json()["id"]
+
+    def record(local_time: str, amount: str, route: str = "oral") -> dict[str, Any]:
+        response = client.post(
+            "/api/v1/doses",
+            json={
+                "medication_id": medication_id,
+                "amount": amount,
+                "unit": "mg",
+                "route": route,
+                "category": "scheduled",
+                "time": {"local_time": local_time, "timezone": "UTC"},
+                "notes": "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR",
+            },
+            headers=logged_in,
+        )
+        assert response.status_code == 201, response.text
+        return cast(dict[str, Any], response.json())
+
+    prior = record("2024-01-31T23:30:00", "4")
+    original = record("2024-02-01T07:00:00", "10")
+    close = record("2024-02-01T07:01:00", "5")
+    unsupported = record("2024-02-01T13:00:00", "3", "intramuscular")
+    corrected = client.post(
+        f"/api/v1/doses/{original['id']}/correct",
+        json={
+            "reason": "Synthetic amount correction",
+            "changes": {"amount": "12"},
+        },
+        headers=logged_in,
+    )
+    assert corrected.status_code == 201, corrected.text
+
+    with Session(engine) as session, session.begin():
+        other = Owner(
+            email=f"curve-other-{uuid.uuid4()}@example.test",
+            password_hash="synthetic-non-login-hash",
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        other_medication = Medication(
+            owner_id=other.id,
+            name="Hydrocortisone",
+            normalized_name="hydrocortisone",
+            formulation="tablet",
+            strength=Decimal("8.4321"),
+            strength_unit="mg",
+            default_unit=DoseUnit.MG,
+            default_route=Route.ORAL,
+        )
+        session.add(other_medication)
+        session.flush()
+        other_dose = events.create_event(
+            session,
+            DoseEvent,
+            owner_id=other.id,
+            event_time=resolve_event_time(
+                datetime(2024, 2, 1, 7, 0),  # noqa: DTZ001
+                "UTC",
+            ),
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            medication_id=other_medication.id,
+            amount=Decimal("99"),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            category=DoseCategory.SCHEDULED,
+        )
+        other_dose_id = str(other_dose.id)
+
+    response = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "UTC"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    marker_ids = {row["dose_event_id"] for row in body["dose_markers"]}
+    corrected_id = corrected.json()["id"]
+
+    assert body["model"]["version"] == "hc-exposure-v1"
+    assert body["series_unit"] == "REU"
+    assert body["elapsed_hours"] == "24.0"
+    assert "not a cortisol measurement or dosing guide" in body["safety_label"]
+    assert body["supported_dose_count"] == 3
+    assert body["excluded_dose_count"] == 1
+    assert set(marker_ids) == {prior["id"], corrected_id, close["id"], unsupported["id"]}
+    assert original["id"] not in marker_ids
+    assert other_dose_id not in marker_ids
+    assert body["dose_markers"][0]["carryover"] is True
+    assert (
+        next(row for row in body["dose_markers"] if row["dose_event_id"] == unsupported["id"])[
+            "exclusion_reason"
+        ]
+        == "unsupported_route"
+    )
+    peak_at = next(row for row in body["dose_markers"] if row["dose_event_id"] == corrected_id)[
+        "modeled_peak_at"
+    ]
+    peak_sample = next(row for row in body["samples"] if row["occurred_at"] == peak_at)
+    assert Decimal(peak_sample["theoretical_exposure_reu"]) > Decimal("12")
+    assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in response.text
+
+    invalid = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "Not/A_Zone"},
     )
     assert invalid.status_code == 422
 
