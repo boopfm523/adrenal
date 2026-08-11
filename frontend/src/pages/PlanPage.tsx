@@ -23,7 +23,7 @@ import { PlanCard } from "../components/CategoryCards";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement, formatQuantitativeText } from "../format";
-import { timezoneAbbreviation } from "../time";
+import { formatUnzonedDateTime, formatZonedDateTime, timezoneAbbreviation } from "../time";
 
 interface SlotDraft {
   medication_id: string;
@@ -106,21 +106,29 @@ function initialInstructions(version: RegimenVersion | null): InstructionDraft[]
   }));
 }
 
-function ApprovalProvenance({ version }: { version: RegimenVersion }): React.JSX.Element {
+function RecordedPlanTime({ value }: { value: string }): React.JSX.Element {
+  return <time dateTime={value}>{formatUnzonedDateTime(value)}</time>;
+}
+
+function EffectivePeriod({ version }: { version: RegimenVersion }): React.JSX.Element {
+  return <><RecordedPlanTime value={version.effective_from} /> through {version.effective_to === null ? "ongoing" : <RecordedPlanTime value={version.effective_to} />}</>;
+}
+
+function ApprovalProvenance({ version, timezone }: { version: RegimenVersion; timezone: string }): React.JSX.Element {
   if (version.status !== "approved") return <p className="draft-warning">Draft plan—not physician approved. This version is not in force.</p>;
   return <dl className="provenance-grid">
     <div><dt>Approved by</dt><dd>{version.approved_by ?? "Provenance missing"}</dd></div>
     <div><dt>Approval source</dt><dd>{version.approval_source ?? "Provenance missing"}</dd></div>
-    <div><dt>Approved at</dt><dd>{version.approved_at ?? "Provenance missing"}</dd></div>
-    <div><dt>Effective dates</dt><dd>{version.effective_from} through {version.effective_to ?? "ongoing"}</dd></div>
+    <div><dt>Approved at</dt><dd>{version.approved_at === null ? "Provenance missing" : <time dateTime={version.approved_at}>{formatZonedDateTime(version.approved_at, timezone)}</time>}</dd></div>
+    <div><dt>Effective dates</dt><dd><EffectivePeriod version={version} /></dd></div>
   </dl>;
 }
 
-function PlanContents({ version }: { version: RegimenVersion }): React.JSX.Element {
+function PlanContents({ version, timezone }: { version: RegimenVersion; timezone: string }): React.JSX.Element {
   const slots = version.slots ?? [];
   const instructions = version.instructions ?? [];
   return <>
-    <ApprovalProvenance version={version} />
+    <ApprovalProvenance version={version} timezone={timezone} />
     <h3>Scheduled slots</h3>
     {slots.length === 0 ? <p>No scheduled slots recorded.</p> : <ul className="plan-list">{slots.map((slot) => <li key={slot.id}><strong>{slot.scheduled_local_time.slice(0, 5)}</strong> · {slot.medication_name} · {formatMeasurement(slot.amount, slot.unit)} · {slot.route}{slot.condition === null ? null : <span> · {slot.condition}</span>}</li>)}</ul>}
     <h3>Physician-authored instructions</h3>
@@ -262,7 +270,7 @@ function ApprovalForm({ version, focusOnMount, onComplete }: { version: RegimenV
     <h4 id={`approval-heading-${version.id}`} ref={headingRef} tabIndex={-1}>Next step: review and record physician approval</h4>
     <p><strong>This draft is not active.</strong> Record approval here only after a physician has actually approved this plan. HealthCurve and its AI cannot approve it.</p>
     <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
-    <p>After approval, HealthCurve uses the plan only during its effective period, beginning {version.effective_from}. A future-dated plan will wait until that time.</p>
+    <p>After approval, HealthCurve uses the plan only during its effective period, beginning <RecordedPlanTime value={version.effective_from} />. A future-dated plan will wait until that time.</p>
     <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null }); }}>
       <label>Approving clinician or role<input name="approved_by" required maxLength={200} /></label>
       <label>Approval source<input name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" /></label>
@@ -329,13 +337,13 @@ export function PlanPage(): React.JSX.Element {
     {editor === null ? <div className="page-actions"><button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</button></div> : null}
     {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
     {active.data === null ? <section className="empty-state"><h2>No approved plan currently in force</h2><p>Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</p></section> : null}
-    {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} /></PlanCard>}
+    {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} timezone={profileTimezone} /></PlanCard>}
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
       <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...draft, page: 1 })); }}><label>Effective from date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Effective through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setValidation(null); setDraftState({ search: "", filters: reset }); setOlderId(""); setNewerId(""); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
       <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)} and select versions by when the plan becomes effective. This does not change plan approval or active status.</p>
       {history.data?.page.total_items === 0 ? <p>No plan versions recorded.</p> : null}
-      {versions.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><table><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td><time dateTime={version.effective_from}>{version.effective_from}</time><span>through {version.effective_to ?? "ongoing"}</span></td><th scope="row"><h3>{version.version_label}</h3></th><td><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td><details><summary>Show slots and instructions</summary><PlanContents version={version} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></table></div>}
+      {versions.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><table><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td><EffectivePeriod version={version} /></td><th scope="row"><h3>{version.version_label}</h3></th><td><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td><details><summary>Show slots and instructions</summary><PlanContents version={version} timezone={profileTimezone} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></table></div>}
       {history.data === undefined ? null : <PaginationControls label="Plan version history" metadata={history.data.page} onPageChange={(page) => { setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...view, page })); }} />}
     </section>
 

@@ -71,3 +71,37 @@ export function timezoneAbbreviationForLocalDate(timezone: string, localDay: str
   }
   return timezoneAbbreviation(timezone, instant);
 }
+
+/** Format a timestamp that represents a real instant in the owner's timezone. */
+export function formatZonedDateTime(value: string, timezone: string): string {
+  const instant = new Date(value);
+  if (!Number.isFinite(instant.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(instant);
+}
+
+/**
+ * Format a stored wall-clock value without assigning a timezone it never had.
+ * UTC is used only to make Intl preserve the recorded calendar/time fields.
+ */
+export function formatUnzonedDateTime(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(value);
+  if (match === null) return value;
+  const [, year, month, day, hour, minute] = match;
+  const recorded = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(recorded);
+}

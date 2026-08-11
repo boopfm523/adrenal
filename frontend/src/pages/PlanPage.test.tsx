@@ -75,7 +75,11 @@ describe("Medication plan page", () => {
     expect(screen.getByRole("region", { name: "Medication plan version history table" })).toBeVisible();
     expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Synthetic clinic letter").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("2026-08-01T14:00:00Z").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Aug 1, 2026, 10:00 AM EDT").length).toBeGreaterThan(0);
+    const effectiveStart = screen.getAllByText("Aug 1, 2026, 12:00 AM")[0];
+    expect(effectiveStart?.closest("dd")).toHaveTextContent("Aug 1, 2026, 12:00 AM through ongoing");
+    expect(screen.queryByText("2026-08-01T14:00:00Z")).not.toBeInTheDocument();
+    expect(document.querySelector('time[datetime="2026-08-01T14:00:00Z"]')).not.toBeNull();
     expect(screen.getAllByText("Draft plan—not physician approved").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Draft plan—not physician approved. This version is not in force.").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Next step: review and record physician approval" })).toBeVisible();
