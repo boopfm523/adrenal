@@ -364,6 +364,13 @@ markers with a reason and do not silently borrow parameters. The series is in re
 exposure units (REU), not serum cortisol, biological effect, clinical coverage, or
 dosing advice. See [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
 
+The planned selected-day overlay keeps symptoms, stress episodes, Garmin stress/HRV/
+respiration/heart rate, and blood pressure in separate recorded-context lanes. These
+observations do not alter the actual-dose exposure trace and are not converted into a
+cortisol requirement, medication-demand multiplier, or adequacy/shortfall judgment.
+Missing measurements remain visible gaps. See
+[ADR-0015](adr/0015-recorded-context-not-cortisol-demand.md).
+
 Historical dose timing is resolved against the physician-approved plan whose half-open
 effective interval contained each scheduled or recorded instant, including retired
 plans and a plan transition within a day. The timing result shows signed minutes

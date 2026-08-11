@@ -22,6 +22,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0012](0012-unofficial-garmin-connect-read-only.md) | Isolated read-only use of the unofficial Garmin Connect client | Superseded by 0014 |
 | [0013](0013-theoretical-steroid-exposure-model.md) | Versioned theoretical steroid-exposure model from recorded doses | Accepted |
 | [0014](0014-garmin-intraday-read-contract.md) | Read-only Garmin intraday metric contract | Accepted |
+| [0015](0015-recorded-context-not-cortisol-demand.md) | Recorded context overlays without inferred cortisol demand | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.
