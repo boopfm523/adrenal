@@ -20,6 +20,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0010](0010-local-document-ingestion-and-models.md) | Deterministic-first local document ingestion and task-specific models | Accepted |
 | [0011](0011-tiered-emergency-page-access.md) | Tiered emergency-page access without public medical details | Accepted |
 | [0012](0012-unofficial-garmin-connect-read-only.md) | Isolated read-only use of the unofficial Garmin Connect client | Accepted |
+| [0013](0013-theoretical-steroid-exposure-model.md) | Versioned theoretical steroid-exposure model from recorded doses | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.
