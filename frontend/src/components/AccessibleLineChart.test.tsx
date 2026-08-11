@@ -36,6 +36,33 @@ describe("Accessible line chart", () => {
     expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toContain("0");
   });
 
+  it("renders a compact padded scale for one, two, and identical values", () => {
+    const { container, rerender } = render(chart({
+      compactPlot: true,
+      yPadding: 1,
+      series: [{ name: "Weight", source: "synthetic facts", values: [{ label: "2026-08-01", value: "180" }] }],
+    }));
+
+    expect(screen.getByRole("region", { name: "Synthetic chart scrollable graph" })).toHaveClass("chart-plot-scroll--compact");
+    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179.0", "179.5", "180.0", "180.5", "181.0"]);
+    expect(container.querySelectorAll('[data-point-series="Weight"]')).toHaveLength(1);
+
+    rerender(chart({
+      compactPlot: true,
+      yPadding: 1,
+      series: [{ name: "Weight", source: "synthetic facts", values: [{ label: "2026-08-01", value: "180" }, { label: "2026-08-02", value: "180" }] }],
+    }));
+    expect(container.querySelectorAll('[data-point-series="Weight"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-series="Weight"]')).toHaveLength(1);
+
+    rerender(chart({
+      compactPlot: true,
+      yPadding: 1,
+      series: [{ name: "Weight", source: "synthetic facts", values: [{ label: "2026-08-01", value: "180" }, { label: "2026-08-02", value: "181" }] }],
+    }));
+    expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179.0", "179.5", "180.0", "180.5", "181.0", "181.5", "182.0"]);
+  });
+
   it("does not plot values with incompatible units on one Y-axis", () => {
     render(chart({ unit: "mixed", series: [{ name: "Recorded", source: "synthetic facts", values: [{ label: "2026-08-01", value: "1", unit: "mg" }, { label: "2026-08-02", value: "2", unit: "mL" }] }] }));
 

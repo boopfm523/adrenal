@@ -180,6 +180,7 @@ th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; v
 .series-key--2 { border-color: #a14c12; border-top-style: dotted; }
 .chart-axis-description { margin-block: 0.75rem 0.35rem; font-weight: 700; }
 .chart-plot-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #dce2dd; background: #fbfcfb; }
+.chart-plot-scroll--compact { width: min(100%, 42rem); margin-inline: auto; }
 .line-chart { display: block; width: 100%; min-width: 38rem; min-height: 17rem; background: #fbfcfb; }
 .chart-axis { stroke: #68756f; stroke-width: 1.5; }
 .chart-grid-line { stroke: #dce2dd; stroke-width: 1; }

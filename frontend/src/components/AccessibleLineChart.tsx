@@ -25,6 +25,8 @@ interface AccessibleLineChartProps {
   xAxisLabel?: string;
   yAxisLabel?: string;
   includeZero?: boolean;
+  yPadding?: number;
+  compactPlot?: boolean;
 }
 
 interface Point {
@@ -59,17 +61,21 @@ function niceStep(range: number): number {
   return niceFraction * magnitude;
 }
 
-function chartScale(values: number[], includeZero = false): Scale {
+function chartScale(values: number[], includeZero = false, requestedPadding = 0): Scale {
   let minimum = Math.min(...values);
   let maximum = Math.max(...values);
   if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return { minimum: 0, maximum: 1, step: 0.2, ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] };
+  const padding = Number.isFinite(requestedPadding) && requestedPadding > 0 ? requestedPadding : 0;
   if (includeZero) {
     minimum = Math.min(0, minimum);
     maximum = Math.max(0, maximum);
   }
   if (minimum === maximum) {
-    const padding = Math.abs(minimum) * 0.1 || 1;
-    minimum = includeZero && minimum >= 0 ? 0 : minimum - padding;
+    const equalValuePadding = padding || Math.abs(minimum) * 0.1 || 1;
+    minimum = includeZero && minimum >= 0 ? 0 : minimum - equalValuePadding;
+    maximum += equalValuePadding;
+  } else if (padding > 0) {
+    minimum -= padding;
     maximum += padding;
   }
   const step = niceStep(maximum - minimum);
@@ -152,13 +158,15 @@ export function AccessibleLineChart({
   xAxisLabel = "Experienced date / time",
   yAxisLabel = title,
   includeZero = false,
+  yPadding = 0,
+  compactPlot = false,
 }: AccessibleLineChartProps): React.JSX.Element {
   const headingId = useId();
   const numericValues = series.flatMap((item) => item.values.flatMap((value) => value.value === null ? [] : [Number(value.value)])).filter(Number.isFinite);
   const units = valueUnits(series, unit);
   const mixedUnits = units.size > 1;
   const effectiveUnit = mixedUnits ? "Mixed units—see table" : [...units][0] ?? unit;
-  const scale = chartScale(numericValues, includeZero);
+  const scale = chartScale(numericValues, includeZero, yPadding);
   const labels = series[0]?.values.map((value) => value.label) ?? [];
   const tickIndices = xTickIndices(labels.length);
   const axisDescription = `X axis: ${xAxisLabel} (${timezone}). Y axis: ${yAxisLabel} (${effectiveUnit}).`;
@@ -170,7 +178,7 @@ export function AccessibleLineChart({
     {series.length > 1 ? <aside className="association-caution"><strong>Association does not establish causation.</strong> Overlaid series share a time axis for comparison only.</aside> : null}
     <div className="chart-legend" aria-label="Chart series">{series.map((item, index) => <span key={item.name}><i className={`series-key series-key--${(index % 3).toString()}`} aria-hidden="true" />{item.name} · source: {item.source}</span>)}</div>
     <p className="chart-axis-description">{axisDescription}</p>
-    {mixedUnits ? <p className="chart-unit-warning" role="status"><strong>Graph not plotted:</strong> these values use different units and cannot share one reliable Y-axis. Use the exact-value table below.</p> : <div className="chart-plot-scroll" tabIndex={0} role="region" aria-label={`${title} scrollable graph`}>
+    {mixedUnits ? <p className="chart-unit-warning" role="status"><strong>Graph not plotted:</strong> these values use different units and cannot share one reliable Y-axis. Use the exact-value table below.</p> : <div className={`chart-plot-scroll${compactPlot ? " chart-plot-scroll--compact" : ""}`} tabIndex={0} role="region" aria-label={`${title} scrollable graph`}>
       <svg className="line-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`${title}. ${summary} ${axisDescription}`}>
         <title>{title}. {summary} {axisDescription}</title>
         {scale.ticks.map((tick) => {
