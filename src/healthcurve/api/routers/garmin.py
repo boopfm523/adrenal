@@ -19,7 +19,7 @@ from sqlalchemy import func, literal, select, union_all
 
 from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
-from healthcurve.api.pagination import Pagination, page_metadata
+from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
 from healthcurve.api.routers.events import provenance_out, time_out
 from healthcurve.api.schemas import EventTimeOut, PageMetadata, ProvenanceOut
 from healthcurve.integrations.garmin.connect_jobs import GarminSyncDisposition, enqueue_sync
@@ -61,13 +61,15 @@ class GarminStatusOut(BaseModel):
 
 class GarminRecordOut(BaseModel):
     id: uuid.UUID
-    kind: Literal["daily", "sleep", "activity"]
+    kind: Literal["daily", "sample", "sleep", "activity"]
     summary: str
     time: EventTimeOut
     provenance: ProvenanceOut
     metric_type: str | None = None
     value: str | None = None
     unit: str | None = None
+    aggregation: str | None = None
+    sample_interval_seconds: int | None = None
     ended_at: datetime | None = None
     duration_seconds: int | None = None
     duration_source: str | None = None
@@ -213,6 +215,8 @@ def records(
             model.id.label("id"),
             model.occurred_at.label("occurred_at"),
         ).where(model.owner_id == owner.id, model.id.not_in(superseded))
+        if model is GarminMetricEvent:
+            query = query.where(GarminMetricEvent.aggregation != "provider_sample")
         if window.start is not None:
             query = query.where(model.occurred_at >= window.start)
         if window.end_exclusive is not None:
@@ -238,19 +242,57 @@ def records(
     )
 
 
+@router.get("/samples", response_model=GarminRecordsOut)
+def samples(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    day: date,
+    timezone: str | None = None,
+) -> GarminRecordsOut:
+    """Return one bounded local day of current intraday Garmin samples."""
+
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=day,
+        date_to=day,
+    )
+    if window.start is None or window.end_exclusive is None:  # pragma: no cover
+        raise AssertionError("single-day Garmin sample window must be bounded")
+    page = paginate_current_facts(
+        session,
+        GarminMetricEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=(
+            GarminMetricEvent.aggregation == "provider_sample",
+            GarminMetricEvent.occurred_at >= window.start,
+            GarminMetricEvent.occurred_at < window.end_exclusive,
+        ),
+        include_revisions=False,
+    )
+    return GarminRecordsOut(
+        records=[_garmin_record_out(row) for row in page.items],
+        page=page.metadata,
+    )
+
+
 def _garmin_record_out(
     row: GarminMetricEvent | GarminSleepEvent | GarminActivityEvent,
 ) -> GarminRecordOut:
     if isinstance(row, GarminMetricEvent):
         return GarminRecordOut(
             id=row.id,
-            kind="daily",
+            kind="sample" if row.aggregation == "provider_sample" else "daily",
             summary=f"{row.metric_type.value.replace('_', ' ').title()}: {row.value} {row.unit}",
             time=time_out(row),
             provenance=provenance_out(row),
             metric_type=row.metric_type.value,
             value=str(row.value),
             unit=row.unit,
+            aggregation=row.aggregation,
+            sample_interval_seconds=row.sample_interval_seconds,
         )
     if isinstance(row, GarminSleepEvent):
         return GarminRecordOut(

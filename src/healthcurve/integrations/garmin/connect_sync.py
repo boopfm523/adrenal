@@ -17,7 +17,11 @@ from sqlalchemy.orm import Session
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.timekeeping import EventTime, resolve_event_time
-from healthcurve.integrations.garmin.connect_client import GarminReadClient
+from healthcurve.integrations.garmin.connect_client import GarminIntradayReadClient
+from healthcurve.integrations.garmin.connect_intraday import (
+    IntradayObservation,
+    map_intraday_day,
+)
 from healthcurve.integrations.garmin.connect_mapping import (
     ActivityObservation,
     DailyObservation,
@@ -53,6 +57,7 @@ class FetchedWindow:
     end_date: date
     timezone: str
     metrics: tuple[DailyObservation, ...]
+    intraday_metrics: tuple[IntradayObservation, ...]
     sleeps: tuple[SleepObservation, ...]
     activities: tuple[ActivityObservation, ...]
     warnings: tuple[str, ...]
@@ -70,7 +75,7 @@ class SyncResult:
 
 
 def fetch_window(
-    client: GarminReadClient,
+    client: GarminIntradayReadClient,
     *,
     start_date: date,
     end_date: date,
@@ -82,6 +87,7 @@ def fetch_window(
     _validate_window(start_date, end_date, timezone)
     started_at = datetime.now(UTC)
     metrics: list[DailyObservation] = []
+    intraday_metrics: list[IntradayObservation] = []
     sleeps: list[SleepObservation] = []
     warnings: list[str] = []
     capabilities: dict[str, str] = {}
@@ -115,6 +121,18 @@ def fetch_window(
         for name, state in mapped.capabilities.items():
             already_available = capabilities.get(name) == "available"
             capabilities[name] = "available" if state == "available" or already_available else state
+        intraday = map_intraday_day(
+            heart_rate=call(lambda day_text=day_text: client.get_heart_rates(day_text)),
+            stress=call(lambda day_text=day_text: client.get_stress_data(day_text)),
+            respiration=call(lambda day_text=day_text: client.get_respiration_data(day_text)),
+            hrv=call(lambda day_text=day_text: client.get_hrv_data(day_text)),
+            timezone=timezone,
+        )
+        intraday_metrics.extend(intraday.observations)
+        warnings.extend(intraday.warnings)
+        for name, state in intraday.capabilities.items():
+            already_available = capabilities.get(name) == "available"
+            capabilities[name] = "available" if state == "available" or already_available else state
         current += timedelta(days=1)
 
     raw_activities = call(
@@ -128,6 +146,7 @@ def fetch_window(
         end_date=end_date,
         timezone=timezone,
         metrics=tuple(metrics),
+        intraday_metrics=tuple(intraday_metrics),
         sleeps=tuple(sleeps),
         activities=activities,
         warnings=tuple(sorted(set(warnings)))[:100],
@@ -170,6 +189,11 @@ def persist_window(session: Session, *, owner_id: uuid.UUID, fetched: FetchedWin
         created += outcome == "created"
         corrected += outcome == "corrected"
         unchanged += outcome == "unchanged"
+    for observation in fetched.intraday_metrics:
+        outcome = _upsert_intraday_metric(session, owner_id, run.id, observation)
+        created += outcome == "created"
+        corrected += outcome == "corrected"
+        unchanged += outcome == "unchanged"
     for observation in fetched.sleeps:
         outcome = _upsert_sleep(session, owner_id, run.id, observation)
         created += outcome == "created"
@@ -183,6 +207,7 @@ def persist_window(session: Session, *, owner_id: uuid.UUID, fetched: FetchedWin
 
     run.counts = {
         "metrics": len(fetched.metrics),
+        "intraday_metrics": len(fetched.intraday_metrics),
         "sleep": len(fetched.sleeps),
         "activities": len(fetched.activities),
         "created": created,
@@ -224,6 +249,30 @@ def _upsert_metric(
         "value": value.value,
         "unit": value.unit,
         "period_end_at": next_midnight,
+        "aggregation": "daily_summary",
+        "sample_interval_seconds": None,
+        "garmin_field_name": value.field_name,
+    }
+    return _upsert_event(
+        session, GarminMetricEvent, owner_id, provider_id, value.revision, value.event_time, fields
+    )
+
+
+def _upsert_intraday_metric(
+    session: Session,
+    owner_id: uuid.UUID,
+    run_id: uuid.UUID,
+    value: IntradayObservation,
+) -> str:
+    provider_id = _owned_provider_id(owner_id, value.provider_id)
+    fields = {
+        **_source_fields(run_id, provider_id, value.revision, "intraday-sample"),
+        "metric_type": value.metric_type,
+        "value": value.value,
+        "unit": value.unit,
+        "period_end_at": None,
+        "aggregation": "provider_sample",
+        "sample_interval_seconds": value.sample_interval_seconds,
         "garmin_field_name": value.field_name,
     }
     return _upsert_event(

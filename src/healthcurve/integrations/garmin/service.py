@@ -95,6 +95,8 @@ def confirm_import(
                 value=candidate.value,
                 unit=candidate.unit,
                 period_end_at=candidate.period_end_at,
+                aggregation="interval" if candidate.period_end_at is not None else "point",
+                sample_interval_seconds=None,
                 garmin_field_name=candidate.field_name,
             )
             metric_count += 1

@@ -168,13 +168,24 @@ class GarminMetricEvent(GarminSourceMixin, EventMixin, FactBase):
     value: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
     period_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    aggregation: Mapped[str] = mapped_column(String(32), nullable=False)
+    sample_interval_seconds: Mapped[int | None] = mapped_column()
     garmin_field_name: Mapped[str] = mapped_column(String(120), nullable=False)
 
     __table_args__ = (
         CheckConstraint(
             "period_end_at IS NULL OR period_end_at >= occurred_at", name="period_ordered"
         ),
+        CheckConstraint(
+            "aggregation IN ('point', 'interval', 'daily_summary', 'provider_sample')",
+            name="metric_aggregation_valid",
+        ),
+        CheckConstraint(
+            "sample_interval_seconds IS NULL OR sample_interval_seconds > 0",
+            name="sample_interval_positive",
+        ),
         CheckConstraint("value >= 0", name="metric_nonnegative"),
+        Index("ix_garmin_metric_owner_type_occurred", "owner_id", "metric_type", "occurred_at"),
         CheckConstraint(
             "(garmin_import_batch_id IS NOT NULL AND garmin_sync_run_id IS NULL) OR "
             "(garmin_import_batch_id IS NULL AND garmin_sync_run_id IS NOT NULL)",

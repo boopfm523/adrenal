@@ -411,6 +411,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/garmin/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Samples
+         * @description Return one bounded local day of current intraday Garmin samples.
+         */
+        get: operations["samples_api_v1_integrations_garmin_samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/garmin/status": {
         parameters: {
             query?: never;
@@ -1891,6 +1911,8 @@ export interface components {
         GarminRecordOut: {
             /** Activity Type */
             activity_type?: string | null;
+            /** Aggregation */
+            aggregation?: string | null;
             /** Awakenings */
             awakenings?: number | null;
             /** Distance Miles */
@@ -1910,10 +1932,12 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "daily" | "sleep" | "activity";
+            kind: "daily" | "sample" | "sleep" | "activity";
             /** Metric Type */
             metric_type?: string | null;
             provenance: components["schemas"]["ProvenanceOut"];
+            /** Sample Interval Seconds */
+            sample_interval_seconds?: number | null;
             /** Sleep Score */
             sleep_score?: number | null;
             /** Summary */
@@ -4223,6 +4247,42 @@ export interface operations {
             query?: {
                 local_date_from?: string | null;
                 local_date_to?: string | null;
+                timezone?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarminRecordsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    samples_api_v1_integrations_garmin_samples_get: {
+        parameters: {
+            query: {
+                day: string;
                 timezone?: string | null;
                 page?: number;
                 page_size?: number;

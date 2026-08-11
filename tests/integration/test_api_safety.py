@@ -52,6 +52,7 @@ from healthcurve.events.timekeeping import from_instant, resolve_event_time
 from healthcurve.identity import service as auth
 from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.identity.recovery import recover_owner_access
+from healthcurve.integrations.garmin.connect_intraday import map_intraday_day
 from healthcurve.integrations.garmin.connect_jobs import (
     GARMIN_DISCONNECT_TASK,
     make_disconnect_handler,
@@ -1348,7 +1349,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             )
         )
 
-    def fetched(steps: int) -> FetchedWindow:
+    def fetched(steps: int, heart_rate: int) -> FetchedWindow:
         daily = map_day(
             day=date(2026, 1, 10),
             stats={"totalSteps": steps},
@@ -1370,39 +1371,82 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             ],
             timezone="UTC",
         )
+        start_ms = int(datetime(2026, 1, 10, 8, tzinfo=UTC).timestamp() * 1_000)
+        intraday = map_intraday_day(
+            heart_rate={
+                "heartRateValueDescriptors": [
+                    {"index": 0, "key": "timestamp"},
+                    {"index": 1, "key": "heartrate"},
+                ],
+                "heartRateValues": [[start_ms, heart_rate], [start_ms + 120_000, 74]],
+            },
+            stress={
+                "stressValueDescriptorsDTOList": [
+                    {"index": 0, "key": "timestamp"},
+                    {"index": 1, "key": "stressLevel"},
+                ],
+                "stressValuesArray": [[start_ms + 180_000, 0]],
+            },
+            respiration={
+                "respirationValueDescriptorsDTOList": [
+                    {"index": 0, "key": "timestamp"},
+                    {"index": 1, "key": "respiration"},
+                ],
+                "respirationValuesArray": [[start_ms + 240_000, 14.5]],
+            },
+            hrv={
+                "hrvReadings": [
+                    {"readingTimeGMT": "2026-01-10T08:00:00Z", "hrvValue": 40},
+                    {"readingTimeGMT": "2026-01-10T08:05:00Z", "hrvValue": 42},
+                ]
+            },
+            timezone="UTC",
+        )
         return FetchedWindow(
             start_date=date(2026, 1, 10),
             end_date=date(2026, 1, 10),
             timezone="UTC",
             metrics=daily.metrics,
+            intraday_metrics=intraday.observations,
             sleeps=(),
             activities=activities,
-            warnings=tuple(sorted({*daily.warnings, *activity_warnings})),
-            capabilities={**daily.capabilities, "activities": "available"},
+            warnings=tuple(sorted({*daily.warnings, *intraday.warnings, *activity_warnings})),
+            capabilities={
+                **daily.capabilities,
+                **intraday.capabilities,
+                "activities": "available",
+            },
             started_at=observed_at,
             finished_at=observed_at + timedelta(seconds=1),
         )
 
     with Session(engine) as session, session.begin():
-        first = persist_window(session, owner_id=owner_id, fetched=fetched(100))
-        assert (first.created, first.corrected, first.unchanged) == (2, 0, 0)
+        first = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
+        assert (first.created, first.corrected, first.unchanged) == (8, 0, 0)
     with Session(engine) as session, session.begin():
-        duplicate = persist_window(session, owner_id=owner_id, fetched=fetched(100))
-        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 2)
+        duplicate = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
+        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 8)
     with Session(engine) as session, session.begin():
-        corrected = persist_window(session, owner_id=owner_id, fetched=fetched(120))
-        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 1, 1)
+        corrected = persist_window(session, owner_id=owner_id, fetched=fetched(120, 73))
+        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 2, 6)
 
     with Session(engine) as session:
         metrics = list(
             session.scalars(select(GarminMetricEvent).where(GarminMetricEvent.owner_id == owner_id))
         )
         current = events.current_only(session, GarminMetricEvent, metrics)
-        assert len(metrics) == 2
-        assert len(current) == 1
-        assert current[0].value == Decimal(120)
-        assert current[0].supersedes_id is not None
-        assert current[0].garmin_sync_run_id is not None
+        assert len(metrics) == 9
+        assert len(current) == 7
+        daily_current = [row for row in current if row.aggregation == "daily_summary"]
+        assert len(daily_current) == 1
+        assert daily_current[0].value == Decimal(120)
+        assert daily_current[0].supersedes_id is not None
+        assert daily_current[0].garmin_sync_run_id is not None
+        samples = [row for row in current if row.aggregation == "provider_sample"]
+        assert len(samples) == 6
+        assert any(row.value == 0 and row.metric_type.value == "stress" for row in samples)
+        assert any(row.sample_interval_seconds == 120 for row in samples)
+        assert any(row.sample_interval_seconds == 300 for row in samples)
         activity = session.scalar(
             select(GarminActivityEvent).where(GarminActivityEvent.owner_id == owner_id)
         )
@@ -1425,6 +1469,23 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert {row["kind"] for row in records.json()["records"]} == {"daily", "activity"}
     assert any(row["distance_miles"] == "1.0000" for row in records.json()["records"])
     secondary_record_ids = {row["id"] for row in records.json()["records"]}
+    sample_response = client.get(
+        "/api/v1/integrations/garmin/samples",
+        params={"day": "2026-01-10", "timezone": "UTC", "page_size": 100},
+    )
+    assert sample_response.status_code == 200, sample_response.text
+    sample_body = sample_response.json()
+    assert sample_body["page"]["total_items"] == 6
+    assert {row["kind"] for row in sample_body["records"]} == {"sample"}
+    assert {row["aggregation"] for row in sample_body["records"]} == {"provider_sample"}
+    assert any(row["value"] == "0.0000" for row in sample_body["records"])
+    assert (
+        client.get(
+            "/api/v1/integrations/garmin/samples",
+            params={"day": "2026-01-11", "timezone": "UTC"},
+        ).json()["records"]
+        == []
+    )
     status_response = client.get("/api/v1/integrations/garmin/status")
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "connected"
@@ -1458,6 +1519,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     garmin_export = private_export.json()["integrations"]["garmin"]
     assert len(garmin_export["connection_state"]) == 1
     assert len(garmin_export["sync_runs"]) == 3
+    assert len(private_export.json()["facts"]["garmin_metrics"]) == 9
     assert "credentials" not in garmin_export
 
     disabled_sync = client.post(
@@ -1518,7 +1580,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     )
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["disconnect_requested"] is True
-    assert deleted.json()["data_rows_deleted"] == 6
+    assert deleted.json()["data_rows_deleted"] == 13
 
     class LogoutClient:
         logged_out = False
@@ -1530,6 +1592,18 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             raise AssertionError("disconnect must not read data")
 
         def get_sleep_data(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_heart_rates(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_stress_data(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_respiration_data(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_hrv_data(self, day: str) -> dict[str, Any]:
             raise AssertionError("disconnect must not read data")
 
         def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
@@ -2750,6 +2824,7 @@ def test_health_data_local_date_filters_compose_with_pagination_and_corrections(
         end_date=date(2026, 3, 8),
         timezone="America/New_York",
         metrics=mapped.metrics,
+        intraday_metrics=(),
         sleeps=(),
         activities=(),
         warnings=mapped.warnings,

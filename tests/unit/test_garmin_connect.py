@@ -156,6 +156,18 @@ class _SyntheticClient:
     def get_sleep_data(self, day: str) -> dict[str, Any]:
         return {}
 
+    def get_heart_rates(self, day: str) -> dict[str, Any]:
+        return {}
+
+    def get_stress_data(self, day: str) -> dict[str, Any]:
+        return {}
+
+    def get_respiration_data(self, day: str) -> dict[str, Any]:
+        return {}
+
+    def get_hrv_data(self, day: str) -> dict[str, Any]:
+        return {}
+
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
         return []
 
@@ -186,7 +198,7 @@ def test_fetch_window_rate_limits_every_provider_read() -> None:
     )
 
     assert client.logged_in
-    assert pauses == [0.5, 0.5]
+    assert pauses == [0.5] * 6
     assert fetched.capabilities["activities"] == "unavailable"
 
 
@@ -323,6 +335,14 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
     ]
     assert all(item.event_time.timezone == "America/New_York" for item in mapped.observations)
     assert all(item.provider_id.startswith("intraday:") for item in mapped.observations)
+    assert [item.sample_interval_seconds for item in mapped.observations] == [
+        None,
+        None,
+        None,
+        None,
+        300,
+        180,
+    ]
     assert mapped.capabilities == {
         "intraday_heart_rate": "available",
         "intraday_stress": "available",

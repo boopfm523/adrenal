@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from healthcurve.config import Settings
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.connect_client import (
+    GarminIntradayReadClient,
     GarminProviderError,
     GarminReadClient,
     PythonGarminReadClient,
@@ -211,7 +212,7 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
 def make_garmin_handler(
     settings: Settings,
     *,
-    client_factory: Callable[[], GarminReadClient] | None = None,
+    client_factory: Callable[[], GarminIntradayReadClient] | None = None,
 ) -> JobHandler:
     factory = client_factory or (lambda: _configured_client(settings))
 

@@ -74,6 +74,22 @@ class _SyntheticGarminClient:
         del day
         return {}
 
+    def get_heart_rates(self, day: str) -> dict[str, Any]:
+        del day
+        return {}
+
+    def get_stress_data(self, day: str) -> dict[str, Any]:
+        del day
+        return {}
+
+    def get_respiration_data(self, day: str) -> dict[str, Any]:
+        del day
+        return {}
+
+    def get_hrv_data(self, day: str) -> dict[str, Any]:
+        del day
+        return {}
+
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
         del start, end
         return []

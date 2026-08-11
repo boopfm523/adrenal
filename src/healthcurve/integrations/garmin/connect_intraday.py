@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
@@ -28,6 +28,7 @@ class IntradayObservation:
     value: Decimal
     unit: str
     field_name: str
+    sample_interval_seconds: int | None
     provider_id: str
     revision: str
 
@@ -105,6 +106,7 @@ def map_intraday_day(
     mapped_hrv = _map_hrv(hrv, zone=zone, warnings=warnings)
     observations.extend(mapped_hrv)
     capabilities["intraday_hrv"] = "available" if mapped_hrv else "unavailable"
+    observations = _with_observed_intervals(observations)
     observations.sort(key=lambda value: (value.event_time.occurred_at, value.metric_type.value))
     return MappedIntraday(
         observations=tuple(observations),
@@ -241,9 +243,41 @@ def _observation(
         value=value,
         unit=unit,
         field_name=field_name,
+        sample_interval_seconds=None,
         provider_id=provider_id,
         revision=_revision(selected),
     )
+
+
+def _with_observed_intervals(
+    observations: list[IntradayObservation],
+) -> list[IntradayObservation]:
+    """Attach elapsed cadence since the prior valid sample of the same series."""
+
+    prior: dict[GarminMetricType, datetime] = {}
+    output: list[IntradayObservation] = []
+    for observation in sorted(
+        observations, key=lambda value: (value.metric_type.value, value.event_time.occurred_at)
+    ):
+        previous = prior.get(observation.metric_type)
+        interval = None
+        if previous is not None:
+            elapsed = int((observation.event_time.occurred_at - previous).total_seconds())
+            interval = elapsed if elapsed > 0 else None
+        prior[observation.metric_type] = observation.event_time.occurred_at
+        output.append(
+            replace(
+                observation,
+                sample_interval_seconds=interval,
+                revision=_revision(
+                    {
+                        "observation_revision": observation.revision,
+                        "sample_interval_seconds": interval,
+                    }
+                ),
+            )
+        )
+    return output
 
 
 def _epoch_millis(value: Any) -> datetime | None:

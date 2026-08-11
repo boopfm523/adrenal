@@ -420,6 +420,8 @@ def timeline(
 
         if model is DiaryEvent and not include_sensitive:
             query = query.where(DiaryEvent.is_sensitive.is_(False))
+        if model is GarminMetricEvent:
+            query = query.where(GarminMetricEvent.aggregation != "provider_sample")
         source_queries.append(query)
 
     if not source_queries:
