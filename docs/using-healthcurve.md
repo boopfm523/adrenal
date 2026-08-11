@@ -344,7 +344,8 @@ timeline summary.
 
 ## Analytics
 
-HealthCurve now provides an authenticated `/analytics` page and
+HealthCurve now provides an authenticated `/healthcurve` page (`/analytics` redirects
+there for compatibility) and the
 `/api/v1/analytics/summary` endpoint. They compute deterministic daily plan-versus-
 actual totals, dose timing, stress-episode duration, symptom frequency/severity, and
 missingness for a selected local-date range and IANA timezone. Every result states its
@@ -456,6 +457,27 @@ The Analytics page renders these rows in an exact-value comparison table beneath
 selected-day HealthCurve. The same bounded projection is downloadable from
 `GET /api/v1/analytics/daily-patterns.csv`; the CSV is derived content and contains no
 credentials or AI interpretation.
+
+The longer-range section also summarizes one deterministic value per local day. It
+shows minimum, median, maximum, observed-day coverage, missing-day count, and a
+first-to-last change for theoretical exposure AUC, recorded symptom severity, Garmin
+stress, heart rate, HRV, and respiration. The change is withheld until at least seven
+days contain that metric. This is a display guard, not a statistical-significance
+claim. “Observed coverage” means data availability only—not cortisol sufficiency,
+physiological coverage, or whether a medication plan met the body's needs. Contiguous
+feature/exposure model-version periods remain visible, and each row links back to its
+day-level HealthCurve. Reviewing many measures can surface chance patterns, so the
+section explicitly warns that descriptive correlation or association does not
+establish causation or diagnosis.
+
+The optional private-model pattern draft can phrase only those deterministic range
+figures. A saved draft stays in the AI namespace and carries its daily feature IDs and
+dates, model digest, prompt version, schema version, missingness, and uncertainty
+caution. HealthCurve rejects and does not save output that invents a number, omits
+required citations, or gives medication guidance. If the configured Ollama service
+is unavailable, deterministic results continue to work. The owner can delete the
+generated draft without changing facts or physician-approved plans; while retained,
+it is included only when an export explicitly includes AI analysis.
 
 Historical dose timing is resolved against the physician-approved plan whose half-open
 effective interval contained each scheduled or recorded instant, including retired

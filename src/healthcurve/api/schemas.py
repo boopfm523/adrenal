@@ -1010,6 +1010,68 @@ class DailyPatternDayOut(ApiModel):
         return None if value is None else str(value)
 
 
+class LongitudinalMetricOut(ApiModel):
+    key: str
+    label: str
+    unit: str
+    observed_days: int = Field(ge=0)
+    missing_days: int = Field(ge=0)
+    observed_day_percent: Decimal = Field(ge=0, le=100)
+    minimum: Decimal | None
+    median: Decimal | None
+    maximum: Decimal | None
+    first_observed: Decimal | None
+    last_observed: Decimal | None
+    first_to_last_change: Decimal | None
+    trend_eligible: bool
+
+    @field_serializer(
+        "observed_day_percent",
+        "minimum",
+        "median",
+        "maximum",
+        "first_observed",
+        "last_observed",
+        "first_to_last_change",
+    )
+    def _decimal_values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class ModelVersionPeriodOut(ApiModel):
+    date_from: date
+    date_to: date
+    feature_version: str
+    exposure_model_version: str
+
+
+class LongitudinalSummaryOut(ApiModel):
+    total_days: int = Field(ge=0)
+    minimum_observed_days_for_trend: int = Field(gt=0)
+    coverage_definition: str
+    multiple_comparison_caution: str
+    metrics: list[LongitudinalMetricOut]
+    model_version_periods: list[ModelVersionPeriodOut]
+
+
+class PatternAnalysisOut(AiResource):
+    id: uuid.UUID
+    analysis_type: Literal["pattern_observation"]
+    body: str
+    source_record_ids: list[str]
+    computed_inputs: dict[str, object]
+    range_start: datetime
+    range_end: datetime
+    model_digest: str
+    schema_version: str
+
+
+class PatternAnalysisGenerationOut(ApiModel):
+    outcome: Literal["created", "refused", "model_unavailable", "invalid"]
+    detail: str | None = None
+    analysis: PatternAnalysisOut | None = None
+
+
 class DailyPatternsOut(ApiModel):
     date_from: date
     date_to: date
@@ -1018,4 +1080,5 @@ class DailyPatternsOut(ApiModel):
     safety_label: str
     definitions: dict[str, str]
     exposure_model_versions: list[str]
+    longitudinal_summary: LongitudinalSummaryOut
     days: list[DailyPatternDayOut]

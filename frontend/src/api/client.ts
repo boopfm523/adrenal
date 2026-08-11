@@ -32,6 +32,8 @@ export type MedicationInput = components["schemas"]["MedicationIn"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
 export type SteroidExposureCurve = components["schemas"]["SteroidExposureCurveOut"];
 export type DailyPatterns = components["schemas"]["DailyPatternsOut"];
+export type PatternAnalysis = components["schemas"]["PatternAnalysisOut"];
+export type PatternAnalysisGeneration = components["schemas"]["PatternAnalysisGenerationOut"];
 export type DataQuality = components["schemas"]["DataQualityOut"];
 export type ReportSummary = components["schemas"]["ReportOut"];
 export type ReportPage = components["schemas"]["ReportPage"];
@@ -512,6 +514,15 @@ export function getSteroidExposure(day: string, timezone: string): Promise<Stero
 export function getDailyPatterns(dateFrom: string, dateTo: string, timezone: string): Promise<DailyPatterns> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
   return apiRequest<DailyPatterns>(`/analytics/daily-patterns?${params.toString()}`);
+}
+
+export function generatePatternAnalysis(dateFrom: string, dateTo: string, timezone: string): Promise<PatternAnalysisGeneration> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
+  return apiRequest<PatternAnalysisGeneration>(`/analytics/pattern-analysis?${params.toString()}`, { method: "POST" });
+}
+
+export async function deletePatternAnalysis(analysisId: string): Promise<void> {
+  await apiRequest<unknown>(`/analytics/pattern-analysis/${analysisId}`, { method: "DELETE" });
 }
 
 export async function downloadDailyPatternsCsv(dateFrom: string, dateTo: string, timezone: string): Promise<Blob> {

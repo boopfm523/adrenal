@@ -14,6 +14,7 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from itertools import pairwise
+from statistics import median
 from typing import Final, TypedDict, cast
 from zoneinfo import ZoneInfo
 
@@ -84,7 +85,15 @@ DEFINITIONS: Final = {
         "revisions, timestamps, and structural values. It changes when a correction or "
         "provider revision changes the computed day; it contains no readable health values."
     ),
+    "longitudinal_summary": (
+        "Range distributions use one deterministic value per local day. A trend is the "
+        "last observed daily value minus the first and is withheld until at least seven "
+        "days contain that value. Observed-day coverage describes data availability only; "
+        "it is not cortisol coverage, adequacy, or physiological demand."
+    ),
 }
+
+MINIMUM_TREND_DAYS: Final = 7
 
 
 class _ExposureSample(TypedDict):
@@ -195,6 +204,111 @@ def _event_token(kind: str, row: EventMixin, *values: object) -> str:
 def _watermark(tokens: Iterable[str]) -> str:
     body = json.dumps(sorted(tokens), ensure_ascii=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _longitudinal_metric(
+    *, key: str, label: str, unit: str, values: Sequence[Decimal | None], total_days: int
+) -> dict[str, object]:
+    observed = [value for value in values if value is not None]
+    observed_days = len(observed)
+    eligible = observed_days >= MINIMUM_TREND_DAYS
+    return {
+        "key": key,
+        "label": label,
+        "unit": unit,
+        "observed_days": observed_days,
+        "missing_days": total_days - observed_days,
+        "observed_day_percent": (
+            (Decimal(observed_days) * Decimal(100) / Decimal(total_days)).quantize(DISPLAY_QUANTUM)
+            if total_days
+            else Decimal(0)
+        ),
+        "minimum": min(observed) if observed else None,
+        "median": Decimal(str(median(observed))).quantize(DISPLAY_QUANTUM) if observed else None,
+        "maximum": max(observed) if observed else None,
+        "first_observed": observed[0] if observed else None,
+        "last_observed": observed[-1] if observed else None,
+        "first_to_last_change": (
+            (observed[-1] - observed[0]).quantize(DISPLAY_QUANTUM) if eligible else None
+        ),
+        "trend_eligible": eligible,
+    }
+
+
+def _wearable_average(day: dict[str, object], metric: GarminMetricType) -> Decimal | None:
+    for row in cast(list[dict[str, object]], day.get("wearables", [])):
+        if row.get("metric_type") == metric:
+            value = row.get("average")
+            return value if isinstance(value, Decimal) else None
+    return None
+
+
+def _longitudinal_summary(days: list[dict[str, object]]) -> dict[str, object]:
+    specs: list[tuple[str, str, str, list[Decimal | None]]] = [
+        (
+            "exposure_auc_reu_hours",
+            "Theoretical exposure AUC",
+            "REU-hours",
+            [cast(Decimal | None, day.get("exposure_auc_reu_hours")) for day in days],
+        ),
+        (
+            "average_symptom_severity",
+            "Average recorded symptom severity",
+            "0-10",
+            [cast(Decimal | None, day.get("average_symptom_severity")) for day in days],
+        ),
+    ]
+    labels = {
+        GarminMetricType.STRESS: ("garmin_stress_average", "Garmin stress daily average", "score"),
+        GarminMetricType.HEART_RATE: ("heart_rate_average", "Heart rate daily average", "bpm"),
+        GarminMetricType.HRV: ("hrv_average", "HRV daily average", "ms"),
+        GarminMetricType.RESPIRATION_RATE: (
+            "respiration_rate_average",
+            "Respiration daily average",
+            "breaths/min",
+        ),
+    }
+    for metric, (key, label, unit) in labels.items():
+        specs.append((key, label, unit, [_wearable_average(day, metric) for day in days]))
+
+    boundaries: list[dict[str, object]] = []
+    for day in days:
+        signature = (day.get("feature_version", FEATURE_VERSION), day.get("exposure_model_version"))
+        if (
+            boundaries
+            and boundaries[-1]["feature_version"] == signature[0]
+            and boundaries[-1]["exposure_model_version"] == signature[1]
+        ):
+            boundaries[-1]["date_to"] = day["date"]
+        else:
+            boundaries.append(
+                {
+                    "date_from": day["date"],
+                    "date_to": day["date"],
+                    "feature_version": signature[0],
+                    "exposure_model_version": signature[1],
+                }
+            )
+    return {
+        "total_days": len(days),
+        "minimum_observed_days_for_trend": MINIMUM_TREND_DAYS,
+        "coverage_definition": (
+            "Observed-day coverage is the share of selected local days with a recorded value. "
+            "It does not measure cortisol sufficiency or physiological need."
+        ),
+        "multiple_comparison_caution": (
+            "Reviewing many metrics and date ranges can surface chance patterns. These are "
+            "descriptive comparisons; correlation or association does not establish causation "
+            "or diagnosis."
+        ),
+        "metrics": [
+            _longitudinal_metric(
+                key=key, label=label, unit=unit, values=values, total_days=len(days)
+            )
+            for key, label, unit, values in specs
+        ],
+        "model_version_periods": boundaries,
+    }
 
 
 def _exposure_auc(samples: Sequence[_ExposureSample]) -> Decimal:
@@ -545,5 +659,6 @@ def build_response(
         "safety_label": SAFETY_LABEL,
         "definitions": DEFINITIONS,
         "exposure_model_versions": sorted({str(day["exposure_model_version"]) for day in days}),
+        "longitudinal_summary": _longitudinal_summary(days),
         "days": days,
     }

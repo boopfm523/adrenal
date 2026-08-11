@@ -5337,6 +5337,46 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     assert median(elapsed) < 2.0
 
 
+def test_pattern_analysis_fails_safely_when_private_model_is_unavailable(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner_email = f"pattern-ai-{uuid.uuid4().hex[:12]}@example.com"
+    with Session(engine) as session, session.begin():
+        session.add(
+            Owner(
+                email=owner_email,
+                password_hash=auth.hash_password(PASSWORD),
+                default_timezone="UTC",
+            )
+        )
+
+    login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    csrf = login.json()["csrf_token"]
+
+    def unavailable(*args: object, **kwargs: object) -> analysis_service.AnalysisGenerationResult:
+        return analysis_service.AnalysisGenerationResult(
+            outcome=analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE,
+            detail="synthetic private model detail must not cross the API",
+        )
+
+    monkeypatch.setattr(analysis_service, "generate_analysis", unavailable)
+    response = client.post(
+        "/api/v1/analytics/pattern-analysis",
+        params={"date_from": "2026-08-01", "date_to": "2026-08-07", "timezone": "UTC"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "outcome": "model_unavailable",
+        "detail": (
+            "The configured private model is unavailable. Deterministic results remain available."
+        ),
+        "analysis": None,
+    }
+    assert "synthetic private model detail" not in response.text
+
+
 def test_data_quality_distinguishes_problems_from_provider_absence(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:

@@ -1576,6 +1576,9 @@
             "title": "Feature Version",
             "type": "string"
           },
+          "longitudinal_summary": {
+            "$ref": "#/components/schemas/LongitudinalSummaryOut"
+          },
           "safety_label": {
             "title": "Safety Label",
             "type": "string"
@@ -1593,6 +1596,7 @@
           "safety_label",
           "definitions",
           "exposure_model_versions",
+          "longitudinal_summary",
           "days"
         ],
         "title": "DailyPatternsOut",
@@ -4328,6 +4332,178 @@
         "title": "LoginResponse",
         "type": "object"
       },
+      "LongitudinalMetricOut": {
+        "additionalProperties": false,
+        "properties": {
+          "first_observed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Observed"
+          },
+          "first_to_last_change": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First To Last Change"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_observed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Observed"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "missing_days": {
+            "minimum": 0.0,
+            "title": "Missing Days",
+            "type": "integer"
+          },
+          "observed_day_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Day Percent"
+          },
+          "observed_days": {
+            "minimum": 0.0,
+            "title": "Observed Days",
+            "type": "integer"
+          },
+          "trend_eligible": {
+            "title": "Trend Eligible",
+            "type": "boolean"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "unit",
+          "observed_days",
+          "missing_days",
+          "observed_day_percent",
+          "minimum",
+          "median",
+          "maximum",
+          "first_observed",
+          "last_observed",
+          "first_to_last_change",
+          "trend_eligible"
+        ],
+        "title": "LongitudinalMetricOut",
+        "type": "object"
+      },
+      "LongitudinalSummaryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage_definition": {
+            "title": "Coverage Definition",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/LongitudinalMetricOut"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "minimum_observed_days_for_trend": {
+            "exclusiveMinimum": 0.0,
+            "title": "Minimum Observed Days For Trend",
+            "type": "integer"
+          },
+          "model_version_periods": {
+            "items": {
+              "$ref": "#/components/schemas/ModelVersionPeriodOut"
+            },
+            "title": "Model Version Periods",
+            "type": "array"
+          },
+          "multiple_comparison_caution": {
+            "title": "Multiple Comparison Caution",
+            "type": "string"
+          },
+          "total_days": {
+            "minimum": 0.0,
+            "title": "Total Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_days",
+          "minimum_observed_days_for_trend",
+          "coverage_definition",
+          "multiple_comparison_caution",
+          "metrics",
+          "model_version_periods"
+        ],
+        "title": "LongitudinalSummaryOut",
+        "type": "object"
+      },
       "ManualLabPanelIn": {
         "additionalProperties": false,
         "properties": {
@@ -4692,6 +4868,37 @@
         "title": "MedicationOut",
         "type": "object"
       },
+      "ModelVersionPeriodOut": {
+        "additionalProperties": false,
+        "properties": {
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "exposure_model_version": {
+            "title": "Exposure Model Version",
+            "type": "string"
+          },
+          "feature_version": {
+            "title": "Feature Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "feature_version",
+          "exposure_model_version"
+        ],
+        "title": "ModelVersionPeriodOut",
+        "type": "object"
+      },
       "PageMetadata": {
         "additionalProperties": false,
         "description": "Shared bounded pagination state for growing owner-scoped collections.",
@@ -4747,6 +4954,136 @@
           "new_password"
         ],
         "title": "PasswordChange",
+        "type": "object"
+      },
+      "PatternAnalysisGenerationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatternAnalysisOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "outcome": {
+            "enum": [
+              "created",
+              "refused",
+              "model_unavailable",
+              "invalid"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "PatternAnalysisGenerationOut",
+        "type": "object"
+      },
+      "PatternAnalysisOut": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_type": {
+            "const": "pattern_observation",
+            "title": "Analysis Type",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "category": {
+            "const": "ai",
+            "default": "ai",
+            "title": "Category",
+            "type": "string"
+          },
+          "computed_inputs": {
+            "additionalProperties": true,
+            "title": "Computed Inputs",
+            "type": "object"
+          },
+          "disclaimer": {
+            "default": "Generated analysis. Not medical advice, not a plan, and not a substitute for your physician-approved instructions.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_digest": {
+            "title": "Model Digest",
+            "type": "string"
+          },
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "range_end": {
+            "format": "date-time",
+            "title": "Range End",
+            "type": "string"
+          },
+          "range_start": {
+            "format": "date-time",
+            "title": "Range Start",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Record Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "model_name",
+          "prompt_version",
+          "id",
+          "analysis_type",
+          "body",
+          "source_record_ids",
+          "computed_inputs",
+          "range_start",
+          "range_end",
+          "model_digest",
+          "schema_version"
+        ],
+        "title": "PatternAnalysisOut",
         "type": "object"
       },
       "PdfLabCandidateConfirmIn": {
@@ -7314,6 +7651,227 @@
           }
         },
         "summary": "Daily Patterns Csv",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/pattern-analysis": {
+      "get": {
+        "operationId": "list_pattern_analyses_api_v1_analytics_pattern_analysis_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PatternAnalysisOut"
+                  },
+                  "title": "Response List Pattern Analyses Api V1 Analytics Pattern Analysis Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pattern Analyses",
+        "tags": [
+          "analytics"
+        ]
+      },
+      "post": {
+        "description": "Optionally phrase the deterministic range summary through the private model.",
+        "operationId": "generate_pattern_analysis_api_v1_analytics_pattern_analysis_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatternAnalysisGenerationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Pattern Analysis",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/pattern-analysis/{analysis_id}": {
+      "delete": {
+        "operationId": "delete_pattern_analysis_api_v1_analytics_pattern_analysis__analysis_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Analysis Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Pattern Analysis",
         "tags": [
           "analytics"
         ]

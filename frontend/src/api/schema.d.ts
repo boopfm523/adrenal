@@ -44,6 +44,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/pattern-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Pattern Analyses */
+        get: operations["list_pattern_analyses_api_v1_analytics_pattern_analysis_get"];
+        put?: never;
+        /**
+         * Generate Pattern Analysis
+         * @description Optionally phrase the deterministic range summary through the private model.
+         */
+        post: operations["generate_pattern_analysis_api_v1_analytics_pattern_analysis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/pattern-analysis/{analysis_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Pattern Analysis */
+        delete: operations["delete_pattern_analysis_api_v1_analytics_pattern_analysis__analysis_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/steroid-exposure": {
         parameters: {
             query?: never;
@@ -1690,6 +1728,7 @@ export interface components {
              * @constant
              */
             feature_version: "hc-daily-pattern-v1";
+            longitudinal_summary: components["schemas"]["LongitudinalSummaryOut"];
             /** Safety Label */
             safety_label: string;
             /** Timezone */
@@ -2596,6 +2635,50 @@ export interface components {
             /** Email */
             email: string;
         };
+        /** LongitudinalMetricOut */
+        LongitudinalMetricOut: {
+            /** First Observed */
+            first_observed: string | null;
+            /** First To Last Change */
+            first_to_last_change: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Last Observed */
+            last_observed: string | null;
+            /** Maximum */
+            maximum: string | null;
+            /** Median */
+            median: string | null;
+            /** Minimum */
+            minimum: string | null;
+            /** Missing Days */
+            missing_days: number;
+            /** Observed Day Percent */
+            observed_day_percent: string | null;
+            /** Observed Days */
+            observed_days: number;
+            /** Trend Eligible */
+            trend_eligible: boolean;
+            /** Unit */
+            unit: string;
+        };
+        /** LongitudinalSummaryOut */
+        LongitudinalSummaryOut: {
+            /** Coverage Definition */
+            coverage_definition: string;
+            /** Metrics */
+            metrics: components["schemas"]["LongitudinalMetricOut"][];
+            /** Minimum Observed Days For Trend */
+            minimum_observed_days_for_trend: number;
+            /** Model Version Periods */
+            model_version_periods: components["schemas"]["ModelVersionPeriodOut"][];
+            /** Multiple Comparison Caution */
+            multiple_comparison_caution: string;
+            /** Total Days */
+            total_days: number;
+        };
         /** ManualLabPanelIn */
         ManualLabPanelIn: {
             /** Accession Id */
@@ -2678,6 +2761,23 @@ export interface components {
             /** Strength Unit */
             strength_unit: string | null;
         };
+        /** ModelVersionPeriodOut */
+        ModelVersionPeriodOut: {
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /** Exposure Model Version */
+            exposure_model_version: string;
+            /** Feature Version */
+            feature_version: string;
+        };
         /**
          * PageMetadata
          * @description Shared bounded pagination state for growing owner-scoped collections.
@@ -2698,6 +2798,72 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** PatternAnalysisGenerationOut */
+        PatternAnalysisGenerationOut: {
+            analysis?: components["schemas"]["PatternAnalysisOut"] | null;
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "refused" | "model_unavailable" | "invalid";
+        };
+        /** PatternAnalysisOut */
+        PatternAnalysisOut: {
+            /**
+             * Analysis Type
+             * @constant
+             */
+            analysis_type: "pattern_observation";
+            /** Body */
+            body: string;
+            /**
+             * Category
+             * @default ai
+             * @constant
+             */
+            category: "ai";
+            /** Computed Inputs */
+            computed_inputs: {
+                [key: string]: unknown;
+            };
+            /**
+             * Disclaimer
+             * @default Generated analysis. Not medical advice, not a plan, and not a substitute for your physician-approved instructions.
+             */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model Digest */
+            model_digest: string;
+            /** Model Name */
+            model_name: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /**
+             * Range End
+             * Format: date-time
+             */
+            range_end: string;
+            /**
+             * Range Start
+             * Format: date-time
+             */
+            range_start: string;
+            /** Schema Version */
+            schema_version: string;
+            /** Source Record Ids */
+            source_record_ids: string[];
         };
         /** PdfLabCandidateConfirmIn */
         PdfLabCandidateConfirmIn: {
@@ -3572,6 +3738,107 @@ export interface operations {
                 content: {
                     "text/csv": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pattern_analyses_api_v1_analytics_pattern_analysis_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatternAnalysisOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_pattern_analysis_api_v1_analytics_pattern_analysis_post: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+                timezone?: string | null;
+            };
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatternAnalysisGenerationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_pattern_analysis_api_v1_analytics_pattern_analysis__analysis_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                analysis_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

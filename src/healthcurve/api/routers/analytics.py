@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import csv
-from datetime import date
+import uuid
+from datetime import UTC, date, datetime, time, timedelta
 from io import StringIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select
 
+from healthcurve.ai import analysis as analysis_service
+from healthcurve.ai.models import AIAnalysis, AnalysisType
 from healthcurve.analytics import exposure, patterns, service
-from healthcurve.api.deps import CurrentOwner, DbSession
+from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
     AnalyticsSummaryOut,
     DailyPatternsOut,
+    PatternAnalysisGenerationOut,
+    PatternAnalysisOut,
     SteroidExposureCurveOut,
 )
+from healthcurve.operations import audit
 
 router = APIRouter(tags=["analytics"])
 MAX_RANGE_DAYS = 366
@@ -97,6 +104,146 @@ def daily_patterns(
         date_to=date_to,
         timezone=zone_name,
     )
+
+
+def _pattern_analysis_out(row: AIAnalysis) -> PatternAnalysisOut:
+    if row.range_start is None or row.range_end is None or row.computed_inputs is None:
+        raise ValueError("pattern analysis provenance is incomplete")
+    return PatternAnalysisOut(
+        id=row.id,
+        analysis_type="pattern_observation",
+        body=row.body,
+        source_record_ids=row.source_record_ids,
+        computed_inputs=row.computed_inputs,
+        range_start=row.range_start,
+        range_end=row.range_end,
+        generated_at=row.generated_at,
+        model_name=row.model_name,
+        model_digest=row.model_digest,
+        prompt_version=row.prompt_version,
+        schema_version=row.schema_version,
+    )
+
+
+@router.post(
+    "/analytics/pattern-analysis",
+    response_model=PatternAnalysisGenerationOut,
+    dependencies=[Depends(require_csrf)],
+)
+def generate_pattern_analysis(
+    session: DbSession,
+    owner: CurrentOwner,
+    date_from: date,
+    date_to: date,
+    timezone: str | None = None,
+) -> PatternAnalysisGenerationOut:
+    """Optionally phrase the deterministic range summary through the private model."""
+    zone_name = _validated_range(
+        date_from=date_from,
+        date_to=date_to,
+        timezone=timezone,
+        default_timezone=owner.default_timezone,
+    )
+    projection = DailyPatternsOut.model_validate(
+        patterns.daily_patterns_for_owner(
+            session,
+            owner_id=owner.id,
+            date_from=date_from,
+            date_to=date_to,
+            timezone=zone_name,
+        )
+    )
+    source_ids = [
+        f"daily-feature:{day.date}:{day.source_revision_watermark_sha256}"
+        for day in projection.days
+    ]
+    computed_inputs = projection.longitudinal_summary.model_dump(mode="json")
+    generated = analysis_service.generate_analysis(
+        session,
+        owner_id=owner.id,
+        analysis_type=AnalysisType.PATTERN_OBSERVATION,
+        source_record_ids=source_ids,
+        computed_inputs=computed_inputs,
+    )
+    if generated.analysis is not None:
+        zone = ZoneInfo(zone_name)
+        generated.analysis.range_start = datetime.combine(
+            date_from, time.min, tzinfo=zone
+        ).astimezone(UTC)
+        generated.analysis.range_end = datetime.combine(
+            date_to + timedelta(days=1), time.min, tzinfo=zone
+        ).astimezone(UTC)
+        session.flush()
+    safe_detail = {
+        analysis_service.AnalysisOutcome.REFUSED: "The local model refused this request safely.",
+        analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE: (
+            "The configured private model is unavailable. Deterministic results remain available."
+        ),
+        analysis_service.AnalysisOutcome.INVALID: (
+            "The generated draft failed HealthCurve's citation or safety checks and was not saved."
+        ),
+    }.get(generated.outcome)
+    return PatternAnalysisGenerationOut.model_validate(
+        {
+            "outcome": generated.outcome.value,
+            "detail": safe_detail,
+            "analysis": (
+                _pattern_analysis_out(generated.analysis)
+                if generated.analysis is not None
+                else None
+            ),
+        }
+    )
+
+
+@router.get("/analytics/pattern-analysis", response_model=list[PatternAnalysisOut])
+def list_pattern_analyses(session: DbSession, owner: CurrentOwner) -> list[PatternAnalysisOut]:
+    rows = session.scalars(
+        select(AIAnalysis)
+        .where(
+            AIAnalysis.owner_id == owner.id,
+            AIAnalysis.analysis_type == AnalysisType.PATTERN_OBSERVATION,
+            AIAnalysis.hidden_at.is_(None),
+        )
+        .order_by(AIAnalysis.generated_at.desc(), AIAnalysis.id.desc())
+        .limit(20)
+    )
+    return [
+        _pattern_analysis_out(row)
+        for row in rows
+        if analysis_service.is_renderable_analysis(row)
+        and row.range_start is not None
+        and row.range_end is not None
+    ]
+
+
+@router.delete(
+    "/analytics/pattern-analysis/{analysis_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+def delete_pattern_analysis(
+    analysis_id: uuid.UUID, session: DbSession, owner: CurrentOwner
+) -> Response:
+    row = session.scalar(
+        select(AIAnalysis).where(
+            AIAnalysis.id == analysis_id,
+            AIAnalysis.owner_id == owner.id,
+            AIAnalysis.analysis_type == AnalysisType.PATTERN_OBSERVATION,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="pattern analysis not found")
+    session.delete(row)
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=audit.AuditAction.AI_ANALYSIS_DELETED,
+        target_type="ai_analysis",
+        target_id=row.id,
+        change_summary="type=pattern_observation",
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
