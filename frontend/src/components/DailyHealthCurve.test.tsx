@@ -327,6 +327,8 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll(".healthcurve-unscored-symptom-marker")).toHaveLength(2);
     expect(screen.getByRole("img")).toHaveAccessibleName(/2 recorded symptom events/i);
     const symptomList = screen.getByRole("heading", { name: "Recorded symptoms" }).parentElement;
+    const chart = screen.getByRole("region", { name: "Daily HealthCurve synchronized chart" });
+    expect(chart.compareDocumentPosition(symptomList as Node) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(symptomList).toHaveTextContent("Synthetic fatigue — severity not recorded");
     expect(symptomList).toHaveTextContent("Synthetic dizziness — severity not recorded");
     const summary = within(screen.getByLabelText("Visible series sample counts")).getByText(/Symptoms:/).parentElement;
