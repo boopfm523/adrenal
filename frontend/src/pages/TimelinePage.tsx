@@ -4,9 +4,11 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { getTimeline, type TimelineFilters } from "../api/client";
 import { useAuth } from "../auth/context";
+import { HistoryDateShortcuts } from "../components/HistoryDateShortcuts";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatQuantitativeText } from "../format";
+import { defaultHistoryDateRange, historyDateRangeFromSearch, setHistoryDateRange, type HistoryDateRange } from "../historyDates";
 import { timezoneAbbreviation } from "../time";
 
 const eventTypes = [
@@ -43,28 +45,29 @@ function categoryNote(category: "fact" | "plan" | "ai", eventType: string): stri
   return null;
 }
 
-function defaultFilters(timezone: string): TimelineFilters {
-  return { type: "", dateFrom: "", dateTo: "", timezone, includeSensitive: false, sortOrder: "desc", page: 1 };
+interface TimelineView extends TimelineFilters, HistoryDateRange {}
+
+function defaultFilters(timezone: string): TimelineView {
+  return { type: "", ...defaultHistoryDateRange(timezone), timezone, includeSensitive: false, sortOrder: "desc", page: 1 };
 }
 
-function filtersFromSearch(search: string, profileTimezone: string): TimelineFilters {
+function filtersFromSearch(search: string, profileTimezone: string): TimelineView {
   const params = new URLSearchParams(search);
+  const timezone = params.get("timezone") ?? profileTimezone;
   return {
     type: params.get("types") ?? "",
-    dateFrom: params.get("local_date_from") ?? "",
-    dateTo: params.get("local_date_to") ?? "",
-    timezone: params.get("timezone") ?? profileTimezone,
+    ...historyDateRangeFromSearch(params, timezone),
+    timezone,
     includeSensitive: params.get("include_sensitive") === "true",
     sortOrder: params.get("sort_order") === "asc" ? "asc" : "desc",
     page: /^\d+$/.test(params.get("page") ?? "") && Number(params.get("page")) >= 1 ? Number(params.get("page")) : 1,
   };
 }
 
-function searchFromFilters(filters: TimelineFilters): URLSearchParams {
+function searchFromFilters(filters: TimelineView): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.type !== "") params.set("types", filters.type);
-  if (filters.dateFrom !== "") params.set("local_date_from", filters.dateFrom);
-  if (filters.dateTo !== "") params.set("local_date_to", filters.dateTo);
+  setHistoryDateRange(params, filters);
   params.set("timezone", filters.timezone);
   if (filters.includeSensitive) params.set("include_sensitive", "true");
   params.set("sort_order", filters.sortOrder);
@@ -81,7 +84,7 @@ export function TimelinePage(): React.JSX.Element {
   const filters = useMemo(() => filtersFromSearch(appliedSearch, timezone), [appliedSearch, timezone]);
   const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
   const draft = draftState.search === appliedSearch ? draftState.filters : filters;
-  const setDraft = (next: TimelineFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const setDraft = (next: TimelineView): void => { setDraftState({ search: appliedSearch, filters: next }); };
   const timeline = useQuery({ queryKey: ["timeline", filters], queryFn: () => getTimeline(filters) });
   const filtered = filters.type !== "" || filters.dateFrom !== "" || filters.dateTo !== "" || filters.includeSensitive;
   const selectedHealthCurveDay = filters.dateFrom !== "" && filters.dateFrom === filters.dateTo ? filters.dateFrom : null;
@@ -96,10 +99,10 @@ export function TimelinePage(): React.JSX.Element {
           </select>
         </label>
         <label>From date
-          <input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} />
+          <input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value, allHistory: false }); }} />
         </label>
         <label>Through date
-          <input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} />
+          <input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value, allHistory: false }); }} />
         </label>
         <label>Order
           <select value={draft.sortOrder} onChange={(event) => { setDraft({ ...draft, sortOrder: event.target.value as TimelineFilters["sortOrder"] }); }}>
@@ -113,9 +116,11 @@ export function TimelinePage(): React.JSX.Element {
         </label>
         <div className="filter-actions">
           <button type="submit">Apply filters</button>
-          <button className="button-secondary" type="button" onClick={() => { setDraftState({ search: "", filters: emptyFilters }); setSearchParams(new URLSearchParams()); }}>Clear filters</button>
+          <button className="button-secondary" type="button" onClick={() => { const allHistory = { ...emptyFilters, dateFrom: "", dateTo: "", allHistory: true }; setDraftState({ search: "", filters: allHistory }); setSearchParams(searchFromFilters(allHistory)); }}>Clear filters</button>
         </div>
+        <HistoryDateShortcuts dateFrom={draft.dateFrom} dateTo={draft.dateTo} timezone={draft.timezone} label="Quick timeline dates" onSelect={(day) => { const selected = { ...draft, dateFrom: day, dateTo: day, allHistory: false, page: 1 }; setDraftState({ search: "", filters: selected }); setSearchParams(searchFromFilters(selected)); }} />
       </form>
+      {filters.allHistory ? <p className="privacy-note"><strong>Showing all history.</strong> Choose dates or a quick date to bound the timeline again.</p> : null}
       <p className="privacy-note">Sensitive diary entries are hidden by default. Dates use {timezoneAbbreviation(timezone)}.</p>
       <p><Link className="button-link" to={healthCurveUrl}>{selectedHealthCurveDay === null ? "Open HealthCurve daily review" : `Review ${selectedHealthCurveDay} in HealthCurve`}</Link></p>
 

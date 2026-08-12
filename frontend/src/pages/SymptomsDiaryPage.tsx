@@ -4,8 +4,10 @@ import { useSearchParams } from "react-router-dom";
 
 import { correctSymptom, createSymptom, getDiaryEntries, getLifeEvents, getSymptoms, type Symptom, type SymptomCorrectionInput, type SymptomInput, type SymptomsDiaryFilters } from "../api/client";
 import { useAuth } from "../auth/context";
+import { HistoryDateShortcuts } from "../components/HistoryDateShortcuts";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
+import { historyDateRangeFromSearch, setHistoryDateRange, type HistoryDateRange } from "../historyDates";
 import { timezoneAbbreviation } from "../time";
 
 function localTime(value: string): string { return value.replace("T", " ").slice(0, 16); }
@@ -17,7 +19,7 @@ function nowLocal(): string {
 
 function words(value: string): string { return value.replaceAll("_", " "); }
 
-interface ViewState extends SymptomsDiaryFilters { symptomPage: number; diaryPage: number; lifePage: number }
+interface ViewState extends SymptomsDiaryFilters, HistoryDateRange { symptomPage: number; diaryPage: number; lifePage: number }
 
 function pageNumber(params: URLSearchParams, name: string): number {
   const value = params.get(name) ?? "";
@@ -26,10 +28,10 @@ function pageNumber(params: URLSearchParams, name: string): number {
 
 function stateFromSearch(search: string, profileTimezone: string): ViewState {
   const params = new URLSearchParams(search);
+  const timezone = params.get("timezone") ?? profileTimezone;
   return {
-    dateFrom: params.get("local_date_from") ?? "",
-    dateTo: params.get("local_date_to") ?? "",
-    timezone: params.get("timezone") ?? profileTimezone,
+    ...historyDateRangeFromSearch(params, timezone),
+    timezone,
     includeSensitive: params.get("include_sensitive") === "true",
     symptomPage: pageNumber(params, "symptom_page"),
     diaryPage: pageNumber(params, "diary_page"),
@@ -39,8 +41,7 @@ function stateFromSearch(search: string, profileTimezone: string): ViewState {
 
 function searchFromState(state: ViewState): URLSearchParams {
   const params = new URLSearchParams({ timezone: state.timezone });
-  if (state.dateFrom !== "") params.set("local_date_from", state.dateFrom);
-  if (state.dateTo !== "") params.set("local_date_to", state.dateTo);
+  setHistoryDateRange(params, state);
   if (state.includeSensitive) params.set("include_sensitive", "true");
   if (state.symptomPage > 1) params.set("symptom_page", state.symptomPage.toString());
   if (state.diaryPage > 1) params.set("diary_page", state.diaryPage.toString());
@@ -147,9 +148,10 @@ export function SymptomsDiaryPage(): React.JSX.Element {
   const appliedSearch = searchParams.toString();
   const view = useMemo(() => stateFromSearch(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);
   const filters = useMemo<SymptomsDiaryFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone, includeSensitive: view.includeSensitive }), [view.dateFrom, view.dateTo, view.timezone, view.includeSensitive]);
-  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
-  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
-  const setDraft = (next: SymptomsDiaryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const appliedDraft = useMemo(() => ({ ...filters, allHistory: view.allHistory }), [filters, view.allHistory]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters: appliedDraft });
+  const draft = draftState.search === appliedSearch ? draftState.filters : appliedDraft;
+  const setDraft = (next: SymptomsDiaryFilters & HistoryDateRange): void => { setDraftState({ search: appliedSearch, filters: next }); };
   const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
   const [validation, setValidation] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -165,13 +167,15 @@ export function SymptomsDiaryPage(): React.JSX.Element {
 
   return <Page title="Symptoms & diary" description="Subjective symptoms, diary notes, and life events are recorded facts—not diagnoses or causal claims.">
     <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditing(null); setSearchParams(searchFromState({ ...draft, symptomPage: 1, diaryPage: 1, lifePage: 1 })); }}>
-      <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label>
-      <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label>
+      <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value, allHistory: false }); }} /></label>
+      <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value, allHistory: false }); }} /></label>
       <label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>
       <label className="checkbox-label"><input type="checkbox" checked={draft.includeSensitive} onChange={(event) => { setDraft({ ...draft, includeSensitive: event.target.checked }); }} /> Reveal sensitive diary and life-event entries</label>
       {validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}
-      <div className="filter-actions"><button type="submit">Apply filters</button><button className="button-secondary" type="button" onClick={() => { setValidation(null); setEditing(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone: profileTimezone, includeSensitive: false } }); setSearchParams(new URLSearchParams()); }}>Clear filters</button></div>
+      <div className="filter-actions"><button type="submit">Apply filters</button><button className="button-secondary" type="button" onClick={() => { const allHistory = { dateFrom: "", dateTo: "", timezone: profileTimezone, includeSensitive: false, allHistory: true, symptomPage: 1, diaryPage: 1, lifePage: 1 }; setValidation(null); setEditing(null); setDraftState({ search: "", filters: allHistory }); setSearchParams(searchFromState(allHistory)); }}>Clear filters</button></div>
+      <HistoryDateShortcuts dateFrom={draft.dateFrom} dateTo={draft.dateTo} timezone={draft.timezone} label="Quick symptom and diary dates" onSelect={(day) => { const selected = { ...view, ...draft, dateFrom: day, dateTo: day, allHistory: false, symptomPage: 1, diaryPage: 1, lifePage: 1 }; setValidation(null); setEditing(null); setDraftState({ search: "", filters: selected }); setSearchParams(searchFromState(selected)); }} />
     </form>
+    {view.allHistory ? <p className="privacy-note"><strong>Showing all history.</strong> Choose dates or a quick date to bound these records again.</p> : null}
     <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. Sensitive text is hidden by default and appears only after applying the reveal control.</p>
     {loading ? <p role="status">Loading recorded symptoms and notes…</p> : null}
     {failed ? <p className="error-summary" role="alert">Some recorded facts could not be loaded.</p> : null}

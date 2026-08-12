@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthContext } from "../auth/context";
+import { localDate, shiftIsoDate } from "../time";
 import { TimelinePage } from "./TimelinePage";
 
 const session = {
@@ -141,6 +142,9 @@ describe("Timeline page", () => {
     const firstUrl = firstInput === undefined ? "" : requestUrl(firstInput);
     expect(firstUrl).not.toContain("include_sensitive");
     expect(firstUrl).toContain("sort_order=desc");
+    const today = localDate(new Date(), "America/New_York");
+    expect(firstUrl).toContain(`local_date_from=${shiftIsoDate(today, -6)}`);
+    expect(firstUrl).toContain(`local_date_to=${today}`);
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Include sensitive diary entries" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
@@ -159,7 +163,8 @@ describe("Timeline page", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(screen.getByLabelText("Order")).toHaveValue("desc");
-    expect(screen.getByLabelText("Current query")).toBeEmptyDOMElement();
+    expect(screen.getByLabelText("Current query")).toHaveTextContent("history=all");
+    expect(screen.getByText(/Showing all history/)).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Browser back" }));
     await waitFor(() => { expect(screen.getByLabelText("Order")).toHaveValue("asc"); });
@@ -200,10 +205,27 @@ describe("Timeline page", () => {
       timezone: "America/New_York", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 }, items: [],
     }), { headers: { "Content-Type": "application/json" } })));
     renderPage();
+    expect(await screen.findByRole("heading", { name: "No records match these filters" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(await screen.findByRole("heading", { name: "No records yet" })).toBeVisible();
     await userEvent.selectOptions(screen.getByLabelText("Record type"), "symptom");
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(await screen.findByRole("heading", { name: "No records match these filters" })).toBeVisible();
+  });
+
+  it("applies a quick local day immediately and keeps it shareable", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      timezone: "America/New_York", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 }, items: [],
+    }), { headers: { "Content-Type": "application/json" } }));
+    renderPage();
+    const yesterday = shiftIsoDate(localDate(new Date(), "America/New_York"), -1);
+
+    await userEvent.click(within(screen.getByRole("group", { name: "Quick timeline dates" })).getByRole("button", { name: "Yesterday" }));
+
+    expect(screen.getByLabelText("From date")).toHaveValue(yesterday);
+    expect(screen.getByLabelText("Through date")).toHaveValue(yesterday);
+    expect(screen.getByLabelText("Current query")).toHaveTextContent(`local_date_from=${yesterday}`);
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes(`local_date_from=${yesterday}`) && requestUrl(input).includes(`local_date_to=${yesterday}`))).toBe(true); });
   });
 
   it("labels environmental context separately from health facts and AI", async () => {

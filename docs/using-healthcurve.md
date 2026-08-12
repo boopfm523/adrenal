@@ -92,6 +92,15 @@ left unchanged. The structural audit entry contains only the deleted draft ID an
 counts, not medication, schedule, instruction, clinician, or source values. Encrypted
 backups may retain the deleted draft until their configured expiry.
 
+## Browsing recorded history
+
+Timeline, Symptoms & diary, and Episodes open with the latest seven local calendar days,
+including today, in the profile timezone. The visible From and Through fields are the
+dates sent to the API. **Today**, **Yesterday**, and **2 days ago** set both fields to one
+day and refresh immediately. Custom dates remain editable and become shareable URL
+filters. **Clear filters** deliberately switches to all history; the page says when this
+unbounded view is active so it is not confused with the seven-day default.
+
 ## Recording things
 
 **Telegram** is the fastest path. Health-recording commands are deterministic and work

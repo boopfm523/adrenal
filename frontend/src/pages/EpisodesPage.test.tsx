@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "../auth/context";
 import { sessionStore } from "../api/session";
+import { localDate, shiftIsoDate } from "../time";
 import { EpisodesPage } from "./EpisodesPage";
 
 const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London" } };
@@ -63,5 +64,31 @@ describe("Episodes page", () => {
     expect(closed.ended_at.timezone).toBe("Europe/London");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Episode history pagination" })).getByRole("button", { name: "Next" }));
     await waitFor(() => { expect(requests.some((request) => request.url.includes("page=2") && request.url.includes("status_filter=resolved") && request.url.includes("local_date_from=2026-08-09"))).toBe(true); });
+  });
+
+  it("defaults to seven local days and applies quick days or all history", async () => {
+    const requests: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      requests.push(requestUrl(input));
+      return Promise.resolve(response(requestUrl(input).includes("/emergency-injections") ? { ...page([]), revisions: [] } : page([])));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    const today = localDate(new Date(), "Europe/London");
+    const sevenDayStart = shiftIsoDate(today, -6);
+
+    expect(screen.getByLabelText("From date")).toHaveValue(sevenDayStart);
+    expect(screen.getByLabelText("Through date")).toHaveValue(today);
+    await waitFor(() => { expect(requests.some((url) => url.includes(`local_date_from=${sevenDayStart}`) && url.includes(`local_date_to=${today}`))).toBe(true); });
+
+    const yesterday = shiftIsoDate(today, -1);
+    fireEvent.click(within(screen.getByRole("group", { name: "Quick episode dates" })).getByRole("button", { name: "Yesterday" }));
+    await waitFor(() => { expect(requests.some((url) => url.includes(`local_date_from=${yesterday}`) && url.includes(`local_date_to=${yesterday}`))).toBe(true); });
+    expect(screen.getByLabelText("From date")).toHaveValue(yesterday);
+    expect(screen.getByLabelText("Through date")).toHaveValue(yesterday);
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear history filters" }));
+    expect(await screen.findByText(/Showing all history/)).toBeVisible();
+    expect(screen.getByLabelText("From date")).toHaveValue("");
+    expect(screen.getByLabelText("Through date")).toHaveValue("");
   });
 });

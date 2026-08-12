@@ -4,9 +4,11 @@ import { useSearchParams } from "react-router-dom";
 
 import { createEpisode, getEmergencyInjections, getEpisodes, updateEpisode, type Episode, type Injection, type RecordedHistoryFilters } from "../api/client";
 import { useAuth } from "../auth/context";
+import { HistoryDateShortcuts } from "../components/HistoryDateShortcuts";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatDecimal, formatMeasurement } from "../format";
+import { historyDateRangeFromSearch, setHistoryDateRange, type HistoryDateRange } from "../historyDates";
 import { timezoneAbbreviation } from "../time";
 
 function nowLocal(): string {
@@ -23,11 +25,11 @@ function optional(value: FormDataEntryValue | null): string | null {
   return text === "" ? null : text;
 }
 
-interface EpisodeViewState extends RecordedHistoryFilters { openPage: number; historyPage: number; injectionPage: number }
+interface EpisodeViewState extends RecordedHistoryFilters, HistoryDateRange { openPage: number; historyPage: number; injectionPage: number }
 
 function pageNumber(params: URLSearchParams, name: string): number { const value = params.get(name) ?? ""; return /^\d+$/.test(value) && Number(value) >= 1 ? Number(value) : 1; }
-function viewFromSearch(search: string, profileTimezone: string): EpisodeViewState { const params = new URLSearchParams(search); return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, openPage: pageNumber(params, "open_page"), historyPage: pageNumber(params, "history_page"), injectionPage: pageNumber(params, "injection_page") }; }
-function searchFromView(view: EpisodeViewState): URLSearchParams { const params = new URLSearchParams({ timezone: view.timezone }); if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom); if (view.dateTo !== "") params.set("local_date_to", view.dateTo); if (view.openPage > 1) params.set("open_page", view.openPage.toString()); if (view.historyPage > 1) params.set("history_page", view.historyPage.toString()); if (view.injectionPage > 1) params.set("injection_page", view.injectionPage.toString()); return params; }
+function viewFromSearch(search: string, profileTimezone: string): EpisodeViewState { const params = new URLSearchParams(search); const timezone = params.get("timezone") ?? profileTimezone; return { ...historyDateRangeFromSearch(params, timezone), timezone, openPage: pageNumber(params, "open_page"), historyPage: pageNumber(params, "history_page"), injectionPage: pageNumber(params, "injection_page") }; }
+function searchFromView(view: EpisodeViewState): URLSearchParams { const params = new URLSearchParams({ timezone: view.timezone }); setHistoryDateRange(params, view); if (view.openPage > 1) params.set("open_page", view.openPage.toString()); if (view.historyPage > 1) params.set("history_page", view.historyPage.toString()); if (view.injectionPage > 1) params.set("injection_page", view.injectionPage.toString()); return params; }
 
 function EpisodeRow({ episode }: { episode: Episode }): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -73,9 +75,10 @@ export function EpisodesPage(): React.JSX.Element {
   const appliedSearch = searchParams.toString();
   const view = useMemo(() => viewFromSearch(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);
   const filters = useMemo<RecordedHistoryFilters>(() => ({ dateFrom: view.dateFrom, dateTo: view.dateTo, timezone: view.timezone }), [view.dateFrom, view.dateTo, view.timezone]);
-  const [draftState, setDraftState] = useState({ search: appliedSearch, filters });
-  const draft = draftState.search === appliedSearch ? draftState.filters : filters;
-  const setDraft = (next: RecordedHistoryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
+  const appliedDraft = useMemo(() => ({ ...filters, allHistory: view.allHistory }), [filters, view.allHistory]);
+  const [draftState, setDraftState] = useState({ search: appliedSearch, filters: appliedDraft });
+  const draft = draftState.search === appliedSearch ? draftState.filters : appliedDraft;
+  const setDraft = (next: RecordedHistoryFilters & HistoryDateRange): void => { setDraftState({ search: appliedSearch, filters: next }); };
   const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
   const [validation, setValidation] = useState<string | null>(null);
   const openEpisodes = useQuery({ queryKey: ["episodes", "open", filters, view.openPage], queryFn: () => getEpisodes(filters, view.openPage, "open"), enabled: !invalidRange });
@@ -104,7 +107,8 @@ export function EpisodesPage(): React.JSX.Element {
       <div className="field-group form-wide"><label htmlFor="episode-notes">Notes</label><textarea id="episode-notes" name="notes" aria-describedby="episode-notes-help" placeholder="Other observations you want to remember" /><small className="field-hint" id="episode-notes-help">Optional extra context. Record doses and symptoms in their own forms so HealthCurve can link and graph them as separate facts.</small></div>
       <button disabled={create.isPending} type="submit">Open episode</button>
     </form>{create.isError ? <p className="error-summary" role="alert">The episode could not be opened. Check the local time and IANA timezone.</p> : null}</section>
-    <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSearchParams(searchFromView({ ...draft, openPage: 1, historyPage: 1, injectionPage: 1 })); }}><label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { setValidation(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone: profileTimezone } }); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
+    <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSearchParams(searchFromView({ ...draft, openPage: 1, historyPage: 1, injectionPage: 1 })); }}><label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value, allHistory: false }); }} /></label><label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value, allHistory: false }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const allHistory = { dateFrom: "", dateTo: "", timezone: profileTimezone, allHistory: true, openPage: 1, historyPage: 1, injectionPage: 1 }; setValidation(null); setDraftState({ search: "", filters: allHistory }); setSearchParams(searchFromView(allHistory)); }}>Clear history filters</button></div><HistoryDateShortcuts dateFrom={draft.dateFrom} dateTo={draft.dateTo} timezone={draft.timezone} label="Quick episode dates" onSelect={(day) => { const selected = { ...view, ...draft, dateFrom: day, dateTo: day, allHistory: false, openPage: 1, historyPage: 1, injectionPage: 1 }; setValidation(null); setDraftState({ search: "", filters: selected }); setSearchParams(searchFromView(selected)); }} /></form>
+    {view.allHistory ? <p className="privacy-note"><strong>Showing all history.</strong> Choose dates or a quick date to bound episode and injection records again.</p> : null}
     <p className="privacy-note">Inclusive history dates use {timezoneAbbreviation(filters.timezone)} and filter by when each episode started or injection occurred.</p>
     {openEpisodes.isFetching || historyEpisodes.isFetching || injections.isFetching ? <p role="status">Loading episode and injection records…</p> : null}{openEpisodes.isError || historyEpisodes.isError || injections.isError ? <p className="error-summary" role="alert">Some episode or injection records could not be loaded.</p> : null}
     <section aria-labelledby="active-heading"><h2 id="active-heading">Open episodes</h2>{open.length === 0 && !openEpisodes.isFetching ? <p>No open episodes match.</p> : <EpisodeTable episodes={open} label="Open episode records" />}{openEpisodes.data === undefined ? null : <PaginationControls label="Open episodes" metadata={openEpisodes.data.page} onPageChange={(openPage) => { setSearchParams(searchFromView({ ...view, openPage })); }} />}</section>

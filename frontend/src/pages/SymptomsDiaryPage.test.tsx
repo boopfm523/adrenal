@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
+import { localDate, shiftIsoDate } from "../time";
 import { SymptomsDiaryPage } from "./SymptomsDiaryPage";
 
 const time = { occurred_at: "2026-08-09T13:00:00Z", local_time: "2026-08-09T09:00:00", timezone: "America/New_York", utc_offset_minutes: -240 };
@@ -46,6 +47,13 @@ describe("Symptoms and diary page", () => {
     expect(screen.getByRole("region", { name: "Life event records table" })).toBeVisible();
     expect(screen.queryByText("Synthetic private note")).not.toBeInTheDocument();
     expect(screen.queryByText("Synthetic private event")).not.toBeInTheDocument();
+    const today = localDate(new Date(), "America/New_York");
+    expect(screen.getByLabelText("From date")).toHaveValue(shiftIsoDate(today, -6));
+    expect(screen.getByLabelText("Through date")).toHaveValue(today);
+    expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes(`local_date_from=${shiftIsoDate(today, -6)}`) && requestUrl(input).includes(`local_date_to=${today}`))).toBe(true);
+    const twoDaysAgo = shiftIsoDate(today, -2);
+    await userEvent.click(within(screen.getByRole("group", { name: "Quick symptom and diary dates" })).getByRole("button", { name: "2 days ago" }));
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes(`local_date_from=${twoDaysAgo}`) && requestUrl(input).includes(`local_date_to=${twoDaysAgo}`))).toBe(true); });
 
     const createForm = screen.getByRole("form", { name: "Record a symptom" });
     await userEvent.type(within(createForm).getByLabelText("Symptom"), "Synthetic nausea");
@@ -62,7 +70,9 @@ describe("Symptoms and diary page", () => {
     await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/severity 4\/10/)).toBeVisible();
 
+    await userEvent.clear(screen.getByLabelText("From date"));
     await userEvent.type(screen.getByLabelText("From date"), "2026-08-09");
+    await userEvent.clear(screen.getByLabelText("Through date"));
     await userEvent.type(screen.getByLabelText("Through date"), "2026-08-10");
     await userEvent.click(screen.getByRole("checkbox", { name: "Reveal sensitive diary and life-event entries" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
@@ -86,5 +96,12 @@ describe("Symptoms and diary page", () => {
 
     await userEvent.click(within(screen.getByRole("navigation", { name: "Symptom records pagination" })).getByRole("button", { name: "Next" }));
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/symptoms?") && requestUrl(input).includes("page=2") && requestUrl(input).includes("local_date_from=2026-08-09"))).toBe(true); });
+
+    const callsBeforeClear = fetchMock.mock.calls.length;
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findByText(/Showing all history/)).toBeVisible();
+    expect(screen.getByLabelText("From date")).toHaveValue("");
+    expect(screen.getByLabelText("Through date")).toHaveValue("");
+    await waitFor(() => { expect(fetchMock.mock.calls.slice(callsBeforeClear).some(([input]) => !requestUrl(input).includes("local_date_from"))).toBe(true); });
   });
 });
