@@ -1,3 +1,4 @@
+import { Alert, Button, Group, NativeSelect, Paper, SimpleGrid, Text, TextInput, Textarea, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -51,8 +52,8 @@ function CompactLocalDateTime({ value, onChange }: { value: string; onChange: (v
   const [date = "", time = ""] = value.split("T");
   return <fieldset className="compact-local-time form-wide">
     <legend>Experienced local time</legend>
-    <label>Date<input required type="date" value={date} onChange={(event) => { onChange(`${event.target.value}T${time || "00:00"}`); }} /></label>
-    <label>Time<input required type="time" value={time.slice(0, 5)} onChange={(event) => { onChange(`${date}T${event.target.value}`); }} /></label>
+    <TextInput label="Date" required aria-label="Date" type="date" value={date} onChange={(event) => { onChange(`${event.target.value}T${time || "00:00"}`); }} />
+    <TextInput label="Time" required aria-label="Time" type="time" value={time.slice(0, 5)} onChange={(event) => { onChange(`${date}T${event.target.value}`); }} />
   </fieldset>;
 }
 
@@ -178,7 +179,7 @@ function WeightHistoryTable({ records, byId, editing, setEditing }: {
   setEditing: (id: string | null) => void;
 }): React.JSX.Element {
   return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Weight records table">
-    <table className="vital-table">
+    <table className="vital-table weight-table">
       <caption>Current recorded weight facts on a consistent pounds scale, with normalized kilograms beneath each value.</caption>
       <thead><tr><th scope="col">Experienced time</th><th scope="col">Weight</th><th scope="col">Setting</th><th scope="col">Source</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
       <tbody>{records.map((record) => {
@@ -190,7 +191,7 @@ function WeightHistoryTable({ records, byId, editing, setEditing }: {
             <td>{measurementSetting(record.measurement_setting)}</td>
             <td>{humanizeSource(record.provenance.source_type)}</td>
             <td>{record.notes ?? <span className="missing-value">None</span>}</td>
-            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{formatDecimal(prior.display_lb)} lb</strong> · entered {formatDecimal(prior.value)} {prior.unit} · {measurementSetting(prior.measurement_setting)}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}<Button mt="sm" type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{formatDecimal(prior.display_lb)} lb</strong> · entered {formatDecimal(prior.value)} {prior.unit} · {measurementSetting(prior.measurement_setting)}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
           </tr>
           {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
@@ -207,7 +208,7 @@ function TemperatureHistoryTable({ records, byId, editing, setEditing }: {
 }): React.JSX.Element {
   const ordered = [...records].sort((left, right) => right.time.occurred_at.localeCompare(left.time.occurred_at));
   return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Temperature records table">
-    <table className="vital-table">
+    <table className="vital-table temperature-table">
       <caption>Current recorded body-temperature facts, shown Fahrenheit first with Celsius in parentheses. Original values and correction history remain preserved.</caption>
       <thead><tr><th scope="col">Experienced time</th><th scope="col">Temperature</th><th scope="col">Entered value</th><th scope="col">Source</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
       <tbody>{ordered.map((record) => {
@@ -219,7 +220,7 @@ function TemperatureHistoryTable({ records, byId, editing, setEditing }: {
             <td>{formatDecimal(record.value)} °{record.unit.toUpperCase()}</td>
             <td>{humanizeSource(record.provenance.source_type)}</td>
             <td>{record.notes ?? <span className="missing-value">None</span>}</td>
-            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct temperature"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.display_f} °F ({prior.display_c} °C)</strong> · entered {formatDecimal(prior.value)} °{prior.unit.toUpperCase()}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<Button mt="sm" type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct temperature"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.display_f} °F ({prior.display_c} °C)</strong> · entered {formatDecimal(prior.value)} °{prior.unit.toUpperCase()}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
           </tr>
           {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><TemperatureCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
@@ -249,7 +250,7 @@ function BloodPressureHistoryTable({ records, byId, editing, setEditing }: {
             <td>{measurementSetting(record.measurement_setting)}</td>
             <td><span>{humanizeSource(record.provenance.source_type)}</span><span>{humanizeSource(record.provenance.confirmation_state)}</span></td>
             <td>{record.notes ?? <span className="missing-value">None</span>}</td>
-            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct blood pressure"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.systolic_mmhg}/{prior.diastolic_mmhg} mmHg</strong>{prior.pulse_bpm === null ? " · pulse not recorded" : ` · pulse ${prior.pulse_bpm.toString()} bpm`} · {measurementSetting(prior.measurement_setting)}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p>{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}{prior.provenance.is_correction ? <p>{`Corrected · ${prior.provenance.correction_reason ?? "reason recorded"}`}</p> : <p>Original record</p>}</article>)}</details>}</td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<Button mt="sm" type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct blood pressure"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.systolic_mmhg}/{prior.diastolic_mmhg} mmHg</strong>{prior.pulse_bpm === null ? " · pulse not recorded" : ` · pulse ${prior.pulse_bpm.toString()} bpm`} · {measurementSetting(prior.measurement_setting)}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p>{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}{prior.provenance.is_correction ? <p>{`Corrected · ${prior.provenance.correction_reason ?? "reason recorded"}`}</p> : <p>Original record</p>}</article>)}</details>}</td>
           </tr>
           {editing === record.id ? <tr className="correction-table-row"><td colSpan={7}><BloodPressureCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
@@ -280,19 +281,19 @@ function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Eleme
     };
     mutation.mutate(payload);
   }
-  return <form className="vital-entry-form" aria-label="Record blood pressure" onSubmit={submit}>
-    <h3>Blood pressure</h3>
-    <label>Systolic (mmHg)<input required type="number" inputMode="numeric" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} /></label>
-    <label>Diastolic (mmHg)<input required type="number" inputMode="numeric" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} /></label>
-    <label>Pulse (bpm, optional)<input type="number" inputMode="numeric" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} /></label>
-    <label>Measurement setting<select value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as BloodPressureInput["measurement_setting"] }); }}><option value="home">Home</option><option value="provider">Provider / clinic</option></select></label>
+  return <form aria-label="Record blood pressure" onSubmit={submit}><Paper className="vital-entry-form" withBorder p="lg" radius="lg">
+    <Title order={3}>Blood pressure</Title>
+    <TextInput label="Systolic (mmHg)" required aria-label="Systolic (mmHg)" type="number" inputMode="numeric" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} />
+    <TextInput label="Diastolic (mmHg)" required aria-label="Diastolic (mmHg)" type="number" inputMode="numeric" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} />
+    <TextInput label="Pulse (bpm, optional)" type="number" inputMode="numeric" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} />
+    <NativeSelect label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as BloodPressureInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} />
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
-    <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
-    <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. HealthCurve records the values without interpreting them.</p>
-    {mutation.isSuccess ? <p className="success-message form-wide" role="status">Blood pressure recorded.</p> : null}
-    {mutation.isError ? <p className="error-summary form-wide" role="alert">Blood pressure was not saved. Check the values and time.</p> : null}
-    <button className="form-wide" type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Record blood pressure"}</button>
-  </form>;
+    <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
+    <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. HealthCurve records the values without interpreting them.</Text>
+    {mutation.isSuccess ? <Alert className="form-wide" color="green" role="status">Blood pressure recorded.</Alert> : null}
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">Blood pressure was not saved. Check the values and time.</Alert> : null}
+    <Button className="form-wide" type="submit" loading={mutation.isPending}>Record blood pressure</Button>
+  </Paper></form>;
 }
 
 function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
@@ -309,18 +310,18 @@ function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
     event.preventDefault();
     mutation.mutate({ value: form.value, unit: form.unit, measurement_setting: form.measurementSetting, time: { local_time: form.localTime, timezone }, notes: form.notes === "" ? null : form.notes });
   }
-  return <form className="vital-entry-form" aria-label="Record weight" onSubmit={submit}>
-    <h3>Weight</h3>
-    <label>Value<input required type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label>
-    <label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }}><option value="lb">lb</option><option value="kg">kg</option></select></label>
-    <label>Measurement setting<select value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as WeightInput["measurement_setting"] }); }}><option value="home">Home</option><option value="provider">Provider / clinic</option></select></label>
+  return <form aria-label="Record weight" onSubmit={submit}><Paper className="vital-entry-form" withBorder p="lg" radius="lg">
+    <Title order={3}>Weight</Title>
+    <TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
+    <NativeSelect label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }} data={["lb","kg"]} />
+    <NativeSelect label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as WeightInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} />
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
-    <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
-    <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. The entered unit is preserved; kilograms use 1 lb = 0.45359237 kg.</p>
-    {mutation.isSuccess ? <p className="success-message form-wide" role="status">Weight recorded.</p> : null}
-    {mutation.isError ? <p className="error-summary form-wide" role="alert">Weight was not saved. Check the value and time.</p> : null}
-    <button className="form-wide" type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Record weight"}</button>
-  </form>;
+    <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
+    <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. The entered unit is preserved; kilograms use 1 lb = 0.45359237 kg.</Text>
+    {mutation.isSuccess ? <Alert className="form-wide" color="green" role="status">Weight recorded.</Alert> : null}
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">Weight was not saved. Check the value and time.</Alert> : null}
+    <Button className="form-wide" type="submit" loading={mutation.isPending}>Record weight</Button>
+  </Paper></form>;
 }
 
 function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element {
@@ -338,17 +339,17 @@ function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element
     mutation.mutate({ value: form.value, unit: form.unit, time: { local_time: form.localTime, timezone }, notes: form.notes === "" ? null : form.notes });
   }
   const bounds = form.unit === "f" ? { min: 77, max: 113 } : { min: 25, max: 45 };
-  return <form className="vital-entry-form" aria-label="Record body temperature" onSubmit={submit}>
-    <h3>Body temperature</h3>
-    <label>Value<input required type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label>
-    <label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }}><option value="f">°F</option><option value="c">°C</option></select></label>
+  return <form aria-label="Record body temperature" onSubmit={submit}><Paper className="vital-entry-form" withBorder p="lg" radius="lg">
+    <Title order={3}>Body temperature</Title>
+    <TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
+    <NativeSelect label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }} data={[{value:"f",label:"°F"},{value:"c",label:"°C"}]} />
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
-    <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
-    <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. Entered units are preserved. HealthCurve converts with °F = (°C × 9/5) + 32 and does not diagnose fever.</p>
-    {mutation.isSuccess ? <p className="success-message form-wide" role="status">Temperature recorded.</p> : null}
-    {mutation.isError ? <p className="error-summary form-wide" role="alert">Temperature was not saved. Use 77–113 °F or 25–45 °C and check the time.</p> : null}
-    <button className="form-wide" type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Record temperature"}</button>
-  </form>;
+    <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
+    <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. Entered units are preserved. HealthCurve converts with °F = (°C × 9/5) + 32 and does not diagnose fever.</Text>
+    {mutation.isSuccess ? <Alert className="form-wide" color="green" role="status">Temperature recorded.</Alert> : null}
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">Temperature was not saved. Use 77–113 °F or 25–45 °C and check the time.</Alert> : null}
+    <Button className="form-wide" type="submit" loading={mutation.isPending}>Record temperature</Button>
+  </Paper></form>;
 }
 
 function BloodPressureCorrection({ record, close }: { record: BloodPressure; close: () => void }): React.JSX.Element {
@@ -434,17 +435,15 @@ export function HealthDataPage(): React.JSX.Element {
   return <Page title="Health data" description="Record and review blood pressure, weight, body temperature, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
     <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /><TemperatureEntry timezone={timezone} /></div></section>
     <section aria-labelledby="health-data-filter-heading"><h2 id="health-data-filter-heading">Filter recorded health data</h2>
-      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, temperaturePage: 1, garminPage: 1 })); }}>
-        <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label>
-        <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label>
-        <label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>
-        {filterValidation === null && !appliedRangeInvalid ? null : <p className="error-summary form-wide" role="alert">{filterValidation ?? "From date must be on or before Through date."}</p>}
-        <div className="filter-actions"><button type="submit">Apply filters</button><button className="button-secondary" type="button" onClick={() => { setFilterValidation(null); setEditing(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</button></div>
-      </form>
-      <p className="privacy-note">Inclusive calendar dates are interpreted in {timezoneAbbreviation(filters.timezone)}. Records keep their original experienced timezone.</p>
+      <Paper component="form" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, temperaturePage: 1, garminPage: 1 })); }}>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="IANA timezone" required aria-label="IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>
+        {filterValidation === null && !appliedRangeInvalid ? null : <Alert color="red" mt="md" role="alert">{filterValidation ?? "From date must be on or before Through date."}</Alert>}
+        <Group mt="md"><Button type="submit">Apply filters</Button><Button variant="outline" type="button" onClick={() => { setFilterValidation(null); setEditing(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</Button></Group>
+      </Paper>
+      <Text c="dimmed" mt="md">Inclusive calendar dates are interpreted in {timezoneAbbreviation(filters.timezone)}. Records keep their original experienced timezone.</Text>
     </section>
-    {bp.isFetching || weight.isFetching || temperature.isFetching || garmin.isFetching ? <p role="status">Loading recorded health data…</p> : null}
-    {bp.isError || weight.isError || temperature.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded. Check the date range and IANA timezone.</p> : null}
+    {bp.isFetching || weight.isFetching || temperature.isFetching || garmin.isFetching ? <Text role="status">Loading recorded health data…</Text> : null}
+    {bp.isError || weight.isError || temperature.isError || garmin.isError ? <Alert color="red" role="alert">Some health records could not be loaded. Check the date range and IANA timezone.</Alert> : null}
     <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
       {currentBp.length === 0 ? <p>{hasActiveDates ? "No blood-pressure readings match the selected dates." : "No blood-pressure readings recorded."}</p> : <AccessibleLineChart title="Blood pressure" summary="Systolic and diastolic measurements on the visible records page." unit="mmHg" timezone={timezone} timezoneReferenceDate={currentBp[0]?.time.local_time.slice(0, 10)} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact on the visible records page. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Blood pressure" series={bpSeries(currentBp)} />}
       {currentWeight.length === 0 ? <p>{hasActiveDates ? "No weight readings match the selected dates." : "No weight readings recorded."}</p> : <AccessibleLineChart title="Weight" summary="Weight measurements on the visible records page, shown on one consistent pounds scale." unit="lb" timezone={timezone} timezoneReferenceDate={currentWeight[0]?.time.local_time.slice(0, 10)} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact on the visible records page, converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The chart adds one pound of visual padding above and below the observed range; exact values remain in the chart points and records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Weight" yPadding={1} compactPlot series={weightSeries(currentWeight)} />}

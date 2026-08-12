@@ -442,8 +442,8 @@ circle.chart-series { fill: white; }
 .help-endpoints code { overflow-wrap: anywhere; }
 .help-planned { border-left: 0.45rem solid #a86712; padding: 1rem 1.25rem; background: #fffbf3; }
 .help-planned li { margin-block: 0.7rem; }
-.vital-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
-.vital-entry-form { display: grid; grid-template-columns: repeat(2, minmax(10rem, 1fr)); align-content: start; gap: 0.8rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
+.vital-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 1rem; }
+.vital-entry-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 0.8rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .vital-entry-form h3 { grid-column: 1 / -1; margin-top: 0; }
 .vital-entry-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .vital-entry-form input, .vital-entry-form select, .vital-entry-form textarea { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
