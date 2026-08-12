@@ -1,3 +1,5 @@
+import { Button, Group, Text } from "@mantine/core";
+
 export interface PageMetadata {
   page: number;
   page_size: number;
@@ -18,17 +20,17 @@ export function PaginationControls({ label, metadata, onPageChange }: Pagination
 
   return (
     <nav className="pagination" aria-label={`${label} pagination`}>
-      <p className="pagination__status" role="status" aria-live="polite">
+      <Text className="pagination__status" role="status" aria-live="polite">
         Showing {first}–{last} of {metadata.total_items}. Page {metadata.page} of {metadata.total_pages}.
-      </p>
-      <div className="pagination__actions">
-        <button type="button" className="button-secondary" disabled={metadata.page === 1} onClick={() => { onPageChange(metadata.page - 1); }}>
+      </Text>
+      <Group className="pagination__actions" gap="sm">
+        <Button type="button" variant="outline" disabled={metadata.page === 1} onClick={() => { onPageChange(metadata.page - 1); }}>
           Previous
-        </button>
-        <button type="button" className="button-secondary" disabled={metadata.page === metadata.total_pages} onClick={() => { onPageChange(metadata.page + 1); }}>
+        </Button>
+        <Button type="button" variant="outline" disabled={metadata.page === metadata.total_pages} onClick={() => { onPageChange(metadata.page + 1); }}>
           Next
-        </button>
-      </div>
+        </Button>
+      </Group>
     </nav>
   );
 }

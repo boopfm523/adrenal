@@ -39,6 +39,10 @@ describe("Labs page", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(json(page(url.includes("/labs/documents?") ? [document] : [base]))); });
     renderPage("/labs?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=America%2FNew_York");
 
+    const uploadForm = screen.getByRole("form", { name: "Upload lab PDF" });
+    expect(within(uploadForm).getByText("PDF file")).toBeVisible();
+    expect(within(uploadForm).getByRole("button", { name: "PDF file" })).toHaveTextContent("Choose PDF file");
+    expect(within(uploadForm).getByRole("button", { name: "Upload for review" })).toBeVisible();
     expect(await screen.findByRole("region", { name: "Uploaded laboratory document history table" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Laboratory source facts and derived values" })).toBeVisible();
     await waitFor(() => { expect(urls.filter((url) => url.includes("/labs/")).every((url) => url.includes("local_date_from=2026-08-09") && url.includes("timezone=America%2FNew_York"))).toBe(true); });

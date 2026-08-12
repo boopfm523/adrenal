@@ -76,10 +76,12 @@ describe("Health data page", () => {
     await userEvent.click(within(bpForm).getByRole("button", { name: "Record blood pressure" }));
     const weightForm = screen.getByRole("form", { name: "Record weight" });
     expect(within(weightForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
+    expect(within(weightForm).getByLabelText("Unit").closest(".measurement-row")).not.toBeNull();
     await userEvent.type(within(weightForm).getByLabelText("Value"), "181");
     await userEvent.click(within(weightForm).getByRole("button", { name: "Record weight" }));
     const temperatureForm = screen.getByRole("form", { name: "Record body temperature" });
     expect(within(temperatureForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
+    expect(within(temperatureForm).getByLabelText("Unit").closest(".measurement-row")).not.toBeNull();
     await userEvent.type(within(temperatureForm).getByLabelText("Value"), "98.6");
     await userEvent.click(within(temperatureForm).getByRole("button", { name: "Record temperature" }));
 

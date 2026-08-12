@@ -72,10 +72,10 @@ export const healthCurveTheme = createTheme({
   },
   primaryColor: "horizonTeal",
   primaryShade: 8,
-  fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontFamily: '"Rubik-Light", sans-serif',
   headings: {
-    fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontWeight: "750",
+    fontFamily: '"Rubik-SemiBold", sans-serif',
+    fontWeight: "600",
   },
   defaultRadius: "md",
   cursorType: "pointer",

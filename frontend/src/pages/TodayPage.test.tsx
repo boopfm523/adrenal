@@ -170,6 +170,9 @@ describe("Today page", () => {
     renderToday();
 
     expect(await screen.findByText("Not recorded")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Today's approved schedule and recorded status" })).toBeVisible();
+    expect(screen.getByText("Approved schedule and corresponding recorded facts for today.")).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Today's approved schedule pagination" })).toBeVisible();
     expect(screen.getByText("No dose record exists for this slot. “Not recorded” does not mean “not taken.”")).toBeVisible();
     expect(screen.getByText("Trigger recorded:")).toBeVisible();
 

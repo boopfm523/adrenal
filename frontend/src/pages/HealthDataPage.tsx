@@ -312,8 +312,8 @@ function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
   }
   return <form aria-label="Record weight" onSubmit={submit}><Paper className="vital-entry-form" withBorder p="lg" radius="lg">
     <Title order={3}>Weight</Title>
-    <TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
-    <NativeSelect label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }} data={["lb","kg"]} />
+    <div className="measurement-row"><TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
+    <NativeSelect className="unit-select" label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }} data={["lb","kg"]} /></div>
     <NativeSelect label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as WeightInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} />
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
@@ -341,8 +341,8 @@ function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element
   const bounds = form.unit === "f" ? { min: 77, max: 113 } : { min: 25, max: 45 };
   return <form aria-label="Record body temperature" onSubmit={submit}><Paper className="vital-entry-form" withBorder p="lg" radius="lg">
     <Title order={3}>Body temperature</Title>
-    <TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
-    <NativeSelect label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }} data={[{value:"f",label:"°F"},{value:"c",label:"°C"}]} />
+    <div className="measurement-row"><TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
+    <NativeSelect className="unit-select" label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }} data={[{value:"f",label:"°F"},{value:"c",label:"°C"}]} /></div>
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
     <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. Entered units are preserved. HealthCurve converts with °F = (°C × 9/5) + 32 and does not diagnose fever.</Text>
@@ -435,7 +435,7 @@ export function HealthDataPage(): React.JSX.Element {
   return <Page title="Health data" description="Record and review blood pressure, weight, body temperature, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
     <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /><TemperatureEntry timezone={timezone} /></div></section>
     <section aria-labelledby="health-data-filter-heading"><h2 id="health-data-filter-heading">Filter recorded health data</h2>
-      <Paper component="form" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, temperaturePage: 1, garminPage: 1 })); }}>
+      <Paper component="form" className="filter-panel" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, temperaturePage: 1, garminPage: 1 })); }}>
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="IANA timezone" required aria-label="IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>
         {filterValidation === null && !appliedRangeInvalid ? null : <Alert color="red" mt="md" role="alert">{filterValidation ?? "From date must be on or before Through date."}</Alert>}
         <Group mt="md"><Button type="submit">Apply filters</Button><Button variant="outline" type="button" onClick={() => { setFilterValidation(null); setEditing(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</Button></Group>

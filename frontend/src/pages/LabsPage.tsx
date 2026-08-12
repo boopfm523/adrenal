@@ -103,7 +103,7 @@ function UploadPanel({ onUploaded }: { onUploaded: (document: LabDocument) => vo
     <Title order={2} id="pdf-import-heading">Import and review a lab PDF</Title>
     <Text my="sm">Upload creates a private extraction draft only. Nothing enters charts, reports, or your health record until you review and confirm it.</Text>
     <form className="lab-upload-form" onSubmit={submit} aria-label="Upload lab PDF">
-      <FileInput required name="file" label="PDF file" accept="application/pdf,.pdf" clearable />
+      <FileInput required name="file" label="PDF file" placeholder="Choose PDF file" accept="application/pdf,.pdf" clearable />
       <Button type="submit" loading={upload.isPending}>Upload for review</Button>
     </form>
     {upload.isError ? <Alert color="red" mt="md" role="alert">The PDF could not be uploaded. Use a non-interactive PDF up to 25 MB.</Alert> : null}
