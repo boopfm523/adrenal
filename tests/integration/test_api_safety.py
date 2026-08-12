@@ -5540,15 +5540,24 @@ def test_data_quality_groups_and_acknowledges_latest_garmin_sync_warning(
     with Session(engine) as session, session.begin():
         owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
         assert owner_id is not None
-        session.add(
-            GarminConnection(
+        connection = session.scalar(
+            select(GarminConnection).where(GarminConnection.owner_id == owner_id)
+        )
+        if connection is None:
+            connection = GarminConnection(
                 owner_id=owner_id,
                 state=GarminConnectionState.CONNECTED,
                 connected_at=datetime(2026, 8, 1, tzinfo=UTC),
                 capabilities={},
                 client_version="synthetic",
             )
-        )
+            session.add(connection)
+        else:
+            connection.state = GarminConnectionState.CONNECTED
+            connection.connected_at = datetime(2026, 8, 1, tzinfo=UTC)
+            connection.disconnected_at = None
+            connection.capabilities = {}
+            connection.client_version = "synthetic"
         run = GarminSyncRun(
             owner_id=owner_id,
             requested_start_date=date(2026, 8, 5),
