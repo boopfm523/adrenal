@@ -5510,6 +5510,24 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     assert len(buckets) == 1
     assert buckets[0]["sample_count"] == 2
     assert buckets[0]["average"] == "72.5000"
+    model_inputs = day_analysis_service.build_model_inputs(projection)
+    assert model_inputs["model_input_version"] == "hc-day-model-input-v1"
+    assert "source_record_ids" not in model_inputs
+    model_facts = cast(dict[str, Any], model_inputs["recorded_facts_and_plan_context"])
+    compact_buckets = cast(dict[str, Any], model_facts["garmin_intraday_15_minute_buckets"])
+    assert compact_buckets["encoding"] == "columnar_rows_v1"
+    assert compact_buckets["columns"] == [
+        "metric_type",
+        "unit",
+        "bucket_start_local",
+        "sample_count",
+        "minimum",
+        "average",
+        "maximum",
+    ]
+    assert compact_buckets["rows"] == [
+        ["heart_rate", "bpm", "2026-03-08T03:00:00-04:00", 2, "70.0000", "72.5000", "75.0000"]
+    ]
 
     login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
     assert login.status_code == 200, login.text
@@ -5682,13 +5700,20 @@ def test_day_analysis_persists_provenance_and_detects_late_data(
             "selected_timezone": "UTC",
             "data_availability_counts": {"symptoms": 1},
             "missing_domains": ["labs"],
-            "recorded_facts_and_plan_context": {"diary": "SYNTHETIC_PRIVATE_DAY_TEXT"},
+            "recorded_facts_and_plan_context": {
+                "diary": "SYNTHETIC_PRIVATE_DAY_TEXT",
+                "garmin_intraday_15_minute_buckets": [],
+            },
+            "theoretical_exposure_15_minute_buckets": [],
             "source_revision_sha256": revision,
             "source_record_id": f"healthcurve-day:2026-08-11:{revision}",
             "source_record_ids": ["11111111-1111-4111-8111-111111111111"],
         }
 
     def generated(session: Session, **kwargs: object) -> analysis_service.AnalysisGenerationResult:
+        assert kwargs["deterministic_safety_fields"] is True
+        assert kwargs["max_output_tokens"] == analysis_service.DAY_MAX_OUTPUT_TOKENS
+        assert kwargs["context_window"] == analysis_service.DAY_CONTEXT_WINDOW
         row = AIAnalysis(
             owner_id=kwargs["owner_id"],
             analysis_type=AnalysisType.DAILY_SUMMARY,
@@ -5725,14 +5750,17 @@ def test_day_analysis_persists_provenance_and_detects_late_data(
     assert body["analysis"]["analysis_type"] == "daily_summary"
     assert body["analysis"]["source_revision_sha256"] == revision
     assert body["analysis"]["source_record_count"] == 2
-    assert body["analysis"]["prompt_version"] == "healthcurve-day-analysis-v1"
+    assert body["analysis"]["prompt_version"] == "healthcurve-day-analysis-v2"
     assert body["analysis"]["stale"] is False
     with Session(engine) as session:
         retained = session.scalar(
             select(AIAnalysis).where(AIAnalysis.id == uuid.UUID(body["analysis"]["id"]))
         )
         assert retained is not None
-        assert "SYNTHETIC_PRIVATE_DAY_TEXT" not in json.dumps(retained.computed_inputs)
+        retained_inputs = retained.computed_inputs
+        assert retained_inputs is not None
+        assert "SYNTHETIC_PRIVATE_DAY_TEXT" not in json.dumps(retained_inputs)
+        assert retained_inputs["model_input_version"] == "hc-day-model-input-v1"
 
     revision = "b" * 64
     stale = client.get(
@@ -5777,6 +5805,8 @@ def test_day_analysis_failure_paths_do_not_leak_model_details(
             "selected_timezone": "UTC",
             "data_availability_counts": {},
             "missing_domains": ["all supported domains"],
+            "recorded_facts_and_plan_context": {"garmin_intraday_15_minute_buckets": []},
+            "theoretical_exposure_15_minute_buckets": [],
             "source_revision_sha256": "c" * 64,
             "source_record_id": f"healthcurve-day:2026-08-11:{'c' * 64}",
             "source_record_ids": [],

@@ -13,6 +13,7 @@ from healthcurve.ai.analysis import (
     AnalysisOutcome,
     AnalysisResponse,
     AnalysisValidationError,
+    canonicalize_safety_fields,
     generate_analysis,
     validate_response,
 )
@@ -24,7 +25,7 @@ from healthcurve.ai.analysis_evaluation import (
 )
 from healthcurve.ai.evaluation import EvaluationError
 from healthcurve.ai.models import AnalysisType
-from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
+from healthcurve.ai.ollama import ModelIdentity, ModelOutcome, ModelResult, OllamaClient
 from healthcurve.api.schemas import DoseIn, RegimenApprovalIn, RegimenVersionIn
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
@@ -104,6 +105,37 @@ def test_analysis_requires_explicit_missingness_and_correlation_caution() -> Non
         source_record_ids=[SOURCE],
         computed_inputs={"total_mg": "15.0000", "missing_domains": ["garmin_sleep"]},
     )
+
+
+@pytest.mark.safety("SAFE-20")
+def test_day_safety_fields_are_derived_from_deterministic_inputs() -> None:
+    inputs: dict[str, object] = {
+        "total_mg": "15.0000",
+        "missing_records": 2,
+        "missing_domains": ["garmin_sleep", "labs"],
+    }
+    claim = (
+        response()
+        .claims[0]
+        .model_copy(update={"source_record_ids": [SOURCE, SOURCE], "numeric_values": []})
+    )
+    unsafe_paraphrase = response().model_copy(
+        update={
+            "claims": [claim],
+            "missingness": "none identified",
+            "correlation_caution": "none",
+        }
+    )
+
+    checked = canonicalize_safety_fields(unsafe_paraphrase, inputs)
+
+    assert "garmin sleep" in checked.missingness
+    assert "labs" in checked.missingness
+    assert "2" in checked.missingness
+    assert "causation or diagnosis" in checked.correlation_caution
+    assert checked.claims[0].source_record_ids == [SOURCE]
+    assert checked.claims[0].numeric_values == ["15"]
+    validate_response(checked, source_record_ids=[SOURCE], computed_inputs=inputs)
 
 
 @pytest.mark.safety("SAFE-20")
@@ -197,3 +229,51 @@ def test_analysis_timeout_is_a_distinct_safe_result_without_a_write() -> None:
     assert result.outcome is AnalysisOutcome.MODEL_TIMEOUT
     assert result.analysis is None
     session.add.assert_not_called()
+
+
+def test_analysis_forwards_bounded_generation_options() -> None:
+    session = Mock()
+    model = Mock(spec=OllamaClient)
+    model.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.TIMEOUT,
+        detail="synthetic timeout detail",
+    )
+
+    generate_analysis(
+        session,
+        owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[SOURCE],
+        computed_inputs={"missing_domains": ["labs"]},
+        client=model,
+        max_output_tokens=768,
+        context_window=16_384,
+    )
+
+    assert model.generate_json.call_args.kwargs["max_output_tokens"] == 768
+    assert model.generate_json.call_args.kwargs["context_window"] == 16_384
+
+
+def test_analysis_resolves_missing_chat_digest_from_local_inventory() -> None:
+    session = Mock()
+    model = Mock(spec=OllamaClient)
+    model.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.OK,
+        data=response().model_dump(mode="json"),
+        model_name="synthetic-model:latest",
+    )
+    model.identity.return_value = ModelIdentity(name="synthetic-model:latest", digest="a" * 64)
+
+    result = generate_analysis(
+        session,
+        owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[SOURCE],
+        computed_inputs={"total_mg": "15.0000", "missing_records": 0},
+        client=model,
+    )
+
+    assert result.outcome is AnalysisOutcome.CREATED
+    assert result.analysis is not None
+    assert result.analysis.model_digest == "a" * 64
+    model.identity.assert_called_once_with("synthetic-model:latest")

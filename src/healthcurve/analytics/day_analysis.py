@@ -38,7 +38,25 @@ from healthcurve.medications.models import DoseEvent, RegimenVersion
 from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
 
 PROJECTION_VERSION: Final = "hc-day-analysis-v1"
+MODEL_INPUT_VERSION: Final = "hc-day-model-input-v1"
 BUCKET_MINUTES: Final = 15
+
+_GARMIN_BUCKET_COLUMNS: Final = (
+    "metric_type",
+    "unit",
+    "bucket_start_local",
+    "sample_count",
+    "minimum",
+    "average",
+    "maximum",
+)
+_EXPOSURE_BUCKET_COLUMNS: Final = (
+    "bucket_start_local",
+    "sample_count",
+    "minimum_reu",
+    "average_reu",
+    "maximum_reu",
+)
 
 
 def _json_default(value: object) -> object:
@@ -57,6 +75,38 @@ def _jsonable(value: object) -> Any:
     return json.loads(
         json.dumps(value, default=_json_default, sort_keys=True, separators=(",", ":"))
     )
+
+
+def _columnar_rows(rows: list[dict[str, object]], columns: tuple[str, ...]) -> dict[str, object]:
+    """State repeated bucket keys once without dropping any measured aggregate."""
+    return {
+        "encoding": "columnar_rows_v1",
+        "columns": list(columns),
+        "rows": [[row[column] for column in columns] for row in rows],
+    }
+
+
+def build_model_inputs(projection: dict[str, object]) -> dict[str, object]:
+    """Return a lossless, compact model view of the canonical day projection.
+
+    The canonical projection remains the source-revision input. Only the two dense,
+    homogeneous bucket arrays become columnar for inference, so every original sample
+    still contributes through its count/minimum/average/maximum while repeated JSON
+    keys and redundant hour/minute fields do not consume model context.
+    """
+    inputs = cast(
+        dict[str, object],
+        _jsonable({key: value for key, value in projection.items() if key != "source_record_ids"}),
+    )
+    facts = cast(dict[str, object], inputs["recorded_facts_and_plan_context"])
+    garmin_rows = cast(list[dict[str, object]], facts["garmin_intraday_15_minute_buckets"])
+    exposure_rows = cast(list[dict[str, object]], inputs["theoretical_exposure_15_minute_buckets"])
+    facts["garmin_intraday_15_minute_buckets"] = _columnar_rows(garmin_rows, _GARMIN_BUCKET_COLUMNS)
+    inputs["theoretical_exposure_15_minute_buckets"] = _columnar_rows(
+        exposure_rows, _EXPOSURE_BUCKET_COLUMNS
+    )
+    inputs["model_input_version"] = MODEL_INPUT_VERSION
+    return inputs
 
 
 def _current_events[E: EventMixin](

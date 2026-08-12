@@ -254,9 +254,8 @@ def generate_day_analysis(
             "source_revision_sha256",
         )
     }
-    model_inputs = {
-        name: value for name, value in projection.items() if name != "source_record_ids"
-    }
+    model_inputs = day_analysis.build_model_inputs(projection)
+    retained_inputs["model_input_version"] = model_inputs["model_input_version"]
     citation_source = str(projection["source_record_id"])
     retained_source_ids = cast(list[str], projection["source_record_ids"])
     generated = analysis_service.generate_analysis(
@@ -272,6 +271,9 @@ def generate_day_analysis(
             *retained_source_ids,
         ],
         persisted_inputs=retained_inputs,
+        max_output_tokens=analysis_service.DAY_MAX_OUTPUT_TOKENS,
+        context_window=analysis_service.DAY_CONTEXT_WINDOW,
+        deterministic_safety_fields=True,
     )
     if generated.analysis is not None:
         zone = ZoneInfo(zone_name)

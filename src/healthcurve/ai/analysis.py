@@ -23,7 +23,9 @@ from healthcurve.operations import audit
 
 PROMPT_VERSION: Final = "analysis-v3"
 SCHEMA_VERSION: Final = "analysis-v1"
-DAY_PROMPT_VERSION: Final = "healthcurve-day-analysis-v1"
+DAY_PROMPT_VERSION: Final = "healthcurve-day-analysis-v2"
+DAY_MAX_OUTPUT_TOKENS: Final = 768
+DAY_CONTEXT_WINDOW: Final = 16_384
 
 SYSTEM_PROMPT: Final = """\
 You summarize deterministic HealthCurve figures. You are not a clinician or adviser.
@@ -52,6 +54,8 @@ those domains are present. Prefer observations a person may not notice by eye an
 offer concise questions worth reviewing. A close time relationship is not evidence
 of causation. Do not call theoretical exposure measured cortisol or determine whether
 the owner needed more or less medication. Never recommend or imply a dose change.
+For an object encoded as columnar_rows_v1, interpret each row position using the
+corresponding columns entry; this is a compact representation of deterministic buckets.
 """
 )
 
@@ -173,6 +177,56 @@ def _missing_domain_labels(value: object) -> set[str]:
     return labels
 
 
+def canonicalize_safety_fields(
+    response: AnalysisResponse, computed_inputs: dict[str, object]
+) -> AnalysisResponse:
+    """Replace model-written safety boilerplate with deterministic input-derived text.
+
+    Day analysis asks the model for observations, not for arithmetic bookkeeping. The
+    application can state missing domains/counts and the causation boundary exactly,
+    derive each claim's numeric declaration from its text, and remove duplicate
+    citations. The validator still rejects any invented number or out-of-manifest
+    citation. Refusals remain untouched.
+    """
+    if response.refused:
+        return response
+    domains = sorted(_missing_domain_labels(computed_inputs))
+    nonzero_missing = sorted(
+        {number for number in _missing_numbers(computed_inputs) if Decimal(number) != 0},
+        key=Decimal,
+    )
+    domain_text = ", ".join(domains) if domains else "none identified"
+    count_text = ", ".join(nonzero_missing) if nonzero_missing else "none identified"
+    claims: list[AnalysisClaim] = []
+    for claim in response.claims:
+        numeric_values: list[str] = []
+        for token in _NUMBER.findall(claim.text):
+            normalized = _decimal_token(token)
+            if normalized is not None and normalized not in numeric_values:
+                numeric_values.append(normalized)
+        claims.append(
+            claim.model_copy(
+                update={
+                    "source_record_ids": list(dict.fromkeys(claim.source_record_ids)),
+                    "numeric_values": numeric_values,
+                }
+            )
+        )
+    return response.model_copy(
+        update={
+            "claims": claims,
+            "missingness": (
+                f"Missing domains in deterministic inputs: {domain_text}. "
+                f"Nonzero missing-count values in deterministic inputs: {count_text}."
+            ),
+            "correlation_caution": (
+                "These descriptive correlations or associations do not establish "
+                "causation or diagnosis."
+            ),
+        }
+    )
+
+
 def validate_response(
     response: AnalysisResponse,
     *,
@@ -272,6 +326,9 @@ def generate_analysis(
     prompt_version: str = PROMPT_VERSION,
     persisted_source_record_ids: list[str] | None = None,
     persisted_inputs: dict[str, object] | None = None,
+    max_output_tokens: int | None = None,
+    context_window: int | None = None,
+    deterministic_safety_fields: bool = False,
 ) -> AnalysisGenerationResult:
     """Generate and persist only output that passes every deterministic safety gate."""
     if not source_record_ids or not computed_inputs:
@@ -286,6 +343,8 @@ def generate_analysis(
         ),
         json_schema=ANALYSIS_SCHEMA,
         temperature=0.0,
+        max_output_tokens=max_output_tokens,
+        context_window=context_window,
     )
     if not result.ok:
         if result.outcome is ModelOutcome.TIMEOUT:
@@ -295,12 +354,19 @@ def generate_analysis(
         else:
             outcome = AnalysisOutcome.INVALID
         return AnalysisGenerationResult(outcome=outcome, detail=result.detail)
-    if not result.model_name or not result.model_digest:
+    model_digest = result.model_digest
+    if result.model_name and not model_digest:
+        identity = resolved_client.identity(result.model_name)
+        if identity is not None and identity.name == result.model_name:
+            model_digest = identity.digest
+    if not result.model_name or not model_digest:
         return AnalysisGenerationResult(
             outcome=AnalysisOutcome.INVALID, detail="model identity missing"
         )
     try:
         response = AnalysisResponse.model_validate(result.data)
+        if deterministic_safety_fields:
+            response = canonicalize_safety_fields(response, computed_inputs)
         validate_response(
             response,
             source_record_ids=source_record_ids,
@@ -324,7 +390,7 @@ def generate_analysis(
         ),
         computed_inputs=computed_inputs if persisted_inputs is None else persisted_inputs,
         model_name=result.model_name,
-        model_digest=result.model_digest,
+        model_digest=model_digest,
         prompt_version=prompt_version,
         schema_version=SCHEMA_VERSION,
     )
