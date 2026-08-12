@@ -176,7 +176,6 @@ export function AnalyticsPage(): React.JSX.Element {
   }
 
   return <Page title="HealthCurve.ai" description="Review one day from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
-    <aside className="safety-note"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
     <HealthCurveDateFilter key={`${dayFilter.day}-${dayFilter.timezone}`} selected={dayFilter} profileTimezone={profileTimezone} onReview={reviewDay} />
     {dailyCurve.isPending ? <p role="status">Building your daily HealthCurve…</p> : null}
     {dailyCurve.isError ? <p className="error-summary" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</p> : null}

@@ -240,6 +240,10 @@ circle.chart-series { fill: white; }
 .healthcurve-date-shortcuts button { min-height: 2.35rem; padding: 0.4rem 0.75rem; }
 .healthcurve-selected-day { display: flex; align-items: center; gap: 0.55rem; }
 .healthcurve-selected-day button { min-width: 2.35rem; min-height: 2.35rem; padding: 0.25rem 0.65rem; font-size: 1.15rem; line-height: 1; }
+.healthcurve-context { margin-block: 0.8rem; }
+.healthcurve-context > summary { cursor: pointer; font-weight: 800; }
+.healthcurve-context-content { padding-top: 0.35rem; }
+.healthcurve-context-model { grid-template-columns: minmax(12rem, 22rem); }
 .curve-toggles { display: flex; flex-wrap: wrap; gap: 0.65rem 1.1rem; margin-block: 1rem; padding: 1rem; border: 1px solid #ccd4ce; border-radius: 0.6rem; }
 .curve-toggles legend { padding-inline: 0.35rem; font-weight: 800; }
 .curve-toggles .checkbox-label { display: flex; gap: 0.45rem; align-items: center; }

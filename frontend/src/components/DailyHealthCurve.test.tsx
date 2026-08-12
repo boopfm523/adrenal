@@ -63,6 +63,22 @@ function hoverAt(minute: number): { target: SVGRectElement; tooltip: HTMLElement
 }
 
 describe("Daily HealthCurve", () => {
+  it("keeps guidance, missingness, causation, and the model in one collapsed disclosure", () => {
+    render(<DailyHealthCurve data={data()} />);
+
+    const summary = screen.getByText("HealthCurve context and limits");
+    const context = summary.parentElement;
+    if (context === null) throw new Error("HealthCurve context disclosure missing");
+    expect(context).not.toHaveAttribute("open");
+    expect(within(context).getByText("Exposure model").parentElement).toHaveTextContent("hc-exposure-v1");
+    expect(context).toHaveTextContent("Association does not establish causation");
+    expect(context).toHaveTextContent("Focused comparison on one time axis");
+    expect(context).toHaveTextContent("Missingness: Garmin cadence is observational");
+    expect(screen.getByText("Selected date")).toBeVisible();
+    fireEvent.click(summary);
+    expect(context).toHaveAttribute("open");
+  });
+
   it("uses one interactive overlay and exposes exact native values at the explored time", () => {
     render(<DailyHealthCurve data={data({ garmin: [sample(60)] })} />);
 
@@ -310,6 +326,7 @@ describe("Daily HealthCurve", () => {
 
     view.rerender(<DailyHealthCurve data={data({ garmin: [{ ...sleep, id: "50000000-0000-4000-8000-000000000002", sleep_intervals: [] }] })} />);
     expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(0);
+    fireEvent.click(screen.getByText("HealthCurve context and limits"));
     expect(screen.getByText(/Garmin reported one or more awakenings without their exact times/)).toBeVisible();
     expect(hoverAt(60).tooltip).toHaveTextContent("Awakenings: 2 reported; exact times unavailable");
   });
@@ -419,6 +436,7 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByText("23 hours")).toBeVisible();
     const summaries = screen.getByLabelText("Series sample counts");
     expect(within(summaries).getByText(/Garmin stress:/).parentElement).toHaveTextContent("0 exact point");
+    fireEvent.click(screen.getByText("HealthCurve context and limits"));
     expect(screen.getByText(/expected missing counts are not invented/)).toBeVisible();
   });
 
