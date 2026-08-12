@@ -1431,6 +1431,7 @@ export interface components {
         BloodPressureCorrectionChanges: {
             /** Diastolic Mmhg */
             diastolic_mmhg?: number | null;
+            measurement_setting?: components["schemas"]["MeasurementSetting"] | null;
             /** Notes */
             notes?: string | null;
             /** Pulse Bpm */
@@ -1449,6 +1450,8 @@ export interface components {
         BloodPressureIn: {
             /** Diastolic Mmhg */
             diastolic_mmhg: number;
+            /** @default home */
+            measurement_setting: components["schemas"]["MeasurementSetting"];
             /** Notes */
             notes?: string | null;
             /** Pulse Bpm */
@@ -1472,6 +1475,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            measurement_setting: components["schemas"]["MeasurementSetting"];
             /** Notes */
             notes: string | null;
             provenance: components["schemas"]["ProvenanceOut"];
@@ -2967,6 +2971,12 @@ export interface components {
             /** Qualitative Result */
             qualitative_result?: string | null;
         };
+        /**
+         * MeasurementSetting
+         * @description Where a person says a manual measurement was taken, not how it entered the app.
+         * @enum {string}
+         */
+        MeasurementSetting: "home" | "provider";
         /** MedicationIn */
         MedicationIn: {
             /** Active From */
@@ -3997,6 +4007,7 @@ export interface components {
         };
         /** WeightCorrectionChanges */
         WeightCorrectionChanges: {
+            measurement_setting?: components["schemas"]["MeasurementSetting"] | null;
             /** Notes */
             notes?: string | null;
             time?: components["schemas"]["EventTimeIn"] | null;
@@ -4012,6 +4023,8 @@ export interface components {
         };
         /** WeightIn */
         WeightIn: {
+            /** @default home */
+            measurement_setting: components["schemas"]["MeasurementSetting"];
             /** Notes */
             notes?: string | null;
             time: components["schemas"]["EventTimeIn"];
@@ -4034,6 +4047,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            measurement_setting: components["schemas"]["MeasurementSetting"];
             /** Normalized Kg */
             normalized_kg: string;
             /** Notes */

@@ -914,6 +914,17 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
         json={"systolic_mmhg": 120, "diastolic_mmhg": 80, "time": event_time_payload},
     )
     assert no_csrf.status_code == 403
+    invalid_setting = client.post(
+        "/api/v1/blood-pressure",
+        headers=logged_in,
+        json={
+            "systolic_mmhg": 120,
+            "diastolic_mmhg": 80,
+            "measurement_setting": "gym",
+            "time": event_time_payload,
+        },
+    )
+    assert invalid_setting.status_code == 422
 
     bp_response = client.post(
         "/api/v1/blood-pressure",
@@ -929,13 +940,19 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert bp_response.status_code == 201, bp_response.text
     bp = bp_response.json()
     assert bp["category"] == "fact"
+    assert bp["measurement_setting"] == "home"
     assert bp["time"]["occurred_at"] == "2026-08-09T07:15:00Z"
     assert bp["provenance"]["source_type"] == "web"
 
     weight_response = client.post(
         "/api/v1/weight",
         headers=logged_in,
-        json={"value": "180", "unit": "lb", "time": event_time_payload},
+        json={
+            "value": "180",
+            "unit": "lb",
+            "measurement_setting": "provider",
+            "time": event_time_payload,
+        },
     )
     assert weight_response.status_code == 201, weight_response.text
     weight = weight_response.json()
@@ -943,6 +960,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert weight["unit"] == "lb"
     assert weight["normalized_kg"] == "81.6466"
     assert weight["display_lb"] == "180.0"
+    assert weight["measurement_setting"] == "provider"
 
     assert (
         client.post(
@@ -976,13 +994,18 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
         headers=logged_in,
         json={
             "reason": "Synthetic transcription correction",
-            "changes": {"systolic_mmhg": 118, "pulse_bpm": None},
+            "changes": {
+                "systolic_mmhg": 118,
+                "pulse_bpm": None,
+                "measurement_setting": "provider",
+            },
         },
     )
     assert bp_correction.status_code == 201, bp_correction.text
     corrected_bp = bp_correction.json()
     assert corrected_bp["systolic_mmhg"] == 118
     assert corrected_bp["pulse_bpm"] is None
+    assert corrected_bp["measurement_setting"] == "provider"
     assert corrected_bp["provenance"]["supersedes_id"] == bp["id"]
 
     weight_correction = client.post(
@@ -990,13 +1013,14 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
         headers=logged_in,
         json={
             "reason": "Synthetic unit correction",
-            "changes": {"value": "82", "unit": "kg"},
+            "changes": {"value": "82", "unit": "kg", "measurement_setting": "home"},
         },
     )
     assert weight_correction.status_code == 201, weight_correction.text
     corrected_weight = weight_correction.json()
     assert corrected_weight["normalized_kg"] == "82.0000"
     assert corrected_weight["display_lb"] == "180.8"
+    assert corrected_weight["measurement_setting"] == "home"
 
     temperature_correction = client.post(
         f"/api/v1/temperature/{temperature['id']}/correct",
@@ -1026,8 +1050,8 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
         "weight",
         "temperature",
     }
-    assert any(item["summary"] == "Blood pressure 118/80 mmHg" for item in items)
-    assert any(item["summary"] == "Weight 180.8 lb (entered 82.0000 kg)" for item in items)
+    assert any(item["summary"] == "Blood pressure 118/80 mmHg · provider" for item in items)
+    assert any(item["summary"] == "Weight 180.8 lb (entered 82.0000 kg) · home" for item in items)
     assert any(item["summary"] == "Temperature 98.6 °F (37.0 °C)" for item in items)
 
     _, _, exported = _complete_private_export(
@@ -1036,9 +1060,29 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     facts = exported.json()["facts"]
     assert corrected_bp["id"] in {row["id"] for row in facts["blood_pressure"]}
     assert corrected_weight["id"] in {row["id"] for row in facts["weight"]}
+    assert (
+        next(row for row in facts["blood_pressure"] if row["id"] == corrected_bp["id"])[
+            "measurement_setting"
+        ]
+        == "provider"
+    )
+    assert (
+        next(row for row in facts["weight"] if row["id"] == corrected_weight["id"])[
+            "measurement_setting"
+        ]
+        == "home"
+    )
     assert corrected_temperature["id"] in {row["id"] for row in facts["temperature"]}
 
     with Session(engine) as session, session.begin():
+        other_bp = session.scalar(
+            select(BloodPressureEvent).where(BloodPressureEvent.owner_id == other_owner_id)
+        )
+        other_weight = session.scalar(
+            select(WeightEvent).where(WeightEvent.owner_id == other_owner_id)
+        )
+        assert other_bp is not None and other_bp.measurement_setting.value == "home"
+        assert other_weight is not None and other_weight.measurement_setting.value == "home"
         session.execute(
             text("DELETE FROM fact.blood_pressure_event WHERE owner_id = :owner_id"),
             {"owner_id": other_owner_id},
@@ -5254,6 +5298,7 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
             "systolic_mmhg": 118,
             "diastolic_mmhg": 76,
             "pulse_bpm": 62,
+            "measurement_setting": "provider",
             "time": {"local_time": "2025-08-09T08:15:00", "timezone": "Europe/London"},
         },
     )
@@ -5305,10 +5350,12 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
     assert facts_by_type["blood_pressure"]["systolic_mmhg"] == 118
     assert facts_by_type["blood_pressure"]["diastolic_mmhg"] == 76
     assert facts_by_type["blood_pressure"]["pulse_bpm"] == 62
+    assert facts_by_type["blood_pressure"]["measurement_setting"] == "provider"
     assert facts_by_type["weight"]["value"] == "180.0000"
     assert facts_by_type["weight"]["unit"] == "lb"
     assert facts_by_type["weight"]["normalized_kg"] == "81.6466"
     assert facts_by_type["weight"]["display_lb"] == "180.0"
+    assert facts_by_type["weight"]["measurement_setting"] == "home"
     assert facts_by_type["weight"]["normalization_definition"] == "1 lb = 0.45359237 kg"
     assert facts_by_type["temperature"]["value"] == "38.00"
     assert facts_by_type["temperature"]["unit"] == "c"

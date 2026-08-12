@@ -22,6 +22,13 @@ class TemperatureUnit(StrEnum):
     FAHRENHEIT = "f"
 
 
+class MeasurementSetting(StrEnum):
+    """Where a person says a manual measurement was taken, not how it entered the app."""
+
+    HOME = "home"
+    PROVIDER = "provider"
+
+
 class BloodPressureEvent(EventMixin, FactBase):
     """A paired blood-pressure reading, with optional measured pulse."""
 
@@ -30,6 +37,9 @@ class BloodPressureEvent(EventMixin, FactBase):
     systolic_mmhg: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     diastolic_mmhg: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     pulse_bpm: Mapped[int | None] = mapped_column(SmallInteger)
+    measurement_setting: Mapped[MeasurementSetting] = mapped_column(
+        StrEnumType(MeasurementSetting, 16), nullable=False, default=MeasurementSetting.HOME
+    )
 
     __table_args__ = (
         CheckConstraint("systolic_mmhg BETWEEN 1 AND 500", name="systolic_structural_range"),
@@ -49,6 +59,9 @@ class WeightEvent(EventMixin, FactBase):
     value: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
     unit: Mapped[WeightUnit] = mapped_column(StrEnumType(WeightUnit, 8), nullable=False)
     normalized_kg: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    measurement_setting: Mapped[MeasurementSetting] = mapped_column(
+        StrEnumType(MeasurementSetting, 16), nullable=False, default=MeasurementSetting.HOME
+    )
 
     __table_args__ = (
         CheckConstraint("value > 0 AND value <= 5000", name="value_structural_range"),

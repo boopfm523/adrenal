@@ -18,6 +18,7 @@ from healthcurve.ai.extraction import (
     SYSTEM_PROMPT,
     ExtractionResponse,
     explicit_dose_category,
+    explicit_measurement_setting,
     find_explicit_weight,
     find_time_expression,
     has_negation,
@@ -28,7 +29,7 @@ from healthcurve.ai.extraction import (
     normalise_weight_unit,
 )
 from healthcurve.medications.models import DoseCategory
-from healthcurve.vitals.models import WeightUnit
+from healthcurve.vitals.models import MeasurementSetting, WeightUnit
 
 
 @pytest.mark.safety("SAFE-19")
@@ -95,6 +96,32 @@ def test_only_explicit_stress_dose_language_is_classified_as_stress(text: str) -
 )
 def test_ordinary_doses_remain_regular_despite_stress_context(text: str) -> None:
     assert explicit_dose_category(text) is DoseCategory.SCHEDULED
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "My weight at the provider was 180 lb",
+        "Blood pressure at the doctor's office was 120/80",
+        "I weighed 181 pounds at the clinic",
+        "The hospital took my BP: 118/76",
+    ],
+)
+def test_measurements_use_provider_only_from_explicit_provider_wording(text: str) -> None:
+    assert explicit_measurement_setting(text) is MeasurementSetting.PROVIDER
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "My weight was 180 lb",
+        "Blood pressure 120/80",
+        "I weighed 181 pounds at home",
+        "My doctor wants me to track my weight; today it was 179 lb at home",
+    ],
+)
+def test_measurements_default_to_home(text: str) -> None:
+    assert explicit_measurement_setting(text) is MeasurementSetting.HOME
 
 
 @pytest.mark.parametrize(

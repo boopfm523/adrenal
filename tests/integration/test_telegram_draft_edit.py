@@ -26,7 +26,13 @@ from healthcurve.integrations.telegram.handlers import (
 )
 from healthcurve.integrations.telegram.models import TelegramLocationRequest
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
-from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
+from healthcurve.vitals.models import (
+    BloodPressureEvent,
+    MeasurementSetting,
+    TemperatureEvent,
+    WeightEvent,
+    WeightUnit,
+)
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
@@ -176,6 +182,7 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
             1,
         )
         assert pressure.confirmation_state.value == "confirmed_from_draft"
+        assert pressure.measurement_setting.value == "home"
         assert bp_confirmed.text.startswith("Recorded:")
 
         weight_reply = handle_message(session, owner, text="/weight 180 lb 08:20", now=NOW)
@@ -193,6 +200,36 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         assert weight.unit.value == "lb"
         assert weight.normalized_kg == Decimal("82.1002")
         assert weight.confirmation_state.value == "confirmed_from_draft"
+        assert weight.measurement_setting.value == "home"
+
+        provider_candidate = ValidatedCandidate(
+            type=CandidateType.WEIGHT,
+            weight_value=Decimal("182"),
+            weight_unit=WeightUnit.LB,
+            measurement_setting=MeasurementSetting.PROVIDER,
+            local_time=datetime(2026, 8, 9, 8, 25),  # noqa: DTZ001
+            timezone="UTC",
+            confidence=0.99,
+        )
+        provider_draft = ExtractionDraft(
+            owner_id=owner.id,
+            candidates=[provider_candidate.model_dump(mode="json")],
+            raw_text=f"{SYNTHETIC_MARKER} weight at doctor's office",
+            source="telegram",
+            prompt_version="synthetic-test-v1",
+            schema_version="synthetic-test-v1",
+        )
+        session.add(provider_draft)
+        session.flush()
+        confirm_draft(session, owner, provider_draft.id)
+        session.flush()
+        provider_weight = session.scalar(
+            select(WeightEvent).where(
+                WeightEvent.owner_id == owner.id,
+                WeightEvent.measurement_setting == MeasurementSetting.PROVIDER,
+            )
+        )
+        assert provider_weight is not None
         assert weight_confirmed.text.startswith("Recorded:")
 
         kg_reply = handle_message(session, owner, text="/weight 83.1 kg 08:25", now=NOW)

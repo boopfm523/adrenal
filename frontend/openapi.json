@@ -79,6 +79,16 @@
             ],
             "title": "Diastolic Mmhg"
           },
+          "measurement_setting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeasurementSetting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notes": {
             "anyOf": [
               {
@@ -160,6 +170,10 @@
             "title": "Diastolic Mmhg",
             "type": "integer"
           },
+          "measurement_setting": {
+            "$ref": "#/components/schemas/MeasurementSetting",
+            "default": "home"
+          },
           "notes": {
             "anyOf": [
               {
@@ -221,6 +235,9 @@
             "title": "Id",
             "type": "string"
           },
+          "measurement_setting": {
+            "$ref": "#/components/schemas/MeasurementSetting"
+          },
           "notes": {
             "anyOf": [
               {
@@ -259,6 +276,7 @@
           "systolic_mmhg",
           "diastolic_mmhg",
           "pulse_bpm",
+          "measurement_setting",
           "time",
           "provenance",
           "notes"
@@ -4911,6 +4929,15 @@
         "title": "ManualLabResultIn",
         "type": "object"
       },
+      "MeasurementSetting": {
+        "description": "Where a person says a manual measurement was taken, not how it entered the app.",
+        "enum": [
+          "home",
+          "provider"
+        ],
+        "title": "MeasurementSetting",
+        "type": "string"
+      },
       "MedicationIn": {
         "additionalProperties": false,
         "properties": {
@@ -8026,6 +8053,16 @@
       "WeightCorrectionChanges": {
         "additionalProperties": false,
         "properties": {
+          "measurement_setting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeasurementSetting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notes": {
             "anyOf": [
               {
@@ -8102,6 +8139,10 @@
       "WeightIn": {
         "additionalProperties": false,
         "properties": {
+          "measurement_setting": {
+            "$ref": "#/components/schemas/MeasurementSetting",
+            "default": "home"
+          },
           "notes": {
             "anyOf": [
               {
@@ -8161,6 +8202,9 @@
             "title": "Id",
             "type": "string"
           },
+          "measurement_setting": {
+            "$ref": "#/components/schemas/MeasurementSetting"
+          },
           "normalized_kg": {
             "title": "Normalized Kg",
             "type": "string"
@@ -8196,6 +8240,7 @@
           "unit",
           "normalized_kg",
           "display_lb",
+          "measurement_setting",
           "time",
           "provenance",
           "notes"

@@ -163,6 +163,7 @@ describe("Daily HealthCurve", () => {
       systolic_mmhg: 121,
       diastolic_mmhg: 81,
       pulse_bpm: 88,
+      measurement_setting: "home",
       time: { occurred_at: "2026-03-08T16:00:00Z", local_time: "2026-03-08T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
       provenance: { ...provenance, source_type: "telegram", confirmation_state: "confirmed_from_draft" },
       notes: null,

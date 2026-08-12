@@ -39,7 +39,7 @@ from healthcurve.events.timekeeping import (
 )
 from healthcurve.medications.models import DoseCategory, DoseEvent, Medication
 from healthcurve.vitals import service as vitals
-from healthcurve.vitals.models import TemperatureUnit, WeightUnit
+from healthcurve.vitals.models import MeasurementSetting, TemperatureUnit, WeightUnit
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
@@ -105,6 +105,12 @@ _EXPLICIT_STRESS_DOSE_PATTERN: Final = re.compile(
     r"\b(?:stress\s*(?:dose|dosing)|up[\s-]?dose(?:d|s|ing)?)\b",
     re.IGNORECASE,
 )
+
+_PROVIDER_MEASUREMENT_PATTERN: Final = re.compile(
+    r"\b(?:provider|doctor(?:'s)?(?:\s+office)?|clinic|hospital|medical\s+office)\b",
+    re.IGNORECASE,
+)
+_HOME_MEASUREMENT_PATTERN: Final = re.compile(r"\b(?:at|from)\s+home\b", re.IGNORECASE)
 
 SYSTEM_PROMPT: Final = """\
 You extract structured candidate health events from a person's own message.
@@ -284,6 +290,7 @@ class ValidatedCandidate(BaseModel):
     systolic_mmhg: int | None = None
     diastolic_mmhg: int | None = None
     pulse_bpm: int | None = None
+    measurement_setting: MeasurementSetting = MeasurementSetting.HOME
     weight_value: Decimal | None = None
     weight_unit: WeightUnit | None = None
     temperature_value: Decimal | None = None
@@ -358,6 +365,18 @@ def explicit_dose_category(message: str) -> DoseCategory:
     if _EXPLICIT_STRESS_DOSE_PATTERN.search(message) is not None:
         return DoseCategory.STRESS
     return DoseCategory.SCHEDULED
+
+
+def explicit_measurement_setting(message: str) -> MeasurementSetting:
+    """Choose provider only from explicit provider-location wording; omission is home."""
+
+    if _HOME_MEASUREMENT_PATTERN.search(message):
+        return MeasurementSetting.HOME
+    return (
+        MeasurementSetting.PROVIDER
+        if _PROVIDER_MEASUREMENT_PATTERN.search(message)
+        else MeasurementSetting.HOME
+    )
 
 
 def extract(
@@ -565,6 +584,11 @@ def _validate_candidate(
         systolic_mmhg=candidate.systolic_mmhg,
         diastolic_mmhg=candidate.diastolic_mmhg,
         pulse_bpm=candidate.pulse_bpm,
+        measurement_setting=(
+            explicit_measurement_setting(message)
+            if candidate.type in {CandidateType.BLOOD_PRESSURE, CandidateType.WEIGHT}
+            else MeasurementSetting.HOME
+        ),
         weight_value=weight_value,
         weight_unit=weight_unit,
         temperature_value=temperature_value,

@@ -142,6 +142,7 @@ def build_snapshot(
                     "systolic_mmhg": row.systolic_mmhg,
                     "diastolic_mmhg": row.diastolic_mmhg,
                     "pulse_bpm": row.pulse_bpm,
+                    "measurement_setting": row.measurement_setting,
                 }
             )
             manifest["fact"].append(str(row.id))
@@ -154,6 +155,7 @@ def build_snapshot(
                     "unit": row.unit,
                     "display_lb": vitals.display_weight_lb(row.value, row.unit),
                     "normalized_kg": row.normalized_kg,
+                    "measurement_setting": row.measurement_setting,
                     "normalization_definition": "1 lb = 0.45359237 kg",
                     "presentation_definition": (
                         "Pounds are primary, rounded half up to 0.1 lb; original value and unit "

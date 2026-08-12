@@ -66,6 +66,7 @@ def create_blood_pressure(payload: BloodPressureIn, session: DbSession, owner: C
         systolic_mmhg=payload.systolic_mmhg,
         diastolic_mmhg=payload.diastolic_mmhg,
         pulse_bpm=payload.pulse_bpm,
+        measurement_setting=payload.measurement_setting,
         notes=payload.notes,
     )
     return _blood_pressure_out(row)
@@ -142,6 +143,7 @@ def create_weight(payload: WeightIn, session: DbSession, owner: CurrentOwner):
         value=payload.value,
         unit=payload.unit,
         normalized_kg=vitals.normalize_weight_kg(payload.value, payload.unit),
+        measurement_setting=payload.measurement_setting,
         notes=payload.notes,
     )
     return _weight_out(row)
@@ -362,6 +364,7 @@ def _blood_pressure_out(row: BloodPressureEvent) -> BloodPressureOut:
         systolic_mmhg=row.systolic_mmhg,
         diastolic_mmhg=row.diastolic_mmhg,
         pulse_bpm=row.pulse_bpm,
+        measurement_setting=row.measurement_setting,
         time=time_out(row),
         provenance=provenance_out(row),
         notes=row.notes,
@@ -375,6 +378,7 @@ def _weight_out(row: WeightEvent) -> WeightOut:
         unit=row.unit,
         normalized_kg=row.normalized_kg,
         display_lb=vitals.display_weight_lb(row.value, row.unit),
+        measurement_setting=row.measurement_setting,
         time=time_out(row),
         provenance=provenance_out(row),
         notes=row.notes,

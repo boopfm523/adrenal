@@ -359,6 +359,7 @@ def build_projection(
                 "systolic_mmhg": row.systolic_mmhg,
                 "diastolic_mmhg": row.diastolic_mmhg,
                 "pulse_bpm": row.pulse_bpm,
+                "measurement_setting": row.measurement_setting,
             }
             for row in blood_pressure
         ],
@@ -368,6 +369,7 @@ def build_projection(
                 "value": row.value,
                 "unit": row.unit,
                 "normalized_kg": row.normalized_kg,
+                "measurement_setting": row.measurement_setting,
             }
             for row in weights
         ],

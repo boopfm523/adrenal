@@ -295,7 +295,12 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
         else:
             kind = "Temperature"
             reading = f"{_value(record.get('display_f'))} °F ({_value(record.get('display_c'))} °C)"
-        vital_rows.append([_time(record), kind, reading, _notes(record, "notes")])
+        setting = (
+            _value(record.get("measurement_setting")).title()
+            if record.get("record_type") in {"blood_pressure", "weight"}
+            else ""
+        )
+        vital_rows.append([_time(record), kind, reading, setting, _notes(record, "notes")])
 
     injection_rows = [
         [
@@ -385,7 +390,7 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
         ),
         _table(
             "Vitals",
-            ["Local time", "Measurement", "Value", "Notes"],
+            ["Local time", "Measurement", "Value", "Setting", "Notes"],
             vital_rows,
             "No blood pressure, weight, or temperature records selected for this period.",
             "vitals",

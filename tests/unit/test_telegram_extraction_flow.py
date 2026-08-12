@@ -362,6 +362,22 @@ def test_explicit_weight_is_recovered_when_model_drops_value_and_unit(
     assert candidate["is_actionable"] is True
 
 
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("My weight was 173.4 lbs.", "home"),
+        ("My weight at the doctor's office was 173.4 lbs.", "provider"),
+        ("My doctor asked me to weigh at home: 173.4 lbs.", "home"),
+    ],
+)
+def test_weight_measurement_setting_uses_explicit_location_wording(
+    monkeypatch: pytest.MonkeyPatch, message: str, expected: str
+) -> None:
+    _, stored, _ = _handle_weight_candidate(monkeypatch, message)
+
+    assert stored.candidates[0]["measurement_setting"] == expected
+
+
 def test_bare_weight_number_remains_blocked_when_model_drops_unit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

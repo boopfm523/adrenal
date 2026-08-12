@@ -519,7 +519,9 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             return f"{location} · {conditions}" if conditions else location
         case "blood_pressure":
             pulse = f"; pulse {row.pulse_bpm} bpm" if row.pulse_bpm is not None else ""  # type: ignore[attr-defined]
-            return f"Blood pressure {row.systolic_mmhg}/{row.diastolic_mmhg} mmHg{pulse}"  # type: ignore[attr-defined]
+            reading = f"Blood pressure {row.systolic_mmhg}/{row.diastolic_mmhg} mmHg"  # type: ignore[attr-defined]
+            setting = row.measurement_setting.value  # type: ignore[attr-defined]
+            return f"{reading}{pulse} · {setting}"
         case "weight":
             pounds = vitals.display_weight_lb(row.value, row.unit)  # type: ignore[attr-defined]
             entered = (
@@ -527,7 +529,7 @@ def _summarize(row: EventMixin, type_name: str) -> str:
                 if row.unit is not WeightUnit.LB  # type: ignore[attr-defined]
                 else ""
             )
-            return f"Weight {pounds} lb{entered}"
+            return f"Weight {pounds} lb{entered} · {row.measurement_setting.value}"  # type: ignore[attr-defined]
         case "temperature":
             fahrenheit = vitals.display_temperature_f(row.value, row.unit)  # type: ignore[attr-defined]
             celsius = vitals.display_temperature_c(row.value, row.unit)  # type: ignore[attr-defined]

@@ -153,7 +153,7 @@ export function HelpPage(): React.JSX.Element {
           </article>
           <article className="help-workflow">
             <h3>Record blood pressure, weight, or body temperature on the web</h3>
-            <p>Health data provides mobile-friendly entry, current facts with source and confirmation provenance, immutable corrections, and trend charts with equivalent data tables. Weight is shown primarily in pounds. Temperature is shown in Fahrenheit first with Celsius in parentheses. Original entered values and units remain visible, and measurements are displayed without diagnosis or treatment advice.</p>
+            <p>Health data provides mobile-friendly entry, current facts with source and confirmation provenance, immutable corrections, and trend charts with equivalent data tables. Weight and blood pressure default to a home measurement setting; choose provider / clinic only when the reading was taken there. Measurement setting describes where a reading was taken and is separate from source provenance, which describes how it entered HealthCurve. Weight is shown primarily in pounds. Temperature is shown in Fahrenheit first with Celsius in parentheses. Original entered values and units remain visible, and measurements are displayed without diagnosis or treatment advice.</p>
             <CopyableExample label="Synthetic web examples" value="Blood pressure: 118/76 mmHg, pulse 62 · Weight: 180 lb · Temperature: 98.6 °F" />
             <Link to="/health-data">Open Health data</Link>
           </article>

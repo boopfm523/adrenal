@@ -28,7 +28,7 @@ from healthcurve.medications.models import (
     RegimenStatus,
     Route,
 )
-from healthcurve.vitals.models import TemperatureUnit, WeightUnit
+from healthcurve.vitals.models import MeasurementSetting, TemperatureUnit, WeightUnit
 
 #: A positive clinical quantity. Bounded above so a typo cannot record 15000 mg.
 Amount = Annotated[Decimal, Field(gt=0, le=10000, max_digits=10, decimal_places=4)]
@@ -319,6 +319,7 @@ class BloodPressureIn(ApiModel):
     systolic_mmhg: int = Field(ge=1, le=500)
     diastolic_mmhg: int = Field(ge=1, le=500)
     pulse_bpm: int | None = Field(default=None, ge=1, le=500)
+    measurement_setting: MeasurementSetting = MeasurementSetting.HOME
     time: EventTimeIn
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -328,6 +329,7 @@ class BloodPressureOut(FactResource):
     systolic_mmhg: int
     diastolic_mmhg: int
     pulse_bpm: int | None
+    measurement_setting: MeasurementSetting
     time: EventTimeOut
     provenance: ProvenanceOut
     notes: str | None
@@ -337,6 +339,7 @@ class BloodPressureCorrectionChanges(ApiModel):
     systolic_mmhg: int | None = Field(default=None, ge=1, le=500)
     diastolic_mmhg: int | None = Field(default=None, ge=1, le=500)
     pulse_bpm: int | None = Field(default=None, ge=1, le=500)
+    measurement_setting: MeasurementSetting | None = None
     time: EventTimeIn | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -362,6 +365,7 @@ WeightValue = Annotated[Decimal, Field(gt=0, le=5000, max_digits=10, decimal_pla
 class WeightIn(ApiModel):
     value: WeightValue
     unit: WeightUnit
+    measurement_setting: MeasurementSetting = MeasurementSetting.HOME
     time: EventTimeIn
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -372,6 +376,7 @@ class WeightOut(FactResource):
     unit: WeightUnit
     normalized_kg: Decimal
     display_lb: Decimal
+    measurement_setting: MeasurementSetting
     time: EventTimeOut
     provenance: ProvenanceOut
     notes: str | None
@@ -388,6 +393,7 @@ class WeightOut(FactResource):
 class WeightCorrectionChanges(ApiModel):
     value: WeightValue | None = None
     unit: WeightUnit | None = None
+    measurement_setting: MeasurementSetting | None = None
     time: EventTimeIn | None = None
     notes: str | None = Field(default=None, max_length=2000)
 

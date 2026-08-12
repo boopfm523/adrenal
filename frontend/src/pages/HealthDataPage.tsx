@@ -158,6 +158,10 @@ function weightSeries(records: Weight[]): ChartSeries[] {
   }];
 }
 
+function measurementSetting(value: "home" | "provider"): string {
+  return value === "provider" ? "Provider / clinic" : "Home";
+}
+
 function temperatureSeries(records: Temperature[]): ChartSeries[] {
   const ordered = [...records].sort((left, right) => left.time.occurred_at.localeCompare(right.time.occurred_at));
   return [{
@@ -176,18 +180,19 @@ function WeightHistoryTable({ records, byId, editing, setEditing }: {
   return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Weight records table">
     <table className="vital-table">
       <caption>Current recorded weight facts on a consistent pounds scale, with normalized kilograms beneath each value.</caption>
-      <thead><tr><th scope="col">Experienced time</th><th scope="col">Weight</th><th scope="col">Source</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Weight</th><th scope="col">Setting</th><th scope="col">Source</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
       <tbody>{records.map((record) => {
         const history = historyFor(record, byId);
         return <Fragment key={record.id}>
           <tr data-category="fact">
             <td className="timeline-time">{displayTime(record.time.local_time)}<span>{timezoneAbbreviation(record.time.timezone, record.time.occurred_at)}</span></td>
             <td className="weight-primary"><strong>{formatDecimal(record.display_lb)} lb</strong><span className="secondary-measurement">{formatDecimal(record.normalized_kg)} kg</span></td>
+            <td>{measurementSetting(record.measurement_setting)}</td>
             <td>{humanizeSource(record.provenance.source_type)}</td>
             <td>{record.notes ?? <span className="missing-value">None</span>}</td>
-            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{formatDecimal(prior.display_lb)} lb</strong> · entered {formatDecimal(prior.value)} {prior.unit}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{formatDecimal(prior.display_lb)} lb</strong> · entered {formatDecimal(prior.value)} {prior.unit} · {measurementSetting(prior.measurement_setting)}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
           </tr>
-          {editing === record.id ? <tr className="correction-table-row"><td colSpan={5}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
+          {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
       })}</tbody>
     </table>
@@ -233,7 +238,7 @@ function BloodPressureHistoryTable({ records, byId, editing, setEditing }: {
   return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Blood pressure records table">
     <table className="vital-table blood-pressure-table">
       <caption>Current recorded blood-pressure facts in latest-experienced-time order, with source, confirmation, corrections, and immutable revision history.</caption>
-      <thead><tr><th scope="col">Experienced time</th><th scope="col">Systolic / diastolic</th><th scope="col">Pulse</th><th scope="col">Source and confirmation</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Systolic / diastolic</th><th scope="col">Pulse</th><th scope="col">Setting</th><th scope="col">Source and confirmation</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
       <tbody>{ordered.map((record) => {
         const history = historyFor(record, byId);
         return <Fragment key={record.id}>
@@ -241,11 +246,12 @@ function BloodPressureHistoryTable({ records, byId, editing, setEditing }: {
             <td className="timeline-time">{displayTime(record.time.local_time)}<span>{timezoneAbbreviation(record.time.timezone, record.time.occurred_at)}</span></td>
             <th scope="row" className="blood-pressure-primary">{record.systolic_mmhg.toString()}/{record.diastolic_mmhg.toString()} mmHg</th>
             <td>{record.pulse_bpm === null ? <span className="missing-value">Not recorded</span> : `${record.pulse_bpm.toString()} bpm`}</td>
+            <td>{measurementSetting(record.measurement_setting)}</td>
             <td><span>{humanizeSource(record.provenance.source_type)}</span><span>{humanizeSource(record.provenance.confirmation_state)}</span></td>
             <td>{record.notes ?? <span className="missing-value">None</span>}</td>
-            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct blood pressure"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.systolic_mmhg}/{prior.diastolic_mmhg} mmHg</strong>{prior.pulse_bpm === null ? " · pulse not recorded" : ` · pulse ${prior.pulse_bpm.toString()} bpm`}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p>{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}{prior.provenance.is_correction ? <p>{`Corrected · ${prior.provenance.correction_reason ?? "reason recorded"}`}</p> : <p>Original record</p>}</article>)}</details>}</td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct blood pressure"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.systolic_mmhg}/{prior.diastolic_mmhg} mmHg</strong>{prior.pulse_bpm === null ? " · pulse not recorded" : ` · pulse ${prior.pulse_bpm.toString()} bpm`} · {measurementSetting(prior.measurement_setting)}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p>{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}{prior.provenance.is_correction ? <p>{`Corrected · ${prior.provenance.correction_reason ?? "reason recorded"}`}</p> : <p>Original record</p>}</article>)}</details>}</td>
           </tr>
-          {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><BloodPressureCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
+          {editing === record.id ? <tr className="correction-table-row"><td colSpan={7}><BloodPressureCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
       })}</tbody>
     </table>
@@ -254,11 +260,11 @@ function BloodPressureHistoryTable({ records, byId, editing, setEditing }: {
 
 function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ systolic: "", diastolic: "", pulse: "", localTime: localNow(), notes: "" });
+  const [form, setForm] = useState({ systolic: "", diastolic: "", pulse: "", measurementSetting: "home" as BloodPressureInput["measurement_setting"], localTime: localNow(), notes: "" });
   const mutation = useMutation({
     mutationFn: createBloodPressure,
     onSuccess: async () => {
-      setForm({ systolic: "", diastolic: "", pulse: "", localTime: localNow(), notes: "" });
+      setForm({ systolic: "", diastolic: "", pulse: "", measurementSetting: form.measurementSetting, localTime: localNow(), notes: "" });
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["blood-pressure"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]);
     },
   });
@@ -268,6 +274,7 @@ function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Eleme
       systolic_mmhg: Number(form.systolic),
       diastolic_mmhg: Number(form.diastolic),
       pulse_bpm: form.pulse === "" ? null : Number(form.pulse),
+      measurement_setting: form.measurementSetting,
       time: { local_time: form.localTime, timezone },
       notes: form.notes === "" ? null : form.notes,
     };
@@ -278,6 +285,7 @@ function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Eleme
     <label>Systolic (mmHg)<input required type="number" inputMode="numeric" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} /></label>
     <label>Diastolic (mmHg)<input required type="number" inputMode="numeric" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} /></label>
     <label>Pulse (bpm, optional)<input type="number" inputMode="numeric" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} /></label>
+    <label>Measurement setting<select value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as BloodPressureInput["measurement_setting"] }); }}><option value="home">Home</option><option value="provider">Provider / clinic</option></select></label>
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
     <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. HealthCurve records the values without interpreting them.</p>
@@ -289,22 +297,23 @@ function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Eleme
 
 function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ value: "", unit: "lb" as WeightInput["unit"], localTime: localNow(), notes: "" });
+  const [form, setForm] = useState({ value: "", unit: "lb" as WeightInput["unit"], measurementSetting: "home" as WeightInput["measurement_setting"], localTime: localNow(), notes: "" });
   const mutation = useMutation({
     mutationFn: createWeight,
     onSuccess: async () => {
-      setForm({ value: "", unit: form.unit, localTime: localNow(), notes: "" });
+      setForm({ value: "", unit: form.unit, measurementSetting: form.measurementSetting, localTime: localNow(), notes: "" });
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["weight"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]);
     },
   });
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
-    mutation.mutate({ value: form.value, unit: form.unit, time: { local_time: form.localTime, timezone }, notes: form.notes === "" ? null : form.notes });
+    mutation.mutate({ value: form.value, unit: form.unit, measurement_setting: form.measurementSetting, time: { local_time: form.localTime, timezone }, notes: form.notes === "" ? null : form.notes });
   }
   return <form className="vital-entry-form" aria-label="Record weight" onSubmit={submit}>
     <h3>Weight</h3>
     <label>Value<input required type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label>
     <label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }}><option value="lb">lb</option><option value="kg">kg</option></select></label>
+    <label>Measurement setting<select value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as WeightInput["measurement_setting"] }); }}><option value="home">Home</option><option value="provider">Provider / clinic</option></select></label>
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
     <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. The entered unit is preserved; kilograms use 1 lb = 0.45359237 kg.</p>
@@ -344,7 +353,7 @@ function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element
 
 function BloodPressureCorrection({ record, close }: { record: BloodPressure; close: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ systolic: record.systolic_mmhg.toString(), diastolic: record.diastolic_mmhg.toString(), pulse: record.pulse_bpm?.toString() ?? "", localTime: record.time.local_time.slice(0, 16), timezone: record.time.timezone, notes: record.notes ?? "", reason: "" });
+  const [form, setForm] = useState({ systolic: record.systolic_mmhg.toString(), diastolic: record.diastolic_mmhg.toString(), pulse: record.pulse_bpm?.toString() ?? "", measurementSetting: record.measurement_setting, localTime: record.time.local_time.slice(0, 16), timezone: record.time.timezone, notes: record.notes ?? "", reason: "" });
   const [validation, setValidation] = useState<string | null>(null);
   const mutation = useMutation({ mutationFn: (payload: BloodPressureCorrectionInput) => correctBloodPressure(record.id, payload), onSuccess: async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ["blood-pressure"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]); close(); } });
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
@@ -353,29 +362,31 @@ function BloodPressureCorrection({ record, close }: { record: BloodPressure; clo
     if (Number(form.systolic) !== record.systolic_mmhg) changes.systolic_mmhg = Number(form.systolic);
     if (Number(form.diastolic) !== record.diastolic_mmhg) changes.diastolic_mmhg = Number(form.diastolic);
     if (form.pulse !== (record.pulse_bpm?.toString() ?? "")) changes.pulse_bpm = form.pulse === "" ? null : Number(form.pulse);
+    if (form.measurementSetting !== record.measurement_setting) changes.measurement_setting = form.measurementSetting;
     if (form.localTime !== record.time.local_time.slice(0, 16) || form.timezone !== record.time.timezone) changes.time = { local_time: form.localTime, timezone: form.timezone };
     if (form.notes !== (record.notes ?? "")) changes.notes = form.notes === "" ? null : form.notes;
     if (form.reason.trim() === "" || Object.keys(changes).length === 0) { setValidation(form.reason.trim() === "" ? "Explain why this fact needs correction." : "Change at least one recorded field."); return; }
     setValidation(null); mutation.mutate({ reason: form.reason.trim(), changes });
   }
-  return <form className="correction-form" aria-label="Correct blood pressure" onSubmit={submit}><p className="correction-warning">This creates a corrected fact and preserves the original.</p><label>Systolic (mmHg)<input required type="number" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} /></label><label>Diastolic (mmHg)<input required type="number" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} /></label><label>Pulse (bpm)<input type="number" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} /></label><label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label><label>Timezone<input required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} /></label><label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label><label className="form-wide">Correction reason<input required value={form.reason} onChange={(event) => { setForm({ ...form, reason: event.target.value }); }} /></label>{validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}{mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved.</p> : null}<div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>Save corrected fact</button><button className="button-secondary" type="button" onClick={close}>Cancel</button></div></form>;
+  return <form className="correction-form" aria-label="Correct blood pressure" onSubmit={submit}><p className="correction-warning">This creates a corrected fact and preserves the original.</p><label>Systolic (mmHg)<input required type="number" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} /></label><label>Diastolic (mmHg)<input required type="number" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} /></label><label>Pulse (bpm)<input type="number" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} /></label><label>Measurement setting<select value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as BloodPressure["measurement_setting"] }); }}><option value="home">Home</option><option value="provider">Provider / clinic</option></select></label><label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label><label>Timezone<input required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} /></label><label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label><label className="form-wide">Correction reason<input required value={form.reason} onChange={(event) => { setForm({ ...form, reason: event.target.value }); }} /></label>{validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}{mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved.</p> : null}<div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>Save corrected fact</button><button className="button-secondary" type="button" onClick={close}>Cancel</button></div></form>;
 }
 
 function WeightCorrection({ record, close }: { record: Weight; close: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ value: record.value, unit: record.unit, localTime: record.time.local_time.slice(0, 16), timezone: record.time.timezone, notes: record.notes ?? "", reason: "" });
+  const [form, setForm] = useState({ value: record.value, unit: record.unit, measurementSetting: record.measurement_setting, localTime: record.time.local_time.slice(0, 16), timezone: record.time.timezone, notes: record.notes ?? "", reason: "" });
   const [validation, setValidation] = useState<string | null>(null);
   const mutation = useMutation({ mutationFn: (payload: WeightCorrectionInput) => correctWeight(record.id, payload), onSuccess: async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ["weight"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]); close(); } });
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault(); const changes: WeightCorrectionInput["changes"] = {};
     if (form.value !== record.value) changes.value = form.value;
     if (form.unit !== record.unit) changes.unit = form.unit;
+    if (form.measurementSetting !== record.measurement_setting) changes.measurement_setting = form.measurementSetting;
     if (form.localTime !== record.time.local_time.slice(0, 16) || form.timezone !== record.time.timezone) changes.time = { local_time: form.localTime, timezone: form.timezone };
     if (form.notes !== (record.notes ?? "")) changes.notes = form.notes === "" ? null : form.notes;
     if (form.reason.trim() === "" || Object.keys(changes).length === 0) { setValidation(form.reason.trim() === "" ? "Explain why this fact needs correction." : "Change at least one recorded field."); return; }
     setValidation(null); mutation.mutate({ reason: form.reason.trim(), changes });
   }
-  return <form className="correction-form" aria-label="Correct weight" onSubmit={submit}><p className="correction-warning">This creates a corrected fact and preserves the original.</p><label>Value<input required type="number" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label><label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as Weight["unit"] }); }}><option value="lb">lb</option><option value="kg">kg</option></select></label><label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label><label>Timezone<input required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} /></label><label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label><label className="form-wide">Correction reason<input required value={form.reason} onChange={(event) => { setForm({ ...form, reason: event.target.value }); }} /></label>{validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}{mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved.</p> : null}<div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>Save corrected fact</button><button className="button-secondary" type="button" onClick={close}>Cancel</button></div></form>;
+  return <form className="correction-form" aria-label="Correct weight" onSubmit={submit}><p className="correction-warning">This creates a corrected fact and preserves the original.</p><label>Value<input required type="number" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label><label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as Weight["unit"] }); }}><option value="lb">lb</option><option value="kg">kg</option></select></label><label>Measurement setting<select value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as Weight["measurement_setting"] }); }}><option value="home">Home</option><option value="provider">Provider / clinic</option></select></label><label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label><label>Timezone<input required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} /></label><label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label><label className="form-wide">Correction reason<input required value={form.reason} onChange={(event) => { setForm({ ...form, reason: event.target.value }); }} /></label>{validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}{mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved.</p> : null}<div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>Save corrected fact</button><button className="button-secondary" type="button" onClick={close}>Cancel</button></div></form>;
 }
 
 function TemperatureCorrection({ record, close }: { record: Temperature; close: () => void }): React.JSX.Element {

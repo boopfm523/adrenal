@@ -72,6 +72,7 @@ from healthcurve.operations.rate_limit import (
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import (
     BloodPressureEvent,
+    MeasurementSetting,
     TemperatureEvent,
     TemperatureUnit,
     WeightEvent,
@@ -515,6 +516,7 @@ def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now:
         systolic_mmhg=systolic,
         diastolic_mmhg=diastolic,
         pulse_bpm=pulse,
+        measurement_setting=MeasurementSetting.HOME,
         local_time=local,
         timezone=owner.default_timezone,
         confidence=1.0,
@@ -547,6 +549,7 @@ def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetim
         type=CandidateType.WEIGHT,
         weight_value=value,
         weight_unit=unit,
+        measurement_setting=MeasurementSetting.HOME,
         local_time=local,
         timezone=owner.default_timezone,
         confidence=1.0,
@@ -1319,7 +1322,8 @@ def _describe(candidate: ValidatedCandidate) -> str:
         case CandidateType.BLOOD_PRESSURE:
             reading = f"{candidate.systolic_mmhg or '?'}/{candidate.diastolic_mmhg or '?'} mmHg"
             pulse = f", pulse {candidate.pulse_bpm} bpm" if candidate.pulse_bpm is not None else ""
-            return f"Blood pressure: {reading}{pulse} at {when}"
+            setting = candidate.measurement_setting.value
+            return f"Blood pressure: {reading}{pulse} · {setting} at {when}"
         case CandidateType.WEIGHT:
             if candidate.weight_value is None or candidate.weight_unit is None:
                 return f"Weight: value or unit missing at {when}"
@@ -1329,7 +1333,7 @@ def _describe(candidate: ValidatedCandidate) -> str:
                 if candidate.weight_unit is WeightUnit.KG
                 else ""
             )
-            return f"Weight: {pounds} lb{entered} at {when}"
+            return f"Weight: {pounds} lb{entered} · {candidate.measurement_setting.value} at {when}"
         case CandidateType.TEMPERATURE:
             if candidate.temperature_value is None or candidate.temperature_unit is None:
                 return f"Temperature: value or unit missing at {when}"
@@ -1474,6 +1478,7 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 systolic_mmhg=candidate.systolic_mmhg,
                 diastolic_mmhg=candidate.diastolic_mmhg,
                 pulse_bpm=candidate.pulse_bpm,
+                measurement_setting=candidate.measurement_setting,
             )
         case CandidateType.WEIGHT:
             if candidate.weight_value is None or candidate.weight_unit is None:
@@ -1490,6 +1495,7 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 normalized_kg=vitals.normalize_weight_kg(
                     candidate.weight_value, candidate.weight_unit
                 ),
+                measurement_setting=candidate.measurement_setting,
             )
         case CandidateType.TEMPERATURE:
             if candidate.temperature_value is None or candidate.temperature_unit is None:
