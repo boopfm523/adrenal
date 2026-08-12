@@ -33,14 +33,37 @@ describe("day analysis card", () => {
 
   afterEach(() => { sessionStore.clear(); });
 
+  it("starts collapsed and expanding it does not request a new analysis", async () => {
+    const methods: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
+      methods.push(init?.method ?? "GET");
+      return Promise.resolve(new Response("null", { headers: { "Content-Type": "application/json" } }));
+    });
+    renderCard();
+
+    const summary = screen.getByText("AI HealthCurve analysis");
+    const disclosure = summary.closest("details");
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(await screen.findByText(/No AI interpretation has been saved/)).not.toBeVisible();
+
+    fireEvent.click(summary);
+
+    expect(disclosure).toHaveAttribute("open");
+    expect(screen.getByText(/No AI interpretation has been saved/)).toBeVisible();
+    expect(methods).toEqual(["GET"]);
+  });
+
   it("generates a labeled interpretation and displays reproducibility provenance", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => Promise.resolve(new Response(JSON.stringify(init?.method === "POST" ? { outcome: "created", detail: null, analysis } : null), { headers: { "Content-Type": "application/json" } })));
     renderCard();
 
+    fireEvent.click(screen.getByText("AI HealthCurve analysis"));
     expect(await screen.findByText(/No AI interpretation has been saved/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Analyze this day" }));
 
     expect(await screen.findByText(/Stress rose near the recorded symptom/)).toBeVisible();
+    expect(screen.queryByText(/\[sources:/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Current for this source revision/)).toBeVisible();
     fireEvent.click(screen.getByText("AI analysis provenance"));
     expect(screen.getByText("healthcurve-day-analysis-v1 / analysis-v1")).toBeVisible();
@@ -51,6 +74,7 @@ describe("day analysis card", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => Promise.resolve(new Response(JSON.stringify(init?.method === "POST" ? { outcome: "model_unavailable", detail: "The configured private model is unavailable. Recorded facts and the HealthCurve remain available.", analysis: null } : stale), { headers: { "Content-Type": "application/json" } })));
     renderCard();
 
+    fireEvent.click(screen.getByText("AI HealthCurve analysis"));
     expect(await screen.findByText(/Recorded data changed after this analysis/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Analyze this day again" }));
     expect(await screen.findByText(/configured private model is unavailable/)).toBeVisible();
@@ -67,6 +91,7 @@ describe("day analysis card", () => {
     });
     renderCard();
 
+    fireEvent.click(screen.getByText("AI HealthCurve analysis"));
     await vi.waitFor(() => { expect(screen.getByText(/No AI interpretation has been saved/)).toBeVisible(); });
     fireEvent.click(screen.getByRole("button", { name: "Analyze this day" }));
     await vi.advanceTimersByTimeAsync(0);
