@@ -41,7 +41,7 @@ function LocationProbe(): React.JSX.Element {
 
 describe("automated accessibility audit", () => {
   it("has no serious or critical violations in the sign-in journey", async () => {
-    render(<AuthContext.Provider value={{ ...auth, status: "anonymous", session: null }}><MemoryRouter><LoginPage /></MemoryRouter></AuthContext.Provider>);
+    render(<HealthCurveProvider><AuthContext.Provider value={{ ...auth, status: "anonymous", session: null }}><MemoryRouter><LoginPage /></MemoryRouter></AuthContext.Provider></HealthCurveProvider>);
     await expectNoHighImpactViolations();
   });
 

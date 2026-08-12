@@ -65,11 +65,11 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .category-card--context .category-label::after { content: " · optional context"; text-transform: none; font-weight: 500; }
 .category-disclaimer { font-size: 0.9rem; font-weight: 650; }
 
-.login-page { display: grid; min-height: 100vh; place-items: center; padding: 1rem; }
-.login-panel { width: min(30rem, 100%); border: 1px solid #ccd4ce; border-radius: 1rem; padding: clamp(1.5rem, 6vw, 3rem); background: #fff; box-shadow: 0 1rem 3rem rgb(28 52 42 / 10%); }
-.login-panel h1 { font-size: 2rem; }
-.login-panel form { display: grid; gap: 0.6rem; margin-top: 1.5rem; }
-.login-panel input { min-height: 48px; margin-bottom: 0.6rem; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.65rem; }
+.login-page { display: grid; min-height: 100dvh; place-items: center; padding: clamp(1rem, 4vw, 3rem); background: radial-gradient(circle at 15% 15%, var(--mantine-color-horizonTeal-0), transparent 35%), var(--hc-color-canvas); }
+.login-panel { width: min(31rem, 100%); padding: clamp(1.5rem, 5vw, 2.75rem); border-color: var(--hc-color-border); background: color-mix(in srgb, var(--hc-color-surface) 96%, transparent); }
+.login-panel h1 { font-size: clamp(2rem, 8vw, 2.65rem); line-height: 1.05; }
+.login-logo { width: min(13rem, 70%); height: auto; }
+.login-safety-note { border-left: 0.3rem solid var(--mantine-color-horizonOrange-6); background: var(--mantine-color-horizonOrange-0); }
 .eyebrow { color: #174c3c; font-size: 0.8rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .error-summary { margin-block: 1rem; border-left: 0.4rem solid #a62c16; padding: 0.75rem 1rem; background: #fff0eb; }
 .success-message { color: #174c3c; font-weight: 700; }

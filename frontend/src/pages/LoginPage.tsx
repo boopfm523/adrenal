@@ -1,6 +1,8 @@
+import { Alert, Box, Button, Image, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import protectiveHorizonLogo from "../../../design/logo-concepts/healthcurve-protective-horizon-concept.png";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/context";
 
@@ -40,40 +42,52 @@ export function LoginPage(): React.JSX.Element {
   }
 
   return (
-    <main className="login-page">
-      <section className="login-panel" aria-labelledby="login-heading">
-        <p className="eyebrow">Private health record</p>
-        <h1 id="login-heading">Sign in to HealthCurve.ai</h1>
-        <p className="brand-tagline"><strong>AI for AI:</strong> Artificial intelligence for adrenal insufficiency.</p>
-        <p className="privacy-note">For organizing and reviewing your records—not diagnosis, emergency care, or medication advice.</p>
-        <p>Your session stays on this device. Health details are never placed in the page title or URL.</p>
-        {error === null ? null : <div className="error-summary" role="alert" tabIndex={-1}>{error}</div>}
-        <form onSubmit={(event) => { void submit(event); }}>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(event) => { setEmail(event.currentTarget.value); }}
-          />
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => { setPassword(event.currentTarget.value); }}
-          />
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </section>
-    </main>
+    <Box component="main" className="login-page">
+      <Paper component="section" className="login-panel" aria-labelledby="login-heading" radius="xl" shadow="lg" withBorder>
+        <Stack gap="lg">
+          <Image className="login-logo" src={protectiveHorizonLogo} alt="HealthCurve.ai" fit="contain" />
+          <Box>
+            <Text className="eyebrow" mb="xs">Private health record</Text>
+            <Title id="login-heading" order={1}>Sign in to HealthCurve.ai</Title>
+            <Text className="brand-tagline" mt="sm"><strong>AI for AI:</strong> Artificial intelligence for adrenal insufficiency.</Text>
+          </Box>
+          <Paper className="login-safety-note" radius="md" p="md">
+            <Text fw={650}>For organizing and reviewing your records—not diagnosis, emergency care, or medication advice.</Text>
+            <Text size="sm" mt="xs">Your session stays on this device. Health details are never placed in the page title or URL.</Text>
+          </Paper>
+          {error === null ? null : <Alert color="red" role="alert" tabIndex={-1}>{error}</Alert>}
+          <form onSubmit={(event) => { void submit(event); }}>
+            <Stack gap="md">
+              <TextInput
+                id="email"
+                name="email"
+                type="email"
+                label="Email"
+                aria-label="Email"
+                autoComplete="username"
+                required
+                size="md"
+                value={email}
+                onChange={(event) => { setEmail(event.currentTarget.value); }}
+              />
+              <PasswordInput
+                id="password"
+                name="password"
+                label="Password"
+                aria-label="Password"
+                autoComplete="current-password"
+                required
+                size="md"
+                value={password}
+                onChange={(event) => { setPassword(event.currentTarget.value); }}
+              />
+              <Button type="submit" size="md" fullWidth loading={submitting}>
+                {submitting ? "Signing in…" : "Sign in"}
+              </Button>
+            </Stack>
+          </form>
+        </Stack>
+      </Paper>
+    </Box>
   );
 }
