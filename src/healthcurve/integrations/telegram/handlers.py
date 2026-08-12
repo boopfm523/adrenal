@@ -320,10 +320,8 @@ def _cmd_bd_operation(
         )
     except FeatureRequestRejected:
         return Reply("Beads status is temporarily unavailable. Nothing was run; try again later.")
-    return Reply(
-        f"Got it — I'm getting the {operation_name} now. "
-        "I'll post it here as soon as it's ready."
-    )
+    acknowledgement = f"Got it — I'm getting the {operation_name} now."
+    return Reply(f"{acknowledgement} I'll post it here as soon as it's ready.")
 
 
 def _cmd_bd_add(
@@ -402,7 +400,7 @@ def _cmd_bd_add(
     except FeatureRequestRejected:
         return Reply("That request could not be queued safely. Nothing was created.")
     return Reply(
-        f"Got it — I'm adding \"{evaluated.proposal.title}\" to the HealthCurve task list. "
+        f'Got it — I\'m adding "{evaluated.proposal.title}" to the HealthCurve task list. '
         "I'll post the Bead ID here as soon as it's ready. "
         "This creates a task only; it doesn't start any work."
     )

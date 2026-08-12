@@ -288,9 +288,7 @@ def test_explicit_weight_is_recovered_when_model_drops_value_and_unit(
 def test_bare_weight_number_remains_blocked_when_model_drops_unit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    reply, stored, privileged = _handle_weight_candidate(
-        monkeypatch, "Add a body weight of 173.4."
-    )
+    reply, stored, privileged = _handle_weight_candidate(monkeypatch, "Add a body weight of 173.4.")
 
     assert reply.draft_id == DRAFT_ID
     assert "Weight: value or unit missing" in reply.text

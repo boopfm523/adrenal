@@ -46,6 +46,13 @@ _SECRET_OUTPUT: Final = re.compile(
     r"\b\d{8,12}:[a-z0-9_-]{30,}\b)"
 )
 MAX_OPERATION_OUTPUT: Final = 3200
+_TERMINAL_FAILURES: Final = frozenset(
+    {"outbox_envelope_invalid", "outbox_parent_mismatch", "outbox_result_invalid"}
+)
+_TERMINAL_FAILURE_MESSAGE: Final = (
+    "I couldn't safely read a queued Beads request, so I stopped retrying it. "
+    "Please send /bd-list, /bd-status, or /bd-add again."
+)
 _WORD: Final = re.compile(r"[a-z0-9]+")
 _STOPWORDS: Final = frozenset(
     {
@@ -104,6 +111,12 @@ class OperationResolution:
 
 type Runner = Callable[[Sequence[str], Path], subprocess.CompletedProcess[str]]
 type BridgeEnvelope = Envelope | BeadsOperationEnvelope
+
+
+def _source_fingerprint() -> tuple[int, ...]:
+    """Track bridge/schema source changes so a KeepAlive process reloads them."""
+    paths = (Path(__file__), Path(load_operation_envelope.__code__.co_filename))
+    return tuple(path.stat().st_mtime_ns for path in paths)
 
 
 def _run(argv: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -541,7 +554,22 @@ def run_once(
             )
         except BridgeError as exc:
             failed += 1
-            log.warning("feature bridge request failed", reason_code=str(exc), outcome="retrying")
+            reason_code = str(exc)
+            if reason_code in _TERMINAL_FAILURES and client.send_message(
+                chat_id, _TERMINAL_FAILURE_MESSAGE
+            ):
+                failed_directory = root / "failed"
+                failed_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+                os.replace(request_path, failed_directory / request_path.name)
+                log.warning(
+                    "feature bridge request rejected",
+                    reason_code=reason_code,
+                    outcome="stopped",
+                )
+            else:
+                log.warning(
+                    "feature bridge request failed", reason_code=reason_code, outcome="retrying"
+                )
         else:
             processed += 1
             log.info("feature bridge request completed", outcome="completed")
@@ -557,6 +585,7 @@ def run_loop(
     backlog_epic_id: str,
     interval_s: float = 10,
 ) -> None:
+    source_fingerprint = _source_fingerprint()
     while True:
         run_once(
             root=root,
@@ -565,4 +594,7 @@ def run_loop(
             client=client,
             backlog_epic_id=backlog_epic_id,
         )
+        if _source_fingerprint() != source_fingerprint:
+            log.info("feature bridge source changed", outcome="restarting")
+            return
         time.sleep(interval_s)

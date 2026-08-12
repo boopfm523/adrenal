@@ -23,6 +23,7 @@ from healthcurve.integrations.telegram.beads_bridge import (
     execute_operation,
     load_envelope,
     process_one,
+    run_once,
 )
 from healthcurve.integrations.telegram.beads_operations import (
     BEADS_INTENT_JSON_SCHEMA,
@@ -780,6 +781,54 @@ def test_operation_bridge_reuses_result_after_telegram_failure_without_rerunning
     assert calls == 1
     assert successful.messages == [(4242, "bd status\n\nSummary:\n  Open: 2")]
     assert (tmp_path / "completed" / request.path.name).exists()
+
+
+def test_bridge_stops_retrying_terminal_envelope_failures_with_friendly_notice(
+    tmp_path: Path,
+) -> None:
+    pending = tmp_path / "pending"
+    pending.mkdir()
+    request = pending / ("tg-" + "b" * 24 + ".json")
+    request.write_text('{"kind":"operation","schema_version":999}\n', encoding="utf-8")
+    telegram = FakeTelegramClient()
+
+    processed, failed = run_once(
+        root=tmp_path,
+        repo=tmp_path,
+        chat_id=4242,
+        client=telegram,  # type: ignore[arg-type]
+        backlog_epic_id="hc-inbox",
+    )
+
+    assert (processed, failed) == (0, 1)
+    assert not request.exists()
+    assert (tmp_path / "failed" / request.name).exists()
+    assert telegram.messages == [
+        (
+            4242,
+            "I couldn't safely read a queued Beads request, so I stopped retrying it. "
+            "Please send /bd-list, /bd-status, or /bd-add again.",
+        )
+    ]
+
+
+def test_bridge_retries_terminal_failure_until_notice_is_delivered(tmp_path: Path) -> None:
+    pending = tmp_path / "pending"
+    pending.mkdir()
+    request = pending / ("tg-" + "c" * 24 + ".json")
+    request.write_text('{"kind":"operation","schema_version":999}\n', encoding="utf-8")
+
+    processed, failed = run_once(
+        root=tmp_path,
+        repo=tmp_path,
+        chat_id=4242,
+        client=FakeTelegramClient(succeeds=False),  # type: ignore[arg-type]
+        backlog_epic_id="hc-inbox",
+    )
+
+    assert (processed, failed) == (0, 1)
+    assert request.exists()
+    assert not (tmp_path / "failed" / request.name).exists()
 
 
 def test_strong_duplicate_reuses_existing_open_or_closed_issue(tmp_path: Path) -> None:

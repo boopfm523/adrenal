@@ -107,10 +107,32 @@ Run continuously:
 uv run python scripts/beads_feature_bridge.py --repo /Users/jeff/Documents/adrenal
 ```
 
+The continuous bridge watches its loaded bridge and operation-schema source files.
+When either changes, it exits cleanly so the macOS `KeepAlive` LaunchAgent immediately
+starts a fresh process with the current code. Permanently invalid or incompatible
+envelopes are moved to `var/beads-outbox/failed` after a generic Telegram failure
+notice is delivered; they are not retried forever.
+
 For unattended operation on macOS, install the repository's LaunchAgent template
 after replacing its two `REPOSITORY_PATH` placeholders, then use `launchctl bootstrap`
 for the current GUI user. Its working directory must be the repository so `Settings`
 can read `.env` and `bd` can find the correct Beads database.
+
+Inspect the unattended bridge without exposing Telegram credentials or health data:
+
+```bash
+launchctl print gui/$(id -u)/com.healthcurve.beads-feature-bridge
+find var/beads-outbox/pending -maxdepth 1 -name 'tg-*.json' -print
+tail -50 /tmp/healthcurve-beads-feature-bridge.error.log
+```
+
+A fixed read request should normally leave `pending` within the bridge's 10-second
+poll interval. If the LaunchAgent predates the self-reload behavior or is otherwise
+stale, reload only this service:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.healthcurve.beads-feature-bridge
+```
 
 ## Recovery behavior
 
