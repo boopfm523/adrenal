@@ -175,7 +175,7 @@ export function AnalyticsPage(): React.JSX.Element {
     reviewDay({ day: nextDay, timezone: dayFilter.timezone });
   }
 
-  return <Page title="HealthCurve.ai" description="Review one day from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
+  return <Page title="Daily review" documentTitle="HealthCurve.ai" description="Review one day from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
     <HealthCurveDateFilter key={`${dayFilter.day}-${dayFilter.timezone}`} selected={dayFilter} profileTimezone={profileTimezone} onReview={reviewDay} />
     {dailyCurve.isPending ? <p role="status">Building your daily HealthCurve…</p> : null}
     {dailyCurve.isError ? <p className="error-summary" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</p> : null}

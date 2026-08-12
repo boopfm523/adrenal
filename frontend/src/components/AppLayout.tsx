@@ -4,7 +4,7 @@ import { useAuth } from "../auth/context";
 import protectiveHorizonLogo from "../../../design/logo-concepts/healthcurve-protective-horizon-concept.png";
 
 const navigation = [
-  ["HealthCurve", "/healthcurve"],
+  ["Daily review", "/healthcurve"],
   ["Today", "/today"],
   ["Timeline", "/timeline"],
   ["Doses", "/doses"],
