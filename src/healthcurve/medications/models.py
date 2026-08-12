@@ -150,7 +150,7 @@ class RegimenVersion(PlanBase):
 
     #: Half-open [from, to). ``effective_to`` NULL means "still in force".
     #: Canonical UTC instants are stored naive for PostgreSQL ``tsrange`` compatibility.
-    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     effective_period: Mapped[Range[datetime]] = mapped_column(TSRANGE, nullable=False)
     #: Capture-time wall-clock provenance. Legacy rows deliberately leave these NULL
@@ -198,7 +198,7 @@ class RegimenVersion(PlanBase):
             where=text("status = 'approved'"),
         ),
         CheckConstraint(
-            "effective_to IS NULL OR effective_to > effective_from",
+            "effective_to IS NULL OR effective_from IS NULL OR effective_to > effective_from",
             name="effective_range_ordered",
         ),
         CheckConstraint(
@@ -214,7 +214,8 @@ class RegimenVersion(PlanBase):
         # Approved status requires provenance. An approval with no approver is not an
         # approval, and SAFE-16 depends on that being unforgeable.
         CheckConstraint(
-            "status <> 'approved' OR (approved_at IS NOT NULL AND approved_by IS NOT NULL)",
+            "status <> 'approved' OR (approved_at IS NOT NULL AND approved_by IS NOT NULL "
+            "AND effective_from IS NOT NULL)",
             name="approved_requires_provenance",
         ),
         CheckConstraint(

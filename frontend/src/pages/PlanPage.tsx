@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 
 import {
   approveRegimen,
+  ApiError,
   createMedication,
   createRegimen,
   deleteRegimen,
@@ -123,6 +124,9 @@ function EffectivePlanTime({ canonical, local, timezone, offsetMinutes }: { cano
 }
 
 function EffectivePeriod({ version }: { version: RegimenVersion }): React.JSX.Element {
+  if (version.effective_from === null) {
+    return <>Starts when this draft is set live{version.effective_to === null ? "; no end date" : <> through <EffectivePlanTime canonical={version.effective_to} local={version.effective_to_local} timezone={version.effective_timezone} offsetMinutes={version.effective_to_utc_offset_minutes} /></>}</>;
+  }
   return <>
     <EffectivePlanTime canonical={version.effective_from} local={version.effective_from_local} timezone={version.effective_timezone} offsetMinutes={version.effective_from_utc_offset_minutes} />
     {" through "}
@@ -174,8 +178,8 @@ function findPlanOverlaps(intervals: PlanInterval[]): PlanOverlap[] {
   return overlaps;
 }
 
-function planInterval(version: RegimenVersion): PlanInterval {
-  return { id: version.id, label: version.version_label, status: version.status, effectiveFrom: version.effective_from, effectiveTo: version.effective_to };
+function planInterval(version: RegimenVersion): PlanInterval | null {
+  return version.effective_from === null ? null : { id: version.id, label: version.version_label, status: version.status, effectiveFrom: version.effective_from, effectiveTo: version.effective_to };
 }
 
 function statusLabel(status: RegimenVersion["status"]): string {
@@ -192,13 +196,15 @@ function OverlapList({ overlaps, headingLevel = 3 }: { overlaps: PlanOverlap[]; 
     <ul>{overlaps.map((overlap) => <li key={`${overlap.first.id}-${overlap.second.id}`}>
       <strong>{overlap.kind === "draft" ? "Draft overlap" : "Approved-plan overlap"}:</strong> “{overlap.first.label}” and “{overlap.second.label}” overlap from <RecordedPlanTime value={overlap.from} /> through {overlap.to === null ? "ongoing" : <RecordedPlanTime value={overlap.to} />}.
     </li>)}</ul>
-    <p>HealthCurve never changes effective dates automatically. Review and edit a draft when needed; recording approval may be rejected while an approved period overlaps.</p>
+    <p>When a draft is set live, HealthCurve can end one currently live predecessor at the new plan’s start. Other historical or future conflicts must be corrected first.</p>
   </section>;
 }
 
 function PlanTimeline({ versions }: { versions: RegimenVersion[] }): React.JSX.Element {
   if (versions.length === 0) return <section className="plan-timeline" aria-labelledby="plan-timeline-heading"><h3 id="plan-timeline-heading">Plan timeline</h3><p>No plan versions to place on the timeline.</p></section>;
-  const intervals = versions.map(planInterval).sort((a, b) => intervalTime(a.effectiveFrom) - intervalTime(b.effectiveFrom));
+  const intervals = versions.flatMap((version) => { const interval = planInterval(version); return interval === null ? [] : [interval]; }).sort((a, b) => intervalTime(a.effectiveFrom) - intervalTime(b.effectiveFrom));
+  const pending = versions.filter((version) => version.effective_from === null);
+  if (intervals.length === 0) return <section className="plan-timeline" aria-labelledby="plan-timeline-heading"><h3 id="plan-timeline-heading">Plan timeline</h3><p>{pending.length} draft plan{pending.length === 1 ? " is" : "s are"} waiting for a start time. The start will be the moment each draft is set live unless you enter one.</p></section>;
   const overlaps = findPlanOverlaps(intervals);
   const overlappingIds = new Set(overlaps.flatMap((overlap) => [overlap.first.id, overlap.second.id]));
   const starts = intervals.map((interval) => intervalTime(interval.effectiveFrom));
@@ -212,6 +218,7 @@ function PlanTimeline({ versions }: { versions: RegimenVersion[] }): React.JSX.E
   return <section className="plan-timeline" aria-labelledby="plan-timeline-heading">
     <h3 id="plan-timeline-heading">Plan timeline</h3>
     <p>Effective periods are shown in date order. An ongoing bar extends to the right edge. Dates describe recorded plan metadata, not dosing advice.</p>
+    {pending.length === 0 ? null : <p>{pending.length} draft plan{pending.length === 1 ? " is" : "s are"} not placed on the timeline because the start will be resolved when set live.</p>}
     <ol className="plan-timeline-list">{intervals.map((interval) => {
       const start = intervalTime(interval.effectiveFrom);
       const end = interval.effectiveTo === null ? maximum : Math.min(intervalTime(interval.effectiveTo), maximum);
@@ -310,8 +317,8 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
   const [slots, setSlots] = useState(() => initialSlots(basis));
   const [instructions, setInstructions] = useState(() => initialInstructions(basis));
   const [selectedNewMedication, setSelectedNewMedication] = useState<Medication | null>(null);
-  const [effectiveFrom, setEffectiveFrom] = useState(() => localInput(basis?.effective_from_local ?? basis?.effective_from ?? null));
-  const [effectiveTo, setEffectiveTo] = useState(() => localInput(basis?.effective_to_local ?? basis?.effective_to ?? null));
+  const [effectiveFrom, setEffectiveFrom] = useState(() => editDraft === null ? "" : localInput(editDraft.effective_from_local ?? editDraft.effective_from));
+  const [effectiveTo, setEffectiveTo] = useState(() => editDraft === null ? "" : localInput(editDraft.effective_to_local ?? editDraft.effective_to));
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
   const mutation = useMutation({
@@ -330,7 +337,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
     effectiveTo: effectiveTo === "" ? null : effectiveTo,
   };
   const proposedOverlaps = proposedInterval === null ? [] : findPlanOverlaps([
-    ...existingVersions.filter((version) => version.id !== editDraft?.id).map(planInterval),
+    ...existingVersions.filter((version) => version.id !== editDraft?.id).flatMap((version) => { const interval = planInterval(version); return interval === null ? [] : [interval]; }),
     proposedInterval,
   ]).filter((overlap) => overlap.first.id === proposedInterval.id || overlap.second.id === proposedInterval.id);
 
@@ -343,7 +350,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
       const data = new FormData(event.currentTarget);
       mutation.mutate({
         version_label: formString(data, "version_label"),
-        effective_from: formString(data, "effective_from"),
+        effective_from: formString(data, "effective_from") || null,
         effective_to: formString(data, "effective_to") || null,
         effective_timezone: timezone,
         notes: formString(data, "notes") || null,
@@ -353,12 +360,12 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
     }}>
       <div className="plan-form-grid">
         <label>Version label<input name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : `${source.version_label} — new version`)} /></label>
-        <label>Effective from<input name="effective_from" type="datetime-local" required aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} /></label>
+        <label>Effective start (optional)<input name="effective_from" type="datetime-local" aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} /></label>
         <label>Effective through (optional)<input name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} /></label>
-        <p className="field-hint wide-field" id="effective-period-help">Times are entered in {timezone}. The start is included and the through time is the first moment this version no longer applies. A later version may begin exactly at that through time without overlapping. Leave through blank for an ongoing period. A skipped or repeated daylight-saving time must be corrected rather than guessed.</p>
+        <p className="field-hint wide-field" id="effective-period-help">Leave the start blank to use the exact moment you set this plan live. Enter a start only when the plan should begin at a different time. The end is also optional. Times are entered in {timezone}; the start is included and the end is the first moment this plan no longer applies.</p>
         <aside className="proposed-plan-interval wide-field" aria-live="polite" aria-labelledby="proposed-plan-interval-heading">
           <h3 id="proposed-plan-interval-heading">Proposed effective interval</h3>
-          {proposedInterval === null ? <p>Choose an effective start to preview this draft against the versions shown in history.</p> : <>
+          {proposedInterval === null ? <p>The start will be the moment you set this draft live. If one plan is live then, HealthCurve will end it at the same instant so the plans hand off without overlap.</p> : <>
             <p><RecordedPlanTime value={proposedInterval.effectiveFrom} /> through {proposedInterval.effectiveTo === null ? "ongoing" : <RecordedPlanTime value={proposedInterval.effectiveTo} />}</p>
             {proposedOverlaps.length === 0 ? <p>No overlap with the plan versions shown in history.</p> : <OverlapList overlaps={proposedOverlaps} headingLevel={4} />}
           </>}
@@ -398,23 +405,24 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
   </section>;
 }
 
-function ApprovalForm({ version, focusOnMount, onComplete }: { version: RegimenVersion; focusOnMount: boolean; onComplete: (message: string) => void }): React.JSX.Element {
+function ApprovalForm({ version, activeVersion, focusOnMount, onComplete }: { version: RegimenVersion; activeVersion: RegimenVersion | null; focusOnMount: boolean; onComplete: (message: string) => void }): React.JSX.Element {
   const queryClient = useQueryClient();
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (focusOnMount) headingRef.current?.focus(); }, [focusOnMount]);
-  const mutation = useMutation({ mutationFn: (payload: { approved_by: string; approval_source: string; approved_at: string | null; source_document_checksum: null }) => approveRegimen(version.id, payload), onSuccess: async () => { await invalidatePlans(queryClient); onComplete("Physician approval recorded. HealthCurve now applies this plan according to its effective dates; the plan currently in force is shown above."); } });
+  const mutation = useMutation({ mutationFn: (payload: { approved_by: string; approval_source: string; approved_at: string | null; source_document_checksum: null }) => approveRegimen(version.id, payload), onSuccess: async () => { await invalidatePlans(queryClient); onComplete("Plan set live with physician approval recorded. Any single live predecessor was ended at this plan’s start; recorded doses were not changed."); } });
+  const errorMessage = mutation.error instanceof ApiError ? mutation.error.message : "The plan could not be set live.";
   return <section className="approval-form" aria-labelledby={`approval-heading-${version.id}`}>
-    <h4 id={`approval-heading-${version.id}`} ref={headingRef} tabIndex={-1}>Next step: review and record physician approval</h4>
+    <h4 id={`approval-heading-${version.id}`} ref={headingRef} tabIndex={-1}>Next step: review and set this plan live</h4>
     <p><strong>This draft is not active.</strong> Record approval here only after a physician has actually approved this plan. HealthCurve and its AI cannot approve it.</p>
     <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
-    <p>After approval, HealthCurve uses the plan only during its effective period: <EffectivePeriod version={version} />. A future-dated plan will wait until that time.</p>
+    <div className="proposed-plan-interval" aria-live="polite"><h5>Handoff preview</h5><p>New plan: <EffectivePeriod version={version} />.</p>{activeVersion === null ? <p>No plan is currently live, so no predecessor will be ended.</p> : <p>Current plan “{activeVersion.version_label}” will end at {version.effective_from === null ? "the moment you set this plan live" : <EffectivePlanTime canonical={version.effective_from} local={version.effective_from_local} timezone={version.effective_timezone} offsetMinutes={version.effective_from_utc_offset_minutes} />}. Its earlier history and all recorded doses remain unchanged.</p>}</div>
     <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null }); }}>
       <label>Approving clinician or role<input name="approved_by" required maxLength={200} /></label>
       <label>Approval source<input name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" /></label>
       <label>Approval time (optional)<input name="approved_at" type="datetime-local" /></label>
       <label className="checkbox-label wide-field"><input type="checkbox" required /> I confirm this records a real clinician-approved plan, not AI advice.</label>
-      <button type="submit" disabled={mutation.isPending}>Record physician approval</button>
-      {mutation.isError ? <p className="error-summary" role="alert">Approval was not recorded. Check provenance and overlapping effective dates.</p> : null}
+      <button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Setting plan live…" : "Set physician-approved plan live"}</button>
+      {mutation.isError ? <p className="error-summary" role="alert">{errorMessage}</p> : null}
     </form>
   </section>;
 }
@@ -455,7 +463,7 @@ export function PlanPage(): React.JSX.Element {
   const [message, setMessage] = useState("");
   const [reviewDraftId, setReviewDraftId] = useState<string | null>(null);
   const versions = history.data?.items ?? [];
-  const chronological = [...versions].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  const chronological = [...versions].sort((a, b) => (a.effective_from === null ? 1 : b.effective_from === null ? -1 : a.effective_from.localeCompare(b.effective_from)));
   const selectedOlderId = olderId !== "" ? olderId : (chronological[chronological.length - 2]?.id ?? "");
   const selectedNewerId = newerId !== "" ? newerId : (chronological[chronological.length - 1]?.id ?? "");
   const diff = useQuery({ queryKey: ["regimen-diff", selectedOlderId, selectedNewerId], queryFn: () => getRegimenDiff(selectedOlderId, selectedNewerId), enabled: selectedOlderId !== "" && selectedNewerId !== "" && selectedOlderId !== selectedNewerId });
@@ -464,7 +472,7 @@ export function PlanPage(): React.JSX.Element {
     setEditor(null);
     if (view.page > 1) setSearchParams(planHistorySearch({ ...view, page: 1 }));
     setReviewDraftId(version.id);
-    setMessage(`${nextMessage} Next, review it below and record physician approval if it matches a plan your physician actually approved.`);
+    setMessage(`${nextMessage} Next, review it below and set it live only if it matches a plan your physician actually approved.`);
   };
 
   return <Page title="Medication plan" description="Physician-approved schedules and their provenance, kept separate from actual recorded doses.">
@@ -481,7 +489,7 @@ export function PlanPage(): React.JSX.Element {
       <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...draft, page: 1 })); }}><label>Effective from date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Effective through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setValidation(null); setDraftState({ search: "", filters: reset }); setOlderId(""); setNewerId(""); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
       <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)} and select versions by when the plan becomes effective. This does not change plan approval or active status.</p>
       {history.data?.page.total_items === 0 ? <p>No plan versions recorded.</p> : null}
-      {versions.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><table><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td><EffectivePeriod version={version} /></td><th scope="row"><h3>{version.version_label}</h3></th><td><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td><details><summary>Show slots and instructions</summary><PlanContents version={version} timezone={profileTimezone} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></table></div>}
+      {versions.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><table><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td><EffectivePeriod version={version} /></td><th scope="row"><h3>{version.version_label}</h3></th><td><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td><details><summary>Show slots and instructions</summary><PlanContents version={version} timezone={profileTimezone} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} activeVersion={active.data ?? null} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></table></div>}
       {history.data === undefined ? null : <PaginationControls label="Plan version history" metadata={history.data.page} onPageChange={(page) => { setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...view, page })); }} />}
     </section>
 

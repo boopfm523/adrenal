@@ -3385,11 +3385,8 @@ export interface components {
         RegimenStatus: "draft" | "approved" | "retired";
         /** RegimenVersionIn */
         RegimenVersionIn: {
-            /**
-             * Effective From
-             * Format: date-time
-             */
-            effective_from: string;
+            /** Effective From */
+            effective_from?: string | null;
             /** Effective From Fold */
             effective_from_fold?: number | null;
             /**
@@ -3426,11 +3423,8 @@ export interface components {
             category: "plan";
             /** Deletion Allowed */
             deletion_allowed: boolean;
-            /**
-             * Effective From
-             * Format: date-time
-             */
-            effective_from: string;
+            /** Effective From */
+            effective_from: string | null;
             /** Effective From Local */
             effective_from_local: string | null;
             /** Effective From Utc Offset Minutes */

@@ -12,12 +12,13 @@ Two rules drive everything here:
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
@@ -57,6 +58,14 @@ class PlanError(Exception):
     """A regimen operation that would break the plan's invariants."""
 
 
+@dataclass(frozen=True)
+class PlanActivation:
+    """The approved version and any predecessor closed by the same transaction."""
+
+    version: RegimenVersion
+    predecessor: RegimenVersion | None
+
+
 def normalize_name(name: str) -> str:
     return " ".join(name.strip().lower().split())
 
@@ -71,7 +80,7 @@ def create_draft(
     *,
     owner_id: uuid.UUID,
     version_label: str,
-    effective_from: datetime,
+    effective_from: datetime | None = None,
     effective_to: datetime | None = None,
     effective_timezone: str = "UTC",
     effective_from_fold: int | None = None,
@@ -79,15 +88,24 @@ def create_draft(
     notes: str | None = None,
 ) -> RegimenVersion:
     """Create a draft. Drafts are freely editable; approved versions never are."""
-    resolved_from = _resolve_plan_time(effective_from, effective_timezone, effective_from_fold)
+    _validate_timezone(effective_timezone)
+    resolved_from = (
+        _resolve_plan_time(effective_from, effective_timezone, effective_from_fold)
+        if effective_from is not None
+        else None
+    )
     resolved_to = (
         _resolve_plan_time(effective_to, effective_timezone, effective_to_fold)
         if effective_to is not None
         else None
     )
-    normalized_from = _naive(resolved_from.occurred_at)
+    normalized_from = _naive(resolved_from.occurred_at) if resolved_from is not None else None
     normalized_to = _naive(resolved_to.occurred_at) if resolved_to is not None else None
-    if normalized_to is not None and normalized_to <= normalized_from:
+    if (
+        normalized_from is not None
+        and normalized_to is not None
+        and normalized_to <= normalized_from
+    ):
         raise PlanError("effective_to must be after effective_from")
 
     version = RegimenVersion(
@@ -97,14 +115,18 @@ def create_draft(
         effective_from=normalized_from,
         effective_to=normalized_to,
         effective_period=_period(normalized_from, normalized_to),
-        effective_timezone=resolved_from.timezone,
-        effective_from_local=resolved_from.local_time,
+        effective_timezone=effective_timezone,
+        effective_from_local=resolved_from.local_time if resolved_from is not None else None,
         effective_to_local=resolved_to.local_time if resolved_to is not None else None,
-        effective_from_utc_offset_minutes=resolved_from.utc_offset_minutes,
+        effective_from_utc_offset_minutes=(
+            resolved_from.utc_offset_minutes if resolved_from is not None else None
+        ),
         effective_to_utc_offset_minutes=(
             resolved_to.utc_offset_minutes if resolved_to is not None else None
         ),
-        effective_time_provenance="explicit_timezone",
+        effective_time_provenance=(
+            "explicit_timezone" if resolved_from is not None else "pending_activation"
+        ),
         notes=notes,
     )
     session.add(version)
@@ -117,7 +139,7 @@ def update_draft(
     version: RegimenVersion,
     *,
     version_label: str,
-    effective_from: datetime,
+    effective_from: datetime | None = None,
     effective_to: datetime | None = None,
     effective_timezone: str = "UTC",
     effective_from_fold: int | None = None,
@@ -127,36 +149,49 @@ def update_draft(
     """Replace editable metadata on a draft; approved history is immutable."""
     if version.status is not RegimenStatus.DRAFT:
         raise PlanError("only an unapproved draft can be edited; create a new version")
-    resolved_from = _resolve_plan_time(effective_from, effective_timezone, effective_from_fold)
+    _validate_timezone(effective_timezone)
+    resolved_from = (
+        _resolve_plan_time(effective_from, effective_timezone, effective_from_fold)
+        if effective_from is not None
+        else None
+    )
     resolved_to = (
         _resolve_plan_time(effective_to, effective_timezone, effective_to_fold)
         if effective_to is not None
         else None
     )
-    normalized_from = _naive(resolved_from.occurred_at)
+    normalized_from = _naive(resolved_from.occurred_at) if resolved_from is not None else None
     normalized_to = _naive(resolved_to.occurred_at) if resolved_to is not None else None
-    if normalized_to is not None and normalized_to <= normalized_from:
+    if (
+        normalized_from is not None
+        and normalized_to is not None
+        and normalized_to <= normalized_from
+    ):
         raise PlanError("effective_to must be after effective_from")
 
     version.version_label = version_label
     version.effective_from = normalized_from
     version.effective_to = normalized_to
     version.effective_period = _period(normalized_from, normalized_to)
-    version.effective_timezone = resolved_from.timezone
-    version.effective_from_local = resolved_from.local_time
+    version.effective_timezone = effective_timezone
+    version.effective_from_local = resolved_from.local_time if resolved_from is not None else None
     version.effective_to_local = resolved_to.local_time if resolved_to is not None else None
-    version.effective_from_utc_offset_minutes = resolved_from.utc_offset_minutes
+    version.effective_from_utc_offset_minutes = (
+        resolved_from.utc_offset_minutes if resolved_from is not None else None
+    )
     version.effective_to_utc_offset_minutes = (
         resolved_to.utc_offset_minutes if resolved_to is not None else None
     )
-    version.effective_time_provenance = "explicit_timezone"
+    version.effective_time_provenance = (
+        "explicit_timezone" if resolved_from is not None else "pending_activation"
+    )
     version.notes = notes
     return version
 
 
-def _period(start: datetime, end: datetime | None) -> Range[datetime]:
+def _period(start: datetime | None, end: datetime | None) -> Range[datetime]:
     """The tsrange the exclusion constraint compares. Half-open, naive."""
-    return Range(_naive(start), _naive(end) if end else None, bounds="[)")
+    return Range(_naive(start) if start else None, _naive(end) if end else None, bounds="[)")
 
 
 def _naive(value: datetime) -> datetime:
@@ -170,6 +205,13 @@ def _resolve_plan_time(value: datetime, timezone: str, fold: int | None) -> Even
     return resolve_event_time(value, timezone, fold=fold)
 
 
+def _validate_timezone(timezone: str) -> None:
+    try:
+        ZoneInfo(timezone)
+    except Exception as exc:
+        raise PlanError(f"unknown IANA timezone: {timezone}") from exc
+
+
 def approve_version(
     session: Session,
     version: RegimenVersion,
@@ -178,12 +220,35 @@ def approve_version(
     approval_source: str,
     approved_at: datetime | None = None,
     source_document_checksum: str | None = None,
+    activation_at: datetime | None = None,
 ) -> RegimenVersion:
     """Approve a draft. Only ever called from a human-initiated request (SAFE-16).
 
     Overlap with another approved version is refused by a database exclusion
     constraint, so this cannot create a period with two plans in force.
     """
+    return activate_version(
+        session,
+        version,
+        approved_by=approved_by,
+        approval_source=approval_source,
+        approved_at=approved_at,
+        source_document_checksum=source_document_checksum,
+        activation_at=activation_at,
+    ).version
+
+
+def activate_version(
+    session: Session,
+    version: RegimenVersion,
+    *,
+    approved_by: str,
+    approval_source: str,
+    approved_at: datetime | None = None,
+    source_document_checksum: str | None = None,
+    activation_at: datetime | None = None,
+) -> PlanActivation:
+    """Approve a draft and atomically end its single approved predecessor."""
     if version.status is RegimenStatus.RETIRED:
         raise PlanError("a retired version cannot be approved; create a new version")
     if version.status is RegimenStatus.APPROVED:
@@ -191,13 +256,93 @@ def approve_version(
     if not approved_by.strip() or not approval_source.strip():
         raise PlanError("approval requires both an approver and a source")
 
+    activated_at = activation_at or datetime.now(UTC)
+    if activated_at.tzinfo is None or activated_at.utcoffset() is None:
+        raise PlanError("activation time must include a UTC offset")
+    timezone = version.effective_timezone or "UTC"
+    _validate_timezone(timezone)
+    if version.effective_from is None:
+        resolved_from = from_instant(activated_at, timezone)
+        resolved_start = _naive(resolved_from.occurred_at)
+    else:
+        resolved_from = None
+        resolved_start = version.effective_from
+    if version.effective_to is not None and version.effective_to <= resolved_start:
+        raise PlanError("effective_to must be after the resolved effective_from")
+
+    # An owner-scoped transaction lock also serializes the no-predecessor case, where
+    # there would otherwise be no row to lock. PostgreSQL's exclusion constraint
+    # remains the final invariant guard.
+    if session.get_bind().dialect.name == "postgresql":
+        lock_key = int.from_bytes(version.owner_id.bytes[:8], byteorder="big", signed=True)
+        session.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+    versions = list(
+        session.scalars(
+            select(RegimenVersion)
+            .where(
+                RegimenVersion.owner_id == version.owner_id,
+                RegimenVersion.id != version.id,
+                _historically_approved_clause(),
+            )
+            .order_by(RegimenVersion.effective_from, RegimenVersion.id)
+            .with_for_update()
+        )
+    )
+    predecessors = [
+        candidate
+        for candidate in versions
+        if candidate.effective_from is not None
+        and candidate.effective_from < resolved_start
+        and (candidate.effective_to is None or candidate.effective_to > resolved_start)
+    ]
+    if len(predecessors) > 1:
+        raise PlanError("more than one approved predecessor overlaps the new start")
+
+    predecessor = predecessors[0] if predecessors else None
+    if predecessor is not None and predecessor.status is not RegimenStatus.APPROVED:
+        raise PlanError(
+            "approved plan history overlaps the requested start and cannot be changed automatically"
+        )
+    new_end = version.effective_to
+    unsafe_overlaps = [
+        candidate
+        for candidate in versions
+        if candidate is not predecessor
+        and candidate.effective_from is not None
+        and (new_end is None or candidate.effective_from < new_end)
+        and (candidate.effective_to is None or candidate.effective_to > resolved_start)
+    ]
+    if unsafe_overlaps:
+        raise PlanError(
+            "the requested start or end conflicts with approved plan history and cannot be "
+            "handed off automatically"
+        )
+
+    # Only mutate after every check succeeds, so callers that catch PlanError cannot
+    # accidentally commit a partially resolved draft or shortened predecessor.
+    if resolved_from is not None:
+        version.effective_from = resolved_start
+        version.effective_from_local = resolved_from.local_time
+        version.effective_from_utc_offset_minutes = resolved_from.utc_offset_minutes
+        version.effective_time_provenance = "activation_instant"
+        version.effective_period = _period(resolved_start, version.effective_to)
+
+    if predecessor is not None:
+        predecessor.effective_to = resolved_start
+        predecessor.effective_period = _period(predecessor.effective_from, predecessor.effective_to)
+        predecessor_timezone = predecessor.effective_timezone or timezone
+        predecessor_end = from_instant(resolved_start.replace(tzinfo=UTC), predecessor_timezone)
+        predecessor.effective_to_local = predecessor_end.local_time
+        predecessor.effective_to_utc_offset_minutes = predecessor_end.utc_offset_minutes
+
     version.status = RegimenStatus.APPROVED
     version.approved_at = approved_at or datetime.now(UTC)
     version.approved_by = approved_by.strip()
     version.approval_source = approval_source.strip()
     version.source_document_checksum = source_document_checksum
     session.flush()
-    return version
+    return PlanActivation(version=version, predecessor=predecessor)
 
 
 def retire_version(
@@ -210,7 +355,9 @@ def retire_version(
     retired_moment = retired_at or datetime.now(UTC)
     version.retired_at = retired_moment
     retired_end = _naive(retired_moment)
-    version.effective_from = _naive(version.effective_from)
+    version.effective_from = (
+        _naive(version.effective_from) if version.effective_from is not None else None
+    )
     current_end = _naive(version.effective_to) if version.effective_to is not None else None
     version.effective_to = current_end
     if current_end is None or current_end > retired_end:
@@ -559,10 +706,20 @@ def _active_from_candidates(
         version
         for version in versions
         if _was_approved(version)
+        and version.effective_from is not None
         and version.effective_from <= naive
         and (version.effective_to is None or version.effective_to > naive)
     ]
-    return max(eligible, key=lambda version: version.effective_from) if eligible else None
+    return (
+        max(
+            eligible,
+            key=lambda version: (
+                version.effective_from or datetime.min.replace(tzinfo=UTC).replace(tzinfo=None)
+            ),
+        )
+        if eligible
+        else None
+    )
 
 
 def _historically_approved_clause() -> ColumnElement[bool]:
@@ -595,7 +752,7 @@ def _versions_active_during(
     probes.extend(
         version.effective_from.replace(tzinfo=UTC)
         for version in versions
-        if naive_start <= version.effective_from < naive_end
+        if version.effective_from is not None and naive_start <= version.effective_from < naive_end
     )
     active: list[RegimenVersion] = []
     seen: set[uuid.UUID] = set()

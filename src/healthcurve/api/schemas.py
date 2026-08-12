@@ -193,7 +193,7 @@ class InstructionOut(PlanResource):
 
 class RegimenVersionIn(ApiModel):
     version_label: str = Field(min_length=1, max_length=60)
-    effective_from: datetime
+    effective_from: datetime | None = None
     effective_to: datetime | None = None
     effective_timezone: str | None = Field(
         default=None,
@@ -222,7 +222,7 @@ class RegimenVersionOut(PlanResource):
     id: uuid.UUID
     version_label: str
     status: RegimenStatus
-    effective_from: datetime
+    effective_from: datetime | None
     effective_to: datetime | None
     effective_timezone: str | None
     effective_from_local: datetime | None

@@ -6168,9 +6168,16 @@
         "additionalProperties": false,
         "properties": {
           "effective_from": {
-            "format": "date-time",
-            "title": "Effective From",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
           },
           "effective_from_fold": {
             "anyOf": [
@@ -6256,8 +6263,7 @@
           }
         },
         "required": [
-          "version_label",
-          "effective_from"
+          "version_label"
         ],
         "title": "RegimenVersionIn",
         "type": "object"
@@ -6310,9 +6316,16 @@
             "type": "boolean"
           },
           "effective_from": {
-            "format": "date-time",
-            "title": "Effective From",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
           },
           "effective_from_local": {
             "anyOf": [

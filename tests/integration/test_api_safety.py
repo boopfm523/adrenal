@@ -10,10 +10,12 @@ import json
 import os
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from statistics import median
+from threading import Barrier
 from time import perf_counter
 from typing import Any, cast
 from unittest import mock
@@ -4616,6 +4618,160 @@ def test_draft_plan_can_be_replaced_atomically_but_approved_plan_is_immutable(
         assert "12.5" not in summaries
 
 
+@pytest.mark.safety("SAFE-13", "SAFE-16")
+def test_draft_dates_are_optional_and_activation_hands_off_atomically(engine: Engine) -> None:
+    activation_at = datetime(2042, 6, 1, 13, 45, tzinfo=UTC)
+    with Session(engine, expire_on_commit=False) as session, session.begin():
+        owner = Owner(
+            email=f"optional-plan-{uuid.uuid4()}@example.test",
+            password_hash="synthetic-non-login-hash",
+            default_timezone="America/New_York",
+        )
+        session.add(owner)
+        session.flush()
+        predecessor = medication_service.create_draft(
+            session,
+            owner_id=owner.id,
+            version_label="Synthetic predecessor",
+            effective_from=datetime(2042, 1, 1),  # noqa: DTZ001
+            effective_timezone="America/New_York",
+        )
+        medication_service.approve_version(
+            session,
+            predecessor,
+            approved_by="Dr Synthetic",
+            approval_source="synthetic fixture",
+            activation_at=datetime(2042, 1, 1, tzinfo=UTC),
+        )
+        successor = medication_service.create_draft(
+            session,
+            owner_id=owner.id,
+            version_label="Synthetic start-on-activation draft",
+            effective_timezone="America/New_York",
+        )
+        assert successor.effective_from is None
+        assert successor.effective_to is None
+        assert successor.effective_time_provenance == "pending_activation"
+
+        activation = medication_service.activate_version(
+            session,
+            successor,
+            approved_by="Dr Synthetic",
+            approval_source="synthetic fixture",
+            activation_at=activation_at,
+        )
+
+        expected = activation_at.replace(tzinfo=None)
+        assert activation.predecessor is predecessor
+        assert successor.effective_from == expected
+        assert successor.effective_from_local == datetime(2042, 6, 1, 9, 45)  # noqa: DTZ001
+        assert successor.effective_from_utc_offset_minutes == -240
+        assert successor.effective_time_provenance == "activation_instant"
+        assert successor.effective_to is None
+        assert predecessor.effective_to == expected
+        assert predecessor.effective_period.upper == expected
+        assert successor.effective_period.lower == expected
+
+
+@pytest.mark.safety("SAFE-16")
+def test_unsafe_retroactive_activation_is_clear_and_non_mutating(engine: Engine) -> None:
+    with Session(engine, expire_on_commit=False) as session, session.begin():
+        owner = Owner(
+            email=f"retroactive-plan-{uuid.uuid4()}@example.test",
+            password_hash="synthetic-non-login-hash",
+            default_timezone="UTC",
+        )
+        session.add(owner)
+        session.flush()
+        approved = medication_service.create_draft(
+            session,
+            owner_id=owner.id,
+            version_label="Synthetic future approved history",
+            effective_from=datetime(2044, 2, 1),  # noqa: DTZ001
+        )
+        medication_service.approve_version(
+            session,
+            approved,
+            approved_by="Dr Synthetic",
+            approval_source="synthetic fixture",
+        )
+        draft = medication_service.create_draft(
+            session,
+            owner_id=owner.id,
+            version_label="Synthetic unsafe retroactive draft",
+            effective_from=datetime(2044, 1, 1),  # noqa: DTZ001
+        )
+
+        with pytest.raises(medication_service.PlanError, match="cannot be handed off"):
+            medication_service.activate_version(
+                session,
+                draft,
+                approved_by="Dr Synthetic",
+                approval_source="synthetic fixture",
+            )
+
+        assert draft.status.value == "draft"
+        assert draft.approved_at is None
+        assert draft.effective_from == datetime(2044, 1, 1)  # noqa: DTZ001
+        assert approved.effective_to is None
+
+
+@pytest.mark.safety("SAFE-16")
+def test_concurrent_start_on_activation_allows_only_one_plan(engine: Engine) -> None:
+    activation_at = datetime(2046, 5, 1, 12, tzinfo=UTC)
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email=f"concurrent-plan-{uuid.uuid4()}@example.test",
+            password_hash="synthetic-non-login-hash",
+            default_timezone="UTC",
+        )
+        session.add(owner)
+        session.flush()
+        owner_id = owner.id
+        draft_ids = [
+            medication_service.create_draft(
+                session,
+                owner_id=owner.id,
+                version_label=f"Synthetic concurrent draft {index}",
+            ).id
+            for index in range(2)
+        ]
+
+    barrier = Barrier(2)
+
+    def activate(version_id: uuid.UUID) -> str:
+        with Session(engine) as session, session.begin():
+            draft = session.get(RegimenVersion, version_id)
+            assert draft is not None
+            barrier.wait(timeout=10)
+            try:
+                medication_service.activate_version(
+                    session,
+                    draft,
+                    approved_by="Dr Synthetic",
+                    approval_source="synthetic fixture",
+                    activation_at=activation_at,
+                )
+            except medication_service.PlanError:
+                return "conflict"
+            return "approved"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(activate, draft_ids))
+
+    assert sorted(results) == ["approved", "conflict"]
+    with Session(engine) as session:
+        approved_count = session.scalar(
+            select(func.count())
+            .select_from(RegimenVersion)
+            .where(
+                RegimenVersion.owner_id == owner_id,
+                RegimenVersion.status == "approved",
+            )
+        )
+        assert approved_count == 1
+
+
 @pytest.mark.safety("SAFE-16")
 def test_regimen_lifecycle_normalizes_aware_effective_dates_in_one_session(
     engine: Engine,
@@ -4860,6 +5016,89 @@ def test_approval_requires_an_approver_and_a_source(
             f"/api/v1/regimens/{version_id}/approve", json=payload, headers=logged_in
         )
         assert response.status_code == 422, payload
+
+
+@pytest.mark.safety("SAFE-13", "SAFE-16")
+def test_api_sets_undated_draft_live_and_audits_predecessor_handoff(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    del logged_in
+    email = f"api-handoff-{uuid.uuid4()}@example.com"
+    with Session(engine) as session, session.begin():
+        session.add(
+            Owner(
+                email=email,
+                password_hash=auth.hash_password(PASSWORD),
+                default_timezone="Europe/London",
+            )
+        )
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    headers = {auth.CSRF_HEADER_NAME: login.json()["csrf_token"]}
+    predecessor_created = client.post(
+        "/api/v1/regimens",
+        headers=headers,
+        json={
+            "version_label": "Synthetic current predecessor",
+            "effective_from": "2020-01-01T00:00:00",
+            "effective_timezone": "Europe/London",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert predecessor_created.status_code == 201, predecessor_created.text
+    predecessor_id = predecessor_created.json()["id"]
+    predecessor = client.post(
+        f"/api/v1/regimens/{predecessor_id}/approve",
+        headers=headers,
+        json={"approved_by": "Dr Synthetic", "approval_source": "synthetic fixture"},
+    )
+    assert predecessor.status_code == 200, predecessor.text
+
+    created = client.post(
+        "/api/v1/regimens",
+        headers=headers,
+        json={
+            "version_label": "Synthetic undated successor",
+            "effective_from": None,
+            "effective_to": None,
+            "effective_timezone": "Europe/London",
+            "slots": [],
+            "instructions": [],
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["effective_from"] is None
+    assert created.json()["effective_time_provenance"] == "pending_activation"
+
+    activated = client.post(
+        f"/api/v1/regimens/{created.json()['id']}/approve",
+        headers=headers,
+        json={"approved_by": "Dr Synthetic", "approval_source": "synthetic fixture"},
+    )
+    assert activated.status_code == 200, activated.text
+    body = activated.json()
+    assert body["status"] == "approved"
+    assert body["effective_from"] is not None
+    assert body["effective_from_local"] is not None
+    assert body["effective_time_provenance"] == "activation_instant"
+    assert body["effective_to"] is None
+
+    history = client.get("/api/v1/regimens").json()["items"]
+    ended = next(item for item in history if item["id"] == predecessor_id)
+    assert ended["effective_to"] == body["effective_from"]
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEntry)
+                .where(
+                    AuditEntry.target_id == uuid.UUID(predecessor_id),
+                    AuditEntry.action == AuditAction.REGIMEN_HANDOFF,
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.safety("SAFE-16")

@@ -135,7 +135,7 @@ def list_regimens(
     total_items = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     metadata = page_metadata(total_items, pagination)
     rows = session.scalars(
-        query.order_by(RegimenVersion.effective_from.desc(), RegimenVersion.id.asc())
+        query.order_by(RegimenVersion.effective_from.desc().nullslast(), RegimenVersion.id.asc())
         .offset(pagination.offset)
         .limit(pagination.page_size)
     )
@@ -338,7 +338,7 @@ def approve_regimen(
     """
     version = _owned_version(session, owner.id, version_id)
     try:
-        service.approve_version(
+        activation = service.activate_version(
             session,
             version,
             approved_by=payload.approved_by,
@@ -349,13 +349,27 @@ def approve_regimen(
     except service.PlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
+    if activation.predecessor is not None:
+        audit.record(
+            session,
+            actor=audit.actor_for_owner(owner.id),
+            action=audit.AuditAction.REGIMEN_HANDOFF,
+            target_type="regimen_version",
+            target_id=activation.predecessor.id,
+            change_summary=f"effective period ended by successor {version.id}",
+        )
+
     audit.record(
         session,
         actor=audit.actor_for_owner(owner.id),
         action=audit.AuditAction.REGIMEN_APPROVED,
         target_type="regimen_version",
         target_id=version.id,
-        change_summary="approval provenance recorded",
+        change_summary=(
+            "approval provenance recorded; activation start resolved and predecessor handed off"
+            if activation.predecessor is not None
+            else "approval provenance recorded; activation start resolved"
+        ),
     )
     return _regimen_out(version, deletion_allowed=settings.environment is Environment.DEV)
 

@@ -9,7 +9,7 @@ import { PlanPage } from "./PlanPage";
 const auth = { status: "authenticated" as const, session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } }, signIn: vi.fn(), signOut: vi.fn() };
 function renderPage(initialEntry = "/plan", client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) { return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={auth}><PlanPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
 
-function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string, effectiveTo: string | null = null) {
+function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string | null, effectiveTo: string | null = null) {
   return {
     id, category: "plan", version_label: label, status, effective_from: effective, effective_to: effectiveTo,
     effective_timezone: "America/New_York",
@@ -107,7 +107,7 @@ describe("Medication plan page", () => {
 
     expect(await screen.findByText("Approved-plan overlap:")).toBeVisible();
     expect(screen.getByText("Draft overlap:")).toBeVisible();
-    expect(screen.getByText(/never changes effective dates automatically/i)).toBeVisible();
+    expect(screen.getByText(/can end one currently live predecessor/i)).toBeVisible();
   });
 
   it("loads shareable effective-date filters and keeps them while paging", async () => {
@@ -164,8 +164,8 @@ describe("Medication plan page", () => {
     expect(document.querySelector('time[datetime="2026-08-01T14:00:00Z"]')).not.toBeNull();
     expect(screen.getAllByText("Draft plan—not physician approved").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Draft plan—not physician approved. This version is not in force.").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Next step: review and record physician approval" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Record physician approval" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Next step: review and set this plan live" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Set physician-approved plan live" })).toBeVisible();
     expect(await screen.findByText("Synthetic medicine at 07:00:00: 10 mg -> 12 mg")).toBeVisible();
     expect(screen.getByText("No removed schedule entries.")).toBeVisible();
   });
@@ -272,10 +272,10 @@ describe("Medication plan page", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
     expect(screen.getByRole("heading", { name: "Create your first plan draft" })).toHaveFocus();
     await userEvent.type(screen.getByLabelText("Version label"), "My real plan");
-    await userEvent.type(screen.getByLabelText("Effective from"), "2026-08-15T07:00");
+    await userEvent.type(screen.getByLabelText("Effective start (optional)"), "2026-08-15T07:00");
     expect(screen.getByRole("heading", { name: "Proposed effective interval" })).toBeVisible();
     expect(screen.getByText("No overlap with the plan versions shown in history.")).toBeVisible();
-    expect(screen.getByText(/later version may begin exactly at that through time without overlapping/i)).toBeVisible();
+    expect(screen.getByText(/Leave the start blank to use the exact moment you set this plan live/i)).toBeVisible();
     const medicationSelect = screen.getByLabelText("Medication and formulation");
     expect(within(medicationSelect).getByRole("option", { name: "Synthetic medicine tablet — formulation strength: 10 mg" })).toBeInTheDocument();
     medicationSelect.focus();
@@ -296,10 +296,10 @@ describe("Medication plan page", () => {
     expect(scheduledAmount).toBeValid();
     await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
 
-    expect(await screen.findByText(/Next, review it below and record physician approval/)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Next step: review and record physician approval" })).toHaveFocus();
+    expect(await screen.findByText(/Next, review it below and set it live/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Next step: review and set this plan live" })).toHaveFocus();
     expect(screen.getByText(/Required provenance: the approving clinician or role and the source of approval/i)).toBeVisible();
-    expect(screen.getByText(/A future-dated plan will wait until that time/i)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Handoff preview" })).toBeVisible();
     const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
     expect(creation?.body).toMatchObject({
       version_label: "My real plan",
@@ -308,6 +308,44 @@ describe("Medication plan page", () => {
       instructions: [],
     });
     expect(requests.some((request) => request.url.includes("/approve"))).toBe(false);
+  });
+
+  it("saves a draft without dates and previews activation-time handoff", async () => {
+    const current = version("22222222-2222-4222-8222-222222222222", "Current synthetic plan", "approved", "2026-08-01T00:00:00");
+    const undated = version("33333333-3333-4333-8333-333333333333", "Undated synthetic draft", "draft", null);
+    const medication = {
+      id: "99999999-9999-4999-8999-999999999999", category: "plan", name: "Synthetic medicine",
+      formulation: "tablet", strength: "10", strength_unit: "mg", default_unit: "mg", default_route: "oral",
+      active_from: null, active_to: null, notes: null,
+    };
+    const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    let created = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(current));
+      if (url.endsWith("/medications")) return Promise.resolve(response([medication]));
+      if (url.endsWith("/regimens") && method === "POST") { created = true; return Promise.resolve(response(undated)); }
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage(created ? [undated, current] : [current])));
+      if (url.includes("/diff/")) return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create new version from active plan" }));
+    expect(screen.getByLabelText("Effective start (optional)")).toHaveValue("");
+    expect(screen.getByLabelText("Effective through (optional)")).toHaveValue("");
+    await userEvent.clear(screen.getByLabelText("Version label"));
+    await userEvent.type(screen.getByLabelText("Version label"), "Undated synthetic draft");
+    expect(screen.getByText(/start will be the moment you set this draft live/i)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
+
+    const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
+    expect(creation?.body).toMatchObject({ effective_from: null, effective_to: null });
+    expect(await screen.findByText(/Current plan “Current synthetic plan” will end at the moment you set this plan live/)).toBeVisible();
+    expect(screen.getAllByText(/Starts when this draft is set live/).length).toBeGreaterThan(0);
   });
 
   it("creates a medication in an independent, keyboard-operable form", async () => {
@@ -382,17 +420,17 @@ describe("Medication plan page", () => {
     });
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Next step: review and record physician approval" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
+    expect(await screen.findByRole("heading", { name: "Next step: review and set this plan live" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Set physician-approved plan live" }));
     expect(requests.some((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST")).toBe(false);
     await userEvent.type(screen.getByLabelText("Approving clinician or role"), "Dr Synthetic");
     await userEvent.type(screen.getByLabelText("Approval source"), "Portal message");
     await userEvent.click(screen.getByLabelText(/confirm this records a real clinician-approved plan/i));
-    await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Check provenance and overlapping effective dates");
-    await userEvent.click(screen.getByRole("button", { name: "Record physician approval" }));
+    await userEvent.click(screen.getByRole("button", { name: "Set physician-approved plan live" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("overlapping effective dates");
+    await userEvent.click(screen.getByRole("button", { name: "Set physician-approved plan live" }));
 
-    expect(await screen.findByText(/applies this plan according to its effective dates/)).toBeVisible();
+    expect(await screen.findByText(/Plan set live with physician approval recorded/)).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Reviewed synthetic draft · currently in force" })).toBeVisible();
     expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
     const approval = requests.filter((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST").at(-1);

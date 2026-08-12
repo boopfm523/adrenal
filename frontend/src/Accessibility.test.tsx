@@ -68,7 +68,7 @@ describe("automated accessibility audit", () => {
     expect(skipLink).toHaveFocus();
     await user.tab();
     expect(screen.getByRole("link", { name: "HealthCurve.ai home" })).toHaveFocus();
-    const approvalButton = screen.getByRole("button", { name: "Record physician approval" });
+    const approvalButton = screen.getByRole("button", { name: "Set physician-approved plan live" });
     approvalButton.focus();
     await user.keyboard("[Enter]");
     const clinician = screen.getByLabelText("Approving clinician or role");
