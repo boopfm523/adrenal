@@ -1,8 +1,14 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within, type RenderResult } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 import type { GarminRecord } from "../api/client";
+import { HealthCurveProvider } from "./HealthCurveProvider";
 import { DailyHealthCurve, type DailyHealthCurveData } from "./DailyHealthCurve";
+
+function renderWithTheme(ui: ReactNode): RenderResult {
+  return render(ui, { wrapper: HealthCurveProvider });
+}
 
 const provenance = { recorded_at: "2026-03-08T05:00:00Z", source_type: "provider" as const, confirmation_state: "provider_imported" as const, supersedes_id: null, correction_reason: null, is_correction: false };
 
@@ -64,7 +70,7 @@ function hoverAt(minute: number): { target: SVGRectElement; tooltip: HTMLElement
 
 describe("Daily HealthCurve", () => {
   it("keeps guidance, missingness, causation, and the model in one collapsed disclosure", () => {
-    render(<DailyHealthCurve data={data()} />);
+    renderWithTheme(<DailyHealthCurve data={data()} />);
 
     const summary = screen.getByText("HealthCurve context and limits");
     const context = summary.parentElement;
@@ -80,7 +86,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("uses one interactive overlay and exposes exact native values at the explored time", () => {
-    render(<DailyHealthCurve data={data({ garmin: [sample(60)] })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [sample(60)] })} />);
 
     expect(screen.getAllByRole("img")).toHaveLength(1);
     expect(screen.getByRole("img")).toHaveAccessibleName(/interactive selected-day HealthCurve overlay/i);
@@ -122,7 +128,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("breaks recorded curves across missing cadence intervals", () => {
-    render(<DailyHealthCurve data={data({ garmin: [sample(0), sample(1), sample(10), sample(11)] })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [sample(0), sample(1), sample(10), sample(11)] })} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
@@ -143,7 +149,7 @@ describe("Daily HealthCurve", () => {
         unit: "breaths/min",
       } satisfies GarminRecord;
     });
-    render(<DailyHealthCurve data={data({ garmin: respiration })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: respiration })} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Respiration" }));
     const paths = document.querySelectorAll("path.healthcurve-series--respiration_rate");
@@ -161,7 +167,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("publishes the executable formula, evidence, and absence of a needed-value model", () => {
-    render(<DailyHealthCurve data={data()} />);
+    renderWithTheme(<DailyHealthCurve data={data()} />);
 
     const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
     expect(methodology).not.toBeNull();
@@ -178,7 +184,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("shows systolic and diastolic together while keeping pulse in heart rate", () => {
-    render(<DailyHealthCurve data={data({ bloodPressure: [{
+    renderWithTheme(<DailyHealthCurve data={data({ bloodPressure: [{
       id: "30000000-0000-4000-8000-000000000001",
       category: "fact",
       systolic_mmhg: 121,
@@ -220,7 +226,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("shows temperature as discrete Fahrenheit-first facts with exact accessible values", () => {
-    render(<DailyHealthCurve data={data({ temperature: [{
+    renderWithTheme(<DailyHealthCurve data={data({ temperature: [{
       id: "50000000-0000-4000-8000-000000000001",
       category: "fact",
       value: "38.00",
@@ -302,7 +308,7 @@ describe("Daily HealthCurve", () => {
       unit: "garmin_score",
       sample_interval_seconds: 180,
     };
-    render(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration, restingHeartRate, observedStress] })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration, restingHeartRate, observedStress] })} />);
 
     expect(document.querySelectorAll("circle.healthcurve-point--stress")).toHaveLength(0);
     expect(document.querySelectorAll("path.healthcurve-series--stress")).toHaveLength(0);
@@ -339,7 +345,7 @@ describe("Daily HealthCurve", () => {
       sleep_score: 82,
       sleep_intervals: [{ stage: "awake", started_at: "2026-03-08T08:00:00Z", ended_at: "2026-03-08T08:10:00Z" }],
     };
-    const view = render(<DailyHealthCurve data={data({ garmin: [sleep] })} />);
+    const view = renderWithTheme(<DailyHealthCurve data={data({ garmin: [sleep] })} />);
 
     expect(document.querySelectorAll("[data-series='sleep']")).toHaveLength(1);
     expect(document.querySelectorAll(".healthcurve-sleep-band")).toHaveLength(1);
@@ -389,7 +395,7 @@ describe("Daily HealthCurve", () => {
       id: "50000000-0000-4000-8000-000000000021",
       sleep_intervals: [sleep.sleep_intervals?.[0]].filter((interval) => interval !== undefined),
     };
-    render(<DailyHealthCurve data={data({ garmin: [sleep, duplicate] })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [sleep, duplicate] })} />);
 
     expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(1);
     const tooltip = hoverAt(195).tooltip;
@@ -416,7 +422,7 @@ describe("Daily HealthCurve", () => {
       time: { ...sample(0).time, occurred_at: "2026-03-08T15:00:00Z" },
       ended_at: "2026-03-08T16:00:00Z",
     };
-    render(<DailyHealthCurve data={data({ garmin: [overnight, later] })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [overnight, later] })} />);
 
     expect(document.querySelectorAll(".healthcurve-sleep-band")).toHaveLength(2);
     expect(document.querySelectorAll(".healthcurve-sleep-marker--start")).toHaveLength(1);
@@ -448,7 +454,7 @@ describe("Daily HealthCurve", () => {
       carryover: false,
       modeled_peak_at: "2026-03-08T07:00:00Z",
     };
-    render(<DailyHealthCurve data={data({ exposure: { ...base.exposure, dose_markers: [
+    renderWithTheme(<DailyHealthCurve data={data({ exposure: { ...base.exposure, dose_markers: [
       { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000003", occurred_at: "2026-03-08T06:00:30Z", medication_name: "Prednisone", amount: "5", supported: false, exclusion_reason: "unsupported_medication", modeled_peak_at: null },
       marker,
       { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000001", amount: "2.5", category: "stress" },
@@ -469,7 +475,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
-    render(<DailyHealthCurve data={data()} />);
+    renderWithTheme(<DailyHealthCurve data={data()} />);
 
     expect(screen.getByText("23 hours")).toBeVisible();
     const summaries = screen.getByLabelText("Series sample counts");
@@ -489,7 +495,7 @@ describe("Daily HealthCurve", () => {
 
   it("keeps a large sampled day available in the chart", () => {
     const garmin = Array.from({ length: 1_000 }, (_, index) => sample(index));
-    render(<DailyHealthCurve data={data({ garmin })} />);
+    renderWithTheme(<DailyHealthCurve data={data({ garmin })} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
@@ -497,7 +503,7 @@ describe("Daily HealthCurve", () => {
   });
 
   it("shows close unscored symptoms as timed events without inventing severity", () => {
-    render(<DailyHealthCurve data={data({ symptoms: [{
+    renderWithTheme(<DailyHealthCurve data={data({ symptoms: [{
       id: "10000000-0000-4000-8000-000000000001",
       category: "fact",
       name: "Synthetic fatigue",

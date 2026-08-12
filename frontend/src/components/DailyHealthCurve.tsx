@@ -1,3 +1,4 @@
+import { Button, Checkbox, Group, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { useMemo, useState } from "react";
 
 import type {
@@ -682,9 +683,9 @@ export function DailyHealthCurve({
     setCursorMinute(Math.round(ratio * (end - start) / 60_000));
   }
 
-  return <section className="metric-card healthcurve-card" aria-labelledby="daily-healthcurve-title">
-    <h2 id="daily-healthcurve-title">Your daily HealthCurve</h2>
-    <p>{data.exposure.safety_label}</p>
+  return <Paper component="section" className="healthcurve-card" withBorder radius="lg" p={{ base: "md", sm: "lg" }} aria-labelledby="daily-healthcurve-title">
+    <Title order={2} id="daily-healthcurve-title">Your daily HealthCurve</Title>
+    <Text mt="xs">{data.exposure.safety_label}</Text>
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd className="healthcurve-selected-day">{onPreviousDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review previous day" onClick={onPreviousDay}>←</button>}<span>{data.exposure.date}</span>{onNextDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review next day" disabled={nextDayDisabled} onClick={onNextDay}>→</button>}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div></dl>
     <details className="metric-definition healthcurve-context">
       <summary>HealthCurve context and limits</summary>
@@ -695,8 +696,8 @@ export function DailyHealthCurve({
         <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
       </div>
     </details>
-    <div className="healthcurve-controls" aria-label="HealthCurve chart controls"><div className="healthcurve-focus" role="group" aria-label="Choose a focused HealthCurve comparison"><span>Quick focus:</span>{FOCUS_PRESETS.map((preset) => <button key={preset.label} type="button" className={isPresetVisible(visible, preset.keys) ? undefined : "button-secondary"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</button>)}</div>
-      <fieldset className="curve-toggles"><legend>Show or hide chart series</legend>{Object.entries({
+    <Stack className="healthcurve-controls" gap="sm" aria-label="HealthCurve chart controls"><Group className="healthcurve-focus" gap="xs" role="group" aria-label="Choose a focused HealthCurve comparison"><Text fw={750}>Quick focus:</Text>{FOCUS_PRESETS.map((preset) => <Button key={preset.label} type="button" size="sm" variant={isPresetVisible(visible, preset.keys) ? "filled" : "outline"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</Button>)}</Group>
+      <Paper component="fieldset" className="curve-toggles" withBorder radius="md" p="md"><legend>Show or hide chart series</legend><SimpleGrid cols={{ base: 1, xs: 2, md: 3 }}>{Object.entries({
         exposure: "Theoretical exposure and actual doses",
         stress: "Garmin stress",
         heart_rate: "Heart rate",
@@ -706,7 +707,7 @@ export function DailyHealthCurve({
         temperature: "Temperature",
         symptoms: "Symptoms",
         episodes: "Stress episodes",
-      } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset></div>
+      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}</SimpleGrid></Paper></Stack>
     <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
       <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; relative display positions share one time axis and exact values follow.`}>
@@ -817,5 +818,5 @@ export function DailyHealthCurve({
       <h3>Overlay display formula</h3>
       <p>For every numeric lane without a fixed domain, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment. Body temperature uses a fixed {TEMPERATURE_DISPLAY_MIN.toString()}–{TEMPERATURE_DISPLAY_MAX.toString()} °F structural display domain and discrete points; conversion uses <code>°F = (°C × 9/5) + 32</code>. Values outside fixed domains are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and authoritative Timeline. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
     </details>
-  </section>;
+  </Paper>;
 }

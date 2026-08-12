@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { localDate, shiftIsoDate } from "../time";
 import { AnalyticsPage } from "./AnalyticsPage";
 
@@ -55,7 +56,7 @@ describe("Analytics page", () => {
   it("renders definitions, timezone, missingness, and the no-causation caution", async () => {
     const urls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url, init?.method)); });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(screen.getByRole("heading", { name: "Daily review", level: 1 })).toBeVisible();
     expect(screen.getByLabelText("HealthCurve date")).toHaveValue("2026-08-01");
@@ -119,7 +120,7 @@ describe("Analytics page", () => {
     const today = localDate(new Date(), "Europe/London");
     const yesterday = shiftIsoDate(today, -1);
     const twoDaysAgo = shiftIsoDate(today, -2);
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     const shortcuts = screen.getByRole("group", { name: "Quick HealthCurve dates" });
     const yesterdayButton = within(shortcuts).getByRole("button", { name: "Yesterday" });
@@ -144,7 +145,7 @@ describe("Analytics page", () => {
   it("navigates local calendar days, preserves chart focus, and honors browser history", async () => {
     const urls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url, init?.method)); });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
     await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));

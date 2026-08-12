@@ -1,3 +1,4 @@
+import { Alert, Button, Group, Paper, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type PropsWithChildren } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -118,7 +119,16 @@ function HealthCurveDateFilter({
 }): React.JSX.Element {
   const [draft, setDraft] = useState(selected);
   const shortcuts = recentDayShortcuts(draft.timezone, profileTimezone);
-  return <form className="filter-panel healthcurve-date-filter" onSubmit={(event) => { event.preventDefault(); onReview(draft); }}><label>HealthCurve date<input required type="date" value={draft.day} onChange={(event) => { setDraft({ ...draft, day: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Review this day</button><div className="healthcurve-date-shortcuts" role="group" aria-label="Quick HealthCurve dates"><span>Quick dates:</span>{shortcuts.map((shortcut) => <button key={shortcut.label} type="button" className={selected.day === shortcut.day && selected.timezone === draft.timezone ? undefined : "button-secondary"} aria-pressed={selected.day === shortcut.day && selected.timezone === draft.timezone} onClick={() => { onReview({ day: shortcut.day, timezone: draft.timezone }); }}>{shortcut.label}</button>)}</div></form>;
+  return <Paper component="form" className="healthcurve-date-filter" withBorder radius="lg" p="lg" onSubmit={(event) => { event.preventDefault(); onReview(draft); }}>
+    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+      <TextInput label="HealthCurve date" aria-label="HealthCurve date" required type="date" value={draft.day} onChange={(event) => { setDraft({ ...draft, day: event.target.value }); }} />
+      <TextInput label="IANA timezone" aria-label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} />
+    </SimpleGrid>
+    <Group mt="md" justify="space-between" align="center">
+      <Group gap="xs" role="group" aria-label="Quick HealthCurve dates"><Text fw={750}>Quick dates:</Text>{shortcuts.map((shortcut) => <Button key={shortcut.label} type="button" variant={selected.day === shortcut.day && selected.timezone === draft.timezone ? "filled" : "outline"} aria-pressed={selected.day === shortcut.day && selected.timezone === draft.timezone} onClick={() => { onReview({ day: shortcut.day, timezone: draft.timezone }); }}>{shortcut.label}</Button>)}</Group>
+      <Button type="submit">Review this day</Button>
+    </Group>
+  </Paper>;
 }
 
 export function AnalyticsPage(): React.JSX.Element {
@@ -177,12 +187,12 @@ export function AnalyticsPage(): React.JSX.Element {
 
   return <Page title="Daily review" documentTitle="HealthCurve.ai" description="Review one day from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
     <HealthCurveDateFilter key={`${dayFilter.day}-${dayFilter.timezone}`} selected={dayFilter} profileTimezone={profileTimezone} onReview={reviewDay} />
-    {dailyCurve.isPending ? <p role="status">Building your daily HealthCurve…</p> : null}
-    {dailyCurve.isError ? <p className="error-summary" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</p> : null}
+    {dailyCurve.isPending ? <Text role="status" mt="md">Building your daily HealthCurve…</Text> : null}
+    {dailyCurve.isError ? <Alert color="red" mt="md" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</Alert> : null}
     {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} visible={curveVisibility} onVisibleChange={setCurveVisibility} onPreviousDay={() => { reviewAdjacentDay(-1); }} onNextDay={() => { reviewAdjacentDay(1); }} nextDayDisabled={dayFilter.day >= todayForSelectedTimezone} />}
     {dailyCurve.data === undefined ? null : <DayAnalysisCard day={dayFilter.day} timezone={dayFilter.timezone} />}
-    <section className="analytics-history" aria-labelledby="analytics-history-title"><h2 id="analytics-history-title">Longer-range analytics</h2><p>Use these deterministic totals to compare days across a longer period. Daily pattern analysis builds on the selected-day HealthCurve.</p></section>
-    <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><label>From date<input required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Calculate metrics</button></form>
+    <Stack className="analytics-history" gap="xs"><Title order={2} id="analytics-history-title">Longer-range analytics</Title><Text>Use these deterministic totals to compare days across a longer period. Daily pattern analysis builds on the selected-day HealthCurve.</Text></Stack>
+    <Paper component="form" withBorder radius="lg" p="lg" mt="md" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" aria-label="From date" required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" aria-label="Through date" required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="IANA timezone" aria-label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid><Button type="submit" mt="md">Calculate metrics</Button></Paper>
     {patterns.isPending ? <p role="status">Deriving comparable daily features…</p> : null}{patterns.isError ? <p className="error-summary" role="alert">Daily pattern features could not be calculated. Check the date range and IANA timezone.</p> : null}
     {patterns.data === undefined ? null : <DailyPatternsTable data={patterns.data} />}
     {summary.isPending ? <p role="status">Calculating deterministic metrics…</p> : null}{summary.isError ? <p className="error-summary" role="alert">Metrics could not be calculated. Check the date range and IANA timezone.</p> : null}
