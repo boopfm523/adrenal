@@ -185,9 +185,12 @@ def create_regimen(
             version_label=payload.version_label,
             effective_from=payload.effective_from,
             effective_to=payload.effective_to,
+            effective_timezone=payload.effective_timezone or owner.default_timezone,
+            effective_from_fold=payload.effective_from_fold,
+            effective_to_fold=payload.effective_to_fold,
             notes=payload.notes,
         )
-    except service.PlanError as exc:
+    except (service.PlanError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
@@ -268,9 +271,12 @@ def update_regimen_draft(
             version_label=payload.version_label,
             effective_from=payload.effective_from,
             effective_to=payload.effective_to,
+            effective_timezone=payload.effective_timezone or owner.default_timezone,
+            effective_from_fold=payload.effective_from_fold,
+            effective_to_fold=payload.effective_to_fold,
             notes=payload.notes,
         )
-    except service.PlanError as exc:
+    except (service.PlanError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     version.slots.clear()
@@ -437,6 +443,12 @@ def _regimen_out(v: RegimenVersion, *, deletion_allowed: bool) -> RegimenVersion
         status=v.status,
         effective_from=v.effective_from,
         effective_to=v.effective_to,
+        effective_timezone=v.effective_timezone,
+        effective_from_local=v.effective_from_local,
+        effective_to_local=v.effective_to_local,
+        effective_from_utc_offset_minutes=v.effective_from_utc_offset_minutes,
+        effective_to_utc_offset_minutes=v.effective_to_utc_offset_minutes,
+        effective_time_provenance=v.effective_time_provenance,
         approved_at=v.approved_at,
         approved_by=v.approved_by,
         approval_source=v.approval_source,

@@ -12,6 +12,12 @@ function renderPage(initialEntry = "/plan", client = new QueryClient({ defaultOp
 function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string, effectiveTo: string | null = null) {
   return {
     id, category: "plan", version_label: label, status, effective_from: effective, effective_to: effectiveTo,
+    effective_timezone: "America/New_York",
+    effective_from_local: effective,
+    effective_to_local: effectiveTo,
+    effective_from_utc_offset_minutes: -240,
+    effective_to_utc_offset_minutes: effectiveTo === null ? null : -240,
+    effective_time_provenance: "explicit_timezone",
     approved_at: status === "approved" ? "2026-08-01T14:00:00Z" : null,
     approved_by: status === "approved" ? "Dr Synthetic" : null,
     approval_source: status === "approved" ? "Synthetic clinic letter" : null,
@@ -59,8 +65,30 @@ describe("Medication plan page", () => {
     const timeline = (await screen.findByRole("heading", { name: "Plan timeline" })).closest("section");
     expect(timeline).not.toBeNull();
     if (timeline === null) throw new Error("plan timeline is missing");
-    expect(within(timeline).getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "Aug 2, 2026, 7:00 AM through ongoing")).toBeVisible();
+    expect(within(timeline).getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "Aug 2, 2026, 7:00 AM (America/New_York, UTC−04:00) through ongoing")).toBeVisible();
     expect(within(timeline).queryByRole("heading", { name: "Overlapping effective periods" })).not.toBeInTheDocument();
+  });
+
+  it("discloses legacy effective times whose original timezone is unknown", async () => {
+    const legacy = {
+      ...version("44444444-4444-4444-8444-444444444444", "Legacy synthetic plan", "retired", "2026-07-01T07:00:00"),
+      effective_timezone: null,
+      effective_from_local: null,
+      effective_to_local: null,
+      effective_from_utc_offset_minutes: null,
+      effective_to_utc_offset_minutes: null,
+      effective_time_provenance: "legacy_naive_utc_ambiguous",
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([legacy])));
+      if (url.endsWith("/medications")) return Promise.resolve(response([]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    renderPage();
+
+    expect((await screen.findAllByText("(legacy time; original timezone unknown)")).length).toBeGreaterThan(0);
   });
 
   it("distinguishes draft overlaps from overlaps between approved historical periods", async () => {
@@ -131,7 +159,7 @@ describe("Medication plan page", () => {
     expect(screen.getAllByText("Synthetic clinic letter").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Aug 1, 2026, 10:00 AM EDT").length).toBeGreaterThan(0);
     const effectiveStart = screen.getAllByText("Aug 1, 2026, 12:00 AM")[0];
-    expect(effectiveStart?.closest("dd")).toHaveTextContent("Aug 1, 2026, 12:00 AM through ongoing");
+    expect(effectiveStart?.closest("dd")).toHaveTextContent("Aug 1, 2026, 12:00 AM (America/New_York, UTC−04:00) through ongoing");
     expect(screen.queryByText("2026-08-01T14:00:00Z")).not.toBeInTheDocument();
     expect(document.querySelector('time[datetime="2026-08-01T14:00:00Z"]')).not.toBeNull();
     expect(screen.getAllByText("Draft plan—not physician approved").length).toBeGreaterThan(0);

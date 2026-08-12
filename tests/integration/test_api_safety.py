@@ -253,6 +253,66 @@ def test_restore_sentinel_migration_downgrades_and_reinstalls(
     assert assert_restore_sentinel(engine) is None
 
 
+def test_regimen_time_migration_marks_legacy_rows_ambiguous(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    legacy_id = uuid.uuid4()
+    legacy_owner_id = uuid.uuid4()
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "a81d4f6c2e90",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO identity.owner "
+                    "(id, email, password_hash, default_timezone, locale, "
+                    "failed_login_count, mfa_enabled) VALUES "
+                    "(:id, :email, 'synthetic-non-login-hash', 'UTC', 'en-GB', 0, false)"
+                ),
+                {"id": legacy_owner_id, "email": f"legacy-{legacy_owner_id}@example.test"},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO plan.regimen_version "
+                    "(id, owner_id, version_label, status, effective_from, effective_to, "
+                    "effective_period) VALUES "
+                    "(:id, :owner_id, 'Synthetic legacy plan', 'draft', "
+                    "'2020-01-01 09:00:00', NULL, "
+                    "tsrange('2020-01-01 09:00:00', NULL, '[)'))"
+                ),
+                {"id": legacy_id, "owner_id": legacy_owner_id},
+            )
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.begin() as connection:
+        row = connection.execute(
+            text(
+                "SELECT effective_timezone, effective_from_local, "
+                "effective_from_utc_offset_minutes, effective_time_provenance "
+                "FROM plan.regimen_version WHERE id = :id"
+            ),
+            {"id": legacy_id},
+        ).one()
+        assert row == (None, None, None, "legacy_naive_utc_ambiguous")
+        connection.execute(
+            text("DELETE FROM plan.regimen_version WHERE id = :id"), {"id": legacy_id}
+        )
+        connection.execute(
+            text("DELETE FROM identity.owner WHERE id = :id"), {"id": legacy_owner_id}
+        )
+
+
 def test_health_data_requires_authentication(client: TestClient) -> None:
     client.cookies.clear()
     for path in (
@@ -4244,6 +4304,95 @@ def test_api_normalizes_aware_regimen_dates_through_approval_and_retirement(
     assert retired.json()["status"] == "retired"
     assert retired.json()["effective_from"] == "1970-03-01T05:00:00"
     assert retired.json()["effective_to"] == "1971-03-01T05:00:00"
+
+
+@pytest.mark.safety("SAFE-13", "SAFE-16")
+def test_regimen_effective_times_preserve_local_timezone_and_reject_dst_guessing(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    payload = {
+        "version_label": "Synthetic zoned plan",
+        "effective_from": "2026-08-12T09:30:00",
+        "effective_to": "2026-08-13T09:30:00",
+        "effective_timezone": "America/New_York",
+        "slots": [],
+        "instructions": [],
+    }
+    created = client.post("/api/v1/regimens", headers=logged_in, json=payload)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["effective_from"] == "2026-08-12T13:30:00"
+    assert body["effective_from_local"] == "2026-08-12T09:30:00"
+    assert body["effective_timezone"] == "America/New_York"
+    assert body["effective_from_utc_offset_minutes"] == -240
+    assert body["effective_time_provenance"] == "explicit_timezone"
+
+    owner_default = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            **payload,
+            "version_label": "Synthetic owner-timezone plan",
+            "effective_timezone": None,
+        },
+    )
+    assert owner_default.status_code == 201, owner_default.text
+    assert owner_default.json()["effective_timezone"] == "Europe/London"
+    assert owner_default.json()["effective_from"] == "2026-08-12T08:30:00"
+    assert owner_default.json()["effective_from_utc_offset_minutes"] == 60
+
+    invalid_timezone = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            **payload,
+            "version_label": "Synthetic invalid-timezone plan",
+            "effective_timezone": "Mars/Olympus",
+        },
+    )
+    assert invalid_timezone.status_code == 422
+    assert "unknown IANA timezone" in invalid_timezone.json()["detail"]
+
+    nonexistent = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            **payload,
+            "version_label": "Synthetic skipped plan",
+            "effective_from": "2026-03-08T02:30:00",
+            "effective_to": None,
+        },
+    )
+    assert nonexistent.status_code == 422
+    assert "does not exist" in nonexistent.json()["detail"]
+
+    ambiguous = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            **payload,
+            "version_label": "Synthetic repeated plan",
+            "effective_from": "2026-11-01T01:30:00",
+            "effective_to": None,
+        },
+    )
+    assert ambiguous.status_code == 422
+    assert "occurs twice" in ambiguous.json()["detail"]
+
+    selected_fold = client.post(
+        "/api/v1/regimens",
+        headers=logged_in,
+        json={
+            **payload,
+            "version_label": "Synthetic selected repeated plan",
+            "effective_from": "2026-11-01T01:30:00",
+            "effective_to": None,
+            "effective_from_fold": 1,
+        },
+    )
+    assert selected_fold.status_code == 201, selected_fold.text
+    assert selected_fold.json()["effective_from"] == "2026-11-01T06:30:00"
+    assert selected_fold.json()["effective_from_utc_offset_minutes"] == -300
 
 
 @pytest.mark.safety("SAFE-16")

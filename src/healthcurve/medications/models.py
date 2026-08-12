@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Numeric,
+    SmallInteger,
     String,
     Text,
     Time,
@@ -148,9 +149,20 @@ class RegimenVersion(PlanBase):
     )
 
     #: Half-open [from, to). ``effective_to`` NULL means "still in force".
+    #: Canonical UTC instants are stored naive for PostgreSQL ``tsrange`` compatibility.
     effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     effective_period: Mapped[Range[datetime]] = mapped_column(TSRANGE, nullable=False)
+    #: Capture-time wall-clock provenance. Legacy rows deliberately leave these NULL
+    #: because their original timezone cannot be reconstructed honestly.
+    effective_timezone: Mapped[str | None] = mapped_column(String(64))
+    effective_from_local: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    effective_to_local: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    effective_from_utc_offset_minutes: Mapped[int | None] = mapped_column(SmallInteger)
+    effective_to_utc_offset_minutes: Mapped[int | None] = mapped_column(SmallInteger)
+    effective_time_provenance: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="explicit_timezone"
+    )
 
     # --- Approval provenance. AI can never write any of this (SAFE-16). ---
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -188,6 +200,16 @@ class RegimenVersion(PlanBase):
         CheckConstraint(
             "effective_to IS NULL OR effective_to > effective_from",
             name="effective_range_ordered",
+        ),
+        CheckConstraint(
+            "effective_from_utc_offset_minutes IS NULL OR "
+            "effective_from_utc_offset_minutes BETWEEN -720 AND 840",
+            name="effective_from_offset_within_real_range",
+        ),
+        CheckConstraint(
+            "effective_to_utc_offset_minutes IS NULL OR "
+            "effective_to_utc_offset_minutes BETWEEN -720 AND 840",
+            name="effective_to_offset_within_real_range",
         ),
         # Approved status requires provenance. An approval with no approver is not an
         # approval, and SAFE-16 depends on that being unforgeable.

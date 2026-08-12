@@ -110,8 +110,24 @@ function RecordedPlanTime({ value }: { value: string }): React.JSX.Element {
   return <time dateTime={value}>{formatUnzonedDateTime(value)}</time>;
 }
 
+function utcOffsetLabel(offsetMinutes: number | null): string {
+  if (offsetMinutes === null) return "UTC offset unavailable";
+  const sign = offsetMinutes < 0 ? "−" : "+";
+  const absolute = Math.abs(offsetMinutes);
+  return `UTC${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
+}
+
+function EffectivePlanTime({ canonical, local, timezone, offsetMinutes }: { canonical: string; local?: string | null; timezone?: string | null; offsetMinutes?: number | null }): React.JSX.Element {
+  if (local == null || timezone == null) return <><RecordedPlanTime value={canonical} /> <span>(legacy time; original timezone unknown)</span></>;
+  return <><RecordedPlanTime value={local} /> <span>({timezone}, {utcOffsetLabel(offsetMinutes ?? null)})</span></>;
+}
+
 function EffectivePeriod({ version }: { version: RegimenVersion }): React.JSX.Element {
-  return <><RecordedPlanTime value={version.effective_from} /> through {version.effective_to === null ? "ongoing" : <RecordedPlanTime value={version.effective_to} />}</>;
+  return <>
+    <EffectivePlanTime canonical={version.effective_from} local={version.effective_from_local} timezone={version.effective_timezone} offsetMinutes={version.effective_from_utc_offset_minutes} />
+    {" through "}
+    {version.effective_to === null ? "ongoing" : <EffectivePlanTime canonical={version.effective_to} local={version.effective_to_local} timezone={version.effective_timezone} offsetMinutes={version.effective_to_utc_offset_minutes} />}
+  </>;
 }
 
 interface PlanInterval {
@@ -192,6 +208,7 @@ function PlanTimeline({ versions }: { versions: RegimenVersion[] }): React.JSX.E
   const day = 24 * 60 * 60 * 1000;
   const maximum = Math.max(latestKnown, minimum + day) + day;
   const span = maximum - minimum;
+  const versionsById = new Map(versions.map((version) => [version.id, version]));
   return <section className="plan-timeline" aria-labelledby="plan-timeline-heading">
     <h3 id="plan-timeline-heading">Plan timeline</h3>
     <p>Effective periods are shown in date order. An ongoing bar extends to the right edge. Dates describe recorded plan metadata, not dosing advice.</p>
@@ -200,8 +217,9 @@ function PlanTimeline({ versions }: { versions: RegimenVersion[] }): React.JSX.E
       const end = interval.effectiveTo === null ? maximum : Math.min(intervalTime(interval.effectiveTo), maximum);
       const left = Math.max(0, ((start - minimum) / span) * 100);
       const width = Math.max(1.5, ((Math.max(end, start + day / 12) - start) / span) * 100);
+      const displayVersion = versionsById.get(interval.id);
       return <li className={`plan-timeline-item plan-timeline-item--${interval.status}${overlappingIds.has(interval.id) ? " plan-timeline-item--overlap" : ""}`} key={interval.id}>
-        <div className="plan-timeline-copy"><strong>{interval.label}</strong><span>{statusLabel(interval.status)}</span><span><RecordedPlanTime value={interval.effectiveFrom} /> through {interval.effectiveTo === null ? "ongoing" : <RecordedPlanTime value={interval.effectiveTo} />}</span>{overlappingIds.has(interval.id) ? <span className="plan-timeline-overlap-label">Overlaps another effective period</span> : null}</div>
+        <div className="plan-timeline-copy"><strong>{interval.label}</strong><span>{statusLabel(interval.status)}</span><span>{displayVersion === undefined ? <><RecordedPlanTime value={interval.effectiveFrom} /> through {interval.effectiveTo === null ? "ongoing" : <RecordedPlanTime value={interval.effectiveTo} />}</> : <EffectivePeriod version={displayVersion} />}</span>{overlappingIds.has(interval.id) ? <span className="plan-timeline-overlap-label">Overlaps another effective period</span> : null}</div>
         <div className="plan-timeline-track" aria-hidden="true"><span style={{ left: `${String(left)}%`, width: `${String(Math.min(width, 100 - left))}%` }} /></div>
       </li>;
     })}</ol>
@@ -278,11 +296,12 @@ function MedicationCreator({ onCreated }: { onCreated: (medication: Medication) 
   </details>;
 }
 
-function PlanEditor({ source, editDraft, medications, existingVersions, onCancel, onSaved }: {
+function PlanEditor({ source, editDraft, medications, existingVersions, timezone, onCancel, onSaved }: {
   source: RegimenVersion | null;
   editDraft: RegimenVersion | null;
   medications: Medication[];
   existingVersions: RegimenVersion[];
+  timezone: string;
   onCancel: () => void;
   onSaved: (message: string, version: RegimenVersion) => void;
 }): React.JSX.Element {
@@ -291,8 +310,8 @@ function PlanEditor({ source, editDraft, medications, existingVersions, onCancel
   const [slots, setSlots] = useState(() => initialSlots(basis));
   const [instructions, setInstructions] = useState(() => initialInstructions(basis));
   const [selectedNewMedication, setSelectedNewMedication] = useState<Medication | null>(null);
-  const [effectiveFrom, setEffectiveFrom] = useState(() => localInput(basis?.effective_from ?? null));
-  const [effectiveTo, setEffectiveTo] = useState(() => localInput(basis?.effective_to ?? null));
+  const [effectiveFrom, setEffectiveFrom] = useState(() => localInput(basis?.effective_from_local ?? basis?.effective_from ?? null));
+  const [effectiveTo, setEffectiveTo] = useState(() => localInput(basis?.effective_to_local ?? basis?.effective_to ?? null));
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
   const mutation = useMutation({
@@ -326,6 +345,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, onCancel
         version_label: formString(data, "version_label"),
         effective_from: formString(data, "effective_from"),
         effective_to: formString(data, "effective_to") || null,
+        effective_timezone: timezone,
         notes: formString(data, "notes") || null,
         slots: slots.map((slot, index) => ({ ...slot, condition: slot.condition || null, scheduled_local_time: slot.scheduled_local_time, sort_order: index })),
         instructions: instructions.map((instruction, index) => ({ ...instruction, sort_order: index })),
@@ -335,7 +355,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, onCancel
         <label>Version label<input name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : `${source.version_label} — new version`)} /></label>
         <label>Effective from<input name="effective_from" type="datetime-local" required aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} /></label>
         <label>Effective through (optional)<input name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} /></label>
-        <p className="field-hint wide-field" id="effective-period-help">The start is included and the through time is the first moment this version no longer applies. A later version may begin exactly at that through time without overlapping. Leave through blank for an ongoing period.</p>
+        <p className="field-hint wide-field" id="effective-period-help">Times are entered in {timezone}. The start is included and the through time is the first moment this version no longer applies. A later version may begin exactly at that through time without overlapping. Leave through blank for an ongoing period. A skipped or repeated daylight-saving time must be corrected rather than guessed.</p>
         <aside className="proposed-plan-interval wide-field" aria-live="polite" aria-labelledby="proposed-plan-interval-heading">
           <h3 id="proposed-plan-interval-heading">Proposed effective interval</h3>
           {proposedInterval === null ? <p>Choose an effective start to preview this draft against the versions shown in history.</p> : <>
@@ -387,7 +407,7 @@ function ApprovalForm({ version, focusOnMount, onComplete }: { version: RegimenV
     <h4 id={`approval-heading-${version.id}`} ref={headingRef} tabIndex={-1}>Next step: review and record physician approval</h4>
     <p><strong>This draft is not active.</strong> Record approval here only after a physician has actually approved this plan. HealthCurve and its AI cannot approve it.</p>
     <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
-    <p>After approval, HealthCurve uses the plan only during its effective period, beginning <RecordedPlanTime value={version.effective_from} />. A future-dated plan will wait until that time.</p>
+    <p>After approval, HealthCurve uses the plan only during its effective period: <EffectivePeriod version={version} />. A future-dated plan will wait until that time.</p>
     <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null }); }}>
       <label>Approving clinician or role<input name="approved_by" required maxLength={200} /></label>
       <label>Approval source<input name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" /></label>
@@ -452,7 +472,7 @@ export function PlanPage(): React.JSX.Element {
     {(active.isError || history.isError || medications.isError) ? <p className="error-summary" role="alert">Medication plan data could not be loaded.</p> : null}
     {message === "" ? null : <p className="success-message" role="status">{message}</p>}
     {editor === null ? <div className="page-actions"><button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</button></div> : null}
-    {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} existingVersions={versions} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
+    {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} existingVersions={versions} timezone={profileTimezone} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
     {active.data === null ? <section className="empty-state"><h2>No approved plan currently in force</h2><p>Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</p></section> : null}
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} timezone={profileTimezone} /></PlanCard>}
 

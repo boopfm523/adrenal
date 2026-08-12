@@ -195,6 +195,13 @@ class RegimenVersionIn(ApiModel):
     version_label: str = Field(min_length=1, max_length=60)
     effective_from: datetime
     effective_to: datetime | None = None
+    effective_timezone: str | None = Field(
+        default=None,
+        max_length=64,
+        description="IANA timezone for naive effective wall times; owner default when omitted",
+    )
+    effective_from_fold: int | None = Field(default=None, ge=0, le=1)
+    effective_to_fold: int | None = Field(default=None, ge=0, le=1)
     notes: str | None = None
     slots: list[DoseSlotIn] = Field(default_factory=list)
     instructions: list[InstructionIn] = Field(default_factory=list)
@@ -217,6 +224,12 @@ class RegimenVersionOut(PlanResource):
     status: RegimenStatus
     effective_from: datetime
     effective_to: datetime | None
+    effective_timezone: str | None
+    effective_from_local: datetime | None
+    effective_to_local: datetime | None
+    effective_from_utc_offset_minutes: int | None
+    effective_to_utc_offset_minutes: int | None
+    effective_time_provenance: str
     approved_at: datetime | None
     approved_by: str | None
     approval_source: str | None

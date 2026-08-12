@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from healthcurve.events import service as event_service
+from healthcurve.events.timekeeping import EventTime, from_instant, resolve_event_time
 from healthcurve.medications.models import (
     DoseEvent,
     DoseUnit,
@@ -71,11 +72,20 @@ def create_draft(
     version_label: str,
     effective_from: datetime,
     effective_to: datetime | None = None,
+    effective_timezone: str = "UTC",
+    effective_from_fold: int | None = None,
+    effective_to_fold: int | None = None,
     notes: str | None = None,
 ) -> RegimenVersion:
     """Create a draft. Drafts are freely editable; approved versions never are."""
-    normalized_from = _naive(effective_from)
-    normalized_to = _naive(effective_to) if effective_to is not None else None
+    resolved_from = _resolve_plan_time(effective_from, effective_timezone, effective_from_fold)
+    resolved_to = (
+        _resolve_plan_time(effective_to, effective_timezone, effective_to_fold)
+        if effective_to is not None
+        else None
+    )
+    normalized_from = _naive(resolved_from.occurred_at)
+    normalized_to = _naive(resolved_to.occurred_at) if resolved_to is not None else None
     if normalized_to is not None and normalized_to <= normalized_from:
         raise PlanError("effective_to must be after effective_from")
 
@@ -86,6 +96,14 @@ def create_draft(
         effective_from=normalized_from,
         effective_to=normalized_to,
         effective_period=_period(normalized_from, normalized_to),
+        effective_timezone=resolved_from.timezone,
+        effective_from_local=resolved_from.local_time,
+        effective_to_local=resolved_to.local_time if resolved_to is not None else None,
+        effective_from_utc_offset_minutes=resolved_from.utc_offset_minutes,
+        effective_to_utc_offset_minutes=(
+            resolved_to.utc_offset_minutes if resolved_to is not None else None
+        ),
+        effective_time_provenance="explicit_timezone",
         notes=notes,
     )
     session.add(version)
@@ -100,13 +118,22 @@ def update_draft(
     version_label: str,
     effective_from: datetime,
     effective_to: datetime | None = None,
+    effective_timezone: str = "UTC",
+    effective_from_fold: int | None = None,
+    effective_to_fold: int | None = None,
     notes: str | None = None,
 ) -> RegimenVersion:
     """Replace editable metadata on a draft; approved history is immutable."""
     if version.status is not RegimenStatus.DRAFT:
         raise PlanError("only an unapproved draft can be edited; create a new version")
-    normalized_from = _naive(effective_from)
-    normalized_to = _naive(effective_to) if effective_to is not None else None
+    resolved_from = _resolve_plan_time(effective_from, effective_timezone, effective_from_fold)
+    resolved_to = (
+        _resolve_plan_time(effective_to, effective_timezone, effective_to_fold)
+        if effective_to is not None
+        else None
+    )
+    normalized_from = _naive(resolved_from.occurred_at)
+    normalized_to = _naive(resolved_to.occurred_at) if resolved_to is not None else None
     if normalized_to is not None and normalized_to <= normalized_from:
         raise PlanError("effective_to must be after effective_from")
 
@@ -114,6 +141,14 @@ def update_draft(
     version.effective_from = normalized_from
     version.effective_to = normalized_to
     version.effective_period = _period(normalized_from, normalized_to)
+    version.effective_timezone = resolved_from.timezone
+    version.effective_from_local = resolved_from.local_time
+    version.effective_to_local = resolved_to.local_time if resolved_to is not None else None
+    version.effective_from_utc_offset_minutes = resolved_from.utc_offset_minutes
+    version.effective_to_utc_offset_minutes = (
+        resolved_to.utc_offset_minutes if resolved_to is not None else None
+    )
+    version.effective_time_provenance = "explicit_timezone"
     version.notes = notes
     return version
 
@@ -125,6 +160,13 @@ def _period(start: datetime, end: datetime | None) -> Range[datetime]:
 
 def _naive(value: datetime) -> datetime:
     return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+
+
+def _resolve_plan_time(value: datetime, timezone: str, fold: int | None) -> EventTime:
+    """Resolve plan input while retaining the owner's capture-time wall clock."""
+    if value.tzinfo is not None:
+        return from_instant(value, timezone)
+    return resolve_event_time(value, timezone, fold=fold)
 
 
 def approve_version(
@@ -172,6 +214,15 @@ def retire_version(
     version.effective_to = current_end
     if current_end is None or current_end > retired_end:
         version.effective_to = retired_end
+        if version.effective_timezone is not None:
+            resolved_end = from_instant(retired_moment, version.effective_timezone)
+            version.effective_to_local = resolved_end.local_time
+            version.effective_to_utc_offset_minutes = resolved_end.utc_offset_minutes
+        else:
+            # A legacy row's original zone is unknown. Preserve that disclosure
+            # instead of making the retirement instant look like recovered context.
+            version.effective_to_local = None
+            version.effective_to_utc_offset_minutes = None
     version.effective_period = _period(version.effective_from, version.effective_to)
     session.flush()
     return version

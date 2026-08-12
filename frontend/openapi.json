@@ -5758,6 +5758,32 @@
             "title": "Effective From",
             "type": "string"
           },
+          "effective_from_fold": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From Fold"
+          },
+          "effective_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "IANA timezone for naive effective wall times; owner default when omitted",
+            "title": "Effective Timezone"
+          },
           "effective_to": {
             "anyOf": [
               {
@@ -5769,6 +5795,19 @@
               }
             ],
             "title": "Effective To"
+          },
+          "effective_to_fold": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To Fold"
           },
           "instructions": {
             "items": {
@@ -5861,6 +5900,44 @@
             "title": "Effective From",
             "type": "string"
           },
+          "effective_from_local": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From Local"
+          },
+          "effective_from_utc_offset_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From Utc Offset Minutes"
+          },
+          "effective_time_provenance": {
+            "title": "Effective Time Provenance",
+            "type": "string"
+          },
+          "effective_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Timezone"
+          },
           "effective_to": {
             "anyOf": [
               {
@@ -5872,6 +5949,29 @@
               }
             ],
             "title": "Effective To"
+          },
+          "effective_to_local": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To Local"
+          },
+          "effective_to_utc_offset_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To Utc Offset Minutes"
           },
           "id": {
             "format": "uuid",
@@ -5929,6 +6029,12 @@
           "status",
           "effective_from",
           "effective_to",
+          "effective_timezone",
+          "effective_from_local",
+          "effective_to_local",
+          "effective_from_utc_offset_minutes",
+          "effective_to_utc_offset_minutes",
+          "effective_time_provenance",
           "approved_at",
           "approved_by",
           "approval_source",

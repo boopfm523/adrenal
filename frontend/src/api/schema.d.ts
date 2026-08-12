@@ -3131,8 +3131,17 @@ export interface components {
              * Format: date-time
              */
             effective_from: string;
+            /** Effective From Fold */
+            effective_from_fold?: number | null;
+            /**
+             * Effective Timezone
+             * @description IANA timezone for naive effective wall times; owner default when omitted
+             */
+            effective_timezone?: string | null;
             /** Effective To */
             effective_to?: string | null;
+            /** Effective To Fold */
+            effective_to_fold?: number | null;
             /** Instructions */
             instructions?: components["schemas"]["InstructionIn"][];
             /** Notes */
@@ -3163,8 +3172,20 @@ export interface components {
              * Format: date-time
              */
             effective_from: string;
+            /** Effective From Local */
+            effective_from_local: string | null;
+            /** Effective From Utc Offset Minutes */
+            effective_from_utc_offset_minutes: number | null;
+            /** Effective Time Provenance */
+            effective_time_provenance: string;
+            /** Effective Timezone */
+            effective_timezone: string | null;
             /** Effective To */
             effective_to: string | null;
+            /** Effective To Local */
+            effective_to_local: string | null;
+            /** Effective To Utc Offset Minutes */
+            effective_to_utc_offset_minutes: number | null;
             /**
              * Id
              * Format: uuid
