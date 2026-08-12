@@ -128,7 +128,7 @@ def require_empty_database(connection: Connection) -> None:
         )
 
 
-def _seed_metric_rows(
+def seed_metric_rows(
     connection: Connection, *, owner_id: uuid.UUID, sync_run_id: uuid.UUID, scale: ScalePlan
 ) -> None:
     metric_specs = json.dumps(
@@ -361,7 +361,7 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
             )
             session.add(sync)
             session.flush()
-            _seed_metric_rows(connection, owner_id=owner.id, sync_run_id=sync.id, scale=scale)
+            seed_metric_rows(connection, owner_id=owner.id, sync_run_id=sync.id, scale=scale)
             connection.execute(text("ANALYZE fact.garmin_metric_event"))
 
             provider_count = connection.scalar(

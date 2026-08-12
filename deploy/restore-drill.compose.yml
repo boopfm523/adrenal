@@ -16,7 +16,9 @@ services:
     volumes:
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     tmpfs:
-      - /var/lib/postgresql/data:rw,nosuid,nodev,size=2g
+      # Five years of synthetic dense Garmin facts restored to 1.97 GiB in hc-jgd.5;
+      # leave headroom for the remaining schemas, indexes, and restore work.
+      - /var/lib/postgresql/data:rw,nosuid,nodev,size=4g
       - /var/run/postgresql:rw,nosuid,nodev,size=16m
       - /tmp:rw,nosuid,nodev,size=64m
     networks: [restore-internal]

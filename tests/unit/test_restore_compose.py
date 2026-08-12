@@ -24,7 +24,7 @@ def test_restore_stack_is_standalone_internal_and_has_no_persistent_database() -
 
     database = compose["services"]["restore-postgres"]
     assert database["read_only"] is True
-    assert any(value.startswith("/var/lib/postgresql/data:") for value in database["tmpfs"])
+    assert "/var/lib/postgresql/data:rw,nosuid,nodev,size=4g" in database["tmpfs"]
     assert any(value.startswith("/var/run/postgresql:") for value in database["tmpfs"])
     assert database["cap_drop"] == ["ALL"]
     assert database["security_opt"] == ["no-new-privileges:true"]

@@ -180,3 +180,27 @@ full uncached year is bounded in memory but still user-visible work. Run the res
 backfill after migration, or before known long-range review, so ordinary requests use
 the warm path. Late or corrected provider observations invalidate only their affected
 local dates; the following bounded read deterministically refreshes those dates.
+
+## Wearable backup and restore scale verification
+
+ADR-0023 retains exact wearable facts indefinitely in PostgreSQL. A disposable
+five-year run on 2026-08-12 measured the database component through the same read-only
+role and custom dump format used by nightly backups:
+
+| Operation | Result |
+| --- | ---: |
+| Seed and index 3,690,540 synthetic rows | 63.654 s |
+| Source metric relation | 2,379,350,016 bytes |
+| `pg_dump --format=custom` | 11.632 s; 230,389,883 bytes |
+| Isolated `pg_restore` | 17.833 s |
+| Restored metric relation | 2,116,419,584 bytes |
+
+The restored row count, deterministic whole-row signature, and non-health restore
+sentinel all matched. Both containers were destroyed. The dump measurement excludes
+artifact copying, tar assembly, encryption, and offsite transfer, so normal backup
+monitoring and quarterly complete restore drills remain authoritative for end-to-end
+RPO/RTO health.
+
+Use `scripts/benchmark_wearable_backup_restore.py` with the explicit confirmation
+shown in ADR-0023 to repeat it. The runner creates its own disposable containers and
+uses only synthetic values.

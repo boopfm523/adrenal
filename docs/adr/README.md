@@ -30,6 +30,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0020](0020-on-demand-day-analysis-projection.md) | On-demand daily AI analysis uses a fingerprinted projection | Accepted |
 | [0021](0021-versioned-wearable-daily-summaries.md) | Versioned wearable daily summaries for bounded longitudinal reads | Accepted |
 | [0022](0022-durable-streamed-private-exports.md) | Durable streamed private exports | Accepted |
+| [0023](0023-indefinite-hot-wearable-retention.md) | Indefinite exact wearable retention | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

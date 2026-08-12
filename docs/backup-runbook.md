@@ -4,6 +4,11 @@
 and the boundary for an offsite copy. The isolated restore drill is tracked separately
 by `hc-cbs.2` and remains a production-launch gate.
 
+Dense raw wearable facts are retained indefinitely under ADR-0023. Capacity planning
+must include them; the five-year synthetic database component produced a 230,389,883
+byte custom dump in 11.632 seconds and restored in 17.833 seconds. These component
+figures do not replace end-to-end encrypted backup and quarterly restore monitoring.
+
 ## Safety rules
 
 - The backup host stores only an `age` **public recipient**. Keep the private identity
