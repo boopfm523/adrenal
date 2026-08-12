@@ -75,7 +75,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Pattern Analyses */
+        /**
+         * List Pattern Analyses
+         * @description Return recent drafts, optionally narrowed to one exact local-date selection.
+         */
         get: operations["list_pattern_analyses_api_v1_analytics_pattern_analysis_get"];
         put?: never;
         /**
@@ -4091,7 +4094,11 @@ export interface operations {
     };
     list_pattern_analyses_api_v1_analytics_pattern_analysis_get: {
         parameters: {
-            query?: never;
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                timezone?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: {

@@ -516,14 +516,20 @@ day-level HealthCurve. Reviewing many measures can surface chance patterns, so t
 section explicitly warns that descriptive correlation or association does not
 establish causation or diagnosis.
 
-The optional private-model pattern draft can phrase only those deterministic range
-figures. A saved draft stays in the AI namespace and carries its daily feature IDs and
-dates, model digest, prompt version, schema version, missingness, and uncertainty
-caution. HealthCurve rejects and does not save output that invents a number, omits
-required citations, or gives medication guidance. If the configured Ollama service
-is unavailable, deterministic results continue to work. The owner can delete the
-generated draft without changing facts or physician-approved plans; while retained,
-it is included only when an export explicitly includes AI analysis.
+The optional private Ollama pattern explanation can phrase only those deterministic
+range figures. The browser shows elapsed time, stops waiting after 75 seconds, and
+offers an explicit **Stop waiting** control. Stopping or timing out ends only the
+browser's wait: host Ollama may still finish, so **Check for a completed draft** or a
+page refresh reloads the latest saved completion for the exact range and timezone.
+Failed and unfinished requests are not stored. A saved draft stays in the AI namespace
+and carries its daily feature IDs and dates, model digest, prompt version, schema
+version, missingness, and uncertainty caution. HealthCurve rejects and does not save
+output that invents a number, omits required citations, or gives medication guidance.
+If configured host Ollama or its model is unavailable, deterministic results continue
+to work and the UI provides a safe retry. The owner can delete the generated draft
+without changing facts or physician-approved plans; while retained, it is included
+only when an export explicitly includes AI analysis. Health text goes only to the
+configured private Ollama adapter, never to a cloud AI service.
 
 For one selected day, **Analyze this day** builds a fresh fingerprinted projection from
 all supported recorded domains and the physician-approved plan active that day. Dense

@@ -184,6 +184,15 @@ export class AnalysisRequestTimeoutError extends Error {
   }
 }
 
+export class AnalysisRequestCancelledError extends Error {
+  constructor() {
+    super("The browser stopped waiting for the private-model request.");
+    this.name = "AnalysisRequestCancelledError";
+  }
+}
+
+export const ANALYSIS_REQUEST_TIMEOUT_SECONDS = 75;
+
 function isWriteMethod(method: string): boolean {
   return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
@@ -552,9 +561,35 @@ export function getDailyPatterns(dateFrom: string, dateTo: string, timezone: str
   return apiRequest<DailyPatterns>(`/analytics/daily-patterns?${params.toString()}`);
 }
 
-export function generatePatternAnalysis(dateFrom: string, dateTo: string, timezone: string): Promise<PatternAnalysisGeneration> {
+async function analysisRequest<T>(path: string, externalSignal?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  const cancel = (): void => { controller.abort(new AnalysisRequestCancelledError()); };
+  if (externalSignal?.aborted === true) cancel();
+  else externalSignal?.addEventListener("abort", cancel, { once: true });
+  const deadline = window.setTimeout(() => {
+    controller.abort(new AnalysisRequestTimeoutError());
+  }, ANALYSIS_REQUEST_TIMEOUT_SECONDS * 1000);
+  try {
+    return await apiRequest<T>(path, { method: "POST", signal: controller.signal });
+  } catch (error: unknown) {
+    if (controller.signal.reason instanceof AnalysisRequestTimeoutError) throw controller.signal.reason;
+    if (controller.signal.reason instanceof AnalysisRequestCancelledError) throw controller.signal.reason;
+    throw error;
+  } finally {
+    window.clearTimeout(deadline);
+    externalSignal?.removeEventListener("abort", cancel);
+  }
+}
+
+export async function getPatternAnalysis(dateFrom: string, dateTo: string, timezone: string): Promise<PatternAnalysis | null> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
-  return apiRequest<PatternAnalysisGeneration>(`/analytics/pattern-analysis?${params.toString()}`, { method: "POST" });
+  const analyses = await apiRequest<PatternAnalysis[]>(`/analytics/pattern-analysis?${params.toString()}`);
+  return analyses.at(0) ?? null;
+}
+
+export function generatePatternAnalysis(dateFrom: string, dateTo: string, timezone: string, signal?: AbortSignal): Promise<PatternAnalysisGeneration> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
+  return analysisRequest<PatternAnalysisGeneration>(`/analytics/pattern-analysis?${params.toString()}`, signal);
 }
 
 export async function deletePatternAnalysis(analysisId: string): Promise<void> {
@@ -568,15 +603,7 @@ export function getDayAnalysis(day: string, timezone: string): Promise<DayAnalys
 
 export function generateDayAnalysis(day: string, timezone: string): Promise<DayAnalysisGeneration> {
   const params = new URLSearchParams({ day, timezone });
-  const controller = new AbortController();
-  const deadline = window.setTimeout(() => { controller.abort(); }, 75_000);
-  return apiRequest<DayAnalysisGeneration>(`/analytics/day-analysis?${params.toString()}`, {
-    method: "POST",
-    signal: controller.signal,
-  }).catch((error: unknown) => {
-    if (controller.signal.aborted) throw new AnalysisRequestTimeoutError();
-    throw error;
-  }).finally(() => { window.clearTimeout(deadline); });
+  return analysisRequest<DayAnalysisGeneration>(`/analytics/day-analysis?${params.toString()}`);
 }
 
 export async function downloadDailyPatternsCsv(dateFrom: string, dateTo: string, timezone: string): Promise<Blob> {

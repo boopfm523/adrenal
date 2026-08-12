@@ -327,7 +327,14 @@ def generate_pattern_analysis(
         f"daily-feature:{day.date}:{day.source_revision_watermark_sha256}"
         for day in projection.days
     ]
-    computed_inputs = projection.longitudinal_summary.model_dump(mode="json")
+    computed_inputs: dict[str, object] = projection.longitudinal_summary.model_dump(mode="json")
+    computed_inputs.update(
+        {
+            "selected_date_from": date_from.isoformat(),
+            "selected_date_to": date_to.isoformat(),
+            "selected_timezone": zone_name,
+        }
+    )
     generated = analysis_service.generate_analysis(
         session,
         owner_id=owner.id,
@@ -371,16 +378,44 @@ def generate_pattern_analysis(
 
 
 @router.get("/analytics/pattern-analysis", response_model=list[PatternAnalysisOut])
-def list_pattern_analyses(session: DbSession, owner: CurrentOwner) -> list[PatternAnalysisOut]:
-    rows = session.scalars(
-        select(AIAnalysis)
-        .where(
-            AIAnalysis.owner_id == owner.id,
-            AIAnalysis.analysis_type == AnalysisType.PATTERN_OBSERVATION,
-            AIAnalysis.hidden_at.is_(None),
+def list_pattern_analyses(
+    session: DbSession,
+    owner: CurrentOwner,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    timezone: str | None = None,
+) -> list[PatternAnalysisOut]:
+    """Return recent drafts, optionally narrowed to one exact local-date selection."""
+    if (date_from is None) != (date_to is None):
+        raise HTTPException(status_code=422, detail="date_from and date_to must be used together")
+    statement = select(AIAnalysis).where(
+        AIAnalysis.owner_id == owner.id,
+        AIAnalysis.analysis_type == AnalysisType.PATTERN_OBSERVATION,
+        AIAnalysis.hidden_at.is_(None),
+    )
+    limit = 20
+    if date_from is not None and date_to is not None:
+        zone_name = _validated_range(
+            date_from=date_from,
+            date_to=date_to,
+            timezone=timezone,
+            default_timezone=owner.default_timezone,
         )
-        .order_by(AIAnalysis.generated_at.desc(), AIAnalysis.id.desc())
-        .limit(20)
+        zone = ZoneInfo(zone_name)
+        range_start = datetime.combine(date_from, time.min, tzinfo=zone).astimezone(UTC)
+        range_end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=zone).astimezone(
+            UTC
+        )
+        statement = statement.where(
+            AIAnalysis.range_start == range_start,
+            AIAnalysis.range_end == range_end,
+            AIAnalysis.computed_inputs["selected_date_from"].astext == date_from.isoformat(),
+            AIAnalysis.computed_inputs["selected_date_to"].astext == date_to.isoformat(),
+            AIAnalysis.computed_inputs["selected_timezone"].astext == zone_name,
+        )
+        limit = 1
+    rows = session.scalars(
+        statement.order_by(AIAnalysis.generated_at.desc(), AIAnalysis.id.desc()).limit(limit)
     )
     return [
         _pattern_analysis_out(row)

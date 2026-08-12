@@ -329,6 +329,7 @@ circle.chart-series { fill: white; }
 .analytics-history { margin-top: 2.5rem; padding-top: 1rem; border-top: 0.2rem solid #174c3c; }
 .section-heading-row { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .section-heading-row h2 { margin-top: 0; }
+.analysis-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 .daily-patterns { margin-top: 1.5rem; }
 .daily-pattern-table { min-width: 108rem; }
 .daily-pattern-table th, .daily-pattern-table td { max-width: 18rem; vertical-align: top; }

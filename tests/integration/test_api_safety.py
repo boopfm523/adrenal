@@ -5851,6 +5851,107 @@ def test_pattern_analysis_fails_safely_when_private_model_is_unavailable(
     assert "synthetic private model detail" not in response.text
 
 
+def test_pattern_analysis_completion_is_reloadable_by_exact_range_and_timeout_is_safe(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner_email = f"pattern-recovery-{uuid.uuid4().hex[:12]}@example.com"
+    with Session(engine) as session, session.begin():
+        session.add(
+            Owner(
+                email=owner_email,
+                password_hash=auth.hash_password(PASSWORD),
+                default_timezone="America/New_York",
+            )
+        )
+
+    login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    csrf = login.json()["csrf_token"]
+
+    def generated(session: Session, **kwargs: object) -> analysis_service.AnalysisGenerationResult:
+        row = AIAnalysis(
+            owner_id=cast(uuid.UUID, kwargs["owner_id"]),
+            analysis_type=AnalysisType.PATTERN_OBSERVATION,
+            body="Synthetic checked pattern explanation.",
+            source_record_ids=cast(list[str], kwargs["source_record_ids"]),
+            computed_inputs=cast(dict[str, object], kwargs["computed_inputs"]),
+            model_name="synthetic-local-model",
+            model_digest="sha256:synthetic",
+            prompt_version="analysis-v3",
+            schema_version="analysis-v1",
+        )
+        session.add(row)
+        session.flush()
+        return analysis_service.AnalysisGenerationResult(
+            outcome=analysis_service.AnalysisOutcome.CREATED,
+            analysis=row,
+        )
+
+    monkeypatch.setattr(analysis_service, "generate_analysis", generated)
+    params = {
+        "date_from": "2026-08-01",
+        "date_to": "2026-08-07",
+        "timezone": "America/New_York",
+    }
+    created = client.post(
+        "/api/v1/analytics/pattern-analysis",
+        params=params,
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["outcome"] == "created"
+    assert created.json()["analysis"]["computed_inputs"]["selected_date_from"] == "2026-08-01"
+    assert created.json()["analysis"]["computed_inputs"]["selected_date_to"] == "2026-08-07"
+    assert created.json()["analysis"]["computed_inputs"]["selected_timezone"] == "America/New_York"
+
+    reloaded = client.get("/api/v1/analytics/pattern-analysis", params=params)
+    assert reloaded.status_code == 200, reloaded.text
+    assert [row["id"] for row in reloaded.json()] == [created.json()["analysis"]["id"]]
+    other_range = client.get(
+        "/api/v1/analytics/pattern-analysis",
+        params={**params, "date_from": "2026-08-02"},
+    )
+    assert other_range.status_code == 200, other_range.text
+    assert other_range.json() == []
+    other_timezone = client.get(
+        "/api/v1/analytics/pattern-analysis",
+        params={**params, "timezone": "America/Toronto"},
+    )
+    assert other_timezone.status_code == 200, other_timezone.text
+    assert other_timezone.json() == []
+    incomplete_range = client.get(
+        "/api/v1/analytics/pattern-analysis",
+        params={"date_from": "2026-08-01"},
+    )
+    assert incomplete_range.status_code == 422
+
+    def timed_out_generation(
+        session: Session, **kwargs: object
+    ) -> analysis_service.AnalysisGenerationResult:
+        del session, kwargs
+        return analysis_service.AnalysisGenerationResult(
+            outcome=analysis_service.AnalysisOutcome.MODEL_TIMEOUT,
+            detail="synthetic timeout detail must not cross the API",
+        )
+
+    monkeypatch.setattr(analysis_service, "generate_analysis", timed_out_generation)
+    timed_out = client.post(
+        "/api/v1/analytics/pattern-analysis",
+        params={**params, "date_from": "2026-08-08", "date_to": "2026-08-08"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert timed_out.status_code == 200, timed_out.text
+    assert timed_out.json() == {
+        "outcome": "model_timeout",
+        "detail": (
+            "The configured private model did not finish within HealthCurve's time limit. "
+            "Deterministic results remain available."
+        ),
+        "analysis": None,
+    }
+    assert "synthetic timeout detail" not in timed_out.text
+
+
 def test_day_analysis_persists_provenance_and_detects_late_data(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
