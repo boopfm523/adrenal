@@ -16,7 +16,10 @@ import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
 import { DayAnalysisCard } from "../components/DayAnalysisCard";
-import { DailyHealthCurve } from "../components/DailyHealthCurve";
+import {
+  DailyHealthCurve,
+  type HealthCurveVisibility,
+} from "../components/DailyHealthCurve";
 import { DailyPatternsTable } from "../components/DailyPatternsTable";
 import { formatDecimal, formatMeasurement } from "../format";
 import { localDate, shiftIsoDate, timezoneAbbreviationForLocalDate } from "../time";
@@ -87,6 +90,36 @@ function recentDayShortcuts(timezone: string, fallbackTimezone: string): readonl
   ];
 }
 
+function selectedHealthCurveDay(
+  searchParams: URLSearchParams,
+  profileTimezone: string,
+): { day: string; timezone: string } {
+  const requestedDay = searchParams.get("day");
+  const requestedTimezone = searchParams.get("timezone")?.trim();
+  return {
+    day: requestedDay !== null && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay)
+      ? requestedDay
+      : localDate(new Date(), profileTimezone),
+    timezone: requestedTimezone === undefined || requestedTimezone === ""
+      ? profileTimezone
+      : requestedTimezone,
+  };
+}
+
+function HealthCurveDateFilter({
+  selected,
+  profileTimezone,
+  onReview,
+}: {
+  selected: { day: string; timezone: string };
+  profileTimezone: string;
+  onReview: (next: { day: string; timezone: string }) => void;
+}): React.JSX.Element {
+  const [draft, setDraft] = useState(selected);
+  const shortcuts = recentDayShortcuts(draft.timezone, profileTimezone);
+  return <form className="filter-panel healthcurve-date-filter" onSubmit={(event) => { event.preventDefault(); onReview(draft); }}><label>HealthCurve date<input required type="date" value={draft.day} onChange={(event) => { setDraft({ ...draft, day: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Review this day</button><div className="healthcurve-date-shortcuts" role="group" aria-label="Quick HealthCurve dates"><span>Quick dates:</span>{shortcuts.map((shortcut) => <button key={shortcut.label} type="button" className={selected.day === shortcut.day && selected.timezone === draft.timezone ? undefined : "button-secondary"} aria-pressed={selected.day === shortcut.day && selected.timezone === draft.timezone} onClick={() => { onReview({ day: shortcut.day, timezone: draft.timezone }); }}>{shortcut.label}</button>)}</div></form>;
+}
+
 export function AnalyticsPage(): React.JSX.Element {
   const { session } = useAuth();
   const profileTimezone = session?.user.defaultTimezone ?? "UTC";
@@ -96,16 +129,19 @@ export function AnalyticsPage(): React.JSX.Element {
     return { dateFrom: localDate(new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000), profileTimezone), dateTo: localDate(now, profileTimezone), timezone: profileTimezone };
   });
   const [filters, setFilters] = useState(draft);
-  const [dayDraft, setDayDraft] = useState(() => {
-    const requestedDay = searchParams.get("day");
-    const requestedTimezone = searchParams.get("timezone")?.trim();
-    return {
-      day: requestedDay !== null && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay) ? requestedDay : localDate(new Date(), profileTimezone),
-      timezone: requestedTimezone === undefined || requestedTimezone === "" ? profileTimezone : requestedTimezone,
-    };
+  const dayFilter = selectedHealthCurveDay(searchParams, profileTimezone);
+  const [curveVisibility, setCurveVisibility] = useState<HealthCurveVisibility>({
+    exposure: true,
+    stress: true,
+    heart_rate: false,
+    hrv: false,
+    respiration_rate: false,
+    blood_pressure: false,
+    symptoms: false,
+    episodes: false,
   });
-  const [dayFilter, setDayFilter] = useState(dayDraft);
-  const dayShortcuts = recentDayShortcuts(dayDraft.timezone, profileTimezone);
+  const todayForSelectedTimezone = recentDayShortcuts(dayFilter.timezone, profileTimezone)[0]?.day
+    ?? localDate(new Date(), profileTimezone);
   const dailyCurve = useQuery({
     queryKey: ["daily-healthcurve", dayFilter],
     queryFn: async () => {
@@ -124,20 +160,24 @@ export function AnalyticsPage(): React.JSX.Element {
   const patterns = useQuery({ queryKey: ["daily-patterns", filters], queryFn: () => getDailyPatterns(filters.dateFrom, filters.dateTo, filters.timezone) });
 
   function reviewDay(next: { day: string; timezone: string }): void {
-    setDayDraft(next);
-    setDayFilter(next);
     const search = new URLSearchParams(searchParams);
     search.set("day", next.day);
     search.set("timezone", next.timezone);
-    setSearchParams(search, { replace: true });
+    setSearchParams(search);
+  }
+
+  function reviewAdjacentDay(offset: -1 | 1): void {
+    const nextDay = shiftIsoDate(dayFilter.day, offset);
+    if (offset === 1 && nextDay > todayForSelectedTimezone) return;
+    reviewDay({ day: nextDay, timezone: dayFilter.timezone });
   }
 
   return <Page title="HealthCurve.ai" description="Review one day from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
     <aside className="safety-note"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
-    <form className="filter-panel healthcurve-date-filter" onSubmit={(event) => { event.preventDefault(); reviewDay(dayDraft); }}><label>HealthCurve date<input required type="date" value={dayDraft.day} onChange={(event) => { setDayDraft({ ...dayDraft, day: event.target.value }); }} /></label><label>IANA timezone<input required value={dayDraft.timezone} onChange={(event) => { setDayDraft({ ...dayDraft, timezone: event.target.value }); }} /></label><button type="submit">Review this day</button><div className="healthcurve-date-shortcuts" role="group" aria-label="Quick HealthCurve dates"><span>Quick dates:</span>{dayShortcuts.map((shortcut) => <button key={shortcut.label} type="button" className={dayFilter.day === shortcut.day && dayFilter.timezone === dayDraft.timezone ? undefined : "button-secondary"} aria-pressed={dayFilter.day === shortcut.day && dayFilter.timezone === dayDraft.timezone} onClick={() => { reviewDay({ day: shortcut.day, timezone: dayDraft.timezone }); }}>{shortcut.label}</button>)}</div></form>
+    <HealthCurveDateFilter key={`${dayFilter.day}-${dayFilter.timezone}`} selected={dayFilter} profileTimezone={profileTimezone} onReview={reviewDay} />
     {dailyCurve.isPending ? <p role="status">Building your daily HealthCurve…</p> : null}
     {dailyCurve.isError ? <p className="error-summary" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</p> : null}
-    {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} />}
+    {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} visible={curveVisibility} onVisibleChange={setCurveVisibility} onPreviousDay={() => { reviewAdjacentDay(-1); }} onNextDay={() => { reviewAdjacentDay(1); }} nextDayDisabled={dayFilter.day >= todayForSelectedTimezone} />}
     {dailyCurve.data === undefined ? null : <DayAnalysisCard day={dayFilter.day} timezone={dayFilter.timezone} />}
     <section className="analytics-history" aria-labelledby="analytics-history-title"><h2 id="analytics-history-title">Longer-range analytics</h2><p>Use these deterministic totals to compare days across a longer period. Daily pattern analysis builds on the selected-day HealthCurve.</p></section>
     <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><label>From date<input required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Calculate metrics</button></form>

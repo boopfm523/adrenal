@@ -22,7 +22,10 @@ export interface DailyHealthCurveData {
   episodes: Episode[];
 }
 
-type LaneKey = "exposure" | "stress" | "heart_rate" | "hrv" | "respiration_rate" | "blood_pressure" | "symptoms" | "episodes";
+export type HealthCurveLaneKey = "exposure" | "stress" | "heart_rate" | "hrv" | "respiration_rate" | "blood_pressure" | "symptoms" | "episodes";
+export type HealthCurveVisibility = Record<HealthCurveLaneKey, boolean>;
+
+type LaneKey = HealthCurveLaneKey;
 
 interface Point {
   time: string;
@@ -65,7 +68,7 @@ const RESPIRATION_DISPLAY_MIN = 0;
 const RESPIRATION_DISPLAY_MAX = 40;
 const RESPIRATION_MEDIAN_RADIUS = 2;
 
-const DEFAULT_VISIBLE: Record<LaneKey, boolean> = {
+const DEFAULT_VISIBLE: HealthCurveVisibility = {
   exposure: true,
   stress: true,
   heart_rate: false,
@@ -414,8 +417,31 @@ function nearbyTooltipObservations(
   );
 }
 
-export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): React.JSX.Element {
-  const [visible, setVisible] = useState(DEFAULT_VISIBLE);
+interface DailyHealthCurveProps {
+  data: DailyHealthCurveData;
+  visible?: HealthCurveVisibility;
+  onVisibleChange?: (visible: HealthCurveVisibility) => void;
+  onPreviousDay?: () => void;
+  onNextDay?: () => void;
+  nextDayDisabled?: boolean;
+}
+
+export function DailyHealthCurve({
+  data,
+  visible: controlledVisible,
+  onVisibleChange,
+  onPreviousDay,
+  onNextDay,
+  nextDayDisabled = false,
+}: DailyHealthCurveProps): React.JSX.Element {
+  const [localVisible, setLocalVisible] = useState(DEFAULT_VISIBLE);
+  const visible = controlledVisible ?? localVisible;
+
+  function setVisible(next: HealthCurveVisibility): void {
+    if (controlledVisible === undefined) setLocalVisible(next);
+    onVisibleChange?.(next);
+  }
+
   const start = Date.parse(data.exposure.day_start);
   const end = Date.parse(data.exposure.day_end);
   const [cursorMinute, setCursorMinute] = useState(0);
@@ -480,7 +506,7 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
     <h2 id="daily-healthcurve-title">Your daily HealthCurve</h2>
     <p>{data.exposure.safety_label}</p>
     <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
-    <dl className="metric-metadata"><div><dt>Selected date</dt><dd>{data.exposure.date}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
+    <dl className="metric-metadata"><div><dt>Selected date</dt><dd className="healthcurve-selected-day">{onPreviousDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review previous day" onClick={onPreviousDay}>←</button>}<span>{data.exposure.date}</span>{onNextDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review next day" disabled={nextDayDisabled} onClick={onNextDay}>→</button>}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div><div><dt>Model</dt><dd>{data.exposure.model.version}</dd></div></dl>
     <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
     <div className="healthcurve-controls" aria-label="HealthCurve chart controls"><div className="healthcurve-focus" role="group" aria-label="Choose a focused HealthCurve comparison"><span>Quick focus:</span>{FOCUS_PRESETS.map((preset) => <button key={preset.label} type="button" className={isPresetVisible(visible, preset.keys) ? undefined : "button-secondary"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</button>)}</div>
       <fieldset className="curve-toggles"><legend>Show or hide chart series</legend>{Object.entries({

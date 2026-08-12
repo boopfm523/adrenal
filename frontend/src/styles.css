@@ -234,6 +234,8 @@ circle.chart-series { fill: white; }
 .healthcurve-date-shortcuts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .healthcurve-date-shortcuts > span { margin-right: 0.2rem; font-weight: 800; }
 .healthcurve-date-shortcuts button { min-height: 2.35rem; padding: 0.4rem 0.75rem; }
+.healthcurve-selected-day { display: flex; align-items: center; gap: 0.55rem; }
+.healthcurve-selected-day button { min-width: 2.35rem; min-height: 2.35rem; padding: 0.25rem 0.65rem; font-size: 1.15rem; line-height: 1; }
 .curve-toggles { display: flex; flex-wrap: wrap; gap: 0.65rem 1.1rem; margin-block: 1rem; padding: 1rem; border: 1px solid #ccd4ce; border-radius: 0.6rem; }
 .curve-toggles legend { padding-inline: 0.35rem; font-weight: 800; }
 .curve-toggles .checkbox-label { display: flex; gap: 0.45rem; align-items: center; }

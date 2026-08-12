@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "../auth/context";
 import { localDate, shiftIsoDate } from "../time";
@@ -17,7 +17,11 @@ const emptyPatternDay = { date: "2026-08-02", timezone: "Europe/London", elapsed
   { metric_type: "respiration_rate", unit: null, sample_count: 0, samples_without_cadence: 0, observed_coverage_minutes: "0", observed_coverage_percent: "0", missingness_state: "no_samples", incompatible_units: false, minimum: null, average: null, maximum: null },
 ], blood_pressure: { sample_count: 0, pulse_sample_count: 0, pulse_missing_count: 0, systolic: { minimum: null, average: null, maximum: null }, diastolic: { minimum: null, average: null, maximum: null }, pulse: { minimum: null, average: null, maximum: null } }, stress_episodes: { count: 0, open_count: 0, overlap_minutes: "0" } };
 function jsonResponse(body: unknown): Response { return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } }); }
-function LocationProbe(): React.JSX.Element { return <output data-testid="location-search">{useLocation().search}</output>; }
+function LocationProbe(): React.JSX.Element {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return <><output data-testid="location-search">{location.search}</output><button type="button" onClick={() => { void navigate(-1); }}>Test browser back</button></>;
+}
 function response(url: string): Response {
   if (url.includes("/analytics/steroid-exposure")) return jsonResponse({ date: "2026-08-01", timezone: "Europe/London", day_start: "2026-07-31T23:00:00Z", day_end: "2026-08-01T23:00:00Z", elapsed_hours: "24", series_name: "Theoretical hydrocortisone exposure", series_unit: "REU", safety_label: "Theoretical hydrocortisone exposure—not a cortisol measurement or dosing guide.", definition: "Actual current doses produce a versioned relative exposure shape.", model: { version: "hc-exposure-v1", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "2", elimination_half_life_hours: "1.7", elimination_rate_per_hour: "0.4077", peak_time_hours: "0.998", contribution_horizon_hours: 24, sample_interval_minutes: 5, references: [] }, dose_markers: [{ dose_event_id: "11111111-1111-4111-8111-111111111111", ...eventTime, medication_name: "Hydrocortisone", formulation: "conventional immediate-release tablet", amount: "10", unit: "mg", route: "oral", source_type: "manual", confirmation_state: "confirmed", supersedes_id: null, supported: true, exclusion_reason: null, carryover: false, modeled_peak_at: "2026-08-01T09:00:00Z" }], samples: [{ occurred_at: "2026-07-31T23:00:00Z", local_time: "2026-08-01T00:00:00", utc_offset_minutes: 60, theoretical_exposure_reu: "0" }, { occurred_at: "2026-08-01T09:00:00Z", local_time: "2026-08-01T10:00:00", utc_offset_minutes: 60, theoretical_exposure_reu: "10" }, { occurred_at: "2026-08-01T23:00:00Z", local_time: "2026-08-02T00:00:00", utc_offset_minutes: 60, theoretical_exposure_reu: "0.1" }], supported_dose_count: 1, excluded_dose_count: 0 });
   if (url.includes("/analytics/day-analysis")) return jsonResponse(null);
@@ -111,21 +115,43 @@ describe("Analytics page", () => {
 
     const shortcuts = screen.getByRole("group", { name: "Quick HealthCurve dates" });
     const yesterdayButton = within(shortcuts).getByRole("button", { name: "Yesterday" });
-    const twoDaysButton = within(shortcuts).getByRole("button", { name: "2 days ago" });
-    const todayButton = within(shortcuts).getByRole("button", { name: "Today" });
     await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
 
     fireEvent.click(yesterdayButton);
     expect(screen.getByLabelText("HealthCurve date")).toHaveValue(yesterday);
-    expect(yesterdayButton).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("group", { name: "Quick HealthCurve dates" })).getByRole("button", { name: "Yesterday" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByTestId("location-search")).toHaveTextContent(`day=${yesterday}`);
     await waitFor(() => { expect(urls.some((url) => url.includes(`day=${yesterday}`) && url.includes("timezone=Europe%2FLondon"))).toBe(true); });
 
-    fireEvent.click(twoDaysButton);
+    fireEvent.click(within(screen.getByRole("group", { name: "Quick HealthCurve dates" })).getByRole("button", { name: "2 days ago" }));
     expect(screen.getByLabelText("HealthCurve date")).toHaveValue(twoDaysAgo);
-    expect(twoDaysButton).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(todayButton);
+    expect(within(screen.getByRole("group", { name: "Quick HealthCurve dates" })).getByRole("button", { name: "2 days ago" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(screen.getByRole("group", { name: "Quick HealthCurve dates" })).getByRole("button", { name: "Today" }));
     expect(screen.getByLabelText("HealthCurve date")).toHaveValue(today);
-    expect(todayButton).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("group", { name: "Quick HealthCurve dates" })).getByRole("button", { name: "Today" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
+    expect(screen.getByRole("button", { name: "Review next day" })).toBeDisabled();
+  });
+
+  it("navigates local calendar days, preserves chart focus, and honors browser history", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url)); });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
+
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
+    expect(screen.getByRole("checkbox", { name: "Heart rate" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Review previous day" }));
+    expect(screen.getByLabelText("HealthCurve date")).toHaveValue("2026-07-31");
+    expect(screen.getByTestId("location-search")).toHaveTextContent("day=2026-07-31");
+    await waitFor(() => { expect(urls.some((url) => url.includes("day=2026-07-31") && url.includes("timezone=Europe%2FLondon"))).toBe(true); });
+    await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
+    expect(screen.getByRole("checkbox", { name: "Heart rate" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Test browser back" }));
+    await waitFor(() => { expect(screen.getByLabelText("HealthCurve date")).toHaveValue("2026-08-01"); });
+    await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
+    expect(screen.getByTestId("location-search")).toHaveTextContent("day=2026-08-01");
+    expect(screen.getByRole("checkbox", { name: "Heart rate" })).toBeChecked();
   });
 });
