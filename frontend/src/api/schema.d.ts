@@ -3660,6 +3660,7 @@ export interface components {
             amount: string;
             /** Carryover */
             carryover: boolean;
+            category: components["schemas"]["DoseCategory"];
             confirmation_state: components["schemas"]["ConfirmationState"];
             /**
              * Dose Event Id
@@ -3733,6 +3734,10 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
+            /** Regular Exposure Reu */
+            regular_exposure_reu: string;
+            /** Stress Exposure Reu */
+            stress_exposure_reu: string;
             /** Theoretical Exposure Reu */
             theoretical_exposure_reu: string;
             /** Utc Offset Minutes */

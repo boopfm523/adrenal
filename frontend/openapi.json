@@ -6880,6 +6880,9 @@
             "title": "Carryover",
             "type": "boolean"
           },
+          "category": {
+            "$ref": "#/components/schemas/DoseCategory"
+          },
           "confirmation_state": {
             "$ref": "#/components/schemas/ConfirmationState"
           },
@@ -6987,6 +6990,7 @@
           "amount",
           "unit",
           "route",
+          "category",
           "source_type",
           "confirmation_state",
           "supersedes_id",
@@ -7083,6 +7087,14 @@
             "title": "Occurred At",
             "type": "string"
           },
+          "regular_exposure_reu": {
+            "title": "Regular Exposure Reu",
+            "type": "string"
+          },
+          "stress_exposure_reu": {
+            "title": "Stress Exposure Reu",
+            "type": "string"
+          },
           "theoretical_exposure_reu": {
             "title": "Theoretical Exposure Reu",
             "type": "string"
@@ -7096,7 +7108,9 @@
           "occurred_at",
           "local_time",
           "utc_offset_minutes",
-          "theoretical_exposure_reu"
+          "theoretical_exposure_reu",
+          "regular_exposure_reu",
+          "stress_exposure_reu"
         ],
         "title": "SteroidExposureSample",
         "type": "object"

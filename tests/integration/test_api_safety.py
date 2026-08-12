@@ -5606,7 +5606,12 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert medication.status_code == 201, medication.text
     medication_id = medication.json()["id"]
 
-    def record(local_time: str, amount: str, route: str = "oral") -> dict[str, Any]:
+    def record(
+        local_time: str,
+        amount: str,
+        route: str = "oral",
+        category: str = "scheduled",
+    ) -> dict[str, Any]:
         response = client.post(
             "/api/v1/doses",
             json={
@@ -5614,7 +5619,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
                 "amount": amount,
                 "unit": "mg",
                 "route": route,
-                "category": "scheduled",
+                "category": category,
                 "time": {"local_time": local_time, "timezone": "UTC"},
                 "notes": "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR",
             },
@@ -5625,7 +5630,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
 
     prior = record("2024-01-31T23:30:00", "4")
     original = record("2024-02-01T07:00:00", "10")
-    close = record("2024-02-01T07:01:00", "5")
+    close = record("2024-02-01T07:01:00", "5", category="stress")
     unsupported = record("2024-02-01T13:00:00", "3", "intramuscular")
     corrected = client.post(
         f"/api/v1/doses/{original['id']}/correct",
@@ -5695,6 +5700,10 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert other_dose_id not in marker_ids
     assert body["dose_markers"][0]["carryover"] is True
     assert (
+        next(row for row in body["dose_markers"] if row["dose_event_id"] == close["id"])["category"]
+        == "stress"
+    )
+    assert (
         next(row for row in body["dose_markers"] if row["dose_event_id"] == unsupported["id"])[
             "exclusion_reason"
         ]
@@ -5705,6 +5714,11 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     ]
     peak_sample = next(row for row in body["samples"] if row["occurred_at"] == peak_at)
     assert Decimal(peak_sample["theoretical_exposure_reu"]) > Decimal("12")
+    assert Decimal(peak_sample["regular_exposure_reu"]) > Decimal("12")
+    assert Decimal(peak_sample["stress_exposure_reu"]) > 0
+    assert Decimal(peak_sample["theoretical_exposure_reu"]) == (
+        Decimal(peak_sample["regular_exposure_reu"]) + Decimal(peak_sample["stress_exposure_reu"])
+    )
     assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in response.text
 
     invalid = client.get(

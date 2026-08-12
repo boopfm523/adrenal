@@ -933,6 +933,7 @@ class SteroidExposureDoseMarker(ApiModel):
     amount: Decimal
     unit: DoseUnit
     route: Route
+    category: DoseCategory
     source_type: SourceType
     confirmation_state: ConfirmationState
     supersedes_id: uuid.UUID | None
@@ -959,8 +960,10 @@ class SteroidExposureSample(ApiModel):
     local_time: datetime
     utc_offset_minutes: int
     theoretical_exposure_reu: Decimal = Field(ge=0)
+    regular_exposure_reu: Decimal = Field(ge=0)
+    stress_exposure_reu: Decimal = Field(ge=0)
 
-    @field_serializer("theoretical_exposure_reu")
+    @field_serializer("theoretical_exposure_reu", "regular_exposure_reu", "stress_exposure_reu")
     def _exposure(self, value: Decimal) -> str:
         return str(value)
 

@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.events import service as event_service
-from healthcurve.medications.models import DoseEvent, DoseUnit, Route
+from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Route
 
 MODEL_VERSION: Final = "hc-exposure-v1"
 SERIES_NAME: Final = "Theoretical hydrocortisone exposure"
@@ -57,6 +57,7 @@ class ExposureDose:
     amount: Decimal
     unit: DoseUnit
     route: Route
+    category: DoseCategory
     medication_name: str
     normalized_medication_name: str
     formulation: str | None
@@ -147,7 +148,20 @@ def build_curve(*, day: date, timezone: str, doses: list[ExposureDose]) -> dict[
     supported = [dose for dose in ordered if exclusion_reason(dose) is None]
     samples = []
     for instant in _sample_instants(start=start, end=end, supported_doses=supported):
-        total = math.fsum(contribution_reu(dose, instant) for dose in supported)
+        regular = _display_decimal(
+            math.fsum(
+                contribution_reu(dose, instant)
+                for dose in supported
+                if dose.category is not DoseCategory.STRESS
+            )
+        )
+        stress = _display_decimal(
+            math.fsum(
+                contribution_reu(dose, instant)
+                for dose in supported
+                if dose.category is DoseCategory.STRESS
+            )
+        )
         local = instant.astimezone(zone)
         offset = local.utcoffset()
         samples.append(
@@ -155,7 +169,9 @@ def build_curve(*, day: date, timezone: str, doses: list[ExposureDose]) -> dict[
                 "occurred_at": instant,
                 "local_time": local.replace(tzinfo=None),
                 "utc_offset_minutes": int((offset or timedelta()).total_seconds() // 60),
-                "theoretical_exposure_reu": _display_decimal(total),
+                "theoretical_exposure_reu": regular + stress,
+                "regular_exposure_reu": regular,
+                "stress_exposure_reu": stress,
             }
         )
 
@@ -174,6 +190,7 @@ def build_curve(*, day: date, timezone: str, doses: list[ExposureDose]) -> dict[
                 "amount": dose.amount,
                 "unit": dose.unit,
                 "route": dose.route,
+                "category": dose.category,
                 "source_type": dose.source_type,
                 "confirmation_state": dose.confirmation_state,
                 "supersedes_id": dose.supersedes_id,
@@ -202,7 +219,9 @@ def build_curve(*, day: date, timezone: str, doses: list[ExposureDose]) -> dict[
         "definition": (
             "Pointwise sum of current supported recorded doses using the versioned "
             "ADR-0013 absorption/elimination shape. Missing and unsupported doses are "
-            "never converted to zero-valued facts."
+            "never converted to zero-valued facts. Explicit stress doses form the stress "
+            "component; scheduled, late, replacement, taper, and emergency categories "
+            "are grouped into the regular component so every supported dose is counted once."
         ),
         "model": {
             "version": MODEL_VERSION,
@@ -263,6 +282,7 @@ def curve_for_owner(
                 amount=row.amount,
                 unit=row.unit,
                 route=row.route,
+                category=row.category,
                 medication_name=row.medication.name,
                 normalized_medication_name=row.medication.normalized_name,
                 formulation=row.medication.formulation,

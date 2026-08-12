@@ -21,9 +21,9 @@ function data(overrides: Partial<DailyHealthCurveData> = {}): DailyHealthCurveDa
       model: { version: "hc-exposure-v1", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "2", elimination_half_life_hours: "1.7", elimination_rate_per_hour: "0.407733", peak_time_hours: "0.998758", contribution_horizon_hours: 24, sample_interval_minutes: 5, references: ["https://doi.org/10.1002/j.1552-4604.1991.tb01906.x"] },
       dose_markers: [],
       samples: [
-        { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "0" },
-        { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "5.509920038" },
-        { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, theoretical_exposure_reu: "0" },
+        { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "0", regular_exposure_reu: "0", stress_exposure_reu: "0" },
+        { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, theoretical_exposure_reu: "5.509920038", regular_exposure_reu: "3.009920038", stress_exposure_reu: "2.5" },
+        { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, theoretical_exposure_reu: "0", regular_exposure_reu: "0", stress_exposure_reu: "0" },
       ],
       supported_dose_count: 0,
       excluded_dose_count: 0,
@@ -89,6 +89,8 @@ describe("Daily HealthCurve", () => {
     const { target: pointerTarget, tooltip } = hoverAt(60);
     expect(tooltip).toHaveTextContent("Heart rate: 80 bpm");
     expect(tooltip).toHaveTextContent("Theoretical exposure: 5.510 REU");
+    expect(tooltip).toHaveTextContent("Regular-dose contribution: 3.010 REU");
+    expect(tooltip).toHaveTextContent("Stress-dose contribution: 2.500 REU");
     expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(tooltip).not.toHaveTextContent(/at 2026-/);
     expect(tooltip).not.toHaveTextContent(/hc-exposure-v1|provider_imported|observed cadence/i);
@@ -144,7 +146,8 @@ describe("Daily HealthCurve", () => {
     expect(methodology).not.toBeNull();
     expect(methodology).toHaveTextContent("ke = ln(2) / 1.7 hours = 0.407733 per hour");
     expect(methodology).toHaveTextContent("t_peak = ln(ka / ke) / (ka - ke) = 0.998758 hours");
-    expect(methodology).toHaveTextContent("total_exposure(t) = sum of every supported current dose contribution");
+    expect(methodology).toHaveTextContent("stress_exposure(t) = sum of explicitly categorized stress-dose contributions");
+    expect(methodology).toHaveTextContent("total_exposure(t) = regular_exposure(t) + stress_exposure(t)");
     expect(methodology).toHaveTextContent("no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value");
     expect(methodology).toHaveTextContent("Req(t) = Base(t) × S(t)");
     expect(methodology).toHaveTextContent("display = 100 × (value - display_min) / max(display_max - display_min, 1)");
@@ -380,6 +383,7 @@ describe("Daily HealthCurve", () => {
       amount: "10",
       unit: "mg" as const,
       route: "oral" as const,
+      category: "scheduled" as const,
       source_type: "web" as const,
       confirmation_state: "direct" as const,
       supersedes_id: null,
@@ -391,21 +395,21 @@ describe("Daily HealthCurve", () => {
     render(<DailyHealthCurve data={data({ exposure: { ...base.exposure, dose_markers: [
       { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000003", occurred_at: "2026-03-08T06:00:30Z", medication_name: "Prednisone", amount: "5", supported: false, exclusion_reason: "unsupported_medication", modeled_peak_at: null },
       marker,
-      { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000001", amount: "2.5" },
+      { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000001", amount: "2.5", category: "stress" },
     ] } })} />);
 
     const tooltip = hoverAt(60).tooltip;
-    const doseRows = within(tooltip).getAllByText(/Actual dose:/).map((label) => label.parentElement?.textContent);
+    const doseRows = within(tooltip).getAllByText(/(?:Regular|Stress) dose:/).map((label) => label.parentElement?.textContent);
     expect(doseRows).toEqual([
-      "Actual dose: Hydrocortisone 2.5 mg",
-      "Actual dose: Hydrocortisone 10 mg",
-      "Actual dose: Prednisone 5 mg",
+      "Stress dose: Hydrocortisone 2.5 mg",
+      "Regular dose: Hydrocortisone 10 mg",
+      "Regular dose: Prednisone 5 mg",
     ]);
     expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(tooltip).not.toHaveTextContent(/manual|confirmed|source|provider/i);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Theoretical exposure and actual doses" }));
-    expect(hoverAt(60).tooltip).not.toHaveTextContent("Actual dose");
+    expect(hoverAt(60).tooltip).not.toHaveTextContent(/Regular dose|Stress dose/);
   });
 
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {

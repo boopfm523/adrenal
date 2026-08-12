@@ -472,6 +472,13 @@ dose_contribution(t) = recorded_amount_mg * shape(t) REU
 total_exposure(t) = sum of every supported current dose contribution
 ```
 
+Each response sample also exposes `regular_exposure_reu` and `stress_exposure_reu`.
+Only doses explicitly categorized as stress contribute to the stress component;
+scheduled, late, replacement, taper, and emergency categories are grouped into the
+regular component. The two components sum to the plotted total and no supported dose
+is counted twice. The hover tooltip shows present components to three decimals and
+actual dose markers identify their recorded category.
+
 Contributions are zero before administration and after 24 elapsed hours. They are
 sampled every five elapsed minutes plus exact administration and modeled-peak knots.
 The peak normalization of 1 REU per recorded mg is a HealthCurve visualization choice,

@@ -264,6 +264,7 @@ def _exposure_dose(row: DoseEvent) -> exposure.ExposureDose:
         amount=row.amount,
         unit=row.unit,
         route=row.route,
+        category=row.category,
         medication_name=row.medication.name,
         normalized_medication_name=row.medication.normalized_name,
         formulation=row.medication.formulation,

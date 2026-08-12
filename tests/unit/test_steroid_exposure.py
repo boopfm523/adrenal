@@ -16,7 +16,7 @@ from healthcurve.analytics.exposure import (
     exclusion_reason,
     normalized_shape,
 )
-from healthcurve.medications.models import DoseUnit, Route
+from healthcurve.medications.models import DoseCategory, DoseUnit, Route
 
 
 def dose(
@@ -28,6 +28,7 @@ def dose(
     formulation: str | None = "tablet",
     route: Route = Route.ORAL,
     unit: DoseUnit = DoseUnit.MG,
+    category: DoseCategory = DoseCategory.SCHEDULED,
 ) -> ExposureDose:
     local = occurred_at.astimezone(UTC)
     return ExposureDose(
@@ -39,6 +40,7 @@ def dose(
         amount=Decimal(amount),
         unit=unit,
         route=route,
+        category=category,
         medication_name=medication.title(),
         normalized_medication_name=medication,
         formulation=formulation,
@@ -122,6 +124,39 @@ def test_close_and_equal_timestamp_doses_sum_without_deduplication() -> None:
     ).quantize(Decimal("0.000000001"))
     assert same_sample["theoretical_exposure_reu"] == Decimal("15.000000000")
     assert [row["dose_event_id"] for row in same_curve["dose_markers"]] == [first.id, same.id]
+
+
+def test_each_sample_splits_stress_from_every_other_supported_category_once() -> None:
+    administered = datetime(2026, 8, 10, 23, 30, tzinfo=UTC)
+    regular = dose(identity=31, occurred_at=administered, amount="10")
+    stress = dose(
+        identity=32,
+        occurred_at=administered + timedelta(minutes=1),
+        amount="5",
+        category=DoseCategory.STRESS,
+    )
+    late = dose(
+        identity=33,
+        occurred_at=administered,
+        amount="2.5",
+        category=DoseCategory.LATE,
+    )
+    curve = cast(
+        dict[str, Any],
+        build_curve(day=date(2026, 8, 11), timezone="UTC", doses=[stress, late, regular]),
+    )
+
+    assert [marker["category"] for marker in curve["dose_markers"]] == [
+        DoseCategory.SCHEDULED,
+        DoseCategory.LATE,
+        DoseCategory.STRESS,
+    ]
+    for sample in curve["samples"]:
+        assert sample["theoretical_exposure_reu"] == (
+            sample["regular_exposure_reu"] + sample["stress_exposure_reu"]
+        )
+    assert curve["samples"][0]["regular_exposure_reu"] > 0
+    assert curve["samples"][0]["stress_exposure_reu"] > 0
 
 
 def test_curve_is_order_independent_and_includes_prior_day_carryover() -> None:

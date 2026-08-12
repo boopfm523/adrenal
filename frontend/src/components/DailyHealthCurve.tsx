@@ -520,7 +520,7 @@ function doseTooltipObservations(
       return [{
         id: `dose-${dose.dose_event_id}`,
         time: dose.occurred_at,
-        series: "Actual dose",
+        series: dose.category === "stress" ? "Stress dose" : "Regular dose",
         value: `${dose.medication_name} ${formatMeasurement(dose.amount, dose.unit)}`,
       }];
     });
@@ -574,6 +574,10 @@ export function DailyHealthCurve({
     ? nearbyTooltipObservations(doseObservations, cursorTime)
     : [];
   const cursorPoints = nearestVisiblePoints(shownLanes, cursorTime);
+  const cursorExposurePoint = cursorPoints.find(({ lane }) => lane.key === "exposure")?.point;
+  const cursorExposureSample = cursorExposurePoint === undefined
+    ? undefined
+    : data.exposure.samples.find((sample) => sample.occurred_at === cursorExposurePoint.time);
   const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
   const cursorUnscoredSymptoms = visible.symptoms
     ? nearbySymptomObservations(unscoredSymptoms, cursorTime)
@@ -597,6 +601,18 @@ export function DailyHealthCurve({
         value: lane.key === "exposure" ? `${point.value.toFixed(3)} REU` : point.label,
       }];
     }),
+    ...(cursorExposureSample === undefined ? [] : [
+      ...(Number(cursorExposureSample.regular_exposure_reu) > 0 ? [{
+        key: `regular-exposure-${cursorExposureSample.occurred_at}`,
+        series: "Regular-dose contribution",
+        value: `${Number(cursorExposureSample.regular_exposure_reu).toFixed(3)} REU`,
+      }] : []),
+      ...(Number(cursorExposureSample.stress_exposure_reu) > 0 ? [{
+        key: `stress-exposure-${cursorExposureSample.occurred_at}`,
+        series: "Stress-dose contribution",
+        value: `${Number(cursorExposureSample.stress_exposure_reu).toFixed(3)} REU`,
+      }] : []),
+    ]),
     ...cursorUnscoredSymptoms.map((symptom) => ({
       key: `unscored-symptom-${symptom.id}`,
       series: "Symptoms",
@@ -732,7 +748,7 @@ export function DailyHealthCurve({
       <p>{data.exposure.definition}</p>
       <h3>Exact implemented exposure formula</h3>
       <p><strong>{data.exposure.model.version}</strong> supports only {data.exposure.model.supported_formulation} {data.exposure.model.supported_route} {data.exposure.model.supported_medication} recorded in {data.exposure.model.amount_unit}. For elapsed hours <code>t</code> after each actual dose:</p>
-      <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = ln(2) / ${formatDecimal(data.exposure.model.elimination_half_life_hours)} hours = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nraw(t) = exp(-ke × t) - exp(-ka × t)\nshape(t) = raw(t) / raw(t_peak)\ndose_contribution(t) = recorded_amount_mg × shape(t) REU\ntotal_exposure(t) = sum of every supported current dose contribution`}</code></pre>
+      <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = ln(2) / ${formatDecimal(data.exposure.model.elimination_half_life_hours)} hours = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nraw(t) = exp(-ke × t) - exp(-ka × t)\nshape(t) = raw(t) / raw(t_peak)\ndose_contribution(t) = recorded_amount_mg × shape(t) REU\nstress_exposure(t) = sum of explicitly categorized stress-dose contributions\nregular_exposure(t) = sum of all other supported dose contributions\ntotal_exposure(t) = regular_exposure(t) + stress_exposure(t)`}</code></pre>
       <p>Each contribution is zero before its recorded administration and after {data.exposure.model.contribution_horizon_hours.toString()} hours. It rises from zero, reaches a normalized peak of 1 REU per recorded mg at <code>t_peak</code>, then declines. Contributions from close or simultaneous doses are summed; none resets another. Output is sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots. REU is a relative visualization unit, not nmol/L, µg/dL, biological effect, or medication adequacy.</p>
       <h3>Why these parameters are used</h3>
       <ul>{data.exposure.model.references.map((href) => { const detail = EXPOSURE_REFERENCE_DETAILS[href]; return <li key={href}><a href={href} target="_blank" rel="noreferrer">{detail?.label ?? "Model source"}</a>{detail === undefined ? null : ` — ${detail.use}.`}</li>; })}</ul>
