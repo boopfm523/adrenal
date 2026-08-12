@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthContext } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { localDate, shiftIsoDate } from "../time";
 import { TimelinePage } from "./TimelinePage";
 
@@ -29,7 +30,7 @@ function BrowserBack(): React.JSX.Element {
 
 function renderPage(initialEntry = "/timeline"): void {
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}>
           <TimelinePage />
@@ -37,7 +38,7 @@ function renderPage(initialEntry = "/timeline"): void {
           <BrowserBack />
         </AuthContext.Provider>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider></HealthCurveProvider>,
   );
 }
 
