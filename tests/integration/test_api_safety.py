@@ -386,6 +386,41 @@ def test_garmin_sync_origin_migration_marks_existing_rows_legacy(
         )
 
 
+def test_garmin_aggregate_index_migration_downgrades_and_reinstalls(
+    engine: Engine, settings: Settings
+) -> None:
+    """Upgrade from the prior schema installs the selective long-history index."""
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    query = text(
+        "SELECT indexdef FROM pg_indexes WHERE schemaname='fact' "
+        "AND tablename='garmin_metric_event' "
+        "AND indexname='ix_garmin_metric_owner_aggregate_occurred'"
+    )
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "6f1c2a8d4b90",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert connection.scalar(query) is None
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.connect() as connection:
+        index_definition = connection.scalar(query)
+    assert index_definition is not None
+    assert "owner_id, occurred_at DESC, id" in index_definition
+    assert "aggregation" in index_definition
+    assert "<> 'provider_sample'" in index_definition
+
+
 def test_health_data_requires_authentication(client: TestClient) -> None:
     client.cookies.clear()
     for path in (

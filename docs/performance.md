@@ -111,3 +111,26 @@ This baseline establishes the work for the remaining `hc-jgd` children:
 - queue and stream complete exports rather than assembling them in request memory;
 - use the measured 2.27-GiB five-year relation in the retention, backup, and isolated
   restore decision.
+
+### Index and current-revision optimization — 2026-08-12
+
+`hc-jgd.2` repeated the same five-year, 3,690,540-row fixture after adding a
+partial owner/time index for non-provider-sample Garmin aggregates and moving
+current-revision exclusion into the initial SQL reads. The transaction rollback was
+again verified: both `identity.owner` and `fact.garmin_metric_event` contained zero
+benchmark rows afterward.
+
+| Path | Baseline | Optimized | Evidence |
+| --- | ---: | ---: | --- |
+| Latest Timeline page (25 rows) | 730.872 ms | 5.774 ms | Complete warmed application operation; about 126× faster |
+| Selected-day HealthCurve | 62.414 ms | 47.078 ms | Complete warmed application operation |
+| 31-day analytics | 1,959.783 ms | 1,385.491 ms | Complete warmed application operation |
+| Seven-day wearable report snapshot + HTML/CSV/JSON | 914.161 ms | 842.184 ms | Complete warmed application operation |
+| Timeline daily aggregates, latest 200 | 17.912 ms | 0.056 ms | PostgreSQL `Limit` → `Index Only Scan` using `ix_garmin_metric_owner_aggregate_occurred` |
+| Timeline aggregate count | not captured | 1.080 ms | PostgreSQL `Aggregate` → `Index Only Scan` over 7,308 aggregate rows |
+
+The selected-day provider-sample path remains index-backed. PostgreSQL rationally
+retains sequential scans for a 366-day raw-sample result and a complete export because
+those operations return a material fraction of the 3.69-million-row table. The next
+children address those shapes with deterministic daily summaries and queued,
+streamed exports instead of forcing inappropriate indexes.

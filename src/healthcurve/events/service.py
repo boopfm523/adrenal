@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.timekeeping import EventTime, resolve_event_time
@@ -143,6 +144,24 @@ def current_only[E: EventMixin](session: Session, model: type[E], rows: list[E])
         session.scalars(select(model.supersedes_id).where(model.supersedes_id.in_(ids)))
     )
     return [r for r in rows if r.id not in superseded]
+
+
+def current_fact_predicate[E: EventMixin](
+    model: type[E], *, owner_id: uuid.UUID
+) -> ColumnElement[bool]:
+    """SQL predicate that excludes superseded revisions before rows are materialized.
+
+    This is equivalent to :func:`current_only`, including a correction recorded
+    outside the requested time window, but does not send every selected ID back to
+    PostgreSQL in a second potentially enormous ``IN`` query.  It is the appropriate
+    shape for dense wearable and long report windows.
+    """
+    return model.id.not_in(
+        select(model.supersedes_id).where(
+            model.owner_id == owner_id,
+            model.supersedes_id.is_not(None),
+        )
+    )
 
 
 def is_superseded[E: EventMixin](session: Session, model: type[E], event_id: uuid.UUID) -> bool:

@@ -65,14 +65,18 @@ def _current_events(
     start: datetime,
     end: datetime,
 ) -> list[Any]:
-    rows = list(
+    return list(
         session.scalars(
             select(model)
-            .where(model.owner_id == owner_id, model.occurred_at >= start, model.occurred_at < end)
+            .where(
+                model.owner_id == owner_id,
+                model.occurred_at >= start,
+                model.occurred_at < end,
+                events.current_fact_predicate(model, owner_id=owner_id),
+            )
             .order_by(model.occurred_at, model.id)
         )
     )
-    return events.current_only(session, model, rows)
 
 
 def build_snapshot(

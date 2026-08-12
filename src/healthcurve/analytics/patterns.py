@@ -574,6 +574,7 @@ def daily_patterns_for_owner(
                 DoseEvent.owner_id == owner_id,
                 DoseEvent.occurred_at >= start - timedelta(hours=exposure.HORIZON_HOURS),
                 DoseEvent.occurred_at < end,
+                event_service.current_fact_predicate(DoseEvent, owner_id=owner_id),
             )
             .order_by(DoseEvent.occurred_at, DoseEvent.id)
         )
@@ -584,6 +585,7 @@ def daily_patterns_for_owner(
                 SymptomEvent.owner_id == owner_id,
                 SymptomEvent.occurred_at >= start,
                 SymptomEvent.occurred_at < end,
+                event_service.current_fact_predicate(SymptomEvent, owner_id=owner_id),
             )
         )
     )
@@ -595,6 +597,7 @@ def daily_patterns_for_owner(
                 GarminMetricEvent.metric_type.in_(METRICS),
                 GarminMetricEvent.occurred_at >= start,
                 GarminMetricEvent.occurred_at < end,
+                event_service.current_fact_predicate(GarminMetricEvent, owner_id=owner_id),
             )
         )
     )
@@ -604,6 +607,7 @@ def daily_patterns_for_owner(
                 BloodPressureEvent.owner_id == owner_id,
                 BloodPressureEvent.occurred_at >= start,
                 BloodPressureEvent.occurred_at < end,
+                event_service.current_fact_predicate(BloodPressureEvent, owner_id=owner_id),
             )
         )
     )
@@ -615,13 +619,6 @@ def daily_patterns_for_owner(
                 or_(StressEpisode.ended_at.is_(None), StressEpisode.ended_at > start),
             )
         )
-    )
-
-    dose_rows = event_service.current_only(session, DoseEvent, dose_rows)
-    symptom_rows = event_service.current_only(session, SymptomEvent, symptom_rows)
-    garmin_rows = event_service.current_only(session, GarminMetricEvent, garmin_rows)
-    blood_pressure_rows = event_service.current_only(
-        session, BloodPressureEvent, blood_pressure_rows
     )
 
     days = []

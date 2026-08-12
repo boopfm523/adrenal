@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declarative_mixin, mapped_column, relationship
@@ -205,6 +206,13 @@ class GarminMetricEvent(GarminSourceMixin, EventMixin, FactBase):
         ),
         CheckConstraint("value >= 0", name="metric_nonnegative"),
         Index("ix_garmin_metric_owner_type_occurred", "owner_id", "metric_type", "occurred_at"),
+        Index(
+            "ix_garmin_metric_owner_aggregate_occurred",
+            "owner_id",
+            text("occurred_at DESC"),
+            "id",
+            postgresql_where=text("aggregation <> 'provider_sample'"),
+        ),
         CheckConstraint(
             "(garmin_import_batch_id IS NOT NULL AND garmin_sync_run_id IS NULL) OR "
             "(garmin_import_batch_id IS NULL AND garmin_sync_run_id IS NOT NULL)",

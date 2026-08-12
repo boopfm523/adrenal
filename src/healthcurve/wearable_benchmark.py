@@ -328,7 +328,7 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
             require_empty_database(connection)
             owner = Owner(
                 email=f"wearable-benchmark-{uuid.uuid4()}@example.test",
-                password_hash="synthetic-non-login-hash",  # noqa: S106 - disabled fixture
+                password_hash="synthetic-non-login-hash",  # noqa: S106  # pragma: allowlist secret
                 default_timezone="UTC",
             )
             session.add(owner)
@@ -468,6 +468,12 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
                     "SELECT id, occurred_at FROM fact.garmin_metric_event "
                     "WHERE owner_id=:owner_id AND aggregation<>'provider_sample' "
                     "ORDER BY occurred_at DESC LIMIT 200",
+                    parameters,
+                ),
+                "timeline_daily_aggregate_count": _explain(
+                    connection,
+                    "SELECT count(*) FROM fact.garmin_metric_event "
+                    "WHERE owner_id=:owner_id AND aggregation<>'provider_sample'",
                     parameters,
                 ),
                 "complete_export_metric_scan": _explain(

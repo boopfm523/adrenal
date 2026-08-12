@@ -118,14 +118,18 @@ def _current_events[E: EventMixin](
     start: datetime,
     end: datetime,
 ) -> list[E]:
-    rows = list(
+    return list(
         session.scalars(
             select(model)
-            .where(model.owner_id == owner_id, model.occurred_at >= start, model.occurred_at < end)
+            .where(
+                model.owner_id == owner_id,
+                model.occurred_at >= start,
+                model.occurred_at < end,
+                event_service.current_fact_predicate(model, owner_id=owner_id),
+            )
             .order_by(model.occurred_at, model.id)
         )
     )
-    return event_service.current_only(session, model, rows)
 
 
 def _event_time(row: EventMixin, zone: ZoneInfo) -> dict[str, object]:
@@ -272,11 +276,12 @@ def build_projection(
                 GarminSleepEvent.owner_id == owner_id,
                 GarminSleepEvent.occurred_at < end,
                 GarminSleepEvent.ended_at > start,
+                event_service.current_fact_predicate(GarminSleepEvent, owner_id=owner_id),
             )
             .order_by(GarminSleepEvent.occurred_at, GarminSleepEvent.id)
         )
     )
-    sleeps = event_service.current_only(session, GarminSleepEvent, sleep_rows)
+    sleeps = sleep_rows
     episodes = list(
         session.scalars(
             select(StressEpisode)
