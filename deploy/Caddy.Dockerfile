@@ -7,6 +7,9 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --ignore-scripts
 
 COPY frontend ./
+# AppLayout imports the owner-selected source logo directly from the repository's
+# design catalog, so preserve that relative path in the isolated frontend builder.
+COPY design/logo-concepts/healthcurve-protective-horizon-concept.png /design/logo-concepts/healthcurve-protective-horizon-concept.png
 RUN npm run check:api && npm run build
 
 # caddy:2.10-alpine, pinned identically to the prior Compose service (T6).

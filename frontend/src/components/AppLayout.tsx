@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../auth/context";
+import protectiveHorizonLogo from "../../../design/logo-concepts/healthcurve-protective-horizon-concept.png";
 
 const navigation = [
   ["HealthCurve", "/healthcurve"],
@@ -25,7 +26,9 @@ export function AppLayout(): React.JSX.Element {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="app-header">
-        <NavLink className="brand" to="/healthcurve" aria-label="HealthCurve.ai home">HealthCurve.ai</NavLink>
+        <NavLink className="brand" to="/healthcurve" aria-label="HealthCurve.ai home">
+          <img className="brand-logo" src={protectiveHorizonLogo} alt="" />
+        </NavLink>
         <a className="emergency-link" href="/emergency">
           <span aria-hidden="true">!</span> Emergency plan
         </a>

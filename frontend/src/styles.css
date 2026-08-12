@@ -31,7 +31,14 @@ button:disabled { cursor: wait; opacity: 0.65; }
   border-bottom: 1px solid #ccd4ce;
   background: #fff;
 }
-.brand { color: #17211d; font-size: 1.35rem; font-weight: 750; text-decoration: none; }
+.brand { display: block; flex: 0 0 auto; text-decoration: none; }
+.brand-logo {
+  display: block;
+  width: clamp(9.5rem, 15vw, 12rem);
+  height: 2.75rem;
+  object-fit: cover;
+  object-position: center;
+}
 .emergency-link { margin-left: auto; color: #8a260f; font-weight: 700; }
 .emergency-link span { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 2px solid currentColor; border-radius: 50%; }
 .session-menu { display: flex; align-items: center; gap: 0.75rem; }
@@ -486,6 +493,7 @@ circle.chart-series { fill: white; }
 
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
+  .brand-logo { width: 9.5rem; height: 2.5rem; }
   .emergency-link { order: 3; width: 100%; margin-left: 0; }
   .session-menu span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .dose-slot { align-items: stretch; flex-direction: column; }
