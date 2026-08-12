@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "./auth/context";
 import { AppLayout } from "./components/AppLayout";
+import { HealthCurveProvider } from "./components/HealthCurveProvider";
 import { AccessibleLineChart } from "./components/AccessibleLineChart";
 import { LoginPage } from "./pages/LoginPage";
 import { PlanPage } from "./pages/PlanPage";
@@ -31,7 +32,7 @@ async function expectNoHighImpactViolations(): Promise<void> {
 }
 
 function renderRoute(element: React.JSX.Element): void {
-  render(<AuthContext.Provider value={auth}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/plan"]}><Routes><Route element={<AppLayout />}><Route path="/plan" element={element} /></Route></Routes></MemoryRouter></QueryClientProvider></AuthContext.Provider>);
+  render(<HealthCurveProvider><AuthContext.Provider value={auth}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/plan"]}><Routes><Route element={<AppLayout />}><Route path="/plan" element={element} /></Route></Routes></MemoryRouter></QueryClientProvider></AuthContext.Provider></HealthCurveProvider>);
 }
 
 function LocationProbe(): React.JSX.Element {
@@ -67,7 +68,11 @@ describe("automated accessibility audit", () => {
     skipLink.focus();
     expect(skipLink).toHaveFocus();
     await user.tab();
-    expect(screen.getByRole("link", { name: "HealthCurve.ai home" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Open navigation" })).toHaveFocus();
+    await user.keyboard("[Enter]");
+    expect(screen.getByRole("button", { name: "Close navigation" })).toBeVisible();
+    await user.keyboard("[Escape]");
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeVisible();
     const approvalButton = screen.getByRole("button", { name: "Set physician-approved plan live" });
     approvalButton.focus();
     await user.keyboard("[Enter]");
@@ -88,7 +93,7 @@ describe("automated accessibility audit", () => {
   });
 
   it("activates every primary route by keyboard", async () => {
-    render(<AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/today"]}><Routes><Route element={<AppLayout />}><Route path="*" element={<LocationProbe />} /></Route></Routes></MemoryRouter></AuthContext.Provider>);
+    render(<HealthCurveProvider><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/today"]}><Routes><Route element={<AppLayout />}><Route path="*" element={<LocationProbe />} /></Route></Routes></MemoryRouter></AuthContext.Provider></HealthCurveProvider>);
     const routes = [
       ["Daily review", "/healthcurve"], ["Today", "/today"], ["Timeline", "/timeline"], ["Doses", "/doses"], ["Plan", "/plan"], ["Episodes", "/episodes"],
       ["Symptoms & diary", "/symptoms-diary"], ["Health data", "/health-data"], ["Labs", "/labs"],

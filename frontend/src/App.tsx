@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
+import { HealthCurveProvider } from "./components/HealthCurveProvider";
 import { RouteLoadBoundary, RouteLoadingStatus } from "./components/RouteLoadBoundary";
 import { NotFoundPage } from "./pages/FoundationPages";
 import { LoginPage } from "./pages/LoginPage";
@@ -33,28 +34,30 @@ function route(element: React.JSX.Element): React.JSX.Element {
 
 export function App(): React.JSX.Element {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/healthcurve" replace />} />
-          <Route path="/healthcurve" element={route(<AnalyticsPage />)} />
-          <Route path="/today" element={route(<TodayPage />)} />
-          <Route path="/timeline" element={route(<TimelinePage />)} />
-          <Route path="/doses" element={route(<DosesPage />)} />
-          <Route path="/symptoms-diary" element={route(<SymptomsDiaryPage />)} />
-          <Route path="/plan" element={route(<PlanPage />)} />
-          <Route path="/episodes" element={route(<EpisodesPage />)} />
-          <Route path="/analytics" element={<Navigate to="/healthcurve" replace />} />
-          <Route path="/settings" element={route(<SettingsPage />)} />
-          <Route path="/data-quality" element={route(<DataQualityPage />)} />
-          <Route path="/reports" element={route(<ReportsPage />)} />
-          <Route path="/help" element={route(<HelpPage />)} />
-          <Route path="/health-data" element={route(<HealthDataPage />)} />
-          <Route path="/labs" element={route(<LabsPage />)} />
-          <Route path="*" element={<NotFoundPage />} />
+    <HealthCurveProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<Navigate to="/healthcurve" replace />} />
+            <Route path="/healthcurve" element={route(<AnalyticsPage />)} />
+            <Route path="/today" element={route(<TodayPage />)} />
+            <Route path="/timeline" element={route(<TimelinePage />)} />
+            <Route path="/doses" element={route(<DosesPage />)} />
+            <Route path="/symptoms-diary" element={route(<SymptomsDiaryPage />)} />
+            <Route path="/plan" element={route(<PlanPage />)} />
+            <Route path="/episodes" element={route(<EpisodesPage />)} />
+            <Route path="/analytics" element={<Navigate to="/healthcurve" replace />} />
+            <Route path="/settings" element={route(<SettingsPage />)} />
+            <Route path="/data-quality" element={route(<DataQualityPage />)} />
+            <Route path="/reports" element={route(<ReportsPage />)} />
+            <Route path="/help" element={route(<HelpPage />)} />
+            <Route path="/health-data" element={route(<HealthDataPage />)} />
+            <Route path="/labs" element={route(<LabsPage />)} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
-      </Route>
-    </Routes>
+      </Routes>
+    </HealthCurveProvider>
   );
 }

@@ -22,15 +22,6 @@ button:disabled { cursor: wait; opacity: 0.65; }
 
 .skip-link { position: fixed; left: 1rem; top: -5rem; z-index: 20; background: white; padding: 0.75rem; }
 .skip-link:focus { top: 1rem; }
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-height: 4rem;
-  padding: 0.75rem clamp(1rem, 3vw, 2.5rem);
-  border-bottom: 1px solid #ccd4ce;
-  background: #fff;
-}
 .brand { display: block; flex: 0 0 auto; text-decoration: none; }
 .brand-logo {
   display: block;
@@ -39,21 +30,21 @@ button:disabled { cursor: wait; opacity: 0.65; }
   object-fit: cover;
   object-position: center;
 }
-.emergency-link { margin-left: auto; color: #8a260f; font-weight: 700; }
+.emergency-link { color: var(--hc-color-error); font-weight: 700; white-space: nowrap; }
 .emergency-link span { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 2px solid currentColor; border-radius: 50%; }
-.session-menu { display: flex; align-items: center; gap: 0.75rem; }
-.session-menu button { min-height: 40px; padding-block: 0.4rem; }
-.primary-navigation {
-  display: flex;
-  gap: 0.25rem;
-  overflow-x: auto;
-  padding: 0.65rem clamp(1rem, 3vw, 2.5rem);
-  border-bottom: 1px solid #ccd4ce;
-  background: #e7ece8;
-}
-.primary-navigation a { flex: 0 0 auto; padding: 0.55rem 0.7rem; color: #26342e; text-decoration: none; border-radius: 0.35rem; }
-.primary-navigation a.active { background: #fff; font-weight: 700; text-decoration: underline; }
-main#main-content { width: min(75rem, 100%); margin-inline: auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
+.mobile-header { border-color: var(--hc-color-border); background: var(--hc-color-surface); }
+.mobile-header .brand-logo { width: 8.75rem; height: 2.35rem; }
+.mobile-header .emergency-link { font-size: var(--mantine-font-size-xs); }
+.mobile-header .emergency-link span { width: 1.25rem; height: 1.25rem; }
+.sidebar { border-color: var(--hc-color-border); background: var(--hc-color-surface); }
+.sidebar-brand { padding: var(--mantine-spacing-lg) var(--mantine-spacing-md); border-bottom: 1px solid var(--hc-color-border); }
+.sidebar-navigation { padding: var(--mantine-spacing-sm); }
+.sidebar-navigation-links { display: grid; gap: var(--mantine-spacing-xs); }
+.sidebar-link { display: flex; align-items: center; min-height: 2.75rem; border-radius: var(--mantine-radius-md); padding: 0 var(--mantine-spacing-md); color: var(--hc-color-text); text-decoration: none; font-weight: 550; }
+.sidebar-link:hover { background: var(--hc-color-surface-muted); }
+.sidebar-link.active { background: var(--mantine-color-horizonTeal-0); color: var(--mantine-color-horizonTeal-9); font-weight: 750; box-shadow: inset 0.25rem 0 var(--mantine-color-horizonTeal-7); }
+.sidebar-footer { display: grid; gap: var(--mantine-spacing-md); padding: var(--mantine-spacing-md); border-top: 1px solid var(--hc-color-border); }
+.main-content-inner { width: min(80rem, 100%); margin-inline: auto; padding: var(--mantine-spacing-xl) clamp(1rem, 4vw, 3rem) 4rem; }
 h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035em; }
 .page-description { max-width: 68ch; color: #48554f; font-size: 1.05rem; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
@@ -492,10 +483,7 @@ circle.chart-series { fill: white; }
 .lab-unparsed summary { cursor: pointer; font-weight: 800; }
 
 @media (max-width: 720px) {
-  .app-header { flex-wrap: wrap; }
-  .brand-logo { width: 9.5rem; height: 2.5rem; }
-  .emergency-link { order: 3; width: 100%; margin-left: 0; }
-  .session-menu span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .main-content-inner { padding: var(--mantine-spacing-lg) var(--mantine-spacing-md) 3rem; }
   .dose-slot { align-items: stretch; flex-direction: column; }
   .dose-slot button { width: 100%; }
   .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values, .plan-form-grid, .repeatable-row, .plan-timeline-item { grid-template-columns: 1fr; }

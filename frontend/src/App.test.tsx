@@ -29,13 +29,14 @@ describe("primary HealthCurve route", () => {
     renderApp(entry);
     await waitFor(() => { expect(screen.getByLabelText("Current route")).toHaveTextContent("/healthcurve"); });
     expect(await screen.findByRole("heading", { name: "Daily review", level: 1 })).toBeVisible();
-    const brand = screen.getByRole("link", { name: "HealthCurve.ai home" });
-    expect(brand).toHaveAttribute("aria-current", "page");
-    expect(brand.querySelector("img")).toHaveAttribute(
+    const brands = screen.getAllByRole("link", { name: "HealthCurve.ai home" });
+    expect(brands).toHaveLength(2);
+    expect(brands.every((brand) => brand.getAttribute("aria-current") === "page")).toBe(true);
+    expect(brands[0]?.querySelector("img")).toHaveAttribute(
       "src",
       expect.stringContaining("healthcurve-protective-horizon-concept"),
     );
-    expect(brand.querySelector("img")).toHaveAttribute("alt", "");
+    expect(brands[0]?.querySelector("img")).toHaveAttribute("alt", "");
     expect(document.title).toBe("HealthCurve.ai");
     cleanup();
   });
