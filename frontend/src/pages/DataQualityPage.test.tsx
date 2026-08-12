@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { DataQualityPage } from "./DataQualityPage";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -10,7 +11,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function renderPage(initialEntry = "/data-quality"): void {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><DataQualityPage /></MemoryRouter></QueryClientProvider>);
+  render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><DataQualityPage /></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 }
 
 describe("Data quality page", () => {
