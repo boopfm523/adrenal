@@ -23,7 +23,9 @@ make eval
 ```
 
 After intentionally changing the prompt, gold set, or canonical local model, run the
-model locally and review the diff before committing a replacement baseline:
+model locally and review the diff before committing a replacement baseline. First
+update the gold set's `prompt_version` to the current `PROMPT_VERSION`; the recorder
+refuses stale gold provenance before it calls Ollama:
 
 ```bash
 HC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \

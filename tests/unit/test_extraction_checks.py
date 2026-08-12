@@ -32,6 +32,25 @@ from healthcurve.medications.models import DoseCategory
 from healthcurve.vitals.models import MeasurementSetting, WeightUnit
 
 
+def test_prompt_requires_bounded_local_time_format() -> None:
+    assert "YYYY-MM-DDTHH:MM:SS" in SYSTEM_PROMPT
+    assert "no fractional seconds" in SYSTEM_PROMPT
+
+
+def test_local_time_schema_has_a_bounded_length() -> None:
+    from healthcurve.ai.extraction import CANDIDATE_JSON_SCHEMA
+
+    candidate = CANDIDATE_JSON_SCHEMA["properties"]["candidates"]["items"]
+    assert candidate["properties"]["local_time"]["maxLength"] == 32
+
+
+def test_candidate_schema_requires_explicit_nulls_instead_of_silent_omissions() -> None:
+    from healthcurve.ai.extraction import CANDIDATE_JSON_SCHEMA
+
+    candidate = CANDIDATE_JSON_SCHEMA["properties"]["candidates"]["items"]
+    assert set(candidate["required"]) == set(candidate["properties"])
+
+
 @pytest.mark.safety("SAFE-19")
 @pytest.mark.parametrize(
     "text",

@@ -43,7 +43,7 @@ from healthcurve.vitals.models import MeasurementSetting, TemperatureUnit, Weigh
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
-PROMPT_VERSION: Final = "extract-v5"
+PROMPT_VERSION: Final = "extract-v6"
 SCHEMA_VERSION: Final = "candidates-v4"
 
 #: Nothing plausible for adrenal replacement exceeds this. A larger number is a parse
@@ -121,12 +121,21 @@ You are a parser, not an adviser. You must:
 - If the message says a dose was NOT taken, set negated=true rather than reporting it.
 - If the message asks a question or describes a hypothetical, set hypothetical=true.
 - If any field is unclear, leave it null and lower your confidence. Do not guess.
+- Include every schema field on every candidate. Use null for fields that do not
+  apply. Never omit a stated medication name, amount, or unit.
+- Write local_time as YYYY-MM-DDTHH:MM:SS with no timezone suffix and no fractional seconds.
+- If the person corrects an earlier value in the same message, return only the final
+  corrected event, not both versions.
 - For a dose, set dose_category="stress" only when the person explicitly calls it a
   stress dose or up-dose. Otherwise set dose_category="scheduled". An illness,
   symptom, stressful situation, or open episode alone does not make a dose a stress
   dose.
-- Create one candidate for each distinct event. A dose and a symptom in one message
-  are two candidates; never put symptom fields on a dose candidate.
+- Create one candidate for each distinct event. Words such as "and", "also", or
+  "then" may join multiple events. A dose and a symptom in one message MUST produce
+  two candidates: one dose candidate and one symptom candidate. Never put symptom
+  fields on a dose candidate. For example, "I took 10 mg hydrocortisone and felt
+  dizzy, severity 4" produces a dose candidate plus a symptom candidate whose
+  symptom_name is "dizziness" and severity is 4.
 - A blood-pressure candidate must preserve the stated systolic and diastolic mmHg
   values and optional pulse. Do not interpret or comment on the reading.
 - A weight candidate must preserve the stated decimal value in the amount field and
@@ -220,12 +229,37 @@ CANDIDATE_JSON_SCHEMA: Final[dict[str, Any]] = {
                         "type": ["string", "null"],
                         "enum": ["f", "c", None],
                     },
-                    "local_time": {"type": ["string", "null"]},
+                    "local_time": {
+                        "type": ["string", "null"],
+                        "maxLength": 32,
+                    },
                     "negated": {"type": "boolean"},
                     "hypothetical": {"type": "boolean"},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 },
-                "required": ["type", "negated", "hypothetical", "confidence"],
+                "required": [
+                    "type",
+                    "medication_name",
+                    "medication_text",
+                    "amount",
+                    "unit",
+                    "route",
+                    "dose_category",
+                    "symptom_name",
+                    "severity",
+                    "text",
+                    "systolic_mmhg",
+                    "diastolic_mmhg",
+                    "pulse_bpm",
+                    "weight_value",
+                    "weight_unit",
+                    "temperature_value",
+                    "temperature_unit",
+                    "local_time",
+                    "negated",
+                    "hypothetical",
+                    "confidence",
+                ],
             },
         }
     },

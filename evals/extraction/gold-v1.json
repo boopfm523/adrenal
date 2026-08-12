@@ -1,6 +1,6 @@
 {
   "version": "gold-v1",
-  "prompt_version": "extract-v4",
+  "prompt_version": "extract-v6",
   "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
   "known_medications": ["hydrocortisone", "fludrocortisone"],
   "thresholds": {
