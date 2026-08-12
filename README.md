@@ -147,8 +147,11 @@ commands record facts; supported free text becomes a reviewable draft that requi
 confirmation before high-impact fields become facts. The local Ollama model can help
 structure those drafts but cannot approve a plan or write directly to the record.
 Telegram itself retains chat history on Telegram's servers, so use the web app when
-that external copy is undesirable. `/beads-add` creates a structured product request
-for later review; it does not automatically implement or deploy anything.
+that external copy is undesirable. `/bd-list` and `/bd-status` return bounded output
+from the trusted host's fixed `bd list` and `bd status` operations. `/bd-add` creates a
+structured product request for later review; `/beads-add` remains a compatibility
+alias. None of these commands automatically implements or deploys anything, and the
+model can never supply a shell command or arguments.
 
 **Garmin Connect** is an owner-selected, unofficial, read-only integration isolated
 in its own worker. It imports supported daily and intraday stress, heart rate, HRV,

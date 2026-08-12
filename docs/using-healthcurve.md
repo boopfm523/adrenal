@@ -114,14 +114,25 @@ even when the language model is unavailable:
 | `/episode` | `/episode start vomiting` / `/episode end` |
 | `/today` | today's doses against your plan |
 | `/undo` | cancels the pending draft |
+| `/bd-list` | current bounded `bd list` output from the trusted host bridge |
+| `/bd-status` | current bounded `bd status` output from the trusted host bridge |
 
-`/beads-add <feature request>` is the deliberate exception: it asks only the configured
-local Ollama/Qwen model to generate a structured product proposal. The host bridge
+`/bd-add <feature request>` is the deliberate model-backed exception; `/beads-add`
+remains a compatibility alias. It asks only the configured local Ollama/Qwen model to
+generate a structured product proposal. The host bridge
 searches for a duplicate before creating a Bead. The raw directive is not copied into
 Beads, and an unavailable model, ambiguity, invalid output, prompt-injection text, or
 sensitive content creates nothing. It never starts an agent or implementation. See
-[Telegram feature-request bridge](beads-feature-bridge.md) for the privacy boundary and
+[Telegram Beads bridge](beads-feature-bridge.md) for the privacy boundary and
 recovery behavior.
+
+Ordinary phrases such as “show the current bd list,” “what is the Beads status,” and
+“add a Bead for hydration tracking” use a separate schema-constrained local-model
+intent with only `list`, `status`, `add`, or `none`. The first two queue the same fixed
+read operations as the slash commands; `add` still passes through the full proposal
+validation. The application and model never control a shell command, argument, path,
+priority, or status. If the model is unavailable, the bot guesses nothing and points
+back to `/bd-list`, `/bd-status`, and `/bd-add`.
 
 Free text goes to the model: *"Took 15mg hydrocortisone at 7:08, slept badly"*. You get
 a draft with **Confirm** / **Cancel**. Nothing becomes a record until you confirm it.

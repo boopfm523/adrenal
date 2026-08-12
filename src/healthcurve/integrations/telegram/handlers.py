@@ -4,9 +4,10 @@ The flow for free text is: receive -> extract -> validate -> show draft -> confi
 edit, or cancel -> store -> reply with what was recorded. Nothing becomes a fact
 before the confirm step (SAFE-11, SAFE-12).
 
-Deterministic health-recording slash commands keep the bot useful when the model is
-down (ADR-0003). They never touch the model. ``/beads-add`` is the explicit product-
-request exception: it fails closed unless the local model produces a validated proposal.
+Deterministic health-recording and Beads-read slash commands keep the bot useful when
+the model is down (ADR-0003). They never touch the model. ``/bd-add`` is the explicit
+product-request exception: it fails closed unless the local model produces a validated
+proposal. Natural-language project requests pass through a separate fixed intent enum.
 """
 
 from __future__ import annotations
@@ -43,6 +44,13 @@ from healthcurve.events.timekeeping import (
 )
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
+from healthcurve.integrations.telegram.beads_operations import (
+    BeadsOperation,
+    classify_beads_intent,
+    looks_like_beads_request,
+    queue_operation,
+    queued_operation,
+)
 from healthcurve.integrations.telegram.feature_requests import (
     FeatureRequestEvaluationFailed,
     FeatureRequestNeedsClarification,
@@ -78,6 +86,9 @@ DRAFT_TTL: Final = timedelta(hours=6)
 SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
     {
         "beads-add",
+        "bd-add",
+        "bd-list",
+        "bd-status",
         "bp",
         "dose",
         "edit",
@@ -119,8 +130,11 @@ Recording commands (these work even if the language model is offline):
 /privacy - what this bot stores
 /help - this message
 
-Product requests (requires the local language model):
-/beads-add <feature request> - evaluate, deduplicate, and add a structured inbox Bead
+Project tasks:
+/bd-list - return the current bd list through the safe host bridge
+/bd-status - return the current bd status through the safe host bridge
+/bd-add <feature request> - evaluate, deduplicate, and add a structured inbox Bead
+/beads-add <feature request> - compatibility alias for /bd-add
 """
 
 PRIVACY_TEXT: Final = """\
@@ -130,7 +144,10 @@ What this bot stores
   or cancel, the raw text is deleted and only the structured record remains.
 - Telegram itself keeps your chat history. That is outside HealthCurve's control.
   Clear the chat there if that matters to you.
-- /beads-add sends only the feature text to the configured local model. A successful
+- /bd-list and /bd-status queue only a fixed operation name for the trusted local host
+  bridge. Message text never becomes a command or command argument.
+- /bd-add (and the older /beads-add alias) sends only the feature text to the
+  configured local model. A successful
   outbox item and Bead retain the generated proposal and a one-way message hash, not
   the raw Telegram directive. Invalid or unavailable model output creates nothing.
 - Message text is sent to a language model running on private infrastructure. It is
@@ -202,7 +219,7 @@ def handle_message(
 
 
 # ---------------------------------------------------------------------------
-# Commands (only /beads-add uses the model, and only to create bounded backlog data)
+# Commands (/bd-add uses the model only to create bounded backlog data)
 # ---------------------------------------------------------------------------
 
 
@@ -238,8 +255,16 @@ def _handle_command(
             return _cmd_weight(session, owner, args, now=now)
         case "temperature":
             return _cmd_temperature(session, owner, args, now=now)
-        case "beads-add":
-            return _cmd_beads_add(
+        case "bd-list":
+            if raw_argument:
+                return Reply("Usage: /bd-list (no arguments)")
+            return _cmd_bd_operation(BeadsOperation.LIST, message_id=message_id, now=now)
+        case "bd-status":
+            if raw_argument:
+                return Reply("Usage: /bd-status (no arguments)")
+            return _cmd_bd_operation(BeadsOperation.STATUS, message_id=message_id, now=now)
+        case "bd-add" | "beads-add":
+            return _cmd_bd_add(
                 raw_argument,
                 message_id=message_id,
                 client=client,
@@ -265,7 +290,39 @@ def _handle_command(
             raise AssertionError(f"registered Telegram command is not dispatched: {command}")
 
 
-def _cmd_beads_add(
+def _cmd_bd_operation(
+    operation: BeadsOperation,
+    *,
+    message_id: str | None,
+    now: datetime,
+) -> Reply:
+    """Queue one fixed read-only Beads operation for the trusted host bridge."""
+    settings = get_settings()
+    if settings.beads_outbox_dir is None:
+        return Reply("Beads status is temporarily unavailable. Nothing was run; try again later.")
+    safe_message_id = message_id or ""
+    try:
+        existing = queued_operation(settings.beads_outbox_dir, message_id=safe_message_id)
+        if existing is not None:
+            return Reply(
+                f"bd {operation.value} is already queued as {existing.request_id}. "
+                "The trusted host bridge will return the result here."
+            )
+        queued = queue_operation(
+            settings.beads_outbox_dir,
+            message_id=safe_message_id,
+            operation=operation,
+            now=now,
+        )
+    except FeatureRequestRejected:
+        return Reply("Beads status is temporarily unavailable. Nothing was run; try again later.")
+    return Reply(
+        f"Queued bd {operation.value} as {queued.request_id}. "
+        "The trusted host bridge will return the bounded command output here."
+    )
+
+
+def _cmd_bd_add(
     request: str,
     *,
     message_id: str | None,
@@ -301,8 +358,9 @@ def _cmd_beads_add(
                 "feature outcome, without instructions to the language model."
             )
         return Reply(
-            "Usage: /beads-add <feature request>\n"
-            "Example: /beads-add add a feature that allows me to record hydration"
+            "Usage: /bd-add <feature request>\n"
+            "Example: /bd-add add a feature that allows me to record hydration\n"
+            "The older /beads-add spelling remains a compatibility alias."
         )
     if existing is not None:
         return Reply(
@@ -942,6 +1000,44 @@ def _handle_free_text(
                 "I can't safely check the automatic-reading limit right now. Nothing "
                 "was recorded. You can still use /dose, /symptom, or /injection."
             )
+    if looks_like_beads_request(text):
+        try:
+            intent_result = classify_beads_intent(text, client=client)
+        except FeatureRequestNeedsClarification as exc:
+            return Reply(f"I need one clarification before creating a Bead:\n{exc.question}")
+        except FeatureRequestRejected:
+            return Reply(
+                "I couldn't safely interpret that project request. Nothing was run or "
+                "created. Use /bd-list, /bd-status, or /bd-add <feature request>."
+            )
+        except FeatureRequestEvaluationFailed:
+            return Reply(
+                "The local language model couldn't safely interpret that project request. "
+                "Nothing was run or created. Use /bd-list, /bd-status, or /bd-add."
+            )
+        if intent_result.outcome is not ModelOutcome.OK or intent_result.intent is None:
+            return Reply(
+                "The local language model is unavailable, so I couldn't interpret that "
+                "project request. Nothing was run or created. The deterministic commands "
+                "/bd-list, /bd-status, and /bd-add still work."
+            )
+        intent = intent_result.intent
+        match intent.operation:
+            case "list":
+                return _cmd_bd_operation(BeadsOperation.LIST, message_id=message_id, now=now)
+            case "status":
+                return _cmd_bd_operation(BeadsOperation.STATUS, message_id=message_id, now=now)
+            case "add":
+                return _cmd_bd_add(
+                    intent.feature_request or "",
+                    message_id=message_id,
+                    client=client,
+                    limiter=None,
+                    model_policy=None,
+                    now=now,
+                )
+            case "none":
+                pass
     result = extract(
         session,
         owner_id=owner.id,

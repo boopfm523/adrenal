@@ -76,6 +76,11 @@ While you're still in BotFather, harden the bot:
   help - Show help
   ```
 
+Telegram's BotFather command menu permits underscores but not hyphens. HealthCurve
+deliberately uses the owner-requested `/bd-list`, `/bd-status`, and `/bd-add` spellings,
+so type those commands directly rather than adding misleading underscore aliases to
+the menu.
+
 ## Step 2 — Find your chat ID
 
 The bot will only ever respond to this one chat. Everything else is dropped.
@@ -222,6 +227,10 @@ Message your bot:
 | `/help` | The command list |
 | `/today` | Today's doses against your approved plan |
 | `/dose 15 hydrocortisone` | A draft with **Confirm** / **Cancel** buttons |
+| `/bd-list` | Queue the fixed host `bd list` operation, then receive its bounded output |
+| `/bd-status` | Queue the fixed host `bd status` operation, then receive its bounded output |
+| `/bd-add add hydration tracking` | A locally evaluated proposal queue ID, then an existing or new `hc-*` issue ID |
+| `What is the current bd list?` | The local model maps to the same fixed list operation; if unavailable, the bot points to `/bd-list` |
 | `Took 15mg hydrocortisone at 7:08, slept badly` | A draft listing a dose *and* a symptom |
 
 Press **Confirm** and check the dose appears in the web app's timeline.
@@ -283,9 +292,10 @@ to ADR-0010's `qwen3:30b`. With native Ollama on macOS, run `ollama list` and
 `ollama pull qwen3:30b`; with the bundled CPU-only service, use
 `docker compose exec ollama ollama list` and
 `docker compose exec ollama ollama pull qwen3:30b`. Confirm `HC_OLLAMA_MODEL` names the
-installed tag. The commands (`/dose`, `/symptom`, `/bp`, `/weight`, `/temperature`,
-`/today`) remain deterministic and
-keep working without any model at all.
+installed tag. The recording commands (`/dose`, `/symptom`, `/bp`, `/weight`,
+`/temperature`, `/today`) and fixed read commands (`/bd-list`, `/bd-status`) keep
+working without any model. `/bd-add` remains available as a safe entry point but
+creates nothing until the local model can validate a proposal.
 
 **`telegram update failed` with a `reason_code`.**
 The `reason_code` is the exception type. `ProgrammingError` is usually a database

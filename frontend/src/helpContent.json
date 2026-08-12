@@ -65,12 +65,36 @@
       "confirmation": "Review the value, unit, and experienced time, then press Confirm. HealthCurve displays Fahrenheit first with Celsius in parentheses and does not diagnose fever."
     },
     {
-      "command": "/beads-add",
-      "syntax": "/beads-add <feature request>",
-      "example": "/beads-add add a feature that allows me to record hydration",
+      "command": "/bd-list",
+      "syntax": "/bd-list",
+      "example": "/bd-list",
+      "purpose": "Ask the trusted local host bridge for the current bounded bd list output.",
+      "result": "Read-only Beads list returned in Telegram",
+      "confirmation": "The application queues only the fixed list operation. The host bridge runs bd list without a shell or model-controlled arguments, redacts terminal output, and returns a bounded reply. No issue or code is changed."
+    },
+    {
+      "command": "/bd-status",
+      "syntax": "/bd-status",
+      "example": "/bd-status",
+      "purpose": "Ask the trusted local host bridge for the current bounded bd status output.",
+      "result": "Read-only Beads status returned in Telegram",
+      "confirmation": "The application queues only the fixed status operation. The host bridge runs bd status without a shell or model-controlled arguments, redacts terminal output, and returns a bounded reply. No issue or code is changed."
+    },
+    {
+      "command": "/bd-add",
+      "syntax": "/bd-add <feature request>",
+      "example": "/bd-add add a feature that allows me to record hydration",
       "purpose": "Have the local Ollama/Qwen model turn a product idea into a structured proposal for the fixed HealthCurve feature inbox.",
       "result": "Existing matching Bead or new structured backlog Bead",
       "confirmation": "The bot returns a queue ID after local evaluation; the host bridge searches for duplicates and then returns the hc-* issue ID. Model failure, ambiguity, unsafe content, or invalid output creates nothing and never falls back to copying the directive. No agent, shell command, or implementation starts. Do not include personal health values or secrets."
+    },
+    {
+      "command": "/beads-add",
+      "syntax": "/beads-add <feature request>",
+      "example": "/beads-add add a feature that allows me to record hydration",
+      "purpose": "Compatibility alias for /bd-add while older Telegram command menus and saved messages are updated.",
+      "result": "Existing matching Bead or new structured backlog Bead",
+      "confirmation": "This follows exactly the same safety and confirmation boundary as /bd-add; it is retained only to prevent silent breakage."
     },
     {
       "command": "/injection",

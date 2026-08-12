@@ -20,8 +20,17 @@ from healthcurve.integrations.telegram.beads_bridge import (
     BridgeError,
     IssueResolution,
     create_or_find_issue,
+    execute_operation,
     load_envelope,
     process_one,
+)
+from healthcurve.integrations.telegram.beads_operations import (
+    BEADS_INTENT_JSON_SCHEMA,
+    BeadsOperation,
+    BeadsOperationEnvelope,
+    classify_beads_intent,
+    load_operation_envelope,
+    queue_operation,
 )
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.dispatch import UpdateOutcome, process_update
@@ -107,6 +116,39 @@ class StubOllamaClient(OllamaClient):
         return self.result
 
 
+class SequencedOllamaClient(StubOllamaClient):
+    def __init__(self, results: list[ModelResult]) -> None:
+        super().__init__(results[0])
+        self.results = results
+
+    @override
+    def generate_json(
+        self,
+        *,
+        system_prompt: str,
+        user_content: str,
+        json_schema: dict[str, Any],
+        temperature: float = 0.0,
+        model_name: str | None = None,
+        images: list[bytes] | None = None,
+        max_output_tokens: int | None = None,
+        context_window: int | None = None,
+    ) -> ModelResult:
+        self.calls.append(
+            {
+                "system_prompt": system_prompt,
+                "user_content": user_content,
+                "json_schema": json_schema,
+                "temperature": temperature,
+                "model_name": model_name,
+                "images": images,
+                "max_output_tokens": max_output_tokens,
+                "context_window": context_window,
+            }
+        )
+        return self.results.pop(0)
+
+
 class FakeTelegramClient:
     def __init__(self, succeeds: bool = True) -> None:
         self.succeeds = succeeds
@@ -125,6 +167,15 @@ def model_client(data: dict[str, Any] | None = None) -> StubOllamaClient:
             model_digest="a" * 64,
             data=data or proposal_data(),
         )
+    )
+
+
+def intent_model_result(operation: str, feature_request: str | None = None) -> ModelResult:
+    return ModelResult(
+        outcome=ModelOutcome.OK,
+        model_name="qwen3:30b",
+        model_digest="a" * 64,
+        data={"operation": operation, "feature_request": feature_request},
     )
 
 
@@ -172,6 +223,56 @@ def test_local_model_evaluation_is_schema_constrained_versioned_and_minimal() ->
     assert call["max_output_tokens"] == 900
     assert call["context_window"] == 8192
     assert "Do not invent a missing feature target" in call["system_prompt"]
+
+
+@pytest.mark.parametrize(
+    ("message", "operation", "feature_request"),
+    [
+        ("What is the current bd list?", "list", None),
+        ("Give me the Beads project status", "status", None),
+        ("Add a bead for hydration reminders", "add", "add hydration reminders"),
+        ("I felt tired this afternoon", "none", None),
+    ],
+)
+def test_natural_language_beads_intent_is_schema_constrained_and_allowlisted(
+    message: str, operation: str, feature_request: str | None
+) -> None:
+    client = StubOllamaClient(intent_model_result(operation, feature_request))
+
+    result = classify_beads_intent(message, client=client)
+
+    assert result.outcome is ModelOutcome.OK
+    assert result.intent is not None
+    assert result.intent.operation == operation
+    assert result.intent.feature_request == feature_request
+    call = client.calls[0]
+    assert call["json_schema"] == BEADS_INTENT_JSON_SCHEMA
+    assert json.loads(call["user_content"]) == {"untrusted_project_request": message}
+    assert call["max_output_tokens"] == 160
+    assert call["context_window"] == 4096
+    assert "Never return a command, argument, path" in call["system_prompt"]
+
+
+def test_invalid_or_unavailable_natural_intent_cannot_select_an_operation() -> None:
+    invalid = StubOllamaClient(
+        ModelResult(
+            outcome=ModelOutcome.OK,
+            model_name="qwen3:30b",
+            data={
+                "operation": "list",
+                "feature_request": None,
+                "command": "bd list --all",
+            },
+        )
+    )
+    assert (
+        classify_beads_intent("show the Beads list", client=invalid).outcome
+        is ModelOutcome.INVALID_JSON
+    )
+    unavailable = StubOllamaClient(ModelResult(outcome=ModelOutcome.UNAVAILABLE))
+    result = classify_beads_intent("show the Beads list", client=unavailable)
+    assert result.outcome is ModelOutcome.UNAVAILABLE
+    assert result.intent is None
 
 
 @pytest.mark.parametrize(
@@ -318,6 +419,130 @@ def test_handler_rejects_bad_input_and_model_failure_then_queues_only_normalized
     assert retry_client.calls == []
 
 
+def test_bd_read_commands_queue_only_fixed_operations_and_add_aliases_remain_safe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+    session = cast(Session, object())
+    owner = cast(Owner, object())
+
+    list_reply = handlers.handle_message(
+        session,
+        owner,
+        text="/bd-list",
+        message_id="101",
+        now=NOW,  # type: ignore[arg-type]
+    )
+    list_path = next((tmp_path / "pending").glob("tg-*.json"))
+    assert "Queued bd list" in list_reply.text
+    assert load_operation_envelope(list_path).operation is BeadsOperation.LIST
+
+    status_reply = handlers.handle_message(
+        session,
+        owner,
+        text="/bd-status",
+        message_id="102",
+        now=NOW,  # type: ignore[arg-type]
+    )
+    status_paths = [path for path in (tmp_path / "pending").glob("tg-*.json") if path != list_path]
+    assert "Queued bd status" in status_reply.text
+    assert len(status_paths) == 1
+    assert load_operation_envelope(status_paths[0]).operation is BeadsOperation.STATUS
+
+    rejected_arguments = handlers.handle_message(
+        session,
+        owner,
+        text="/bd-list --all",
+        message_id="103",
+        now=NOW,  # type: ignore[arg-type]
+    )
+    assert rejected_arguments.text == "Usage: /bd-list (no arguments)"
+    assert len(list((tmp_path / "pending").glob("tg-*.json"))) == 2
+
+    for index, command in enumerate(("/bd-add", "/beads-add"), start=104):
+        alias_root = tmp_path / str(index)
+        monkeypatch.setattr(handlers, "get_settings", lambda root=alias_root: settings(root))
+        reply = handlers.handle_message(
+            session,
+            owner,
+            text=f"{command} {RAW_REQUEST}",
+            message_id=str(index),
+            client=model_client(),
+            now=NOW,  # type: ignore[arg-type]
+        )
+        assert "Evaluated locally and queued" in reply.text
+        assert len(list((alias_root / "pending").glob("tg-*.json"))) == 1
+
+
+@pytest.mark.parametrize(
+    ("message", "operation"),
+    [
+        ("Can you show me the current bd list?", BeadsOperation.LIST),
+        ("What is the Beads project status?", BeadsOperation.STATUS),
+    ],
+)
+def test_natural_language_read_intents_queue_the_same_fixed_operations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    message: str,
+    operation: BeadsOperation,
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+    client = StubOllamaClient(intent_model_result(operation.value))
+
+    reply = handlers.handle_message(
+        cast(Session, object()),
+        cast(Owner, object()),
+        text=message,
+        message_id="201",
+        client=client,
+        now=NOW,  # type: ignore[arg-type]
+    )
+
+    assert f"Queued bd {operation.value}" in reply.text
+    path = next((tmp_path / "pending").glob("tg-*.json"))
+    assert load_operation_envelope(path).operation is operation
+    assert len(client.calls) == 1
+
+
+def test_natural_language_add_uses_intent_then_existing_safe_proposal_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+    client = SequencedOllamaClient([intent_model_result("add", RAW_REQUEST), model_client().result])
+
+    reply = handlers.handle_message(
+        cast(Session, object()),
+        cast(Owner, object()),
+        text="Please add a Bead for hydration tracking",
+        message_id="202",
+        client=client,
+        now=NOW,  # type: ignore[arg-type]
+    )
+
+    assert "Evaluated locally and queued" in reply.text
+    pending = next((tmp_path / "pending").glob("tg-*.json"))
+    assert load_envelope(pending).proposal.title == "Track daily hydration entries"
+    assert len(client.calls) == 2
+
+
+def test_natural_language_beads_model_outage_has_visible_command_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+    reply = handlers.handle_message(
+        cast(Session, object()),
+        cast(Owner, object()),
+        text="What is the current bd list?",
+        message_id="203",
+        client=StubOllamaClient(ModelResult(outcome=ModelOutcome.UNAVAILABLE)),
+        now=NOW,  # type: ignore[arg-type]
+    )
+    assert "local language model is unavailable" in reply.text
+    assert "/bd-list" in reply.text and "/bd-status" in reply.text and "/bd-add" in reply.text
+    assert not (tmp_path / "pending").exists()
+
+
 def test_handler_rate_limit_calls_neither_model_nor_outbox(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -368,6 +593,26 @@ def test_dispatch_allowlist_and_update_claim_guard_outbox_creation(
         process_update(
             cast(Session, rejected_session),
             rejected,
+            allowed_chat_id=4242,
+            client=telegram,
+            model_client=model_client(),
+        )
+        is UpdateOutcome.REJECTED_CHAT
+    )
+    assert not (tmp_path / "pending").exists()
+
+    rejected_read = {
+        "update_id": 12,
+        "message": {
+            "message_id": 502,
+            "chat": {"id": 9999, "type": "private"},
+            "text": "/bd-list",
+        },
+    }
+    assert (
+        process_update(
+            cast(Session, rejected_session),
+            rejected_read,
             allowed_chat_id=4242,
             client=telegram,
             model_client=model_client(),
@@ -438,6 +683,87 @@ def test_host_bridge_uses_structured_fields_fixed_argv_and_no_raw_request(tmp_pa
     assert FEATURE_REQUEST_SCHEMA_VERSION in notes
     assert RAW_REQUEST not in "\n".join(create_argv)
     assert all("shell" not in argument.lower() for argument in create_argv[:2])
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_argv"),
+    [
+        (BeadsOperation.LIST, ("/fixed/bd", "list")),
+        (BeadsOperation.STATUS, ("/fixed/bd", "status")),
+    ],
+)
+def test_host_bridge_executes_only_fixed_read_argv_and_bounds_redacted_output(
+    tmp_path: Path,
+    operation: BeadsOperation,
+    expected_argv: tuple[str, str],
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def runner(argv: Sequence[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        calls.append(tuple(argv))
+        unsafe = "\x1b[31mOpen issues\x1b[0m\nBearer synthetic-secret-value\n" + "x" * 4000
+        return subprocess.CompletedProcess(argv, 0, unsafe, "ignored stderr")
+
+    resolution = execute_operation(
+        BeadsOperationEnvelope("tg-" + "a" * 24, operation),
+        repo=tmp_path,
+        bd_path="/fixed/bd",
+        runner=runner,
+    )
+
+    assert resolution.operation is operation
+    assert calls == [expected_argv]
+    assert "\x1b" not in resolution.output
+    assert "synthetic-secret-value" not in resolution.output
+    assert "[redacted]" in resolution.output
+    assert "output truncated" in resolution.output
+    assert len(resolution.output) <= 3200
+
+
+def test_operation_bridge_reuses_result_after_telegram_failure_without_rerunning_bd(
+    tmp_path: Path,
+) -> None:
+    request = queue_operation(
+        tmp_path,
+        message_id="301",
+        operation=BeadsOperation.STATUS,
+        now=NOW,
+    )
+    calls = 0
+
+    def runner(argv: Sequence[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        return subprocess.CompletedProcess(argv, 0, "Summary:\n  Open: 2\n", "")
+
+    with pytest.raises(BridgeError, match="telegram_ack_failed"):
+        process_one(
+            request.path,
+            root=tmp_path,
+            repo=tmp_path,
+            chat_id=4242,
+            client=FakeTelegramClient(succeeds=False),  # type: ignore[arg-type]
+            backlog_epic_id="hc-inbox",
+            bd_path="/fixed/bd",
+            runner=runner,
+        )
+    successful = FakeTelegramClient()
+    assert (
+        process_one(
+            request.path,
+            root=tmp_path,
+            repo=tmp_path,
+            chat_id=4242,
+            client=successful,  # type: ignore[arg-type]
+            backlog_epic_id="hc-inbox",
+            bd_path="/fixed/bd",
+            runner=runner,
+        )
+        == "status"
+    )
+    assert calls == 1
+    assert successful.messages == [(4242, "bd status\n\nSummary:\n  Open: 2")]
+    assert (tmp_path / "completed" / request.path.name).exists()
 
 
 def test_strong_duplicate_reuses_existing_open_or_closed_issue(tmp_path: Path) -> None:

@@ -16,6 +16,11 @@ from typing import Any, Final
 
 from pydantic import ValidationError
 
+from healthcurve.integrations.telegram.beads_operations import (
+    BeadsOperation,
+    BeadsOperationEnvelope,
+    load_operation_envelope,
+)
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.feature_requests import (
     ALLOWED_AREA_LABELS,
@@ -34,6 +39,13 @@ _ISSUE_ID: Final = re.compile(r"^hc-[a-z0-9.]+$")
 _REQUEST_ID: Final = re.compile(r"^tg-[a-f0-9]{24}$")
 _MODEL_IDENTITY: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _VERSION: Final = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+_ANSI_ESCAPE: Final = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+_SECRET_OUTPUT: Final = re.compile(
+    r"(?i)(bearer\s+[a-z0-9._-]+|"
+    r"\b(?:gh[pousr]_[a-z0-9]{20,}|sk-[a-z0-9_-]{20,})\b|"
+    r"\b\d{8,12}:[a-z0-9_-]{30,}\b)"
+)
+MAX_OPERATION_OUTPUT: Final = 3200
 _WORD: Final = re.compile(r"[a-z0-9]+")
 _STOPWORDS: Final = frozenset(
     {
@@ -84,7 +96,14 @@ class IssueResolution:
     created: bool
 
 
+@dataclass(frozen=True, slots=True)
+class OperationResolution:
+    operation: BeadsOperation
+    output: str
+
+
 type Runner = Callable[[Sequence[str], Path], subprocess.CompletedProcess[str]]
+type BridgeEnvelope = Envelope | BeadsOperationEnvelope
 
 
 def _run(argv: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -165,6 +184,20 @@ def load_envelope(path: Path) -> Envelope:
         prompt_version,
         proposal_schema_version,
     )
+
+
+def load_bridge_envelope(path: Path) -> BridgeEnvelope:
+    """Load either the legacy feature envelope or a fixed operation envelope."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BridgeError("outbox_envelope_invalid") from exc
+    if isinstance(raw, dict) and raw.get("kind") == "operation":
+        try:
+            return load_operation_envelope(path)
+        except FeatureRequestEvaluationFailed as exc:
+            raise BridgeError("outbox_envelope_invalid") from exc
+    return load_envelope(path)
 
 
 def _valid_digest(value: object) -> bool:
@@ -351,6 +384,88 @@ def _load_result(path: Path, envelope: Envelope) -> IssueResolution:
     return IssueResolution(issue_id, title, created)
 
 
+def _safe_operation_output(value: str, *, operation: BeadsOperation) -> str:
+    """Remove terminal controls/secrets and enforce Telegram's bounded response size."""
+    cleaned = _ANSI_ESCAPE.sub("", value)
+    cleaned = "".join(
+        character for character in cleaned if ord(character) >= 32 or character in "\n\t"
+    )
+    cleaned = _SECRET_OUTPUT.sub("[redacted]", cleaned).strip()
+    if not cleaned:
+        cleaned = f"bd {operation.value} returned no output."
+    suffix = f"\n\n…output truncated. Run bd {operation.value} on the host for the full result."
+    if len(cleaned) > MAX_OPERATION_OUTPUT:
+        cleaned = cleaned[: MAX_OPERATION_OUTPUT - len(suffix)].rstrip() + suffix
+    return cleaned
+
+
+def execute_operation(
+    envelope: BeadsOperationEnvelope,
+    *,
+    repo: Path,
+    bd_path: str | None = None,
+    runner: Runner = _run,
+) -> OperationResolution:
+    """Execute one fixed argv tuple; the envelope supplies no arguments."""
+    bd = bd_path or shutil.which("bd")
+    if bd is None:
+        raise BridgeError("beads_cli_unavailable")
+    argv_by_operation = {
+        BeadsOperation.LIST: (bd, "list"),
+        BeadsOperation.STATUS: (bd, "status"),
+    }
+    completed = runner(argv_by_operation[envelope.operation], repo)
+    if completed.returncode != 0:
+        raise BridgeError(f"beads_{envelope.operation.value}_failed")
+    return OperationResolution(
+        envelope.operation,
+        _safe_operation_output(completed.stdout, operation=envelope.operation),
+    )
+
+
+def _write_operation_result(
+    root: Path, envelope: BeadsOperationEnvelope, resolution: OperationResolution
+) -> Path:
+    results = root / "results"
+    results.mkdir(parents=True, exist_ok=True, mode=0o700)
+    destination = results / f"{envelope.request_id}.json"
+    temporary = destination.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(
+            {
+                "request_id": envelope.request_id,
+                "operation": resolution.operation.value,
+                "output": resolution.output,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, destination)
+    return destination
+
+
+def _load_operation_result(path: Path, envelope: BeadsOperationEnvelope) -> OperationResolution:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        operation = BeadsOperation(raw["operation"])
+        output = raw["output"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise BridgeError("outbox_result_invalid") from exc
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {"request_id", "operation", "output"}
+        or raw.get("request_id") != envelope.request_id
+        or operation is not envelope.operation
+        or not isinstance(output, str)
+        or not 1 <= len(output) <= MAX_OPERATION_OUTPUT
+    ):
+        raise BridgeError("outbox_result_invalid")
+    return OperationResolution(operation, output)
+
+
 def process_one(
     request_path: Path,
     *,
@@ -362,7 +477,25 @@ def process_one(
     bd_path: str | None = None,
     runner: Runner = _run,
 ) -> str:
-    envelope = load_envelope(request_path)
+    envelope = load_bridge_envelope(request_path)
+    if isinstance(envelope, BeadsOperationEnvelope):
+        result_path = root / "results" / f"{envelope.request_id}.json"
+        if result_path.exists():
+            operation_resolution = _load_operation_result(result_path, envelope)
+        else:
+            operation_resolution = execute_operation(
+                envelope, repo=repo, bd_path=bd_path, runner=runner
+            )
+            _write_operation_result(root, envelope, operation_resolution)
+        if not client.send_message(
+            chat_id,
+            f"bd {operation_resolution.operation.value}\n\n{operation_resolution.output}",
+        ):
+            raise BridgeError("telegram_ack_failed")
+        completed = root / "completed"
+        completed.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.replace(request_path, completed / request_path.name)
+        return operation_resolution.operation.value
     if envelope.backlog_epic_id != backlog_epic_id:
         raise BridgeError("outbox_parent_mismatch")
     result_path = root / "results" / f"{envelope.request_id}.json"

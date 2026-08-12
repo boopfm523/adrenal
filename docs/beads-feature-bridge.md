@@ -1,13 +1,31 @@
-# Telegram feature-request bridge
+# Telegram Beads bridge
 
-`/beads-add` lets the single allowlisted Telegram chat propose a bounded product idea
-for the `hc-inbox` Beads epic. It does not start Codex, claim work, run message text as
-a command, or change an existing issue.
+The single allowlisted Telegram chat can use `/bd-list`, `/bd-status`, and `/bd-add`
+without giving the application container repository or shell access. `/beads-add`
+remains a documented compatibility alias for `/bd-add`. These commands do not start
+Codex, claim work, run message text as a command, or change an existing issue other
+than the bounded new inbox Bead deliberately requested through `/bd-add`.
+
+`/bd-list` and `/bd-status` write an envelope containing only the fixed enum `list` or
+`status`. The trusted host bridge maps those values to exact argument vectors
+`[bd, list]` and `[bd, status]`, never a shell. It strips terminal control sequences,
+redacts token-shaped output, caps the Telegram reply, and reuses a durable result if
+delivery must retry. The bot first acknowledges the queue ID; the host bridge then
+returns the command output to the same allowlisted chat.
+
+Natural phrases such as “show me the current bd list,” “what is the Beads status,” or
+“add a Bead for hydration tracking” first pass through a separate local Ollama intent
+schema whose only values are `list`, `status`, `add`, and `none`. `list` and `status`
+queue the same fixed envelopes. `add` still passes through the full feature-proposal
+safety evaluation below. If Ollama is unavailable or invalid, no operation is guessed;
+the reply points to the deterministic slash commands.
+
+`/bd-add` lets the owner propose a bounded product idea for the `hc-inbox` Beads epic.
 
 Example:
 
 ```text
-/beads-add add a feature that lets me record hydration and review a daily total
+/bd-add add a feature that lets me record hydration and review a daily total
 ```
 
 The response is intentionally two-stage:
@@ -22,7 +40,8 @@ command never authorizes implementation.
 
 ## Local-model evaluation boundary
 
-The worker sends only the request text to the configured local Ollama/Qwen endpoint.
+For `/bd-add`, the worker sends only the request text to the configured local
+Ollama/Qwen endpoint.
 There is no cloud fallback. Ollama receives the text as an untrusted JSON value, under
 a versioned system prompt and strict JSON Schema. It can return either:
 
