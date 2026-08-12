@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { TodayPage } from "./TodayPage";
 
 const session = {
@@ -74,7 +75,7 @@ function renderToday(): void {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
-    <QueryClientProvider client={queryClient}>
+    <HealthCurveProvider><QueryClientProvider client={queryClient}>
       <MemoryRouter>
         <AuthContext.Provider value={{
           status: "authenticated",
@@ -85,7 +86,7 @@ function renderToday(): void {
           <TodayPage />
         </AuthContext.Provider>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider></HealthCurveProvider>,
   );
 }
 

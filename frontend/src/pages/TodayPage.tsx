@@ -1,3 +1,4 @@
+import { Alert, Anchor, Button, Group, List, Paper, Stack, Text, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
@@ -53,26 +54,26 @@ function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: s
 
   return (
     <li className={`dose-slot dose-slot--${slot.status}`}>
-      <div>
-        <p className="dose-slot__schedule">
+      <Stack gap="xs">
+        <Text className="dose-slot__schedule">
           <strong>{displayTime(slot.scheduled_local_time)}</strong> · {slot.medication_name} · {formatMeasurement(slot.planned_amount, slot.unit)}
-        </p>
-        <p className="dose-slot__status"><strong>{label}</strong></p>
+        </Text>
+        <Text className="dose-slot__status"><strong>{label}</strong></Text>
         {slot.status === "missing" ? (
-          <p className="status-explanation">No dose record exists for this slot. “Not recorded” does not mean “not taken.”</p>
+          <Text className="status-explanation">No dose record exists for this slot. “Not recorded” does not mean “not taken.”</Text>
         ) : (
-          <p className="status-explanation">
+          <Text className="status-explanation">
             Recorded fact: {formatMeasurement(slot.actual_amount, slot.unit)} at {displayTime(slot.actual_local_time)}.
-          </p>
+          </Text>
         )}
-      </div>
+      </Stack>
       {slot.status === "missing" && slot.planned_amount !== null ? (
-        <button type="button" disabled={mutation.isPending} onClick={() => { mutation.mutate(); }}>
+        <Button type="button" loading={mutation.isPending} onClick={() => { mutation.mutate(); }}>
           {mutation.isPending ? "Recording…" : `Record ${formatMeasurement(slot.planned_amount, slot.unit)} taken now`}
-        </button>
+        </Button>
       ) : null}
-      {mutation.isError ? <p className="error-summary" role="alert">The dose was not recorded. Review the time and try again.</p> : null}
-      {mutation.isSuccess ? <p className="success-message" role="status">Dose recorded as a fact.</p> : null}
+      {mutation.isError ? <Alert color="red" role="alert">The dose was not recorded. Review the time and try again.</Alert> : null}
+      {mutation.isSuccess ? <Alert color="green" role="status">Dose recorded as a fact.</Alert> : null}
     </li>
   );
 }
@@ -96,36 +97,36 @@ export function TodayPage(): React.JSX.Element {
 
   return (
     <Page title="Today" description="Recorded facts and your physician-approved plan remain separate.">
-      <p className="today-date"><strong>{day}</strong> · {timezoneAbbreviationForLocalDate(timezone, day)}</p>
-      <section className="primary-healthcurve-entry" aria-labelledby="today-healthcurve-title">
-        <h2 id="today-healthcurve-title">Review today’s HealthCurve</h2>
-        <p>See actual recorded dose timing beside stress, symptoms, Garmin observations, and vital signs without entering anything twice.</p>
-        <Link className="button-link" to={healthCurveUrl}>Open today’s HealthCurve</Link>
-      </section>
-      <div className="quick-actions" aria-label="Quick actions">
-        <Link className="button-link" to="/timeline">Open timeline</Link>
-        <Link className="button-link" to="/doses">Review doses</Link>
-        <a className="button-link button-link--urgent" href="/emergency">Open emergency plan</a>
-      </div>
+      <Text className="today-date"><strong>{day}</strong> · {timezoneAbbreviationForLocalDate(timezone, day)}</Text>
+      <Paper component="section" className="primary-healthcurve-entry" withBorder radius="lg" p={{ base: "md", sm: "xl" }} aria-labelledby="today-healthcurve-title">
+        <Title order={2} id="today-healthcurve-title">Review today’s HealthCurve</Title>
+        <Text mt="xs">See actual recorded dose timing beside stress, symptoms, Garmin observations, and vital signs without entering anything twice.</Text>
+        <Button component={Link} to={healthCurveUrl} mt="md">Open today’s HealthCurve</Button>
+      </Paper>
+      <Group className="quick-actions" aria-label="Quick actions">
+        <Button component={Link} variant="outline" to="/timeline">Open timeline</Button>
+        <Button component={Link} variant="outline" to="/doses">Review doses</Button>
+        <Button component="a" variant="outline" color="red" href="/emergency">Open emergency plan</Button>
+      </Group>
 
-      {comparison.isPending ? <p role="status">Loading today’s record…</p> : null}
-      {comparison.isError ? <p className="error-summary" role="alert">Today’s dose record could not be loaded.</p> : null}
+      {comparison.isPending ? <Text role="status">Loading today’s record…</Text> : null}
+      {comparison.isError ? <Alert color="red" role="alert">Today’s dose record could not be loaded.</Alert> : null}
 
       {comparison.data !== undefined && planVersions.length === 0 ? (
-        <section className="empty-state" aria-labelledby="no-plan">
-          <h2 id="no-plan">No approved plan for this date</h2>
-          <p>Recorded doses still appear as facts. HealthCurve will not infer a schedule from them.</p>
-          <Link to="/plan">Review plan history</Link>
-        </section>
+        <Paper component="section" className="empty-state" withBorder radius="lg" p="lg" aria-labelledby="no-plan">
+          <Title order={2} id="no-plan">No approved plan for this date</Title>
+          <Text mt="xs">Recorded doses still appear as facts. HealthCurve will not infer a schedule from them.</Text>
+          <Anchor component={Link} to="/plan">Review plan history</Anchor>
+        </Paper>
       ) : null}
 
       {comparison.data !== undefined && planVersions.length > 0 ? (
         <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${formatDecimal(planVersions.length)} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
           <p>Schedule for {day} in {timezoneAbbreviationForLocalDate(timezone, day)}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
           {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : (
-            <ol className="dose-slots">
+            <List component="ol" className="dose-slots" listStyleType="none">
               {planSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}
-            </ol>
+            </List>
           )}
           <details className="metric-definition">
             <summary>How timing status is calculated</summary>
@@ -135,10 +136,10 @@ export function TodayPage(): React.JSX.Element {
       ) : null}
 
       {comparison.data !== undefined && !hasRecordedDose ? (
-        <section className="empty-state" aria-labelledby="no-doses">
-          <h2 id="no-doses">No doses recorded today</h2>
-          <p>This is an empty record, not a recorded amount of zero.</p>
-        </section>
+        <Paper component="section" className="empty-state" withBorder radius="lg" p="lg" aria-labelledby="no-doses">
+          <Title order={2} id="no-doses">No doses recorded today</Title>
+          <Text mt="xs">This is an empty record, not a recorded amount of zero.</Text>
+        </Paper>
       ) : null}
 
       {unplannedDoses.map((dose) => (
@@ -147,7 +148,7 @@ export function TodayPage(): React.JSX.Element {
         </FactCard>
       ))}
 
-      {episodes.isError ? <p className="error-summary" role="alert">Open-episode status could not be loaded.</p> : null}
+      {episodes.isError ? <Alert color="red" role="alert">Open-episode status could not be loaded.</Alert> : null}
       {openEpisode === undefined ? null : (
         <FactCard title="Open stress episode" metadata={<Link to="/episodes">Review episode</Link>}>
           <p><strong>Trigger recorded:</strong> {openEpisode.trigger}</p>
