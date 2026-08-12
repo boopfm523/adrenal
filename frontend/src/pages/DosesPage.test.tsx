@@ -5,12 +5,13 @@ import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { DosesPage } from "./DosesPage";
 
 const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
 
 function renderPage(initialEntry = "/doses"): void {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><DosesPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
+  render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><DosesPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 }
 
 function dose(id: string, amount: string, supersedesId: string | null, reason: string | null, occurredAt = "2026-08-09T11:00:00Z", medicationName = "Synthetic medicine") {

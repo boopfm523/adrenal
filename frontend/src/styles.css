@@ -485,6 +485,16 @@ circle.chart-series { fill: white; }
 .lab-unparsed summary { cursor: pointer; font-weight: 800; }
 
 @media (max-width: 720px) {
+  .dose-table-region { overflow: hidden; }
+  .dose-table { min-width: 0; }
+  .dose-table caption { display: block; width: auto; }
+  .dose-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .dose-table, .dose-table tbody, .dose-table tr, .dose-table th, .dose-table td { display: block; width: 100%; box-sizing: border-box; }
+  .dose-table tbody > tr:not(.correction-table-row) { padding: 0.85rem; border-top: 1px solid #d8dfda; }
+  .dose-table th, .dose-table td { display: grid; grid-template-columns: minmax(7rem, .8fr) minmax(0, 1.2fr); gap: .75rem; padding: .35rem 0; border: 0; text-align: left; }
+  .dose-table th::before, .dose-table td::before { content: attr(data-label); color: #52625a; font-size: .8rem; font-weight: 700; }
+  .dose-table .correction-table-row td { display: block; }
+  .dose-table .correction-table-row td::before { content: none; }
   .timeline-table-region { overflow: hidden; }
   .timeline-table { min-width: 0; }
   .timeline-table caption { display: block; width: auto; }
