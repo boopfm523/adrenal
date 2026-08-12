@@ -37,14 +37,14 @@ from healthcurve.events.timekeeping import (
     is_nonexistent,
     resolve_event_time,
 )
-from healthcurve.medications.models import DoseEvent, Medication
+from healthcurve.medications.models import DoseCategory, DoseEvent, Medication
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import TemperatureUnit, WeightUnit
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
-PROMPT_VERSION: Final = "extract-v4"
-SCHEMA_VERSION: Final = "candidates-v3"
+PROMPT_VERSION: Final = "extract-v5"
+SCHEMA_VERSION: Final = "candidates-v4"
 
 #: Nothing plausible for adrenal replacement exceeds this. A larger number is a parse
 #: error until a human says otherwise.
@@ -101,6 +101,11 @@ _WEIGHT_UNIT_ALIASES: Final = {
     "kilograms": WeightUnit.KG,
 }
 
+_EXPLICIT_STRESS_DOSE_PATTERN: Final = re.compile(
+    r"\b(?:stress\s*(?:dose|dosing)|up[\s-]?dose(?:d|s|ing)?)\b",
+    re.IGNORECASE,
+)
+
 SYSTEM_PROMPT: Final = """\
 You extract structured candidate health events from a person's own message.
 
@@ -110,6 +115,10 @@ You are a parser, not an adviser. You must:
 - If the message says a dose was NOT taken, set negated=true rather than reporting it.
 - If the message asks a question or describes a hypothetical, set hypothetical=true.
 - If any field is unclear, leave it null and lower your confidence. Do not guess.
+- For a dose, set dose_category="stress" only when the person explicitly calls it a
+  stress dose or up-dose. Otherwise set dose_category="scheduled". An illness,
+  symptom, stressful situation, or open episode alone does not make a dose a stress
+  dose.
 - Create one candidate for each distinct event. A dose and a symptom in one message
   are two candidates; never put symptom fields on a dose candidate.
 - A blood-pressure candidate must preserve the stated systolic and diastolic mmHg
@@ -152,6 +161,7 @@ class ExtractedCandidate(BaseModel):
     amount: str | None = Field(default=None, description="Decimal as a string, never a float")
     unit: str | None = None
     route: str | None = None
+    dose_category: DoseCategory | None = None
     symptom_name: str | None = None
     severity: int | None = Field(default=None, ge=0, le=10)
     text: str | None = None
@@ -187,6 +197,10 @@ CANDIDATE_JSON_SCHEMA: Final[dict[str, Any]] = {
                     "amount": {"type": ["string", "null"]},
                     "unit": {"type": ["string", "null"]},
                     "route": {"type": ["string", "null"]},
+                    "dose_category": {
+                        "type": ["string", "null"],
+                        "enum": [DoseCategory.SCHEDULED.value, DoseCategory.STRESS.value, None],
+                    },
                     "symptom_name": {"type": ["string", "null"]},
                     "severity": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
                     "text": {"type": ["string", "null"]},
@@ -263,6 +277,7 @@ class ValidatedCandidate(BaseModel):
     amount: Decimal | None = None
     unit: str | None = None
     route: str | None = None
+    dose_category: DoseCategory | None = None
     symptom_name: str | None = None
     severity: int | None = None
     text: str | None = None
@@ -336,6 +351,13 @@ def find_explicit_weight(text: str) -> tuple[str, WeightUnit] | None:
 def normalise_weight_unit(raw: str) -> WeightUnit | None:
     """Normalize only explicit supported pound and kilogram spellings."""
     return _WEIGHT_UNIT_ALIASES.get(raw.strip().lower())
+
+
+def explicit_dose_category(message: str) -> DoseCategory:
+    """Classify only explicit stress-dose language; every other actual dose is regular."""
+    if _EXPLICIT_STRESS_DOSE_PATTERN.search(message) is not None:
+        return DoseCategory.STRESS
+    return DoseCategory.SCHEDULED
 
 
 def extract(
@@ -534,6 +556,9 @@ def _validate_candidate(
         amount=amount,
         unit=candidate.unit,
         route=candidate.route,
+        dose_category=(
+            explicit_dose_category(message) if candidate.type is CandidateType.DOSE else None
+        ),
         symptom_name=candidate.symptom_name,
         severity=candidate.severity,
         text=candidate.text,

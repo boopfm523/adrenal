@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { correctDose, getDoses, type Dose, type DoseCorrectionInput, type RecordedHistoryFilters } from "../api/client";
+import { correctDose, getDoses, getMedications, getOpenEpisodes, recordDose, type Dose, type DoseCorrectionInput, type DoseInput, type Medication, type RecordedHistoryFilters } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement } from "../format";
-import { timezoneAbbreviation } from "../time";
+import { localDateTime, timezoneAbbreviation } from "../time";
 
 interface FormValues {
   amount: string;
@@ -64,6 +64,77 @@ function changedFields(dose: Dose, values: FormValues): DoseCorrectionInput["cha
     changes.time = { local_time: values.localTime, timezone: values.timezone };
   }
   return changes;
+}
+
+interface DoseEntryValues {
+  medicationId: string;
+  amount: string;
+  unit: DoseInput["unit"];
+  route: DoseInput["route"];
+  category: DoseInput["category"];
+  localTime: string;
+  episodeId: string;
+  notes: string;
+}
+
+function doseEntryDefaults(timezone: string): DoseEntryValues {
+  return { medicationId: "", amount: "", unit: "mg", route: "oral", category: "scheduled", localTime: localDateTime(new Date(), timezone).slice(0, 16), episodeId: "", notes: "" };
+}
+
+function RecordDoseForm({ timezone }: { timezone: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const medications = useQuery({ queryKey: ["medications"], queryFn: getMedications });
+  const episodes = useQuery({ queryKey: ["open-episodes"], queryFn: getOpenEpisodes });
+  const [values, setValues] = useState<DoseEntryValues>(() => doseEntryDefaults(timezone));
+  const selected = medications.data?.find((item) => item.id === values.medicationId);
+  const mutation = useMutation({
+    mutationFn: () => recordDose({
+      medication_id: values.medicationId,
+      amount: values.amount,
+      unit: values.unit,
+      route: values.route,
+      category: values.category,
+      time: { local_time: values.localTime, timezone },
+      episode_id: values.episodeId === "" ? null : values.episodeId,
+      notes: values.notes.trim() === "" ? null : values.notes.trim(),
+    }),
+    onSuccess: async () => {
+      setValues(doseEntryDefaults(timezone));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["doses"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["today"] }),
+        queryClient.invalidateQueries({ queryKey: ["healthcurve"] }),
+      ]);
+    },
+  });
+
+  function chooseMedication(medication: Medication | undefined): void {
+    if (medication === undefined) {
+      setValues({ ...values, medicationId: "" });
+      return;
+    }
+    setValues({ ...values, medicationId: medication.id, unit: medication.default_unit, route: medication.default_route });
+  }
+
+  return <section className="metric-card" aria-labelledby="record-dose-heading">
+    <h2 id="record-dose-heading">Record a dose taken</h2>
+    <p>This records what happened; it does not change your physician-approved plan. A dose is regular unless you explicitly select Stress dose.</p>
+    <form className="plan-form-grid" aria-label="Record a dose taken" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+      <label>Medication<select required value={values.medicationId} onChange={(event) => { chooseMedication(medications.data?.find((item) => item.id === event.target.value)); }}><option value="">Choose medication</option>{(medications.data ?? []).map((medication) => <option value={medication.id} key={medication.id}>{medication.name}{medication.formulation === null ? "" : ` · ${medication.formulation}`}</option>)}</select></label>
+      <label>Amount<input required inputMode="decimal" value={values.amount} onChange={(event) => { setValues({ ...values, amount: event.target.value }); }} /></label>
+      <label>Unit<select value={values.unit} onChange={(event) => { setValues({ ...values, unit: event.target.value as DoseInput["unit"] }); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">ml</option><option value="tablet">tablet</option></select></label>
+      <label>Route<select value={values.route} onChange={(event) => { setValues({ ...values, route: event.target.value as DoseInput["route"] }); }}><option value="oral">Oral</option><option value="intramuscular">Intramuscular</option><option value="subcutaneous">Subcutaneous</option><option value="intravenous">Intravenous</option></select></label>
+      <label>Dose type<select value={values.category} onChange={(event) => { setValues({ ...values, category: event.target.value as DoseInput["category"] }); }}><option value="scheduled">Regular dose</option><option value="stress">Stress dose / up-dose</option></select><small className="field-hint">Choose Stress dose only for an explicitly intended stress or up-dose.</small></label>
+      <label>Experienced local time<input required type="datetime-local" value={values.localTime} onChange={(event) => { setValues({ ...values, localTime: event.target.value }); }} /></label>
+      <label>Related episode (optional)<select value={values.episodeId} onChange={(event) => { setValues({ ...values, episodeId: event.target.value }); }}><option value="">No episode link</option>{(episodes.data?.items ?? []).map((episode) => <option value={episode.id} key={episode.id}>{episode.trigger}</option>)}</select><small className="field-hint">Linking an episode adds context but does not change the selected dose type.</small></label>
+      <label>Timezone<input value={timezone} readOnly /></label>
+      <label className="form-wide">Notes (optional)<textarea value={values.notes} onChange={(event) => { setValues({ ...values, notes: event.target.value }); }} /></label>
+      <div className="form-wide"><button type="submit" disabled={mutation.isPending || selected === undefined}>{mutation.isPending ? "Recording…" : "Record dose taken"}</button></div>
+      {mutation.isSuccess ? <p className="success-message form-wide" role="status">Dose recorded as a fact.</p> : null}
+      {mutation.isError ? <p className="error-summary form-wide" role="alert">The dose was not recorded. Check the amount, time, and medication.</p> : null}
+    </form>
+  </section>;
 }
 
 function CorrectionForm({ dose, onCancel }: { dose: Dose; onCancel: () => void }): React.JSX.Element {
@@ -146,6 +217,7 @@ export function DosesPage(): React.JSX.Element {
 
   return (
     <Page title="Doses" description="Actual recorded doses and their immutable correction history—not the physician-approved schedule.">
+      <RecordDoseForm timezone={profileTimezone} />
       <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditingId(null); setSearchParams(searchFromView({ ...draft, page: 1 })); }}>
         <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label>
         <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label>

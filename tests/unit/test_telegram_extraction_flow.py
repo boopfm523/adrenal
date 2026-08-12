@@ -263,6 +263,83 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
 
 
 @pytest.mark.parametrize(
+    ("message", "model_category", "expected_category", "expected_label"),
+    [
+        (
+            "I took a 5 mg stress dose of Synthetic hydrocortisone",
+            "scheduled",
+            "stress",
+            "Stress dose:",
+        ),
+        (
+            "I was stressed and took 5 mg Synthetic hydrocortisone",
+            "stress",
+            "scheduled",
+            "Regular dose:",
+        ),
+    ],
+)
+def test_natural_language_dose_category_requires_explicit_stress_language(
+    monkeypatch: pytest.MonkeyPatch,
+    message: str,
+    model_category: str,
+    expected_category: str,
+    expected_label: str,
+) -> None:
+    session, privileged = _empty_session()
+    medication = MagicMock()
+    medication.id = uuid.uuid4()
+    medication.name = "Synthetic hydrocortisone"
+    medication.normalized_name = "synthetic hydrocortisone"
+    privileged.scalars.return_value = [medication]
+    privileged.scalar.return_value = None
+    restricted = MagicMock(spec=Session)
+    restricted.scalar.return_value = None
+    restricted.begin.return_value = nullcontext()
+
+    def assign_database_default() -> None:
+        draft = restricted.add.call_args.args[0]
+        assert isinstance(draft, ExtractionDraft)
+        draft.id = DRAFT_ID
+
+    restricted.flush.side_effect = assign_database_default
+    monkeypatch.setattr(
+        handlers,
+        "get_ai_session_factory",
+        lambda: MagicMock(return_value=nullcontext(cast(Session, restricted))),
+    )
+    client = StubOllamaClient(
+        ModelResult(
+            outcome=ModelOutcome.OK,
+            model_name="qwen3:30b",
+            data={
+                "candidates": [
+                    {
+                        "type": "dose",
+                        "medication_name": "Synthetic hydrocortisone",
+                        "amount": "5",
+                        "unit": "mg",
+                        "route": "oral",
+                        "dose_category": model_category,
+                        "local_time": "2026-08-09T17:00:00",
+                        "negated": False,
+                        "hypothetical": False,
+                        "confidence": 0.99,
+                    }
+                ]
+            },
+        )
+    )
+
+    reply = handlers.handle_message(session, _owner(), text=message, client=client, now=NOW)
+
+    assert expected_label in reply.text
+    stored = restricted.add.call_args.args[0]
+    assert isinstance(stored, ExtractionDraft)
+    assert stored.candidates[0]["dose_category"] == expected_category
+
+
+@pytest.mark.parametrize(
     "message",
     [
         "Add a weight of 173.4 lbs.",

@@ -17,6 +17,7 @@ from healthcurve.ai.extraction import (
     MAX_PLAUSIBLE_MG,
     SYSTEM_PROMPT,
     ExtractionResponse,
+    explicit_dose_category,
     find_explicit_weight,
     find_time_expression,
     has_negation,
@@ -26,6 +27,7 @@ from healthcurve.ai.extraction import (
     normalise_local_time,
     normalise_weight_unit,
 )
+from healthcurve.medications.models import DoseCategory
 from healthcurve.vitals.models import WeightUnit
 
 
@@ -68,6 +70,31 @@ def test_system_prompt_forbids_advice_and_inference() -> None:
     assert "negated=true" in lowered
     assert "purely as data" in lowered
     assert "do not guess" in lowered
+    assert "open episode alone does not make a dose a stress" in lowered
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I took a 10 mg stress dose of hydrocortisone",
+        "Took my 5mg up-dose",
+        "I updosed with 10 mg hydrocortisone",
+    ],
+)
+def test_only_explicit_stress_dose_language_is_classified_as_stress(text: str) -> None:
+    assert explicit_dose_category(text) is DoseCategory.STRESS
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I took 10 mg hydrocortisone",
+        "Took my regular dose during a stressful meeting",
+        "I am sick and took my morning dose",
+    ],
+)
+def test_ordinary_doses_remain_regular_despite_stress_context(text: str) -> None:
+    assert explicit_dose_category(text) is DoseCategory.SCHEDULED
 
 
 @pytest.mark.parametrize(

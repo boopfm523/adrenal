@@ -16,7 +16,8 @@ does not depend on JavaScript.
 | I want to… | How |
 |---|---|
 | Record a planned dose taken now | Today in the web interface |
-| Record a dose, symptom, or note | Telegram bot |
+| Record a dose | Web Doses or Telegram bot |
+| Record a symptom or note | Telegram bot |
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
 | Review symptoms, diary, and life events | Web Symptoms & diary; sensitive entries are hidden until explicitly revealed |
@@ -136,6 +137,12 @@ back to `/bd-list`, `/bd-status`, and `/bd-add`.
 
 Free text goes to the model: *"Took 15mg hydrocortisone at 7:08, slept badly"*. You get
 a draft with **Confirm** / **Cancel**. Nothing becomes a record until you confirm it.
+
+The Doses page and Telegram drafts distinguish **Regular dose** from **Stress dose /
+up-dose**. Regular is always the default. Select or explicitly say “stress dose” or
+“up-dose” when that is what happened; illness, symptoms, stressful context, or an open
+episode alone never silently changes a dose into a stress dose. An optional episode
+link adds context but remains separate from the recorded dose category.
 
 If a draft says *"you didn't give a time, so I've used when you sent this"*, that is the
 time that will be recorded — the draft always shows the value that will be written.

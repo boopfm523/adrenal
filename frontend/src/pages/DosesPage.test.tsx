@@ -42,6 +42,12 @@ function page(items: unknown[], revisions: unknown[] = [], currentPage = 1, tota
   return { items, revisions, page: { page: currentPage, page_size: 25, total_items: totalItems, total_pages: totalPages } };
 }
 
+function supportingResponse(url: string): Response | null {
+  if (url.endsWith("/medications")) return new Response(JSON.stringify([{ id: "33333333-3333-4333-8333-333333333333", category: "plan", name: "Synthetic medicine", formulation: "tablet", strength: null, strength_unit: null, default_unit: "mg", default_route: "oral", active_from: null, active_to: null, notes: null }]), { headers: { "Content-Type": "application/json" } });
+  if (url.includes("/stress-episodes?") && url.includes("status_filter=open")) return new Response(JSON.stringify({ items: [{ id: "55555555-5555-4555-8555-555555555555", category: "fact", trigger: "Synthetic illness", status: "open", severity: null, started_at: "2026-08-09T08:00:00Z", ended_at: null, timezone: "America/New_York", highest_temperature_c: null, illness_description: null, recovery_notes: null, outcome: null, notes: null, dose_count: 0, symptom_count: 0 }], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }), { headers: { "Content-Type": "application/json" } });
+  return null;
+}
+
 describe("Doses page", () => {
   afterEach(() => { sessionStore.clear(); });
 
@@ -51,6 +57,8 @@ describe("Doses page", () => {
     const current = dose("22222222-2222-4222-8222-222222222222", "10.1250", original.id, "Synthetic first correction");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
+      const supporting = supportingResponse(url);
+      if (supporting !== null) return Promise.resolve(supporting);
       if (url.endsWith(`/doses/${current.id}/correct`) && init?.method === "POST") {
         return Promise.resolve(new Response(JSON.stringify(dose("44444444-4444-4444-8444-444444444444", "10.2500", current.id, "Synthetic second correction")), { status: 201, headers: { "Content-Type": "application/json" } }));
       }
@@ -88,7 +96,7 @@ describe("Doses page", () => {
     const later = dose("33333333-3333-4333-8333-333333333333", "3.0000", null, null, "2026-08-09T12:00:00Z", "Later medicine");
     const equalSecond = dose("22222222-2222-4222-8222-222222222222", "2.0000", null, null, "2026-08-09T10:00:00Z", "Equal second");
     const equalFirst = dose("11111111-1111-4111-8111-111111111111", "1.0000", null, null, "2026-08-09T10:00:00Z", "Equal first");
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(page([later, equalFirst, equalSecond])), { headers: { "Content-Type": "application/json" } }));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(supportingResponse(requestUrl(input)) ?? new Response(JSON.stringify(page([later, equalFirst, equalSecond])), { headers: { "Content-Type": "application/json" } })));
     renderPage();
 
     const rows = within(await screen.findByRole("table")).getAllByRole("row").slice(1);
@@ -100,7 +108,7 @@ describe("Doses page", () => {
   });
 
   it("shows a safe empty state without a table", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(page([])), { headers: { "Content-Type": "application/json" } }));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(supportingResponse(requestUrl(input)) ?? new Response(JSON.stringify(page([])), { headers: { "Content-Type": "application/json" } })));
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "No doses recorded" })).toBeVisible();
@@ -112,6 +120,8 @@ describe("Doses page", () => {
     const first = dose("11111111-1111-4111-8111-111111111111", "1.0000", null, null);
     const last = dose("22222222-2222-4222-8222-222222222222", "2.0000", null, null);
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const supporting = supportingResponse(requestUrl(input));
+      if (supporting !== null) return Promise.resolve(supporting);
       const secondPage = requestUrl(input).includes("page=2");
       return Promise.resolve(new Response(JSON.stringify(secondPage ? page([last], [], 2, 26, 2) : page([first], [], 1, 26, 2)), { headers: { "Content-Type": "application/json" } }));
     });
@@ -123,5 +133,33 @@ describe("Doses page", () => {
     expect(await screen.findByText("Showing 26–26 of 26. Page 2 of 2.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  it("records regular by default and stress only when explicitly selected", async () => {
+    sessionStore.set(session);
+    const writes: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const supporting = supportingResponse(url);
+      if (supporting !== null) return Promise.resolve(supporting);
+      if (url.endsWith("/doses") && init?.method === "POST") {
+        writes.push(JSON.parse(typeof init.body === "string" ? init.body : "{}") as unknown);
+        return Promise.resolve(new Response(JSON.stringify(dose("77777777-7777-4777-8777-777777777777", "5.0000", null, null)), { status: 201, headers: { "Content-Type": "application/json" } }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(page([])), { headers: { "Content-Type": "application/json" } }));
+    });
+    renderPage();
+
+    const form = await screen.findByRole("form", { name: "Record a dose taken" });
+    expect(within(form).getByLabelText(/^Dose type/)).toHaveValue("scheduled");
+    expect(within(form).getByText(/Linking an episode adds context but does not change/)).toBeVisible();
+    await waitFor(() => { expect(within(form).getByRole("option", { name: /Synthetic medicine/ })).toBeVisible(); });
+    await userEvent.selectOptions(within(form).getByLabelText("Medication"), "33333333-3333-4333-8333-333333333333");
+    await userEvent.type(within(form).getByLabelText("Amount"), "5");
+    await userEvent.selectOptions(within(form).getByLabelText(/^Dose type/), "stress");
+    await userEvent.selectOptions(within(form).getByLabelText(/^Related episode/), "55555555-5555-4555-8555-555555555555");
+    await userEvent.click(within(form).getByRole("button", { name: "Record dose taken" }));
+    await waitFor(() => { expect(writes).toHaveLength(1); });
+    expect(writes[0]).toEqual(expect.objectContaining({ category: "stress", episode_id: "55555555-5555-4555-8555-555555555555" }));
   });
 });

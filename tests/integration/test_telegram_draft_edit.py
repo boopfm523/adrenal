@@ -17,6 +17,7 @@ from healthcurve.ai.extraction import CandidateType, ValidatedCandidate
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.db import SCHEMAS, Base
+from healthcurve.episodes.models import EpisodeStatus, StressEpisode
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
 from healthcurve.integrations.telegram.handlers import (
@@ -24,7 +25,7 @@ from healthcurve.integrations.telegram.handlers import (
     handle_message,
 )
 from healthcurve.integrations.telegram.models import TelegramLocationRequest
-from healthcurve.medications.models import DoseEvent, DoseUnit, Medication, Route
+from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
@@ -213,6 +214,64 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         assert temperature.normalized_c == Decimal("38.00")
         assert temperature.confirmation_state.value == "confirmed_from_draft"
         assert temperature_confirmed.text.startswith("Recorded:")
+
+
+def test_open_episode_links_dose_without_silently_reclassifying_it(engine: Engine) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email="dose-category@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    medication = Medication(
+        owner_id=owner.id,
+        name="Synthetic hydrocortisone",
+        normalized_name="synthetic hydrocortisone",
+        default_unit=DoseUnit.MG,
+        default_route=Route.ORAL,
+    )
+    with Session(engine) as session, session.begin():
+        session.add_all((owner, medication))
+        session.flush()
+        episode = StressEpisode(
+            owner_id=owner.id,
+            trigger="Synthetic stress context",
+            status=EpisodeStatus.OPEN,
+            started_at=NOW,
+            timezone="UTC",
+            recorded_at=NOW,
+        )
+        session.add(episode)
+        session.flush()
+
+        ordinary = handle_message(
+            session, owner, text="/dose 10 Synthetic hydrocortisone 09:00", now=NOW
+        )
+        assert "Regular dose:" in ordinary.text
+        assert ordinary.draft_id is not None
+        ordinary_recorded = confirm_draft(session, owner, ordinary.draft_id)
+        assert ordinary_recorded.text.startswith("Recorded:")
+        first = session.scalar(select(DoseEvent).where(DoseEvent.owner_id == owner.id))
+        assert first is not None
+        assert first.category is DoseCategory.SCHEDULED
+        assert first.episode_id == episode.id
+
+        stress = handle_message(
+            session, owner, text="/dose 5 Synthetic hydrocortisone 09:00", now=NOW
+        )
+        edited = handle_message(session, owner, text="/edit 1 category stress dose", now=NOW)
+        assert "Stress dose:" in edited.text
+        assert stress.draft_id is not None
+        confirm_draft(session, owner, stress.draft_id)
+        categories = list(
+            session.scalars(
+                select(DoseEvent.category)
+                .where(DoseEvent.owner_id == owner.id)
+                .order_by(DoseEvent.recorded_at, DoseEvent.id)
+            )
+        )
+        assert DoseCategory.SCHEDULED in categories
+        assert DoseCategory.STRESS in categories
 
 
 def test_phone_location_is_rounded_linked_and_consumed_with_draft(engine: Engine) -> None:

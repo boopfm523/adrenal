@@ -445,6 +445,7 @@ def _cmd_dose(session: Session, owner: Owner, args: list[str], *, now: datetime)
         amount=amount,
         unit=medication.default_unit.value,
         route=medication.default_route.value,
+        dose_category=DoseCategory.SCHEDULED,
         local_time=local,
         timezone=owner.default_timezone,
         confidence=1.0,
@@ -749,7 +750,7 @@ def _cmd_undo(session: Session, owner: Owner) -> Reply:
 
 
 def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
-    usage = "Usage: /edit <number> <amount|unit|time|medication> <value>"
+    usage = "Usage: /edit <number> <amount|unit|time|medication|category> <value>"
     if len(args) < 3 or not args[0].isdigit():
         return Reply(usage)
     draft = _pending_draft(session, owner.id)
@@ -830,6 +831,14 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
             FlagCode.NONEXISTENT_TIME,
             FlagCode.FUTURE_TIME,
         )
+    elif field == "category":
+        normalized = value.lower().replace("_", " ").replace("-", " ").strip()
+        if normalized in {"regular", "scheduled"}:
+            changes["dose_category"] = DoseCategory.SCHEDULED
+        elif normalized in {"stress", "stress dose", "up dose", "updose"}:
+            changes["dose_category"] = DoseCategory.STRESS
+        else:
+            return Reply("Category must be regular or stress dose.")
     else:
         return Reply(usage)
 
@@ -1280,7 +1289,7 @@ def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Repl
     reply.text += (
         "\n\nCorrect one field with:\n"
         "/edit <number> <field> <value>\n"
-        "Dose fields: amount, unit, time, medication.\n"
+        "Dose fields: amount, unit, time, medication, category (regular or stress).\n"
         "Blood pressure: systolic, diastolic, pulse, time.\n"
         "Weight: amount, unit, time."
         "\nTemperature: value, unit, time."
@@ -1293,7 +1302,10 @@ def _describe(candidate: ValidatedCandidate) -> str:
     match candidate.type:
         case CandidateType.DOSE:
             amount = f"{candidate.amount} {candidate.unit or ''}".strip()
-            return f"Dose: {amount} {candidate.medication_name or '?'} at {when}"
+            category = (
+                "Stress dose" if candidate.dose_category is DoseCategory.STRESS else "Regular dose"
+            )
+            return f"{category}: {amount} {candidate.medication_name or '?'} at {when}"
         case CandidateType.SYMPTOM:
             severity = (
                 f" (severity {candidate.severity}/10)" if candidate.severity is not None else ""
@@ -1413,7 +1425,7 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 amount=candidate.amount,
                 unit=candidate.unit or "mg",
                 route=candidate.route or Route.ORAL.value,
-                category=DoseCategory.STRESS if open_episode else DoseCategory.SCHEDULED,
+                category=candidate.dose_category or DoseCategory.SCHEDULED,
                 regimen_version_id=version.id if version else None,
                 episode_id=open_episode.id if open_episode else None,
             )
