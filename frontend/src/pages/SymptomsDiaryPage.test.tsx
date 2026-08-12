@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { localDate, shiftIsoDate } from "../time";
 import { SymptomsDiaryPage } from "./SymptomsDiaryPage";
 
@@ -36,7 +37,7 @@ describe("Symptoms and diary page", () => {
       if (url.includes("/life-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife])));
       return Promise.resolve(response({ detail: "not found" }, 404));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><SymptomsDiaryPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><SymptomsDiaryPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 
     expect(await screen.findByText("Synthetic public note")).toBeVisible();
     expect(screen.getByText("Synthetic public event")).toBeVisible();
