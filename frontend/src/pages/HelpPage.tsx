@@ -177,11 +177,10 @@ export function HelpPage(): React.JSX.Element {
         </div>
       </section>
 
-      <section id="planned" className="help-section help-planned anchor-target" aria-labelledby="planned-title">
-        <h2 id="planned-title">Clearly not available yet</h2>
-        <ul>
-          <li><strong>Offsite backup assurance:</strong> encrypted local backup exists, but production readiness still requires an offsite copy and a successful isolated restore drill.</li>
-        </ul>
+      <section id="recovery" className="help-section anchor-target" aria-labelledby="recovery-title">
+        <h2 id="recovery-title">Backup and recovery status</h2>
+        <p>Nightly encrypted local and Google Drive backup copies are configured. The first isolated restore drill passed, confirming that a recent offsite copy could be decrypted and restored in an isolated environment.</p>
+        <p>Continue monitoring backup health and completing the documented quarterly restore drills. Backup locations, credentials, and recovery keys are intentionally not shown here.</p>
       </section>
     </Page>
   );

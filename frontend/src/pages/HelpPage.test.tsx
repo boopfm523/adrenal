@@ -84,4 +84,15 @@ describe("Help page", () => {
     expect(screen.getByRole("link", { name: "Open record a scheduled dose from today" })).toHaveAttribute("href", "/today");
     expect(screen.getByRole("link", { name: "Open emergency page" })).toHaveAttribute("href", "/emergency");
   });
+
+  it("reports the configured offsite backup and proven recovery state", async () => {
+    renderHelp();
+    await screen.findByRole("heading", { name: "Help", level: 1 });
+
+    expect(screen.getByRole("heading", { name: "Backup and recovery status" })).toBeVisible();
+    expect(screen.getByText(/nightly encrypted local and Google Drive backup copies are configured/i)).toBeVisible();
+    expect(screen.getByText(/first isolated restore drill passed/i)).toBeVisible();
+    expect(screen.queryByText(/still requires an offsite copy/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Clearly not available yet/i)).not.toBeInTheDocument();
+  });
 });
