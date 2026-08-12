@@ -57,6 +57,7 @@ router = APIRouter(prefix="/integrations/garmin", tags=["garmin"])
 class GarminStatusOut(BaseModel):
     configured: bool
     state: str
+    automatic_sync_hour_local: int
     last_success_at: datetime | None = None
     checkpoint_date: date | None = None
     capabilities: dict[str, str] = Field(default_factory=dict)
@@ -141,6 +142,7 @@ def connection_status(
     return GarminStatusOut(
         configured=settings.garmin_enabled,
         state="not_connected" if connection is None else connection.state.value,
+        automatic_sync_hour_local=settings.garmin_sync_hour_local,
         last_success_at=None if connection is None else connection.last_success_at,
         checkpoint_date=None if connection is None else connection.checkpoint_date,
         capabilities={} if connection is None else connection.capabilities,

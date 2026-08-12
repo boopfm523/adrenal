@@ -165,7 +165,10 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
     )
     for connection, owner in rows:
         owner_zone = ZoneInfo(owner.default_timezone)
-        local_day = now.astimezone(owner_zone).date()
+        local_now = now.astimezone(owner_zone)
+        if local_now.time() < time(hour=settings.garmin_sync_hour_local):
+            continue
+        local_day = local_now.date()
         first = local_day - timedelta(days=settings.garmin_sync_lookback_days - 1)
         if connection.checkpoint_date is not None:
             first = max(

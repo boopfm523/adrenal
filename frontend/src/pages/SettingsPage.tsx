@@ -139,6 +139,7 @@ function GarminControl(): React.JSX.Element {
   const capabilities = Object.entries(status.data?.capabilities ?? {});
   const warningCodes = status.data?.latest_sync_warning_codes ?? [];
   const canSync = status.data?.configured === true && status.data.state === "connected";
+  const automaticHour = (status.data?.automatic_sync_hour_local ?? 9).toString().padStart(2, "0");
 
   return <article className="settings-card" id="garmin-connection">
     <h3>Garmin Connect</h3>
@@ -154,7 +155,7 @@ function GarminControl(): React.JSX.Element {
     </dl>}
     {capabilities.length === 0 ? null : <details><summary>Latest metric availability</summary><ul>{capabilities.map(([name, value]) => <li key={name}>{name.replaceAll("_", " ")}: {value}</li>)}</ul></details>}
     {warningCodes.length === 0 ? null : <p className="privacy-note">Latest safe warning codes: {warningCodes.join(", ")}. Missing values remain unavailable, never zero.</p>}
-    <p>Automatic sync runs once per local day. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
+    <p>Automatic sync runs once per local day at or after {automaticHour}:00 in your local timezone, giving your watch time to sync with Garmin Connect first. Manual sync remains available anytime. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
     <div className="button-row">
       <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(false); }}>{sync.isPending ? "Queueing sync…" : "Sync Garmin now"}</button>
       <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</button>

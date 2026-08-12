@@ -122,12 +122,14 @@ def factory(engine: Engine) -> Iterator[sessionmaker[Session]]:
     yield maker
 
 
-def _connected_garmin_owner(factory: sessionmaker[Session], *, email: str) -> uuid.UUID:
+def _connected_garmin_owner(
+    factory: sessionmaker[Session], *, email: str, timezone: str = "UTC"
+) -> uuid.UUID:
     with factory() as session, session.begin():
         owner = Owner(
             email=email,
             password_hash=hashlib.sha256(email.encode("utf-8")).hexdigest(),
-            default_timezone="UTC",
+            default_timezone=timezone,
         )
         session.add(owner)
         session.flush()
@@ -443,6 +445,39 @@ def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
         )
         assert scheduled is not None
         assert scheduled.payload["origin"] == GarminSyncOrigin.SCHEDULED.value
+
+
+def test_garmin_scheduler_waits_until_configured_owner_local_hour_across_dst(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(
+        factory,
+        email="garmin-local-hour@example.test",
+        timezone="America/New_York",
+    )
+    settings = Settings.model_validate(
+        {"garmin_enabled": True, "garmin_sync_hour_local": 9}
+    )
+    # 2026-03-08 is the spring DST transition: 12:59 UTC is 08:59 EDT and
+    # 13:00 UTC is 09:00 EDT. The gate follows the owner's wall clock.
+    before = datetime(2026, 3, 8, 12, 59, tzinfo=UTC)
+    at_hour = datetime(2026, 3, 8, 13, 0, tzinfo=UTC)
+
+    with factory() as session, session.begin():
+        schedule_garmin_sync(session, before, settings=settings)
+    with factory() as session:
+        assert session.scalar(select(Job).where(Job.task == GARMIN_SYNC_TASK)) is None
+
+    with factory() as session, session.begin():
+        schedule_garmin_sync(session, at_hour, settings=settings)
+    with factory() as session:
+        scheduled = session.scalar(
+            select(Job).where(
+                Job.idempotency_key == f"scheduled:{owner_id}:2026-03-08"
+            )
+        )
+        assert scheduled is not None
+        assert scheduled.payload["timezone"] == "America/New_York"
 
 
 @pytest.mark.parametrize(

@@ -2457,6 +2457,8 @@ export interface components {
         };
         /** GarminStatusOut */
         GarminStatusOut: {
+            /** Automatic Sync Hour Local */
+            automatic_sync_hour_local: number;
             /** Capabilities */
             capabilities?: {
                 [key: string]: string;

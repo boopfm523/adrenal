@@ -18,6 +18,7 @@ services:
       HC_GARMIN_ENABLED: ${HC_GARMIN_ENABLED:-false}
       HC_GARMIN_TOKEN_STORE: /run/secrets/garmin
       HC_GARMIN_SYNC_LOOKBACK_DAYS: ${HC_GARMIN_SYNC_LOOKBACK_DAYS:-7}
+      HC_GARMIN_SYNC_HOUR_LOCAL: ${HC_GARMIN_SYNC_HOUR_LOCAL:-9}
     volumes:
       - type: bind
         source: ${HC_GARMIN_TOKEN_STORE_HOST:?set HC_GARMIN_TOKEN_STORE_HOST}

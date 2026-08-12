@@ -153,8 +153,11 @@ the same current recorded facts.
 
 ## Scheduling and reconciliation
 
-The worker queues one bounded window per owner and local calendar day, with a maximum
-of 31 days per job. The initial window uses the configured lookback. After a successful
+The worker queues one bounded window per owner and local calendar day at or after the
+configured owner-local hour (`HC_GARMIN_SYNC_HOUR_LOCAL`, 09:00 by default), with a
+maximum of 31 days per job. This gives the watch and phone time to finish their own
+Garmin Connect sync; manual HealthCurve sync remains available before that hour. The
+initial window uses the configured lookback. After a successful
 checkpoint, the daily scheduler deliberately re-reads the checkpoint day and the two
 preceding days, bounded by that lookback, so late or corrected Garmin values are still
 detected. Reads are rate-spaced and durable jobs have bounded retries. Stable provider

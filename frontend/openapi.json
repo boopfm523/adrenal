@@ -3289,6 +3289,10 @@
       },
       "GarminStatusOut": {
         "properties": {
+          "automatic_sync_hour_local": {
+            "title": "Automatic Sync Hour Local",
+            "type": "integer"
+          },
           "capabilities": {
             "additionalProperties": {
               "type": "string"
@@ -3381,7 +3385,8 @@
         },
         "required": [
           "configured",
-          "state"
+          "state",
+          "automatic_sync_hour_local"
         ],
         "title": "GarminStatusOut",
         "type": "object"
