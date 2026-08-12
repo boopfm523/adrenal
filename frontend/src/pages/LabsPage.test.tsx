@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { LabsPage } from "./LabsPage";
 
 const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
@@ -27,7 +28,7 @@ function page(items: unknown[]): Record<string, unknown> { return { items, page:
 
 function renderPage(initialEntry = "/labs"): void {
   sessionStore.set(session);
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><LabsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>);
+  render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><LabsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 }
 
 describe("Labs page", () => {

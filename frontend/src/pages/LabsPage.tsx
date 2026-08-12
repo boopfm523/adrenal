@@ -1,4 +1,5 @@
 import { useMemo, useState, type SyntheticEvent } from "react";
+import { Alert, Button, FileInput, Group, Paper, SimpleGrid, Text, TextInput, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
@@ -98,15 +99,15 @@ function UploadPanel({ onUploaded }: { onUploaded: (document: LabDocument) => vo
     const file = new FormData(event.currentTarget).get("file");
     if (file instanceof File && file.size > 0) upload.mutate(file);
   }
-  return <section aria-labelledby="pdf-import-heading">
-    <h2 id="pdf-import-heading">Import and review a lab PDF</h2>
-    <p>Upload creates a private extraction draft only. Nothing enters charts, reports, or your health record until you review and confirm it.</p>
+  return <Paper component="section" withBorder p="lg" radius="lg" aria-labelledby="pdf-import-heading">
+    <Title order={2} id="pdf-import-heading">Import and review a lab PDF</Title>
+    <Text my="sm">Upload creates a private extraction draft only. Nothing enters charts, reports, or your health record until you review and confirm it.</Text>
     <form className="lab-upload-form" onSubmit={submit} aria-label="Upload lab PDF">
-      <label>PDF file<input required name="file" type="file" accept="application/pdf,.pdf" /></label>
-      <button type="submit" disabled={upload.isPending}>{upload.isPending ? "Uploading privately…" : "Upload for review"}</button>
+      <FileInput required name="file" label="PDF file" accept="application/pdf,.pdf" clearable />
+      <Button type="submit" loading={upload.isPending}>Upload for review</Button>
     </form>
-    {upload.isError ? <p className="error-summary" role="alert">The PDF could not be uploaded. Use a non-interactive PDF up to 25 MB.</p> : null}
-  </section>;
+    {upload.isError ? <Alert color="red" mt="md" role="alert">The PDF could not be uploaded. Use a non-interactive PDF up to 25 MB.</Alert> : null}
+  </Paper>;
 }
 
 function IdList({ label, ids }: { label: string; ids: string[] }): React.JSX.Element {
@@ -328,12 +329,12 @@ export function LabsPage(): React.JSX.Element {
   const results = resultsQuery.data?.items ?? [];
   const groups = trendGroups(results);
   return <Page title="Laboratory results" description="Review private PDF extraction drafts, then view recorded source facts and deterministic trends. HealthCurve does not diagnose, interpret cortisol, or recommend treatment.">
-    <aside className="safety-note"><strong>Descriptive records only.</strong> Reference ranges are preserved exactly from each source and are never invented or used here to diagnose. Cortisol collection time and specimen type materially affect context; discuss interpretation with your physician.</aside>
+    <Alert color="orange" mb="xl"><strong>Descriptive records only.</strong> Reference ranges are preserved exactly from each source and are never invented or used here to diagnose. Cortisol collection time and specimen type materially affect context; discuss interpretation with your physician.</Alert>
     <UploadPanel onUploaded={(document) => { setSelectedDocumentId(document.document_id); }} />
-    <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...draft, resultPage: 1, documentPage: 1 })); }}><label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone }; setValidation(null); setSelectedDocumentId(null); setDraftState({ search: "", filters: reset }); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
-    <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. Result dates mean specimen collection; document dates mean private upload time.</p>
-    {documentsQuery.isFetching ? <p role="status">Loading lab documents…</p> : null}
-    {documentsQuery.isError ? <p className="error-summary" role="alert">Lab documents could not be loaded.</p> : null}
+    <Paper component="form" withBorder p="lg" my="xl" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...draft, resultPage: 1, documentPage: 1 })); }}><Title order={2} mb="md">Filter laboratory history</Title><SimpleGrid cols={{base:1,sm:3}}><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="History IANA timezone" required aria-label="History IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>{validation === null && !invalidRange ? null : <Alert color="red" mt="md" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}<Group mt="md"><Button type="submit">Apply history filters</Button><Button variant="outline" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone }; setValidation(null); setSelectedDocumentId(null); setDraftState({ search: "", filters: reset }); setSearchParams(new URLSearchParams()); }}>Clear history filters</Button></Group></Paper>
+    <Text c="dimmed" my="md">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. Result dates mean specimen collection; document dates mean private upload time.</Text>
+    {documentsQuery.isFetching ? <Text role="status">Loading lab documents…</Text> : null}
+    {documentsQuery.isError ? <Alert color="red" role="alert">Lab documents could not be loaded.</Alert> : null}
     {documentsQuery.data === undefined ? null : <><DocumentList documents={documentsQuery.data.items} selectedId={selectedDocumentId} select={setSelectedDocumentId} onDeleted={(id) => { if (selectedDocumentId === id) setSelectedDocumentId(null); if (view.documentPage > 1 && documentsQuery.data.items.length === 1) setSearchParams(labHistorySearch({ ...view, documentPage: view.documentPage - 1 })); }} /><PaginationControls label="Lab document history" metadata={documentsQuery.data.page} onPageChange={(documentPage) => { setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...view, documentPage })); }} /></>}
     {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
     <hr />
