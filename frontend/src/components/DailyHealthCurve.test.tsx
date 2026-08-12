@@ -296,14 +296,47 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByRole("tooltip").textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(screen.getByRole("tooltip")).not.toHaveTextContent(/Garmin|provider|imported/i);
     expect(hoverAt(180).tooltip).toHaveTextContent("Awakening: started");
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/Awake interval: 10 minutes .*04:00–04:10 local/);
     expect(screen.getByRole("tooltip").textContent.match(/GMT-4/g)).toHaveLength(1);
+    expect(hoverAt(185).tooltip).toHaveTextContent(/Awake interval: 10 minutes/);
+    expect(hoverAt(179).tooltip).not.toHaveTextContent("Awake interval:");
     expect(hoverAt(190).tooltip).toHaveTextContent("Awakening: ended");
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent("Awake interval:");
     expect(hoverAt(420).tooltip).toHaveTextContent("Sleep: final wake / sleep ended");
 
     view.rerender(<DailyHealthCurve data={data({ garmin: [{ ...sleep, id: "50000000-0000-4000-8000-000000000002", sleep_intervals: [] }] })} />);
     expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(0);
     expect(screen.getByText(/Garmin reported one or more awakenings without their exact times/)).toBeVisible();
     expect(hoverAt(60).tooltip).toHaveTextContent("Awakenings: 2 reported; exact times unavailable");
+  });
+
+  it("consolidates duplicate, overlapping, and touching awake intervals", () => {
+    const sleep: GarminRecord = {
+      ...sample(0),
+      id: "50000000-0000-4000-8000-000000000020",
+      kind: "sleep",
+      summary: "Sleep interval recorded by Garmin",
+      time: { ...sample(0).time, occurred_at: "2026-03-08T06:00:00Z" },
+      ended_at: "2026-03-08T12:00:00Z",
+      awakenings: 3,
+      sleep_intervals: [
+        { stage: "awake", started_at: "2026-03-08T08:00:00Z", ended_at: "2026-03-08T08:10:00Z" },
+        { stage: "awake", started_at: "2026-03-08T08:05:00Z", ended_at: "2026-03-08T08:15:00Z" },
+        { stage: "awake", started_at: "2026-03-08T08:15:00Z", ended_at: "2026-03-08T08:20:00Z" },
+      ],
+    };
+    const duplicate = {
+      ...sleep,
+      id: "50000000-0000-4000-8000-000000000021",
+      sleep_intervals: [sleep.sleep_intervals?.[0]].filter((interval) => interval !== undefined),
+    };
+    render(<DailyHealthCurve data={data({ garmin: [sleep, duplicate] })} />);
+
+    expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(1);
+    const tooltip = hoverAt(195).tooltip;
+    expect(tooltip).toHaveTextContent(/Awake interval: 20 minutes/);
+    expect(within(tooltip).getAllByText("Awake interval:")).toHaveLength(1);
+    expect(hoverAt(200).tooltip).not.toHaveTextContent("Awake interval:");
   });
 
   it("clips overnight sleep and distinguishes multiple sessions in the tooltip", () => {

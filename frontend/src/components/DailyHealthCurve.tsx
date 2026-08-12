@@ -58,6 +58,12 @@ interface TooltipObservation {
   value: string;
 }
 
+interface AwakeInterval {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+}
+
 const WIDTH = 960;
 const HEIGHT = 430;
 const LEFT = 74;
@@ -145,6 +151,44 @@ function experiencedTime(value: string, timezone: string): string {
     hour12: false,
     timeZoneName: "shortOffset",
   }).format(new Date(value));
+}
+
+function localClockTime(value: number, timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(value));
+}
+
+function localDate(value: number, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+function awakeIntervalValue(interval: AwakeInterval, timezone: string): string {
+  const totalSeconds = Math.max(1, Math.round((interval.endedAt - interval.startedAt) / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor(totalSeconds % 3_600 / 60);
+  const seconds = totalSeconds % 60;
+  const durationParts = [
+    hours > 0 ? `${hours.toString()} ${hours === 1 ? "hour" : "hours"}` : null,
+    minutes > 0 ? `${minutes.toString()} ${minutes === 1 ? "minute" : "minutes"}` : null,
+    seconds > 0 ? `${seconds.toString()} ${seconds === 1 ? "second" : "seconds"}` : null,
+  ].filter((part): part is string => part !== null);
+  const startedDate = localDate(interval.startedAt, timezone);
+  const endedDate = localDate(interval.endedAt, timezone);
+  const startedAt = localClockTime(interval.startedAt, timezone);
+  const endedAt = localClockTime(interval.endedAt, timezone);
+  const localRange = startedDate === endedDate
+    ? `${startedAt}–${endedAt} local`
+    : `${startedDate} ${startedAt}–${endedDate} ${endedAt} local`;
+  return `${durationParts.join(" ")} · ${localRange}`;
 }
 
 function timeTicks(start: number, end: number, timezone: string): { time: number; label: string }[] {
@@ -435,6 +479,29 @@ function nearbyTooltipObservations(
   );
 }
 
+function explicitAwakeIntervals(records: GarminRecord[]): AwakeInterval[] {
+  const intervals = records.flatMap((record) => (record.sleep_intervals ?? []).flatMap((interval, index) => {
+    const startedAt = Date.parse(interval.started_at);
+    const endedAt = Date.parse(interval.ended_at);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt <= startedAt) return [];
+    return [{
+      id: `${record.id}-awake-${index.toString()}`,
+      startedAt,
+      endedAt,
+    }];
+  })).sort((left, right) => left.startedAt - right.startedAt || left.endedAt - right.endedAt);
+
+  return intervals.reduce<AwakeInterval[]>((merged, interval) => {
+    const previous = merged.at(-1);
+    if (previous === undefined || interval.startedAt > previous.endedAt) {
+      merged.push(interval);
+      return merged;
+    }
+    previous.endedAt = Math.max(previous.endedAt, interval.endedAt);
+    return merged;
+  }, []);
+}
+
 function doseTooltipObservations(
   exposure: SteroidExposureCurve,
   dayStart: number,
@@ -498,6 +565,10 @@ export function DailyHealthCurve({
   );
   const sleepObservations = sleepTooltipObservations(sleepRecords, start, end);
   const cursorSleepObservations = nearbyTooltipObservations(sleepObservations, cursorTime);
+  const awakeIntervals = explicitAwakeIntervals(sleepRecords);
+  const cursorAwakeIntervals = awakeIntervals.filter(
+    (interval) => cursorTime >= interval.startedAt && cursorTime < interval.endedAt,
+  );
   const doseObservations = doseTooltipObservations(data.exposure, start, end);
   const cursorDoseObservations = visible.exposure
     ? nearbyTooltipObservations(doseObservations, cursorTime)
@@ -535,6 +606,11 @@ export function DailyHealthCurve({
       key: observation.id,
       series: observation.series,
       value: observation.value,
+    })),
+    ...cursorAwakeIntervals.map((interval) => ({
+      key: interval.id,
+      series: "Awake interval",
+      value: awakeIntervalValue(interval, data.exposure.timezone),
     })),
     ...cursorDoseObservations.map((observation) => ({
       key: observation.id,
@@ -585,17 +661,16 @@ export function DailyHealthCurve({
           return <g key={record.id} className="healthcurve-sleep-session">
             <title>{experiencedTime(record.time.occurred_at, data.exposure.timezone)} sleep start; {experiencedTime(record.ended_at ?? record.time.occurred_at, data.exposure.timezone)} wake / sleep end; Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</title>
             <rect className="healthcurve-sleep-band" x={startX} y={TOP} width={Math.max(2, endX - startX)} height="12" />
-            {(record.sleep_intervals ?? []).map((interval, index) => {
-              const awakeStart = Math.max(start, Date.parse(interval.started_at));
-              const awakeEnd = Math.min(end, Date.parse(interval.ended_at));
-              if (awakeEnd <= awakeStart) return null;
-              const awakeX = LEFT + (awakeStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
-              const awakeEndX = LEFT + (awakeEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
-              return <rect key={`${interval.started_at}-${index.toString()}`} className="healthcurve-awake-interval" x={awakeX} y={TOP} width={Math.max(2, awakeEndX - awakeX)} height={PLOT_HEIGHT}><title>{experiencedTime(interval.started_at, data.exposure.timezone)} through {experiencedTime(interval.ended_at, data.exposure.timezone)}: explicit Garmin awake interval</title></rect>;
-            })}
             {sessionStart >= start && sessionStart < end ? <><line className="healthcurve-sleep-marker healthcurve-sleep-marker--start" x1={startX} y1={TOP} x2={startX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className="healthcurve-sleep-label" x={startX + 4} y={TOP + 27}>Sleep start</text></> : null}
             {sessionEnd > start && sessionEnd <= end ? <><line className="healthcurve-sleep-marker healthcurve-sleep-marker--end" x1={endX} y1={TOP} x2={endX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className="healthcurve-sleep-label" x={endX + 4} y={TOP + 27}>Wake</text></> : null}
           </g>;
+        })}{awakeIntervals.map((interval) => {
+          const awakeStart = Math.max(start, interval.startedAt);
+          const awakeEnd = Math.min(end, interval.endedAt);
+          if (awakeEnd <= awakeStart) return null;
+          const awakeX = LEFT + (awakeStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          const awakeEndX = LEFT + (awakeEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          return <rect key={interval.id} className="healthcurve-awake-interval" x={awakeX} y={TOP} width={Math.max(2, awakeEndX - awakeX)} height={PLOT_HEIGHT}><title>{awakeIntervalValue(interval, data.exposure.timezone)}: explicit Garmin awake interval</title></rect>;
         })}</g>}
         {[0, 25, 50, 75, 100].map((relative) => {
           const y = TOP + PLOT_HEIGHT - relative / 100 * PLOT_HEIGHT;
