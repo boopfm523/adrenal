@@ -144,7 +144,34 @@ def _metric_overview(metrics: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
-def _wearable_rows(records: list[dict[str, Any]]) -> list[list[str]]:
+def _wearable_rows(
+    records: list[dict[str, Any]], metrics: dict[str, Any] | None = None
+) -> list[list[str]]:
+    summary_metric = (metrics or {}).get("wearable_daily_summaries") or {}
+    summaries = summary_metric.get("values") if isinstance(summary_metric, dict) else []
+    if isinstance(summaries, list) and summaries:
+        rows = []
+        for row in summaries:
+            if not isinstance(row, dict):
+                continue
+            observed = (
+                "missing"
+                if row.get("average") is None
+                else (
+                    f"avg {_value(row.get('average'))}; low {_value(row.get('minimum'))}; "
+                    f"high {_value(row.get('maximum'))}"
+                )
+            )
+            rows.append(
+                [
+                    str(row.get("date") or ""),
+                    str(row.get("metric_type") or "metric").replace("_", " ").title(),
+                    observed,
+                    str(row.get("unit") or "").replace("_", " "),
+                    f"{int(row.get('sample_count') or 0):,}",
+                ]
+            )
+        return rows
     grouped: dict[tuple[str, str, str], list[Decimal]] = defaultdict(list)
     for record in records:
         if record.get("record_type") != "garmin_metric":
@@ -177,6 +204,19 @@ def _wearable_rows(records: list[dict[str, Any]]) -> list[list[str]]:
     return rows
 
 
+def _garmin_aggregate_rows(records: list[dict[str, Any]]) -> list[list[str]]:
+    return [
+        [
+            _time(record),
+            str(record.get("metric_type") or "metric").replace("_", " ").title(),
+            f"{_value(record.get('value'))} {_value(record.get('unit'))}",
+            str(record.get("aggregation") or "aggregate").replace("_", " ").title(),
+        ]
+        for record in records
+        if record.get("record_type") == "garmin_metric_aggregate"
+    ]
+
+
 def presentation(payload: dict[str, Any]) -> dict[str, Any]:
     content = payload["snapshot_content"]
     facts = [record for record in content["fact"] if isinstance(record, dict)]
@@ -187,12 +227,19 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
     for record in facts:
         by_type[str(record.get("record_type") or "other")].append(record)
 
+    wearable_metric = payload["metric_values"].get("wearable_daily_summaries") or {}
+    wearable_values = wearable_metric.get("values") if isinstance(wearable_metric, dict) else []
+    wearable_count = (
+        sum(int(row.get("sample_count") or 0) for row in wearable_values if isinstance(row, dict))
+        if isinstance(wearable_values, list)
+        else len(by_type["garmin_metric"])
+    ) + len(by_type["garmin_metric_aggregate"])
     summary = [
         {"label": "Recorded doses", "value": len(by_type["dose"])},
         {"label": "Symptoms", "value": len(by_type["symptom"])},
         {"label": "Stress episodes", "value": len(by_type["stress_episode"])},
         {"label": "Emergency injections", "value": len(by_type["emergency_injection"])},
-        {"label": "Garmin observations", "value": f"{len(by_type['garmin_metric']):,}"},
+        {"label": "Garmin observations", "value": f"{wearable_count:,}"},
         {"label": "Approved plans", "value": len(plans)},
     ]
 
@@ -360,8 +407,15 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
         _table(
             "Garmin daily observation summary",
             ["Date", "Metric", "Observed range", "Unit", "Samples"],
-            _wearable_rows(facts),
+            _wearable_rows(facts, payload["metric_values"]),
             "No Garmin metric observations selected for this period.",
+            "wearables",
+        ),
+        _table(
+            "Garmin provider aggregates",
+            ["Recorded local time", "Metric", "Provider value", "Period type"],
+            _garmin_aggregate_rows(facts),
+            "No separate Garmin provider aggregates selected for this period.",
             "wearables",
         ),
         _table(

@@ -84,6 +84,7 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncOrigin,
     GarminSyncRun,
     GarminSyncStatus,
+    WearableDailySummary,
 )
 from healthcurve.labs.cleanup_jobs import (
     LAB_DOCUMENT_CLEANUP_TASK,
@@ -419,6 +420,49 @@ def test_garmin_aggregate_index_migration_downgrades_and_reinstalls(
     assert "owner_id, occurred_at DESC, id" in index_definition
     assert "aggregation" in index_definition
     assert "<> 'provider_sample'" in index_definition
+
+
+def test_wearable_summary_migration_downgrades_and_reinstalls(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "9a2c4e6f8b10",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT to_regclass('ops.wearable_daily_summary')")) is None
+            )
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(text("SELECT to_regclass('ops.wearable_daily_summary')"))
+            == "ops.wearable_daily_summary"
+        )
+        triggers = set(
+            connection.scalars(
+                text(
+                    "SELECT trigger_name FROM information_schema.triggers "
+                    "WHERE event_object_schema='fact' "
+                    "AND event_object_table='garmin_metric_event'"
+                )
+            )
+        )
+    assert {
+        "invalidate_wearable_daily_summary_after_insert",
+        "invalidate_wearable_daily_summary_after_delete",
+    } <= triggers
 
 
 def test_health_data_requires_authentication(client: TestClient) -> None:
@@ -5665,8 +5709,37 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
                 notes=None,
             )
             heart_samples.append(sample)
+        daily_stress = events.create_event(
+            session,
+            GarminMetricEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 3, 8, 0),  # noqa: DTZ001
+                "America/New_York",
+            ),
+            source_type=SourceType.PROVIDER,
+            confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+            provider_id="synthetic-pattern-daily-stress",
+            source_revision="stress-v1",
+            import_batch_id=None,
+            garmin_import_batch_id=None,
+            garmin_sync_run_id=sync_run.id,
+            garmin_source_member="synthetic-daily",
+            garmin_manufacturer="Garmin",
+            garmin_product_name=None,
+            garmin_device_serial_hash=None,
+            metric_type=GarminMetricType.STRESS,
+            value=Decimal("31"),
+            unit="garmin_score",
+            period_end_at=None,
+            aggregation="daily_summary",
+            sample_interval_seconds=None,
+            garmin_field_name="averageStressLevel",
+            notes=None,
+        )
         symptom_id = symptom.id
         first_sample_id = heart_samples[0].id
+        daily_stress_id = daily_stress.id
         second_dose_id = second_dose.id
         expected_plan_ids = {str(first_plan.id), str(second_plan.id)}
         owner_id = owner.id
@@ -5780,6 +5853,20 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     assert body["days"][1]["symptom_count"] == 0
     original_watermark = selected["source_revision_watermark_sha256"]
 
+    with Session(engine) as session:
+        cached = session.scalar(
+            select(WearableDailySummary).where(
+                WearableDailySummary.owner_id == owner_id,
+                WearableDailySummary.local_date == day,
+                WearableDailySummary.timezone == "America/New_York",
+                WearableDailySummary.metric_type == GarminMetricType.HEART_RATE,
+            )
+        )
+        assert cached is not None
+        cached_summary_id = cached.id
+        cached_refreshed_at = cached.refreshed_at
+        original_summary_watermark = cached.source_revision_watermark_sha256
+
     export = client.get(
         "/api/v1/analytics/daily-patterns.csv",
         params={
@@ -5794,6 +5881,50 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     assert "source_revision_watermark_sha256" in export.text
     assert "heart_rate_observed_coverage_percent" in export.text
 
+    with Session(engine) as session:
+        rerun_cached = session.scalar(
+            select(WearableDailySummary).where(
+                WearableDailySummary.owner_id == owner_id,
+                WearableDailySummary.local_date == day,
+                WearableDailySummary.timezone == "America/New_York",
+                WearableDailySummary.metric_type == GarminMetricType.HEART_RATE,
+            )
+        )
+        assert rerun_cached is not None
+        assert rerun_cached.id == cached_summary_id
+        assert rerun_cached.refreshed_at == cached_refreshed_at
+
+    with Session(engine) as session, session.begin():
+        report = report_builder.build_snapshot(
+            session,
+            owner_id=owner_id,
+            date_from=day,
+            date_to=day + timedelta(days=1),
+            timezone="America/New_York",
+            selected_sections=["wearables"],
+        )
+        assert not any(
+            row.get("record_type") == "garmin_metric"
+            for row in cast(list[dict[str, Any]], report.snapshot_content["fact"])
+        )
+        report_facts = cast(list[dict[str, Any]], report.snapshot_content["fact"])
+        report_aggregate = next(
+            row for row in report_facts if row.get("record_type") == "garmin_metric_aggregate"
+        )
+        assert report_aggregate["id"] == str(daily_stress_id)
+        assert report_aggregate["value"] == "31.0000"
+        assert report_aggregate["aggregation"] == "daily_summary"
+        report_summary = cast(dict[str, Any], report.metric_values["wearable_daily_summaries"])
+        assert report_summary["summary_version"] == "hc-wearable-daily-v1"
+        summary_values = cast(list[dict[str, Any]], report_summary["values"])
+        assert len(summary_values) == 8
+        report_heart = next(
+            row
+            for row in summary_values
+            if row["date"] == day.isoformat() and row["metric_type"] == "heart_rate"
+        )
+        assert report_heart["sample_count"] == 2
+
     with Session(engine) as session, session.begin():
         original_sample = session.get(GarminMetricEvent, first_sample_id)
         assert original_sample is not None
@@ -5803,6 +5934,20 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
             original_sample,
             reason="Synthetic provider revision",
             changes={"value": Decimal("80"), "source_revision": "hr-v2"},
+        )
+
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WearableDailySummary)
+                .where(
+                    WearableDailySummary.owner_id == owner_id,
+                    WearableDailySummary.local_date == day,
+                    WearableDailySummary.metric_type == GarminMetricType.HEART_RATE,
+                )
+            )
+            == 0
         )
 
     revised = client.get(
@@ -5820,6 +5965,7 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     )
     assert revised_heart["sample_count"] == 2
     assert revised_heart["average"] == "77.5000"
+    assert revised_heart["source_revision_watermark_sha256"] != original_summary_watermark
     assert revised_day["source_revision_watermark_sha256"] != original_watermark
 
     too_long = client.get(

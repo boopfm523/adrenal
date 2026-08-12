@@ -1452,9 +1452,32 @@
             ],
             "title": "Average"
           },
+          "gap_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Count"
+          },
           "incompatible_units": {
             "title": "Incompatible Units",
             "type": "boolean"
+          },
+          "largest_gap_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largest Gap Minutes"
           },
           "maximum": {
             "anyOf": [
@@ -1492,12 +1515,26 @@
             "type": "string"
           },
           "observed_coverage_minutes": {
-            "title": "Observed Coverage Minutes",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Coverage Minutes"
           },
           "observed_coverage_percent": {
-            "title": "Observed Coverage Percent",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Coverage Percent"
           },
           "sample_count": {
             "minimum": 0.0,
@@ -1508,6 +1545,16 @@
             "minimum": 0.0,
             "title": "Samples Without Cadence",
             "type": "integer"
+          },
+          "source_revision_watermark_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision Watermark Sha256",
+            "type": "string"
+          },
+          "summary_version": {
+            "const": "hc-wearable-daily-v1",
+            "title": "Summary Version",
+            "type": "string"
           },
           "unit": {
             "anyOf": [
@@ -1532,7 +1579,9 @@
           "observed_coverage_minutes",
           "observed_coverage_percent",
           "missingness_state",
-          "incompatible_units"
+          "incompatible_units",
+          "source_revision_watermark_sha256",
+          "summary_version"
         ],
         "title": "DailyPatternWearableOut",
         "type": "object"

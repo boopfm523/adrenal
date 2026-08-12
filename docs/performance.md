@@ -131,6 +131,51 @@ benchmark rows afterward.
 
 The selected-day provider-sample path remains index-backed. PostgreSQL rationally
 retains sequential scans for a 366-day raw-sample result and a complete export because
-those operations return a material fraction of the 3.69-million-row table. The next
-children address those shapes with deterministic daily summaries and queued,
-streamed exports instead of forcing inappropriate indexes.
+those operations return a material fraction of the 3.69-million-row table. Versioned
+daily summaries now address the longitudinal shape; queued, streamed exports remain
+separate work instead of forcing inappropriate indexes.
+
+## Versioned daily wearable summaries
+
+Longitudinal analytics and report snapshots now read
+`ops.wearable_daily_summary` instead of materializing dense raw samples. A cold cache
+is filled in at most 31-local-day raw chunks; warm reads return at most four rows per
+day. Exact selected-day HealthCurve samples continue to come from recorded facts.
+
+Operators can prefill a date range after migration or during a quiet window. The
+command is safe to interrupt and rerun: every chunk commits independently and uses an
+idempotent version-keyed upsert.
+
+```bash
+uv run python scripts/backfill_wearable_daily_summaries.py \
+  --date-from 2020-01-01 --date-to 2026-08-12 --chunk-days 31
+```
+
+Use `--database-url` or `HC_DATABASE_URL` to select the database. Output contains only
+owner/chunk counts and the summary version—never health values or owner identifiers.
+Late provider samples and immutable corrections invalidate affected cached days in
+PostgreSQL; the next analytics/report read rebuilds them deterministically.
+
+### Summary scale verification — 2026-08-12
+
+`hc-jgd.3` repeated the five-year, 3,690,540-row fixture and executed the complete
+366-day application projection. The first uncached request built 1,464 daily summary
+rows from 737,856 exact raw observations in bounded 31-day chunks. The synthetic
+transaction rollback was verified afterward: `identity.owner`,
+`fact.garmin_metric_event`, and `ops.wearable_daily_summary` each contained zero rows.
+
+| Path | Median | Evidence |
+| --- | ---: | --- |
+| 366-day analytics, cold summary materialization | 14,605.478 ms | One complete application operation; each raw query bounded to at most 31 local days |
+| 366-day analytics, warm summaries | 256.776 ms | Three complete application operations over 1,464 summary rows |
+| Selected-day HealthCurve | 27.932 ms | Three complete application operations retaining 2,016 exact samples |
+| 31-day analytics | 22.415 ms | Three complete application operations using warm summaries |
+| Seven-day report snapshot + HTML/CSV/JSON | 9.005 ms | Three complete report operations using summaries plus sparse exact Garmin records |
+| 366-day summary-table database scan | 0.292 ms | PostgreSQL scan of 1,464 rows; no dense raw materialization |
+| Comparable 366-day raw database scan | 657.763 ms | PostgreSQL scan of 737,856 rows, retained only as a diagnostic comparison |
+
+The cold result is intentionally reported rather than hidden: on-demand rebuilding a
+full uncached year is bounded in memory but still user-visible work. Run the restartable
+backfill after migration, or before known long-range review, so ordinary requests use
+the warm path. Late or corrected provider observations invalidate only their affected
+local dates; the following bounded read deterministically refreshes those dates.

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from healthcurve.ai.analysis import is_renderable_analysis
 from healthcurve.ai.models import AIAnalysis
 from healthcurve.analytics import service as analytics
+from healthcurve.analytics import wearable_summaries
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events import service as events
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
@@ -311,21 +312,48 @@ def build_snapshot(
             )
             manifest["fact"].extend([str(panel.id), *(str(result.id) for result in panel.results)])
 
+    wearable_summary_values: list[dict[str, object]] = []
     if "wearables" in selected_sections:
+        wearable_summary_values = [
+            {
+                **wearable_summaries.as_feature(row),
+                "date": row.local_date,
+                "timezone": row.timezone,
+            }
+            for row in wearable_summaries.ensure_daily_summaries(
+                session,
+                owner_id=owner_id,
+                date_from=date_from,
+                date_to=date_to,
+                timezone=timezone,
+            )
+        ]
+        for row in session.scalars(
+            select(GarminMetricEvent)
+            .where(
+                GarminMetricEvent.owner_id == owner_id,
+                GarminMetricEvent.aggregation != "provider_sample",
+                GarminMetricEvent.occurred_at >= start,
+                GarminMetricEvent.occurred_at < end,
+                events.current_fact_predicate(GarminMetricEvent, owner_id=owner_id),
+            )
+            .order_by(GarminMetricEvent.occurred_at, GarminMetricEvent.id)
+        ):
+            facts.append(
+                {
+                    **_base_event(row),
+                    "record_type": "garmin_metric_aggregate",
+                    "source": "Garmin",
+                    "metric_type": row.metric_type,
+                    "value": row.value,
+                    "unit": row.unit,
+                    "period_end_at": row.period_end_at,
+                    "aggregation": row.aggregation,
+                    "garmin_field_name": row.garmin_field_name,
+                }
+            )
+            manifest["fact"].append(str(row.id))
         for model, record_type, fields in (
-            (
-                GarminMetricEvent,
-                "garmin_metric",
-                (
-                    "metric_type",
-                    "value",
-                    "unit",
-                    "period_end_at",
-                    "aggregation",
-                    "sample_interval_seconds",
-                    "garmin_field_name",
-                ),
-            ),
             (
                 GarminSleepEvent,
                 "garmin_sleep",
@@ -473,6 +501,17 @@ def build_snapshot(
         for name, value in summary.items()
         if name in {"daily_doses", "timing", "episodes", "symptoms"}
     }
+    if "wearables" in selected_sections:
+        metric_values["wearable_daily_summaries"] = {
+            "definition": (
+                "Versioned deterministic summaries of current Garmin provider samples. "
+                "Missing samples remain missing; observed coverage and gaps use only "
+                "provider-supplied cadence."
+            ),
+            "timezone": timezone,
+            "summary_version": wearable_summaries.SUMMARY_VERSION,
+            "values": wearable_summary_values,
+        }
     return create_snapshot(
         session,
         owner_id=owner_id,

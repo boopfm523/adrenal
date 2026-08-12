@@ -27,6 +27,7 @@ from healthcurve.integrations.garmin.models import (
     GarminSleepEvent,
     GarminSleepStageInterval,
     GarminSyncRun,
+    WearableDailySummary,
 )
 from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
 from healthcurve.labs.documents import DocumentLayout, mark_deleted
@@ -255,6 +256,10 @@ def delete_integration(
     data_rows = 0
     disconnect_requested = False
     if delete_data and provider == "garmin":
+        data_rows += _delete_count(
+            session,
+            delete(WearableDailySummary).where(WearableDailySummary.owner_id == owner_id),
+        )
         data_rows += (
             session.scalar(
                 select(func.count())

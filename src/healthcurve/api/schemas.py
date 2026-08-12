@@ -1003,6 +1003,8 @@ class DailyPatternWearableOut(DecimalRangeOut):
     samples_without_cadence: int = Field(ge=0)
     observed_coverage_minutes: Decimal = Field(ge=0)
     observed_coverage_percent: Decimal = Field(ge=0, le=100)
+    gap_count: int | None = Field(default=None, ge=0)
+    largest_gap_minutes: Decimal | None = Field(default=None, ge=0)
     missingness_state: Literal[
         "no_samples",
         "cadence_unavailable",
@@ -1010,10 +1012,14 @@ class DailyPatternWearableOut(DecimalRangeOut):
         "full_observed_coverage",
     ]
     incompatible_units: bool
+    source_revision_watermark_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    summary_version: Literal["hc-wearable-daily-v1"]
 
-    @field_serializer("observed_coverage_minutes", "observed_coverage_percent")
-    def _coverage(self, value: Decimal) -> str:
-        return str(value)
+    @field_serializer(
+        "observed_coverage_minutes", "observed_coverage_percent", "largest_gap_minutes"
+    )
+    def _coverage(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
 
 
 class DailyPatternSymptomTimingOut(ApiModel):

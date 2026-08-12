@@ -515,8 +515,12 @@ def daily_patterns_csv(
                 "average",
                 "maximum",
                 "observed_coverage_percent",
+                "gap_count",
+                "largest_gap_minutes",
                 "samples_without_cadence",
                 "missingness_state",
+                "summary_version",
+                "source_revision_watermark_sha256",
             )
         )
     writer = csv.DictWriter(stream, fieldnames=fieldnames)
@@ -553,8 +557,14 @@ def daily_patterns_csv(
                     f"{prefix}_average": wearable.average,
                     f"{prefix}_maximum": wearable.maximum,
                     f"{prefix}_observed_coverage_percent": wearable.observed_coverage_percent,
+                    f"{prefix}_gap_count": wearable.gap_count,
+                    f"{prefix}_largest_gap_minutes": wearable.largest_gap_minutes,
                     f"{prefix}_samples_without_cadence": wearable.samples_without_cadence,
                     f"{prefix}_missingness_state": wearable.missingness_state,
+                    f"{prefix}_summary_version": wearable.summary_version,
+                    f"{prefix}_source_revision_watermark_sha256": (
+                        wearable.source_revision_watermark_sha256
+                    ),
                 }
             )
         writer.writerow(row)

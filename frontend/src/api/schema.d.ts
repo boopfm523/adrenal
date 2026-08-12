@@ -1779,8 +1779,12 @@ export interface components {
         DailyPatternWearableOut: {
             /** Average */
             average: string | null;
+            /** Gap Count */
+            gap_count?: number | null;
             /** Incompatible Units */
             incompatible_units: boolean;
+            /** Largest Gap Minutes */
+            largest_gap_minutes?: string | null;
             /** Maximum */
             maximum: string | null;
             metric_type: components["schemas"]["GarminMetricType"];
@@ -1792,13 +1796,20 @@ export interface components {
              */
             missingness_state: "no_samples" | "cadence_unavailable" | "partial_observed_coverage" | "full_observed_coverage";
             /** Observed Coverage Minutes */
-            observed_coverage_minutes: string;
+            observed_coverage_minutes: string | null;
             /** Observed Coverage Percent */
-            observed_coverage_percent: string;
+            observed_coverage_percent: string | null;
             /** Sample Count */
             sample_count: number;
             /** Samples Without Cadence */
             samples_without_cadence: number;
+            /** Source Revision Watermark Sha256 */
+            source_revision_watermark_sha256: string;
+            /**
+             * Summary Version
+             * @constant
+             */
+            summary_version: "hc-wearable-daily-v1";
             /** Unit */
             unit: string | null;
         };

@@ -282,6 +282,26 @@ def test_ai_role_can_record_job_progress(owner_engine: Engine, ai_engine: Engine
 
 
 @pytest.mark.safety("SAFE-15")
+def test_wearable_summary_projection_is_read_only_to_ai_and_backup(
+    ai_engine: Engine, backup_engine: Engine
+) -> None:
+    with ai_engine.connect() as conn:
+        assert (
+            conn.execute(text("SELECT count(*) FROM ops.wearable_daily_summary")).scalar_one() == 0
+        )
+    with backup_engine.connect() as conn:
+        assert (
+            conn.execute(text("SELECT count(*) FROM ops.wearable_daily_summary")).scalar_one() == 0
+        )
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(text("TRUNCATE ops.wearable_daily_summary"))
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with backup_engine.begin() as conn:
+            conn.execute(text("TRUNCATE ops.wearable_daily_summary"))
+
+
+@pytest.mark.safety("SAFE-15")
 @pytest.mark.parametrize("schema", SAFETY_SCHEMAS)
 def test_ai_role_cannot_create_tables_in_safety_schemas(ai_engine: Engine, schema: str) -> None:
     """Creating a table in `fact` would let AI own -- and therefore write -- it."""

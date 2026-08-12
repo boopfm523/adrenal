@@ -21,12 +21,12 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from healthcurve.analytics import exposure
+from healthcurve.analytics import exposure, wearable_summaries
 from healthcurve.episodes.models import StressEpisode
 from healthcurve.events import service as event_service
 from healthcurve.events.base import EventMixin
 from healthcurve.events.models import SymptomEvent
-from healthcurve.integrations.garmin.models import GarminMetricEvent, GarminMetricType
+from healthcurve.integrations.garmin.models import GarminMetricType
 from healthcurve.medications.models import DoseEvent
 from healthcurve.vitals.models import BloodPressureEvent
 
@@ -34,12 +34,7 @@ FEATURE_VERSION: Final = "hc-daily-pattern-v1"
 MAX_RANGE_DAYS: Final = 366
 DISPLAY_QUANTUM: Final = Decimal("0.0001")
 EXPOSURE_QUANTUM: Final = Decimal("0.000000001")
-METRICS: Final = (
-    GarminMetricType.STRESS,
-    GarminMetricType.HEART_RATE,
-    GarminMetricType.HRV,
-    GarminMetricType.RESPIRATION_RATE,
-)
+METRICS: Final = wearable_summaries.METRICS
 SAFETY_LABEL: Final = (
     "Descriptive daily features align current recorded facts with theoretical exposure. "
     "They do not establish causation, measure cortisol, diagnose a condition, or advise dosing."
@@ -114,77 +109,6 @@ def _range(values: Sequence[Decimal]) -> dict[str, Decimal | None]:
         "minimum": min(values) if values else None,
         "average": _decimal_average(values),
         "maximum": max(values) if values else None,
-    }
-
-
-def _observed_coverage(
-    samples: Sequence[GarminMetricEvent], *, start: datetime, end: datetime
-) -> tuple[Decimal, Decimal, int, str]:
-    intervals: list[tuple[datetime, datetime]] = []
-    missing_cadence = 0
-    for sample in samples:
-        if sample.sample_interval_seconds is None:
-            missing_cadence += 1
-            continue
-        interval_start = max(start, sample.occurred_at.astimezone(UTC))
-        interval_end = min(
-            end,
-            sample.occurred_at.astimezone(UTC) + timedelta(seconds=sample.sample_interval_seconds),
-        )
-        if interval_end > interval_start:
-            intervals.append((interval_start, interval_end))
-    intervals.sort()
-    merged: list[list[datetime]] = []
-    for interval_start, interval_end in intervals:
-        if not merged or interval_start > merged[-1][1]:
-            merged.append([interval_start, interval_end])
-        else:
-            merged[-1][1] = max(merged[-1][1], interval_end)
-    seconds = sum(
-        Decimal(str((interval_end - interval_start).total_seconds()))
-        for interval_start, interval_end in merged
-    )
-    day_seconds = Decimal(str((end - start).total_seconds()))
-    minutes = (seconds / Decimal(60)).quantize(DISPLAY_QUANTUM)
-    percent = (
-        (seconds * Decimal(100) / day_seconds).quantize(DISPLAY_QUANTUM)
-        if day_seconds > 0
-        else Decimal(0)
-    )
-    if not samples:
-        state = "no_samples"
-    elif not intervals:
-        state = "cadence_unavailable"
-    elif seconds >= day_seconds:
-        state = "full_observed_coverage"
-    else:
-        state = "partial_observed_coverage"
-    return minutes, percent, missing_cadence, state
-
-
-def _wearable_feature(
-    metric: GarminMetricType,
-    samples: Sequence[GarminMetricEvent],
-    *,
-    start: datetime,
-    end: datetime,
-) -> dict[str, object]:
-    units = sorted({sample.unit for sample in samples})
-    compatible = len(units) <= 1
-    values = [sample.value for sample in samples] if compatible else []
-    coverage_minutes, coverage_percent, missing_cadence, state = _observed_coverage(
-        samples, start=start, end=end
-    )
-    return {
-        "metric_type": metric,
-        "unit": units[0] if len(units) == 1 else None,
-        "sample_count": len(samples),
-        "samples_without_cadence": missing_cadence,
-        "observed_coverage_minutes": coverage_minutes,
-        "observed_coverage_percent": coverage_percent,
-        "missingness_state": state,
-        "incompatible_units": not compatible,
-        **_range(values),
     }
 
 
@@ -361,7 +285,7 @@ def _day_feature(
     timezone: str,
     doses: Sequence[DoseEvent],
     symptoms: Sequence[SymptomEvent],
-    garmin: Sequence[GarminMetricEvent],
+    wearable_features: Sequence[dict[str, object]],
     blood_pressure: Sequence[BloodPressureEvent],
     episodes: Sequence[StressEpisode],
 ) -> dict[str, object]:
@@ -390,7 +314,6 @@ def _day_feature(
     )
     day_doses = _facts_in_window(relevant_doses, start=start, end=end)
     day_symptoms = _facts_in_window(symptoms, start=start, end=end)
-    day_garmin = _facts_in_window(garmin, start=start, end=end)
     day_blood_pressure = _facts_in_window(blood_pressure, start=start, end=end)
 
     symptom_timings = []
@@ -435,15 +358,6 @@ def _day_feature(
             }
         )
 
-    wearable_features = [
-        _wearable_feature(
-            metric,
-            [row for row in day_garmin if row.metric_type == metric],
-            start=start,
-            end=end,
-        )
-        for metric in METRICS
-    ]
     systolic = [Decimal(row.systolic_mmhg) for row in day_blood_pressure]
     diastolic = [Decimal(row.diastolic_mmhg) for row in day_blood_pressure]
     pulse = [Decimal(row.pulse_bpm) for row in day_blood_pressure if row.pulse_bpm is not None]
@@ -478,15 +392,15 @@ def _day_feature(
     )
     tokens.extend(_event_token("symptom", row, row.name, row.severity) for row in day_symptoms)
     tokens.extend(
-        _event_token(
-            "garmin",
-            row,
-            row.metric_type.value,
-            row.value,
-            row.unit,
-            row.sample_interval_seconds,
+        "\x1f".join(
+            (
+                "wearable_summary",
+                str(row["metric_type"]),
+                str(row["summary_version"]),
+                str(row["source_revision_watermark_sha256"]),
+            )
         )
-        for row in day_garmin
+        for row in wearable_features
     )
     tokens.extend(
         _event_token(
@@ -589,18 +503,16 @@ def daily_patterns_for_owner(
             )
         )
     )
-    garmin_rows = list(
-        session.scalars(
-            select(GarminMetricEvent).where(
-                GarminMetricEvent.owner_id == owner_id,
-                GarminMetricEvent.aggregation == "provider_sample",
-                GarminMetricEvent.metric_type.in_(METRICS),
-                GarminMetricEvent.occurred_at >= start,
-                GarminMetricEvent.occurred_at < end,
-                event_service.current_fact_predicate(GarminMetricEvent, owner_id=owner_id),
-            )
-        )
+    wearable_rows = wearable_summaries.ensure_daily_summaries(
+        session,
+        owner_id=owner_id,
+        date_from=date_from,
+        date_to=date_to,
+        timezone=timezone,
     )
+    wearable_by_day: dict[date, list[dict[str, object]]] = {}
+    for row in wearable_rows:
+        wearable_by_day.setdefault(row.local_date, []).append(wearable_summaries.as_feature(row))
     blood_pressure_rows = list(
         session.scalars(
             select(BloodPressureEvent).where(
@@ -630,7 +542,7 @@ def daily_patterns_for_owner(
                 timezone=timezone,
                 doses=dose_rows,
                 symptoms=symptom_rows,
-                garmin=garmin_rows,
+                wearable_features=wearable_by_day[cursor],
                 blood_pressure=blood_pressure_rows,
                 episodes=episode_rows,
             )

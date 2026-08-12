@@ -32,7 +32,7 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.reports import builder as report_builder
 from healthcurve.reports import rendering as report_rendering
 
-RESULT_SCHEMA_VERSION: Final = 1
+RESULT_SCHEMA_VERSION: Final = 2
 MIN_YEARS: Final = 2
 MAX_YEARS: Final = 10
 
@@ -275,6 +275,19 @@ def _measure(name: str, operation: Callable[[], object], *, runs: int) -> dict[s
     }
 
 
+def _measure_once(name: str, operation: Callable[[], object]) -> dict[str, object]:
+    started = perf_counter()
+    operation()
+    elapsed = round((perf_counter() - started) * 1_000, 3)
+    return {
+        "name": name,
+        "runs": 1,
+        "median_ms": elapsed,
+        "minimum_ms": elapsed,
+        "maximum_ms": elapsed,
+    }
+
+
 def _explain(
     connection: Connection, statement: str, parameters: Mapping[str, object]
 ) -> dict[str, object]:
@@ -378,6 +391,7 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
 
             selected_day = scale.end_date_exclusive - timedelta(days=1)
             month_start = selected_day - timedelta(days=30)
+            year_start_date = selected_day - timedelta(days=365)
 
             def timeline() -> object:
                 session.expire_all()
@@ -411,6 +425,16 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
                     timezone="UTC",
                 )
 
+            def annual_analytics() -> object:
+                session.expire_all()
+                return patterns.daily_patterns_for_owner(
+                    session,
+                    owner_id=owner.id,
+                    date_from=year_start_date,
+                    date_to=selected_day,
+                    timezone="UTC",
+                )
+
             def seven_day_report_snapshot() -> object:
                 session.expire_all()
                 snapshot = report_builder.build_snapshot(
@@ -429,17 +453,24 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
                 return None
 
             result["measurements"] = [
+                _measure_once(
+                    "longitudinal_analytics_366_days_cold_materialization", annual_analytics
+                ),
                 _measure("timeline_latest_25", timeline, runs=runs),
                 _measure("selected_day_healthcurve", daily_healthcurve, runs=runs),
                 _measure("monthly_analytics_31_days", monthly_analytics, runs=runs),
+                _measure("longitudinal_analytics_366_days", annual_analytics, runs=runs),
                 _measure(
                     "seven_day_report_snapshot_html_csv_json", seven_day_report_snapshot, runs=runs
                 ),
             ]
 
             day_start = datetime.combine(selected_day, datetime.min.time(), tzinfo=UTC)
-            year_start = datetime.combine(
-                selected_day - timedelta(days=365), datetime.min.time(), tzinfo=UTC
+            year_start = datetime.combine(year_start_date, datetime.min.time(), tzinfo=UTC)
+            connection.execute(text("ANALYZE ops.wearable_daily_summary"))
+            result["actual_rows"]["wearable_daily_summaries"] = connection.scalar(
+                text("SELECT count(*) FROM ops.wearable_daily_summary WHERE owner_id=:owner_id"),
+                {"owner_id": owner.id},
             )
             parameters = {
                 "owner_id": owner.id,
@@ -461,6 +492,14 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
                     "SELECT * FROM fact.garmin_metric_event WHERE owner_id=:owner_id "
                     "AND aggregation='provider_sample' AND occurred_at>=:year_start "
                     "AND occurred_at<:year_end",
+                    parameters,
+                ),
+                "longitudinal_366_day_summaries": _explain(
+                    connection,
+                    "SELECT * FROM ops.wearable_daily_summary WHERE owner_id=:owner_id "
+                    "AND local_date>=CAST(:year_start AS date) "
+                    "AND local_date<CAST(:year_end AS date) "
+                    "AND timezone='UTC' AND summary_version='hc-wearable-daily-v1'",
                     parameters,
                 ),
                 "timeline_daily_aggregates": _explain(
@@ -502,14 +541,14 @@ def run_benchmark(engine: Engine, *, years: int = 5, runs: int = 3) -> dict[str,
                     "constructing a multi-million-row response in application memory."
                 ),
                 (
-                    "The seven-day report benchmark includes exact wearable facts; larger "
-                    "ranges scale with raw sample count until deterministic daily summaries "
-                    "are implemented."
+                    "Selected-day HealthCurve retains exact provider samples. Longitudinal "
+                    "analytics and reports consume versioned daily summaries, and cold-cache "
+                    "raw reads are bounded to at most 31 local days."
                 ),
                 (
-                    "The 366-day plan measures the current raw-sample database access path; "
-                    "executing the existing Python ORM transform at that volume is omitted "
-                    "to avoid turning the audit itself into an unbounded-memory operation."
+                    "The benchmark executes the complete 366-day application projection and "
+                    "captures both the raw database plan for comparison and the bounded "
+                    "summary-table plan used after deterministic materialization."
                 ),
             ]
             result["generated_at"] = datetime.now(UTC).isoformat()

@@ -126,6 +126,92 @@ class GarminSyncRun(OpsBase):
     )
 
 
+class WearableDailySummary(OpsBase):
+    """Versioned, rebuildable summary of current dense Garmin samples.
+
+    Raw ``GarminMetricEvent`` rows remain the authoritative recorded facts.  This
+    operational projection exists only to keep longitudinal reads bounded.
+    """
+
+    __tablename__ = "wearable_daily_summary"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity.owner.id", ondelete="CASCADE"), nullable=False
+    )
+    local_date: Mapped[date] = mapped_column(Date, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    metric_type: Mapped[GarminMetricType] = mapped_column(
+        StrEnumType(GarminMetricType, 48), nullable=False
+    )
+    unit: Mapped[str | None] = mapped_column(String(32))
+    sample_count: Mapped[int] = mapped_column(nullable=False)
+    samples_without_cadence: Mapped[int] = mapped_column(nullable=False)
+    observed_coverage_minutes: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    observed_coverage_percent: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
+    gap_count: Mapped[int | None] = mapped_column()
+    largest_gap_minutes: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    missingness_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    incompatible_units: Mapped[bool] = mapped_column(nullable=False)
+    minimum: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    average: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    maximum: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    source_revision_watermark_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    refreshed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "local_date",
+            "timezone",
+            "metric_type",
+            "summary_version",
+            name="uq_wearable_daily_summary_identity",
+        ),
+        CheckConstraint("sample_count >= 0", name="wearable_summary_sample_count_nonnegative"),
+        CheckConstraint(
+            "samples_without_cadence BETWEEN 0 AND sample_count",
+            name="wearable_summary_missing_cadence_bounded",
+        ),
+        CheckConstraint(
+            "observed_coverage_minutes >= 0",
+            name="wearable_summary_coverage_minutes_nonnegative",
+        ),
+        CheckConstraint(
+            "observed_coverage_percent BETWEEN 0 AND 100",
+            name="wearable_summary_coverage_percent_bounded",
+        ),
+        CheckConstraint(
+            "gap_count IS NULL OR gap_count >= 0",
+            name="wearable_summary_gap_count_nonnegative",
+        ),
+        CheckConstraint(
+            "largest_gap_minutes IS NULL OR largest_gap_minutes >= 0",
+            name="wearable_summary_largest_gap_nonnegative",
+        ),
+        CheckConstraint(
+            "missingness_state IN ('no_samples', 'cadence_unavailable', "
+            "'partial_observed_coverage', 'full_observed_coverage')",
+            name="wearable_summary_missingness_valid",
+        ),
+        CheckConstraint(
+            "source_revision_watermark_sha256 ~ '^[0-9a-f]{64}$'",
+            name="wearable_summary_watermark_sha256",
+        ),
+        Index(
+            "ix_wearable_daily_summary_owner_date",
+            "owner_id",
+            "local_date",
+            "timezone",
+            "summary_version",
+        ),
+        OPS_SCHEMA,
+    )
+
+
 class GarminImportBatch(FactBase):
     """One owner-confirmed source file; preview creates no row."""
 
