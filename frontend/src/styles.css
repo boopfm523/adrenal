@@ -1,13 +1,13 @@
 :root {
-  color: #17211d;
-  background: #f5f3ec;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--hc-color-text, #17211d);
+  background: var(--hc-color-canvas, #f7f8f5);
+  font-family: var(--mantine-font-family, ui-sans-serif, system-ui, sans-serif);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--hc-color-canvas, #f7f8f5); }
 a { color: #174c3c; text-underline-offset: 0.2em; }
 button, input, select { font: inherit; }
 button, .button-link {
@@ -18,7 +18,7 @@ button, .button-link {
 }
 button { color: white; background: #174c3c; cursor: pointer; }
 button:disabled { cursor: wait; opacity: 0.65; }
-:focus-visible { outline: 3px solid #b34f00; outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--hc-color-focus, #f67800); outline-offset: 3px; }
 
 .skip-link { position: fixed; left: 1rem; top: -5rem; z-index: 20; background: white; padding: 0.75rem; }
 .skip-link:focus { top: 1rem; }
