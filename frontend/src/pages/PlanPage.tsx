@@ -1,3 +1,4 @@
+import { Alert, Button, Checkbox, Group, Paper, SimpleGrid, Table, Text, TextInput, Textarea, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -359,9 +360,9 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
       });
     }}>
       <div className="plan-form-grid">
-        <label>Version label<input name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : `${source.version_label} — new version`)} /></label>
-        <label>Effective start (optional)<input name="effective_from" type="datetime-local" aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} /></label>
-        <label>Effective through (optional)<input name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} /></label>
+        <TextInput label="Version label" aria-label="Version label" name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : `${source.version_label} — new version`)} />
+        <TextInput label="Effective start (optional)" name="effective_from" type="datetime-local" aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} />
+        <TextInput label="Effective through (optional)" name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} />
         <p className="field-hint wide-field" id="effective-period-help">Leave the start blank to use the exact moment you set this plan live. Enter a start only when the plan should begin at a different time. The end is also optional. Times are entered in {timezone}; the start is included and the end is the first moment this plan no longer applies.</p>
         <aside className="proposed-plan-interval wide-field" aria-live="polite" aria-labelledby="proposed-plan-interval-heading">
           <h3 id="proposed-plan-interval-heading">Proposed effective interval</h3>
@@ -370,7 +371,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
             {proposedOverlaps.length === 0 ? <p>No overlap with the plan versions shown in history.</p> : <OverlapList overlaps={proposedOverlaps} headingLevel={4} />}
           </>}
         </aside>
-        <label className="wide-field">Draft notes<textarea name="notes" defaultValue={basis?.notes ?? ""} /></label>
+        <Textarea className="wide-field" label="Draft notes" name="notes" minRows={3} defaultValue={basis?.notes ?? ""} />
       </div>
 
       <fieldset><legend>Scheduled medication slots</legend>
@@ -382,9 +383,9 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
           <label>Scheduled dose unit<select value={slot.unit} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value as SlotDraft["unit"] } : item)); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">mL</option><option value="tablet">tablet</option></select></label>
           <label>Route<select value={slot.route} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, route: event.target.value as SlotDraft["route"] } : item)); }}><option value="oral">Oral</option><option value="intramuscular">Intramuscular</option><option value="subcutaneous">Subcutaneous</option><option value="intravenous">Intravenous</option></select></label>
           <label>Condition (optional)<input maxLength={500} value={slot.condition} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, condition: event.target.value } : item)); }} /></label>
-          <button type="button" className="secondary-button" onClick={() => { setSlots((items) => items.filter((_, itemIndex) => itemIndex !== index)); }}>Remove slot</button>
+          <Button type="button" variant="outline" onClick={() => { setSlots((items) => items.filter((_, itemIndex) => itemIndex !== index)); }}>Remove slot</Button>
         </div>)}
-        <button type="button" className="secondary-button" onClick={() => { setSlots((items) => [...items, blankSlot(available[0]?.id)]); }}>Add scheduled slot</button>
+        <Button type="button" variant="outline" onClick={() => { setSlots((items) => [...items, blankSlot(available[0]?.id)]); }}>Add scheduled slot</Button>
       </fieldset>
 
       <fieldset><legend>Physician-authored instructions</legend>
@@ -395,12 +396,12 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
           <label className="wide-field">Instruction<textarea required value={instruction.body} onChange={(event) => { setInstructions((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item)); }} /></label>
           <label>Authored by<input required maxLength={200} value={instruction.authored_by} onChange={(event) => { setInstructions((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, authored_by: event.target.value } : item)); }} /></label>
           <label>Authored on<input type="date" required value={instruction.authored_on} onChange={(event) => { setInstructions((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, authored_on: event.target.value } : item)); }} /></label>
-          <button type="button" className="secondary-button" onClick={() => { setInstructions((items) => items.filter((_, itemIndex) => itemIndex !== index)); }}>Remove instruction</button>
+          <Button type="button" variant="outline" onClick={() => { setInstructions((items) => items.filter((_, itemIndex) => itemIndex !== index)); }}>Remove instruction</Button>
         </div>)}
-        <button type="button" className="secondary-button" onClick={() => { setInstructions((items) => [...items, blankInstruction()]); }}>Add physician instruction</button>
+        <Button type="button" variant="outline" onClick={() => { setInstructions((items) => [...items, blankInstruction()]); }}>Add physician instruction</Button>
       </fieldset>
-      <div className="form-actions"><button type="submit" disabled={mutation.isPending}>{editDraft === null ? "Save unapproved draft" : "Update unapproved draft"}</button><button type="button" className="secondary-button" onClick={onCancel}>Cancel</button></div>
-      {mutation.isError ? <p className="error-summary" role="alert">The draft was not saved. Check the dates, medication entries, and required fields.</p> : null}
+      <Group className="form-actions"><Button type="submit" loading={mutation.isPending}>{editDraft === null ? "Save unapproved draft" : "Update unapproved draft"}</Button><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button></Group>
+      {mutation.isError ? <Alert color="red" role="alert">The draft was not saved. Check the dates, medication entries, and required fields.</Alert> : null}
     </form>
   </section>;
 }
@@ -417,12 +418,12 @@ function ApprovalForm({ version, activeVersion, focusOnMount, onComplete }: { ve
     <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
     <div className="proposed-plan-interval" aria-live="polite"><h5>Handoff preview</h5><p>New plan: <EffectivePeriod version={version} />.</p>{activeVersion === null ? <p>No plan is currently live, so no predecessor will be ended.</p> : <p>Current plan “{activeVersion.version_label}” will end at {version.effective_from === null ? "the moment you set this plan live" : <EffectivePlanTime canonical={version.effective_from} local={version.effective_from_local} timezone={version.effective_timezone} offsetMinutes={version.effective_from_utc_offset_minutes} />}. Its earlier history and all recorded doses remain unchanged.</p>}</div>
     <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null }); }}>
-      <label>Approving clinician or role<input name="approved_by" required maxLength={200} /></label>
-      <label>Approval source<input name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" /></label>
-      <label>Approval time (optional)<input name="approved_at" type="datetime-local" /></label>
-      <label className="checkbox-label wide-field"><input type="checkbox" required /> I confirm this records a real clinician-approved plan, not AI advice.</label>
-      <button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Setting plan live…" : "Set physician-approved plan live"}</button>
-      {mutation.isError ? <p className="error-summary" role="alert">{errorMessage}</p> : null}
+      <TextInput label="Approving clinician or role" aria-label="Approving clinician or role" name="approved_by" required maxLength={200} />
+      <TextInput label="Approval source" aria-label="Approval source" name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" />
+      <TextInput label="Approval time (optional)" name="approved_at" type="datetime-local" />
+      <Checkbox className="wide-field" required label="I confirm this records a real clinician-approved plan, not AI advice." />
+      <Button type="submit" loading={mutation.isPending}>Set physician-approved plan live</Button>
+      {mutation.isError ? <Alert color="red" role="alert">{errorMessage}</Alert> : null}
     </form>
   </section>;
 }
@@ -476,20 +477,20 @@ export function PlanPage(): React.JSX.Element {
   };
 
   return <Page title="Medication plan" description="Physician-approved schedules and their provenance, kept separate from actual recorded doses.">
-    {(active.isPending || history.isFetching || medications.isPending) ? <p role="status">Loading medication plan…</p> : null}
-    {(active.isError || history.isError || medications.isError) ? <p className="error-summary" role="alert">Medication plan data could not be loaded.</p> : null}
-    {message === "" ? null : <p className="success-message" role="status">{message}</p>}
-    {editor === null ? <div className="page-actions"><button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</button></div> : null}
+    {(active.isPending || history.isFetching || medications.isPending) ? <Text role="status">Loading medication plan…</Text> : null}
+    {(active.isError || history.isError || medications.isError) ? <Alert color="red" role="alert">Medication plan data could not be loaded.</Alert> : null}
+    {message === "" ? null : <Alert color="green" role="status">{message}</Alert>}
+    {editor === null ? <Group className="page-actions"><Button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</Button></Group> : null}
     {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} existingVersions={versions} timezone={profileTimezone} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
-    {active.data === null ? <section className="empty-state"><h2>No approved plan currently in force</h2><p>Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</p></section> : null}
+    {active.data === null ? <Paper component="section" className="empty-state" withBorder radius="lg" p="lg"><Title order={2}>No approved plan currently in force</Title><Text mt="xs">Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</Text></Paper> : null}
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} timezone={profileTimezone} /></PlanCard>}
 
-    <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
+    <section aria-labelledby="history-heading"><Title order={2} id="history-heading">Version history</Title><Text>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</Text>
       <PlanTimeline versions={versions} />
-      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...draft, page: 1 })); }}><label>Effective from date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Effective through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setValidation(null); setDraftState({ search: "", filters: reset }); setOlderId(""); setNewerId(""); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
-      <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)} and select versions by when the plan becomes effective. This does not change plan approval or active status.</p>
-      {history.data?.page.total_items === 0 ? <p>No plan versions recorded.</p> : null}
-      {versions.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><table><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td><EffectivePeriod version={version} /></td><th scope="row"><h3>{version.version_label}</h3></th><td><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td><details><summary>Show slots and instructions</summary><PlanContents version={version} timezone={profileTimezone} /></details>{version.status === "draft" ? <><div className="form-actions"><button type="button" className="secondary-button" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</button></div><ApprovalForm version={version} activeVersion={active.data ?? null} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></table></div>}
+      <Paper component="form" className="filter-panel plan-history-filter" withBorder radius="lg" p="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...draft, page: 1 })); }}><SimpleGrid cols={{ base: 1, sm: 3 }} className="form-wide"><TextInput label="Effective from date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Effective through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="History IANA timezone" aria-label="History IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>{validation === null && !invalidRange ? null : <Alert color="red" className="form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}<Group className="filter-actions"><Button type="submit">Apply history filters</Button><Button variant="outline" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setValidation(null); setDraftState({ search: "", filters: reset }); setOlderId(""); setNewerId(""); setSearchParams(new URLSearchParams()); }}>Clear history filters</Button></Group></Paper>
+      <Text c="dimmed" size="sm">Inclusive dates use {timezoneAbbreviation(filters.timezone)} and select versions by when the plan becomes effective. This does not change plan approval or active status.</Text>
+      {history.data?.page.total_items === 0 ? <Text>No plan versions recorded.</Text> : null}
+      {versions.length === 0 ? null : <Paper className="plan-history-region" withBorder radius="lg"><div className="table-scroll" tabIndex={0} role="region" aria-label="Medication plan version history table"><Table className="plan-history-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Plan versions ordered by effective time, latest first; approval categories remain distinct.</caption><thead><tr><th scope="col">Effective period</th><th scope="col">Version</th><th scope="col">Approval state</th><th scope="col">Contents and actions</th></tr></thead><tbody>{versions.map((version) => <tr key={version.id}><td data-label="Effective period"><EffectivePeriod version={version} /></td><th data-label="Version" scope="row"><Title order={3}>{version.version_label}</Title></th><td data-label="Approval state"><span>{version.status === "draft" ? "Draft plan—not physician approved" : version.status === "approved" ? "Physician-approved" : "Retired"}</span>{version.status === "approved" ? <span>{version.approved_by ?? "Approval provenance missing"}</span> : null}</td><td data-label="Contents and actions"><details><summary>Show slots and instructions</summary><PlanContents version={version} timezone={profileTimezone} /></details>{version.status === "draft" ? <><Group className="form-actions"><Button type="button" variant="outline" onClick={() => { setMessage(""); setReviewDraftId(null); setEditor({ source: null, edit: version }); }}>Edit draft</Button></Group><ApprovalForm version={version} activeVersion={active.data ?? null} focusOnMount={reviewDraftId === version.id} onComplete={complete} /></> : null}{version.status === "approved" ? <RetirementForm version={version} onComplete={complete} /> : null}{version.deletion_allowed ? <PlanDeletionButton version={version} onDeleted={() => { if (view.page > 1 && versions.length === 1) setSearchParams(planHistorySearch({ ...view, page: view.page - 1 })); complete("The selected development plan was permanently deleted. Recorded doses were preserved without the deleted plan links."); }} /> : null}</td></tr>)}</tbody></Table></div></Paper>}
       {history.data === undefined ? null : <PaginationControls label="Plan version history" metadata={history.data.page} onPageChange={(page) => { setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...view, page })); }} />}
     </section>
 
