@@ -17,6 +17,7 @@
     "routers/labs.py:/results": { "status": "paginated", "issue": "hc-inbox.20.3", "pagination_contract": "PageRequest", "date_filter": "experienced_local", "timezone": "explicit_iana", "sensitivity": "owner_scoped_health" },
     "routers/medications.py:/medications": { "status": "bounded_reference", "date_filter": "none_reference", "sensitivity": "owner_scoped_medication", "reason": "Owner medication catalog populates plan and dose selectors; it is not rendered as record history." },
     "routers/medications.py:/regimens": { "status": "paginated", "issue": "hc-inbox.20.3", "pagination_contract": "PageRequest", "date_filter": "effective_local", "timezone": "explicit_iana", "sensitivity": "owner_scoped_plan" },
+    "routers/privacy.py:/exports": { "status": "paginated", "issue": "hc-jgd.4", "pagination_contract": "PageRequest", "date_filter": "none_current", "sensitivity": "owner_scoped_private_export" },
     "routers/analytics.py:/analytics/pattern-analysis": { "status": "bounded_reference", "date_filter": "none_reference", "sensitivity": "owner_scoped_ai_analysis", "reason": "The optional analysis history is owner-scoped and intentionally limited to the 20 most recently generated pattern drafts; generation itself requires a selected range of at most 366 days." },
     "routers/reports.py:": { "status": "paginated", "issue": "hc-inbox.20.3", "pagination_contract": "PageRequest", "date_filter": "created_local", "timezone": "explicit_iana", "sensitivity": "owner_scoped_report" },
     "routers/vitals.py:/blood-pressure": { "status": "paginated", "issue": "hc-inbox.10.2", "pagination_contract": "PageRequest", "date_filter": "experienced_local", "timezone": "explicit_iana", "sensitivity": "owner_scoped_health" },
@@ -44,6 +45,7 @@
     "frontend/src/pages/HealthDataPage.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "owner_scoped_health", "reason": "Mapped articles occur only inside revision details for rows on the bounded current page." },
     "frontend/src/pages/PlanPage.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "owner_scoped_plan", "reason": "Instruction cards are bounded child configuration of one visible plan version, not the version history renderer." },
     "frontend/src/pages/ReportsPage.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "owner_scoped_report", "reason": "Mapped report sections render only the immutable snapshot selected from the paginated report history." },
+    "frontend/src/pages/SettingsPage.tsx": { "status": "bounded_reference", "date_filter": "none_current", "sensitivity": "owner_scoped_private_export", "reason": "The status surface deliberately shows the latest 10 durable private exports; artifacts expire after seven days and the API history remains paginated." },
     "frontend/src/pages/SymptomsDiaryPage.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "owner_scoped_health", "reason": "Mapped articles occur only inside revision details for rows on the bounded current page." }
   },
   "additional_ui_collections": {

@@ -48,7 +48,9 @@ class AuditAction(StrEnum):
     RECORD_CORRECTED = "record_corrected"
     RECORD_DELETED = "record_deleted"
 
+    EXPORT_REQUESTED = "export_requested"
     EXPORT_GENERATED = "export_generated"
+    EXPORT_DOWNLOADED = "export_downloaded"
     REPORT_GENERATED = "report_generated"
     REPORT_DOWNLOADED = "report_downloaded"
 

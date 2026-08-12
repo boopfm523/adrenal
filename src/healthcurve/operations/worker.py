@@ -99,6 +99,7 @@ def run_loop(
     poll_interval_s: float,
     worker_id: str | None = None,
     schedulers: Sequence[JobScheduler] = (),
+    lease_duration: timedelta = timedelta(minutes=5),
 ) -> None:
     """Poll until stopped, containing transient database failures without busy-looping."""
     identifier = worker_id or f"{socket.gethostname()}-queue"
@@ -109,7 +110,12 @@ def run_loop(
                     scheduled_at = datetime.now(UTC)
                     for scheduler in schedulers:
                         scheduler(session, scheduled_at)
-            claimed = run_once(factory, handlers, worker_id=identifier)
+            claimed = run_once(
+                factory,
+                handlers,
+                worker_id=identifier,
+                lease_duration=lease_duration,
+            )
         except Exception:
             # Database/driver text can contain URLs. The allow-listed code is enough
             # for an alert; details remain in local database/server diagnostics.

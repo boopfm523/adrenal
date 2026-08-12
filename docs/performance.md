@@ -132,8 +132,9 @@ benchmark rows afterward.
 The selected-day provider-sample path remains index-backed. PostgreSQL rationally
 retains sequential scans for a 366-day raw-sample result and a complete export because
 those operations return a material fraction of the 3.69-million-row table. Versioned
-daily summaries now address the longitudinal shape; queued, streamed exports remain
-separate work instead of forcing inappropriate indexes.
+daily summaries address the longitudinal shape. Complete exports now run through the
+durable queue and write a repeatable-read JSON snapshot in 500-row batches, so the
+remaining sequential scan does not imply request-time ORM or JSON materialization.
 
 ## Versioned daily wearable summaries
 

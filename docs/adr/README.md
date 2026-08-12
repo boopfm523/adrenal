@@ -29,6 +29,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0019](0019-regimen-effective-time-provenance.md) | Canonical regimen instants with preserved local-time provenance | Accepted |
 | [0020](0020-on-demand-day-analysis-projection.md) | On-demand daily AI analysis uses a fingerprinted projection | Accepted |
 | [0021](0021-versioned-wearable-daily-summaries.md) | Versioned wearable daily summaries for bounded longitudinal reads | Accepted |
+| [0022](0022-durable-streamed-private-exports.md) | Durable streamed private exports | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

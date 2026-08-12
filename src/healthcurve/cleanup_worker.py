@@ -9,6 +9,7 @@ from __future__ import annotations
 import signal
 import sys
 import threading
+from datetime import timedelta
 from pathlib import Path
 from types import FrameType
 
@@ -25,6 +26,19 @@ from healthcurve.labs.cleanup_jobs import (
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.logging import configure_logging, get_logger
 from healthcurve.operations import worker as queue_worker
+from healthcurve.private_exports.jobs import (
+    make_cleanup_handler as make_private_export_cleanup_handler,
+)
+from healthcurve.private_exports.jobs import (
+    make_generation_handler as make_private_export_generation_handler,
+)
+from healthcurve.private_exports.jobs import (
+    schedule_cleanup as schedule_private_export_cleanup,
+)
+from healthcurve.private_exports.service import (
+    PRIVATE_EXPORT_CLEANUP_TASK,
+    PRIVATE_EXPORT_TASK,
+)
 from healthcurve.reports.cleanup_jobs import (
     REPORT_ARTIFACT_CLEANUP_TASK,
     make_snapshot_artifact_cleanup_handler,
@@ -72,9 +86,19 @@ def main() -> int:
             REPORT_ARTIFACT_CLEANUP_TASK: make_snapshot_artifact_cleanup_handler(
                 settings.report_artifacts_dir
             ),
+            PRIVATE_EXPORT_TASK: make_private_export_generation_handler(
+                session_factory,
+                root=settings.report_artifacts_dir,
+                uploads=DocumentLayout(settings.uploads_dir),
+            ),
+            PRIVATE_EXPORT_CLEANUP_TASK: make_private_export_cleanup_handler(
+                settings.report_artifacts_dir
+            ),
         },
         stop_event=_stop,
         poll_interval_s=settings.job_poll_interval_s,
+        schedulers=(schedule_private_export_cleanup,),
+        lease_duration=timedelta(hours=1),
     )
     log.info("cleanup worker stopped", outcome="clean")
     return 0

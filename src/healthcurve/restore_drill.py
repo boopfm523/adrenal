@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import sys
+import uuid
 from collections.abc import Generator, Sequence
 from pathlib import Path
 
@@ -92,10 +93,19 @@ def assert_api_smoke(
                 raise BackupError("restore_api_timeline_failed")
             exported = client.post(
                 "/api/v1/privacy/export",
-                headers={auth.CSRF_HEADER_NAME: csrf},
+                headers={
+                    auth.CSRF_HEADER_NAME: csrf,
+                    "Idempotency-Key": f"restore-smoke-{uuid.uuid4()}",
+                },
                 json={"password": password},
             )
-            if exported.status_code != 200 or not isinstance(exported.json(), dict):
+            export_status = exported.json()
+            if (
+                exported.status_code != 202
+                or not isinstance(export_status, dict)
+                or export_status.get("status") != "queued"
+                or not export_status.get("job_id")
+            ):
                 raise BackupError("restore_api_export_failed")
     except BackupError:
         raise

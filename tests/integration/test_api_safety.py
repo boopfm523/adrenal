@@ -116,6 +116,9 @@ from healthcurve.operations.rate_limit import (
 )
 from healthcurve.operations.restore_drill import assert_restore_sentinel
 from healthcurve.operations.telemetry import OperationalEvent
+from healthcurve.private_exports.jobs import make_cleanup_handler, make_generation_handler
+from healthcurve.private_exports.models import PrivateExport
+from healthcurve.private_exports.service import PRIVATE_EXPORT_TASK, request_export
 from healthcurve.reports import builder as report_builder
 from healthcurve.reports import service as report_service
 from healthcurve.reports.cleanup_jobs import (
@@ -235,6 +238,48 @@ def logged_in(client: TestClient) -> dict[str, str]:
     return {auth.CSRF_HEADER_NAME: response.json()["csrf_token"]}
 
 
+def _complete_private_export(
+    client: TestClient,
+    headers: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+    *,
+    key: str,
+    include_ai: bool = False,
+    include_sensitive: bool = True,
+):
+    queued = client.post(
+        "/api/v1/privacy/export",
+        headers={**headers, "Idempotency-Key": key},
+        json={
+            "password": PASSWORD,
+            "include_ai": include_ai,
+            "include_sensitive": include_sensitive,
+        },
+    )
+    assert queued.status_code == 202, queued.text
+    factory = sessionmaker(engine, expire_on_commit=False)
+    claimed = queue_worker.run_once(
+        factory,
+        {
+            PRIVATE_EXPORT_TASK: make_generation_handler(
+                factory,
+                root=settings.report_artifacts_dir,
+                uploads=DocumentLayout(settings.uploads_dir),
+            )
+        },
+        worker_id=f"test-export-{key}",
+    )
+    assert claimed is not None
+    status_response = client.get(f"/api/v1/privacy/exports/{queued.json()['id']}")
+    assert status_response.status_code == 200, status_response.text
+    assert status_response.json()["status"] == "completed"
+    downloaded = client.get(status_response.json()["download_url"])
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.headers["cache-control"] == "no-store"
+    return queued, status_response, downloaded
+
+
 # ---------------------------------------------------------------------------
 # Authentication and CSRF
 # ---------------------------------------------------------------------------
@@ -267,6 +312,32 @@ def test_restore_sentinel_migration_downgrades_and_reinstalls(
             command.upgrade(alembic_config, "head")
         get_settings.cache_clear()
     assert assert_restore_sentinel(engine) is None
+
+
+def test_private_export_migration_downgrades_and_reinstalls(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "ab3d5f7a9c21",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT to_regclass('ops.private_export')")) is None
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('ops.private_export')")) == (
+            "ops.private_export"
+        )
 
 
 def test_regimen_time_migration_marks_legacy_rows_ambiguous(
@@ -786,7 +857,7 @@ def test_session_expiry_idle_timeout_and_logout_everywhere_revoke_access(
 
 
 def test_vitals_are_owner_scoped_correctable_and_exported(
-    client: TestClient, logged_in: dict[str, str], engine: Engine
+    client: TestClient, logged_in: dict[str, str], engine: Engine, settings: Settings
 ) -> None:
     other_owner_id: uuid.UUID
     with Session(engine) as session, session.begin():
@@ -957,8 +1028,9 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert any(item["summary"] == "Weight 180.8 lb (entered 82.0000 kg)" for item in items)
     assert any(item["summary"] == "Temperature 98.6 °F (37.0 °C)" for item in items)
 
-    exported = client.post("/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD})
-    assert exported.status_code == 200, exported.text
+    _, _, exported = _complete_private_export(
+        client, logged_in, engine, settings, key="vitals-export"
+    )
     facts = exported.json()["facts"]
     assert corrected_bp["id"] in {row["id"] for row in facts["blood_pressure"]}
     assert corrected_weight["id"] in {row["id"] for row in facts["weight"]}
@@ -1149,7 +1221,7 @@ def test_context_privacy_time_provenance_corrections_and_deletion(
 
 
 def test_individual_deletion_requires_password_and_preserves_audit(
-    client: TestClient, logged_in: dict[str, str], engine: Engine
+    client: TestClient, logged_in: dict[str, str], engine: Engine, settings: Settings
 ) -> None:
     created = client.post(
         "/api/v1/diary-events",
@@ -1211,19 +1283,25 @@ def test_individual_deletion_requires_password_and_preserves_audit(
     assert client.get("/api/v1/auth/me").status_code == 200
 
     wrong_export = client.post(
-        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD + "-wrong"}
+        "/api/v1/privacy/export",
+        headers={**logged_in, "Idempotency-Key": "wrong-password-export"},
+        json={"password": PASSWORD + "-wrong"},
     )
     assert wrong_export.status_code == 403
-    private_export = client.post(
-        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD}
+    _, export_status, private_export = _complete_private_export(
+        client, logged_in, engine, settings, key="individual-deletion-export"
     )
     assert private_export.status_code == 200
     assert "attachment" in private_export.headers["content-disposition"]
     assert private_export.json()["ai"] == {}
+    assert export_status.json()["progress_percent"] == 100.0
 
 
 def test_full_export_requires_csrf_and_password_reauthentication(
-    client: TestClient, logged_in: dict[str, str], engine: Engine
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
 ) -> None:
     with Session(engine) as session:
         audit_count_before = (
@@ -1243,16 +1321,20 @@ def test_full_export_requires_csrf_and_password_reauthentication(
     )
     wrong_password = client.post(
         "/api/v1/privacy/export",
-        headers=logged_in,
+        headers={**logged_in, "Idempotency-Key": "wrong-password-full-export"},
         json={"password": PASSWORD + "-wrong"},
     )
     legacy = client.post("/api/v1/exports", headers=logged_in)
+    missing_idempotency = client.post(
+        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD}
+    )
 
     assert missing_csrf.status_code == 403
     assert wrong_csrf.status_code == 403
     assert wrong_password.status_code == 403
     assert legacy.status_code == 404
-    for failed in (missing_csrf, wrong_csrf, wrong_password, legacy):
+    assert missing_idempotency.status_code == 422
+    for failed in (missing_csrf, wrong_csrf, wrong_password, legacy, missing_idempotency):
         assert "facts" not in failed.text
         assert "plan" not in failed.text
 
@@ -1266,11 +1348,11 @@ def test_full_export_requires_csrf_and_password_reauthentication(
             == audit_count_before
         )
 
-    exported = client.post(
-        "/api/v1/privacy/export",
-        headers=logged_in,
-        json={"password": PASSWORD},
+    queued, status_response, exported = _complete_private_export(
+        client, logged_in, engine, settings, key="full-export-reauth"
     )
+    assert queued.status_code == 202
+    assert status_response.json()["attempt_count"] == 1
     assert exported.status_code == 200
     assert exported.headers["cache-control"] == "no-store"
     assert set(exported.json()) >= {"plan", "facts", "ai"}
@@ -1284,6 +1366,126 @@ def test_full_export_requires_csrf_and_password_reauthentication(
             )
             == audit_count_before + 1
         )
+
+
+def test_private_export_idempotency_retry_progress_expiration_and_cleanup(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
+) -> None:
+    key = "durable-export-lifecycle"
+    request_headers = {**logged_in, "Idempotency-Key": key}
+    first = client.post(
+        "/api/v1/privacy/export",
+        headers=request_headers,
+        json={"password": PASSWORD, "include_sensitive": False},
+    )
+    replay = client.post(
+        "/api/v1/privacy/export",
+        headers=request_headers,
+        json={"password": PASSWORD, "include_sensitive": False},
+    )
+    conflict = client.post(
+        "/api/v1/privacy/export",
+        headers=request_headers,
+        json={"password": PASSWORD, "include_sensitive": True},
+    )
+    assert first.status_code == replay.status_code == 202
+    assert first.json()["id"] == replay.json()["id"]
+    assert conflict.status_code == 409
+    export_id = uuid.UUID(first.json()["id"])
+
+    history = client.get("/api/v1/privacy/exports?page=1&page_size=10")
+    assert history.status_code == 200
+    assert export_id in {uuid.UUID(row["id"]) for row in history.json()["items"]}
+    assert client.get(f"/api/v1/privacy/exports/{uuid.uuid4()}").status_code == 404
+
+    other_owner_id: uuid.UUID
+    other_export_id: uuid.UUID
+    other_job_id: uuid.UUID
+    with Session(engine) as session, session.begin():
+        other = Owner(
+            email="private-export-other@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        other_owner_id = other.id
+        other_request = request_export(
+            session,
+            owner_id=other_owner_id,
+            idempotency_key="other-owner-export",
+            include_ai=False,
+            include_sensitive=True,
+        )
+        other_export_id = other_request.export.id
+        other_job_id = other_request.job.id
+    assert client.get(f"/api/v1/privacy/exports/{other_export_id}").status_code == 404
+    assert client.get(f"/api/v1/privacy/exports/{other_export_id}/download").status_code == 404
+
+    factory = sessionmaker(engine, expire_on_commit=False)
+
+    def fail_safely(_session: Session, _payload: Any) -> None:
+        raise JobQueueError("export_source_document_unavailable")
+
+    failed = queue_worker.run_once(
+        factory,
+        {PRIVATE_EXPORT_TASK: fail_safely},
+        worker_id="synthetic-export-failure",
+    )
+    assert failed is not None
+    retry_status = client.get(f"/api/v1/privacy/exports/{export_id}")
+    assert retry_status.json()["status"] == "queued"
+    assert retry_status.json()["attempt_count"] == 1
+    assert retry_status.json()["last_error_code"] == "export_source_document_unavailable"
+    assert retry_status.json()["next_attempt_at"] is not None
+
+    with Session(engine) as session, session.begin():
+        export = session.get(PrivateExport, export_id)
+        assert export is not None
+        job = session.get(Job, export.job_id)
+        assert job is not None
+        job.run_at = datetime.now(UTC) - timedelta(seconds=1)
+    completed = queue_worker.run_once(
+        factory,
+        {
+            PRIVATE_EXPORT_TASK: make_generation_handler(
+                factory,
+                root=settings.report_artifacts_dir,
+                uploads=DocumentLayout(settings.uploads_dir),
+            )
+        },
+        worker_id="synthetic-export-retry",
+    )
+    assert completed is not None
+    completed_status = client.get(f"/api/v1/privacy/exports/{export_id}").json()
+    assert completed_status["status"] == "completed"
+    assert completed_status["attempt_count"] == 2
+    assert completed_status["progress_percent"] == 100.0
+    artifact_path = settings.report_artifacts_dir / str(export_id)
+    with Session(engine) as session, session.begin():
+        export = session.get(PrivateExport, export_id)
+        assert export is not None and export.relative_path is not None
+        artifact_path = settings.report_artifacts_dir / export.relative_path
+        export.created_at = datetime.now(UTC) - timedelta(days=8)
+        export.expires_at = datetime.now(UTC) - timedelta(days=1)
+    assert artifact_path.exists()
+    assert client.get(f"/api/v1/privacy/exports/{export_id}/download").status_code == 409
+    with Session(engine) as session, session.begin():
+        make_cleanup_handler(settings.report_artifacts_dir)(session, {})
+    assert not artifact_path.exists()
+    with Session(engine) as session:
+        export = session.get(PrivateExport, export_id)
+        assert export is not None and export.purged_at is not None
+    with Session(engine) as session, session.begin():
+        other_job = session.get(Job, other_job_id)
+        if other_job is not None:
+            session.delete(other_job)
+        other_owner = session.get(Owner, other_owner_id)
+        if other_owner is not None:
+            session.delete(other_owner)
 
 
 def test_integration_deletion_removes_provider_data_and_audits(
@@ -1925,13 +2127,13 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         finding["finding_kind"] == "genuine_absence" and "no zero" in finding["detail"]
         for finding in quality.json()["findings"]
     )
-    private_export = client.post(
-        "/api/v1/privacy/export", headers=headers, json={"password": PASSWORD}
+    _, _, private_export = _complete_private_export(
+        client, headers, engine, settings, key="garmin-owner-export"
     )
     assert private_export.status_code == 200
-    garmin_export = private_export.json()["integrations"]["garmin"]
-    assert len(garmin_export["connection_state"]) == 1
-    assert len(garmin_export["sync_runs"]) == 3
+    garmin_export = private_export.json()["integrations"]
+    assert len(garmin_export["garmin_connection_state"]) == 1
+    assert len(garmin_export["garmin_sync_runs"]) == 3
     assert len(private_export.json()["facts"]["garmin_metrics"]) == 16
     assert len(private_export.json()["facts"]["garmin_sleep_stage_intervals"]) == 2
     assert any(
@@ -4734,11 +4936,15 @@ def test_nonexistent_dst_time_is_rejected(client: TestClient, logged_in: dict[st
 
 @pytest.mark.safety("SAFE-07")
 def test_export_separates_categories_and_excludes_ai_by_default(
-    client: TestClient, logged_in: dict[str, str]
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+    settings: Settings,
 ) -> None:
-    payload = client.post(
-        "/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD}
-    ).json()
+    _, _, downloaded = _complete_private_export(
+        client, logged_in, engine, settings, key="category-export"
+    )
+    payload = downloaded.json()
     assert set(payload) >= {"plan", "facts", "ai"}
     assert payload["ai"] == {}, "AI content must be excluded unless asked for"
     assert "credentials" in payload["notice"]

@@ -770,11 +770,41 @@ export async function deleteAccount(password: string, confirmation: string): Pro
   await apiRequest<unknown>("/privacy/account", { method: "DELETE", body: JSON.stringify({ password, confirmation }) });
 }
 
-export async function downloadPrivateExport(password: string, includeAi: boolean): Promise<Blob> {
-  const headers = new Headers({ "Content-Type": "application/json", Accept: "application/json" });
-  const csrfToken = sessionStore.get()?.csrfToken;
-  if (csrfToken !== undefined) headers.set("X-CSRF-Token", csrfToken);
-  const response = await fetch("/api/v1/privacy/export", { method: "POST", headers, credentials: "include", body: JSON.stringify({ password, include_ai: includeAi, include_sensitive: true }) });
-  if (!response.ok) throw await parseError(response);
-  return response.blob();
+export interface PrivateExport {
+  id: string;
+  job_id: string;
+  status: "queued" | "running" | "completed" | "dead_letter" | "expired";
+  include_ai: boolean;
+  include_sensitive: boolean;
+  processed_rows: number;
+  total_rows: number | null;
+  progress_percent: number | null;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string | null;
+  last_error_code: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  expires_at: string;
+  download_url: string | null;
+  sha256: string | null;
+  byte_size: number | null;
+}
+
+export interface PrivateExportPage {
+  items: PrivateExport[];
+  page: PageMetadata;
+}
+
+export function requestPrivateExport(password: string, includeAi: boolean, includeSensitive: boolean, idempotencyKey: string): Promise<PrivateExport> {
+  return apiRequest<PrivateExport>("/privacy/export", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({ password, include_ai: includeAi, include_sensitive: includeSensitive }),
+  });
+}
+
+export function getPrivateExports(): Promise<PrivateExportPage> {
+  return apiRequest<PrivateExportPage>("/privacy/exports?page=1&page_size=10");
 }

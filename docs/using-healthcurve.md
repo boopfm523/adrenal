@@ -207,7 +207,11 @@ the plan expected and what the record contains, every time you ask.
 ## Getting all your data out
 
 The easiest export is **Settings → Export**. Enter your current password, choose
-whether to include separately labelled AI analysis, and download the JSON file.
+whether to include sensitive diary/life-event text and separately labelled AI
+analysis, then request the export. Complete exports run in the background. The page
+shows durable progress, automatic retry status, a safe error code when applicable,
+and a download link after completion. The link expires seven days after the request;
+refreshing or leaving the page does not lose it.
 
 The API equivalent requires both the session's CSRF token and the current password:
 
@@ -217,16 +221,22 @@ CSRF=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"email": "you@example.com", "password": "..."}' \
   -c cookies.txt | python3 -c 'import json,sys; print(json.load(sys.stdin)["csrf_token"])')
 
-curl -s -b cookies.txt -H "X-CSRF-Token: $CSRF" \
+EXPORT=$(curl -s -b cookies.txt -H "X-CSRF-Token: $CSRF" \
+  -H "Idempotency-Key: cli-export-$(date +%s)" \
   -H 'content-type: application/json' \
   -X POST 'http://localhost:8080/api/v1/privacy/export' \
-  -d '{"password": "...", "include_ai": false, "include_sensitive": true}' \
-  > export.json
+  -d '{"password": "...", "include_ai": false, "include_sensitive": true}')
+
+# Poll the returned status URL (or GET /api/v1/privacy/exports), then stream the
+# download_url once status is "completed".
+echo "$EXPORT" | python3 -m json.tool
 ```
 
 Sections are separated by category: `facts` (what you recorded), `plan` (physician-
 approved), and `ai` (generated analysis, **excluded** unless you explicitly set
-`include_ai` to `true`). Integration credentials are never exported. HealthCurve
+`include_ai` to `true`), plus separately labelled integration provenance and report
+metadata. Exact fact revisions, Garmin source provenance, lab facts, and retained lab
+source PDFs are included. Integration credentials are never exported. HealthCurve
 does not expose a cookie-only legacy export route.
 
 ## Emergency page

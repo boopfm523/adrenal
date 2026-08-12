@@ -38,6 +38,8 @@ from healthcurve.medications.models import (
     RegimenVersion,
 )
 from healthcurve.operations import audit
+from healthcurve.operations.jobs import Job, JobStatus
+from healthcurve.private_exports.models import PrivateExport
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.storage import delete_owner_artifacts
 from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
@@ -350,6 +352,17 @@ def delete_account(
         raise DeletionError(
             "disconnect Garmin and wait for local token removal before deleting the account"
         )
+    export_jobs = tuple(
+        session.execute(
+            select(PrivateExport.job_id, Job.status)
+            .join(Job, Job.id == PrivateExport.job_id)
+            .where(PrivateExport.owner_id == owner_id)
+            .with_for_update(of=(PrivateExport, Job))
+        )
+    )
+    if any(status in (JobStatus.QUEUED, JobStatus.RUNNING) for _, status in export_jobs):
+        raise DeletionError("wait for the private export to finish before deleting the account")
+    export_job_ids = tuple(job_id for job_id, _ in export_jobs)
     document_ids = list(
         session.scalars(select(LabDocument.id).where(LabDocument.owner_id == owner_id))
     )
@@ -357,6 +370,11 @@ def delete_account(
         mark_deleted(DocumentLayout(uploads_dir), document_id)
     if report_artifacts_dir is not None:
         delete_owner_artifacts(report_artifacts_dir, owner_id)
+
+    if export_job_ids:
+        # Deleting jobs cascades their linked export request rows; job payloads cannot
+        # outlive the owner identifier they reference.
+        session.execute(delete(Job).where(Job.id.in_(export_job_ids)))
 
     # Children and records that restrict owner deletion first. Database cascades remove
     # lab results, regimen children, and Garmin facts from their owning parent rows.
