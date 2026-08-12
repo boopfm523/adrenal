@@ -23,6 +23,7 @@ describe("Settings and privacy page", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
 
     expect(screen.getByText(/Telegram itself may retain messages/)).toBeVisible();
+    expect(screen.getByText(/record-completeness reminder 30 minutes/)).toBeVisible();
     expect(screen.getByText(/not the raw directive/)).toBeVisible();
     expect(screen.getByText(/Encrypted backups can retain deleted data until/)).toBeVisible();
     expect(screen.getByText(/Structural audit entries recording deletion survive/)).toBeVisible();

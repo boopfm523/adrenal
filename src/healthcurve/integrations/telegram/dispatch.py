@@ -9,6 +9,7 @@ so choosing a transport cannot accidentally choose a weaker set of checks.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from healthcurve.ai.ollama import OllamaClient
 from healthcurve.identity.models import Owner
-from healthcurve.integrations.telegram import handlers
+from healthcurve.integrations.telegram import dose_reminders, handlers
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.models import TelegramUpdate
 from healthcurve.logging import get_logger
@@ -154,19 +155,32 @@ def _handle_callback(
 
     action, _, raw_id = data.partition(":")
     try:
-        draft_id = uuid.UUID(raw_id)
+        target_id = uuid.UUID(raw_id)
     except ValueError:
         if query_id:
             client.answer_callback_query(query_id, "That button has expired.")
         return
 
+    if action.startswith("reminder_"):
+        reminder_action = action.removeprefix("reminder_")
+        text, markup = dose_reminders.handle_action(
+            session, owner, target_id, reminder_action, now=datetime.now(UTC)
+        )
+        if query_id:
+            client.answer_callback_query(query_id)
+        if chat_id and message_id:
+            client.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+        elif chat_id:
+            client.send_message(chat_id, text, reply_markup=markup)
+        return
+
     match action:
         case "confirm":
-            reply = handlers.confirm_draft(session, owner, draft_id)
+            reply = handlers.confirm_draft(session, owner, target_id)
         case "cancel":
-            reply = handlers.cancel_draft(session, owner, draft_id)
+            reply = handlers.cancel_draft(session, owner, target_id)
         case "edit":
-            reply = handlers.draft_edit_help(session, owner, draft_id)
+            reply = handlers.draft_edit_help(session, owner, target_id)
         case "location":
             chat_type = ((callback.get("message") or {}).get("chat") or {}).get("type")
             if chat_type != "private" or not isinstance(chat_id, int):
@@ -175,13 +189,13 @@ def _handle_callback(
                         query_id, "Location sharing requires a private chat."
                     )
                 return
-            reply = handlers.start_location_request(session, owner, draft_id, chat_id=chat_id)
+            reply = handlers.start_location_request(session, owner, target_id, chat_id=chat_id)
             if query_id:
                 client.answer_callback_query(query_id)
             client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
             return
         case "save_home":
-            reply = handlers.save_location_as_home(session, owner, draft_id)
+            reply = handlers.save_location_as_home(session, owner, target_id)
         case _:
             if query_id:
                 client.answer_callback_query(query_id, "Unknown action.")

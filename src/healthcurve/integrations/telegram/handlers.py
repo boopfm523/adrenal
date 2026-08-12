@@ -60,6 +60,7 @@ from healthcurve.integrations.telegram.feature_requests import (
     queued_request,
     validate_request,
 )
+from healthcurve.integrations.telegram.models import DoseReminderState, TelegramDoseReminder
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 from healthcurve.operations.rate_limit import (
@@ -1381,6 +1382,15 @@ def confirm_draft(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
     )
     draft.resolved_at = datetime.now(UTC)
     draft.created_event_ids = created
+    reminder = session.scalar(
+        select(TelegramDoseReminder).where(
+            TelegramDoseReminder.owner_id == owner.id,
+            TelegramDoseReminder.draft_id == draft.id,
+        )
+    )
+    if reminder is not None:
+        reminder.state = DoseReminderState.SATISFIED
+        reminder.resolved_at = draft.resolved_at
     # The structured fact now exists, so the verbatim message is no longer needed (C9).
     draft.purge_raw_text()
 
@@ -1510,6 +1520,15 @@ def cancel_draft(session: Session, owner: Owner, draft_id: uuid.UUID) -> Reply:
         draft.resolved_at = datetime.now(UTC)
         draft.purge_raw_text()
         location.cancel_for_draft(session, owner.id, draft.id)
+        reminder = session.scalar(
+            select(TelegramDoseReminder).where(
+                TelegramDoseReminder.owner_id == owner.id,
+                TelegramDoseReminder.draft_id == draft.id,
+            )
+        )
+        if reminder is not None:
+            reminder.state = DoseReminderState.DISMISSED
+            reminder.resolved_at = draft.resolved_at
     return Reply("Cancelled. Nothing was recorded.")
 
 

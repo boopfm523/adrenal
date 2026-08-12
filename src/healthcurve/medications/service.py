@@ -25,6 +25,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from healthcurve.events import service as event_service
 from healthcurve.events.timekeeping import EventTime, from_instant, resolve_event_time
 from healthcurve.medications.models import (
+    DoseCategory,
     DoseEvent,
     DoseUnit,
     Medication,
@@ -390,7 +391,10 @@ def compare_day(
 
     comparisons: list[SlotComparison] = []
     unmatched = list(doses)
-    matches = _match_scheduled_slots(scheduled_slots, doses, zone)
+    # A stress dose is an explicitly separate recorded fact. It must never silently
+    # satisfy a regular physician-plan slot merely because its time is nearby.
+    regular_doses = [dose for dose in doses if dose.category is not DoseCategory.STRESS]
+    matches = _match_scheduled_slots(scheduled_slots, regular_doses, zone)
 
     for version, slot, scheduled_local in scheduled_slots:
         match = matches.get(slot.id)

@@ -17,6 +17,12 @@ from types import FrameType
 from healthcurve.config import Environment, Settings, TelegramMode, get_settings
 from healthcurve.db import get_session_factory
 from healthcurve.integrations.telegram import polling
+from healthcurve.integrations.telegram.client import TelegramClient
+from healthcurve.integrations.telegram.dose_reminders import (
+    DOSE_REMINDER_TASK,
+    make_reminder_handler,
+    schedule_reminder_check,
+)
 from healthcurve.integrations.telegram.draft_jobs import (
     DRAFT_EXPIRY_TASK,
     make_draft_expiry_handler,
@@ -30,6 +36,11 @@ from healthcurve.operations import worker as queue_worker
 log = get_logger(__name__)
 
 _stop = threading.Event()
+
+
+def dose_reminders_enabled(*, polling_enabled: bool, allowed_chat_id: int | None) -> bool:
+    """Reminders are deliberately unavailable without a configured private chat."""
+    return polling_enabled and allowed_chat_id is not None
 
 
 def _handle_signal(signum: int, _frame: FrameType | None) -> None:
@@ -81,15 +92,28 @@ def main() -> int:
         )
         polling_thread.start()
 
+    handlers = {
+        DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
+        WEATHER_ENRICHMENT_TASK: make_weather_handler(),
+    }
+    schedulers = [schedule_draft_expiry]
+    if dose_reminders_enabled(
+        polling_enabled=polling_enabled,
+        allowed_chat_id=settings.telegram_allowed_chat_id,
+    ):
+        assert settings.telegram_allowed_chat_id is not None
+        handlers[DOSE_REMINDER_TASK] = make_reminder_handler(
+            client=TelegramClient(settings, token=telegram_secrets.bot_token),
+            chat_id=settings.telegram_allowed_chat_id,
+        )
+        schedulers.append(schedule_reminder_check)
+
     queue_worker.run_loop(
         get_session_factory(),
-        {
-            DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
-            WEATHER_ENRICHMENT_TASK: make_weather_handler(),
-        },
+        handlers,
         stop_event=_stop,
         poll_interval_s=settings.job_poll_interval_s,
-        schedulers=(schedule_draft_expiry,),
+        schedulers=tuple(schedulers),
     )
     if polling_thread is not None:
         polling_thread.join(timeout=5)
