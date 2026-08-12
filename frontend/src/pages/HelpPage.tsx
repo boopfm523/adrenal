@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Alert, Badge, Button, Group, Paper, Text, Title } from "@mantine/core";
 import { Link } from "react-router-dom";
 
 import helpContent from "../helpContent.json";
@@ -37,7 +38,7 @@ function CopyableExample({ label, value }: { label: string; value: string }): Re
   return (
     <div className="copy-example">
       <pre tabIndex={0} aria-label={`${label} example`}><code>{value}</code></pre>
-      <button className="button-secondary" type="button" onClick={() => { void copy(); }} aria-label={`Copy ${label} example`}>Copy</button>
+      <Button variant="outline" type="button" onClick={() => { void copy(); }} aria-label={`Copy ${label} example`}>Copy</Button>
       <span className="copy-status" role="status" aria-live="polite">{message}</span>
     </div>
   );
@@ -54,10 +55,10 @@ function EndpointList({ endpoints }: { endpoints: Endpoint[] }): React.JSX.Eleme
 
 function WorkflowCard({ workflow }: { workflow: Workflow }): React.JSX.Element {
   return (
-    <article className="help-workflow" id={workflow.id}>
+    <Paper component="article" className="help-workflow" id={workflow.id} withBorder radius="md" p="lg">
       <div className="help-workflow__heading">
-        <h3>{workflow.title}</h3>
-        <span className="availability-label">{workflow.availability}</span>
+        <Title order={3}>{workflow.title}</Title>
+        <Badge variant="light">{workflow.availability}</Badge>
       </div>
       <p>{workflow.instructions}</p>
       <dl className="help-outcome">
@@ -67,7 +68,7 @@ function WorkflowCard({ workflow }: { workflow: Workflow }): React.JSX.Element {
       <CopyableExample label={workflow.title} value={workflow.example} />
       {workflow.webPath === undefined ? null : workflow.webPath === "/emergency" ? <a href={workflow.webPath}>Open emergency page</a> : <Link to={workflow.webPath}>Open {workflow.title.toLowerCase()}</Link>}
       <EndpointList endpoints={workflow.endpoints} />
-    </article>
+    </Paper>
   );
 }
 
@@ -77,15 +78,15 @@ export function HelpPage(): React.JSX.Element {
 
   return (
     <Page title="Help" description="Practical, current instructions for recording, reviewing, importing, correcting, and exporting HealthCurve.ai data.">
-      <section className="settings-card" aria-labelledby="help-brand-title">
-        <h2 id="help-brand-title">AI for AI</h2>
-        <p><strong>Artificial intelligence for adrenal insufficiency.</strong> HealthCurve.ai helps organize and review your recorded information. Its AI output stays separate from recorded facts and physician-approved plans and is not diagnosis, emergency care, or medication advice.</p>
-      </section>
-      <aside className="help-emergency" aria-labelledby="help-emergency-title">
-        <h2 id="help-emergency-title">HealthCurve.ai is not emergency care or dosing advice</h2>
-        <p>If you may be having an emergency, contact local emergency services and follow your dated physician-authored instructions. HealthCurve.ai records what happened; it does not decide whether, when, or how much medication you should take.</p>
-        <a className="button-link button-link--urgent" href="/emergency">Open emergency plan</a>
-      </aside>
+      <Paper component="section" withBorder radius="md" p="lg" aria-labelledby="help-brand-title">
+        <Title order={2} id="help-brand-title">AI for AI</Title>
+        <Text><strong>Artificial intelligence for adrenal insufficiency.</strong> HealthCurve.ai helps organize and review your recorded information. Its AI output stays separate from recorded facts and physician-approved plans and is not diagnosis, emergency care, or medication advice.</Text>
+      </Paper>
+      <Alert component="aside" color="red" variant="light" role="note">
+        <Title order={2}>HealthCurve.ai is not emergency care or dosing advice</Title>
+        <Text>If you may be having an emergency, contact local emergency services and follow your dated physician-authored instructions. HealthCurve.ai records what happened; it does not decide whether, when, or how much medication you should take.</Text>
+        <Group mt="md"><Button component="a" color="red" href="/emergency">Open emergency plan</Button></Group>
+      </Alert>
 
       <nav className="help-topics" aria-label="Help topics">
         <a href="#record-types">Understand the record</a>
