@@ -12,7 +12,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "bc4e6a8d0f32"  # pragma: allowlist secret - Alembic revision ID
-down_revision: str | Sequence[str] | None = "ab3d5f7a9c21"
+down_revision: str | Sequence[str] | None = (
+    "ab3d5f7a9c21"  # pragma: allowlist secret - Alembic revision ID
+)
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
