@@ -417,6 +417,30 @@ function nearbyTooltipObservations(
   );
 }
 
+function doseTooltipObservations(
+  exposure: SteroidExposureCurve,
+  dayStart: number,
+  dayEnd: number,
+): TooltipObservation[] {
+  return [...exposure.dose_markers]
+    .sort((left, right) => {
+      const timeDifference = Date.parse(left.occurred_at) - Date.parse(right.occurred_at);
+      return timeDifference === 0
+        ? left.dose_event_id.localeCompare(right.dose_event_id)
+        : timeDifference;
+    })
+    .flatMap((dose) => {
+      const occurredAt = Date.parse(dose.occurred_at);
+      if (occurredAt < dayStart || occurredAt >= dayEnd) return [];
+      return [{
+        id: `dose-${dose.dose_event_id}`,
+        time: dose.occurred_at,
+        series: "Actual dose",
+        value: `${dose.medication_name} ${formatMeasurement(dose.amount, dose.unit)}`,
+      }];
+    });
+}
+
 interface DailyHealthCurveProps {
   data: DailyHealthCurveData;
   visible?: HealthCurveVisibility;
@@ -456,6 +480,10 @@ export function DailyHealthCurve({
   );
   const sleepObservations = sleepTooltipObservations(sleepRecords, start, end);
   const cursorSleepObservations = nearbyTooltipObservations(sleepObservations, cursorTime);
+  const doseObservations = doseTooltipObservations(data.exposure, start, end);
+  const cursorDoseObservations = visible.exposure
+    ? nearbyTooltipObservations(doseObservations, cursorTime)
+    : [];
   const cursorPoints = nearestVisiblePoints(shownLanes, cursorTime);
   const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
   const cursorUnscoredSymptoms = visible.symptoms
@@ -486,6 +514,11 @@ export function DailyHealthCurve({
       value: symptom.label,
     })),
     ...cursorSleepObservations.map((observation) => ({
+      key: observation.id,
+      series: observation.series,
+      value: observation.value,
+    })),
+    ...cursorDoseObservations.map((observation) => ({
       key: observation.id,
       series: observation.series,
       value: observation.value,

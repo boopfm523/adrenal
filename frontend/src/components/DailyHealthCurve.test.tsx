@@ -309,6 +309,47 @@ describe("Daily HealthCurve", () => {
     expect(hoverAt(660).tooltip).toHaveTextContent("Sleep: final wake / sleep ended");
   });
 
+  it("shows distinct actual recorded doses in deterministic tooltip order", () => {
+    const base = data();
+    const marker = {
+      dose_event_id: "90000000-0000-4000-8000-000000000002",
+      occurred_at: "2026-03-08T06:00:00Z",
+      local_time: "2026-03-08T01:00:00",
+      timezone: "America/New_York",
+      utc_offset_minutes: -300,
+      medication_name: "Hydrocortisone",
+      formulation: "conventional immediate-release tablet",
+      amount: "10",
+      unit: "mg" as const,
+      route: "oral" as const,
+      source_type: "web" as const,
+      confirmation_state: "direct" as const,
+      supersedes_id: null,
+      supported: true,
+      exclusion_reason: null,
+      carryover: false,
+      modeled_peak_at: "2026-03-08T07:00:00Z",
+    };
+    render(<DailyHealthCurve data={data({ exposure: { ...base.exposure, dose_markers: [
+      { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000003", occurred_at: "2026-03-08T06:00:30Z", medication_name: "Prednisone", amount: "5", supported: false, exclusion_reason: "unsupported_medication", modeled_peak_at: null },
+      marker,
+      { ...marker, dose_event_id: "90000000-0000-4000-8000-000000000001", amount: "2.5" },
+    ] } })} />);
+
+    const tooltip = hoverAt(60).tooltip;
+    const doseRows = within(tooltip).getAllByText(/Actual dose:/).map((label) => label.parentElement?.textContent);
+    expect(doseRows).toEqual([
+      "Actual dose: Hydrocortisone 2.5 mg",
+      "Actual dose: Hydrocortisone 10 mg",
+      "Actual dose: Prednisone 5 mg",
+    ]);
+    expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
+    expect(tooltip).not.toHaveTextContent(/manual|confirmed|source|provider/i);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Theoretical exposure and actual doses" }));
+    expect(hoverAt(60).tooltip).not.toHaveTextContent("Actual dose");
+  });
+
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
     render(<DailyHealthCurve data={data()} />);
 
