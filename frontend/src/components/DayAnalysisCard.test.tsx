@@ -56,4 +56,25 @@ describe("day analysis card", () => {
     expect(await screen.findByText(/configured private model is unavailable/)).toBeVisible();
     await waitFor(() => { expect(screen.getByText(/Recorded data changed after this analysis/)).toBeVisible(); });
   });
+
+  it("recovers from a request that never completes and permits a safe retry", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
+      if (init?.method !== "POST") return Promise.resolve(new Response("null", { headers: { "Content-Type": "application/json" } }));
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => { reject(new DOMException("Aborted", "AbortError")); });
+      });
+    });
+    renderCard();
+
+    await vi.waitFor(() => { expect(screen.getByText(/No AI interpretation has been saved/)).toBeVisible(); });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze this day" }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByRole("button", { name: "Analyzing this day…" })).toBeDisabled();
+
+    await vi.advanceTimersByTimeAsync(75_000);
+    await vi.waitFor(() => { expect(screen.getByRole("alert")).toHaveTextContent(/did not finish within 75 seconds/); });
+    expect(screen.getByRole("button", { name: "Analyze this day" })).toBeEnabled();
+    vi.useRealTimers();
+  });
 });

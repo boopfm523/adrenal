@@ -177,7 +177,7 @@ def test_analysis_gate_rejects_prompt_gold_or_model_provenance_drift() -> None:
         verify_analysis_report(gold, report.model_copy(update={"model_digest": "changed"}))
 
 
-def test_analysis_timeout_is_a_safe_unavailable_result_without_a_write() -> None:
+def test_analysis_timeout_is_a_distinct_safe_result_without_a_write() -> None:
     session = Mock()
     model = Mock(spec=OllamaClient)
     model.generate_json.return_value = ModelResult(
@@ -194,6 +194,6 @@ def test_analysis_timeout_is_a_safe_unavailable_result_without_a_write() -> None
         client=model,
     )
 
-    assert result.outcome is AnalysisOutcome.MODEL_UNAVAILABLE
+    assert result.outcome is AnalysisOutcome.MODEL_TIMEOUT
     assert result.analysis is None
     session.add.assert_not_called()

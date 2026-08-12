@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { generateDayAnalysis, getDayAnalysis, type DayAnalysis } from "../api/client";
+import { AnalysisRequestTimeoutError, generateDayAnalysis, getDayAnalysis, type DayAnalysis } from "../api/client";
 
 export function DayAnalysisCard({ day, timezone }: { day: string; timezone: string }): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -27,7 +27,9 @@ export function DayAnalysisCard({ day, timezone }: { day: string; timezone: stri
     <button type="button" disabled={generate.isPending} onClick={() => { generate.mutate(); }}>{generate.isPending ? "Analyzing this day…" : analysis === null ? "Analyze this day" : "Analyze this day again"}</button>
     {saved.isPending && analysis === null ? <p role="status">Checking for a saved analysis…</p> : null}
     {saved.isError ? <p className="error-summary" role="alert">A saved analysis could not be checked. You can still try a new analysis.</p> : null}
-    {generate.isError ? <p className="error-summary" role="alert">The private-model request could not be completed. The HealthCurve and recorded data are unchanged.</p> : null}
+    {generate.isError ? <p className="error-summary" role="alert">{generate.error instanceof AnalysisRequestTimeoutError
+      ? "The analysis did not finish within 75 seconds. The private host model may still be loading or the connection may have been interrupted. Wait a moment and try again; recorded facts and the HealthCurve are unchanged."
+      : "The private-model request could not be completed. Check that the host and connection are available, then try again. The HealthCurve and recorded data are unchanged."}</p> : null}
     {notice === null ? null : <p role="status">{notice}</p>}
     {analysis === null ? <p>No AI interpretation has been saved for this selected day and timezone.</p> : <div className="healthcurve-day-analysis-result">
       {analysis.stale ? <p className="error-summary" role="alert"><strong>Recorded data changed after this analysis.</strong> Analyze this day again to include the latest facts.</p> : <p className="success-summary"><strong>Current for this source revision.</strong></p>}

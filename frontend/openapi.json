@@ -1721,6 +1721,7 @@
               "created",
               "refused",
               "model_unavailable",
+              "model_timeout",
               "invalid"
             ],
             "title": "Outcome",
@@ -5156,6 +5157,7 @@
               "created",
               "refused",
               "model_unavailable",
+              "model_timeout",
               "invalid"
             ],
             "title": "Outcome",

@@ -1838,7 +1838,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "created" | "refused" | "model_unavailable" | "invalid";
+            outcome: "created" | "refused" | "model_unavailable" | "model_timeout" | "invalid";
         };
         /** DayAnalysisOut */
         DayAnalysisOut: {
@@ -2954,7 +2954,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "created" | "refused" | "model_unavailable" | "invalid";
+            outcome: "created" | "refused" | "model_unavailable" | "model_timeout" | "invalid";
         };
         /** PatternAnalysisOut */
         PatternAnalysisOut: {

@@ -160,8 +160,14 @@ def _safe_generation_detail(outcome: analysis_service.AnalysisOutcome) -> str | 
     return {
         analysis_service.AnalysisOutcome.REFUSED: "The local model refused this request safely.",
         analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE: (
-            "The configured private model is unavailable. Recorded facts and the HealthCurve "
-            "remain available."
+            "HealthCurve could not reach the configured private model on its host. Confirm "
+            "Ollama is running, then try again. Recorded facts and the HealthCurve remain "
+            "available."
+        ),
+        analysis_service.AnalysisOutcome.MODEL_TIMEOUT: (
+            "The configured private model did not finish within HealthCurve's time limit. "
+            "It may still be loading; wait a moment and try again. Recorded facts and the "
+            "HealthCurve remain available."
         ),
         analysis_service.AnalysisOutcome.INVALID: (
             "The generated analysis failed HealthCurve's citation or safety checks and was "
@@ -340,6 +346,10 @@ def generate_pattern_analysis(
         analysis_service.AnalysisOutcome.REFUSED: "The local model refused this request safely.",
         analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE: (
             "The configured private model is unavailable. Deterministic results remain available."
+        ),
+        analysis_service.AnalysisOutcome.MODEL_TIMEOUT: (
+            "The configured private model did not finish within HealthCurve's time limit. "
+            "Deterministic results remain available."
         ),
         analysis_service.AnalysisOutcome.INVALID: (
             "The generated draft failed HealthCurve's citation or safety checks and was not saved."

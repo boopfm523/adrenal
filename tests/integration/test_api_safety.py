@@ -5746,7 +5746,8 @@ def test_day_analysis_persists_provenance_and_detects_late_data(
 @pytest.mark.parametrize(
     ("outcome", "safe_fragment"),
     [
-        (analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE, "private model is unavailable"),
+        (analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE, "could not reach"),
+        (analysis_service.AnalysisOutcome.MODEL_TIMEOUT, "did not finish"),
         (analysis_service.AnalysisOutcome.INVALID, "citation or safety checks"),
     ],
 )

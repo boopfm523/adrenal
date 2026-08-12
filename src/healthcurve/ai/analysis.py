@@ -105,6 +105,7 @@ class AnalysisOutcome(StrEnum):
     CREATED = "created"
     REFUSED = "refused"
     MODEL_UNAVAILABLE = "model_unavailable"
+    MODEL_TIMEOUT = "model_timeout"
     INVALID = "invalid"
 
 
@@ -287,11 +288,12 @@ def generate_analysis(
         temperature=0.0,
     )
     if not result.ok:
-        outcome = (
-            AnalysisOutcome.MODEL_UNAVAILABLE
-            if result.outcome in {ModelOutcome.UNAVAILABLE, ModelOutcome.TIMEOUT}
-            else AnalysisOutcome.INVALID
-        )
+        if result.outcome is ModelOutcome.TIMEOUT:
+            outcome = AnalysisOutcome.MODEL_TIMEOUT
+        elif result.outcome is ModelOutcome.UNAVAILABLE:
+            outcome = AnalysisOutcome.MODEL_UNAVAILABLE
+        else:
+            outcome = AnalysisOutcome.INVALID
         return AnalysisGenerationResult(outcome=outcome, detail=result.detail)
     if not result.model_name or not result.model_digest:
         return AnalysisGenerationResult(

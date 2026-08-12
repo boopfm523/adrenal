@@ -173,6 +173,13 @@ export class ApiError extends Error {
   }
 }
 
+export class AnalysisRequestTimeoutError extends Error {
+  constructor() {
+    super("The analysis request did not finish within 75 seconds.");
+    this.name = "AnalysisRequestTimeoutError";
+  }
+}
+
 function isWriteMethod(method: string): boolean {
   return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
@@ -539,7 +546,15 @@ export function getDayAnalysis(day: string, timezone: string): Promise<DayAnalys
 
 export function generateDayAnalysis(day: string, timezone: string): Promise<DayAnalysisGeneration> {
   const params = new URLSearchParams({ day, timezone });
-  return apiRequest<DayAnalysisGeneration>(`/analytics/day-analysis?${params.toString()}`, { method: "POST" });
+  const controller = new AbortController();
+  const deadline = window.setTimeout(() => { controller.abort(); }, 75_000);
+  return apiRequest<DayAnalysisGeneration>(`/analytics/day-analysis?${params.toString()}`, {
+    method: "POST",
+    signal: controller.signal,
+  }).catch((error: unknown) => {
+    if (controller.signal.aborted) throw new AnalysisRequestTimeoutError();
+    throw error;
+  }).finally(() => { window.clearTimeout(deadline); });
 }
 
 export async function downloadDailyPatternsCsv(dateFrom: string, dateTo: string, timezone: string): Promise<Blob> {
