@@ -6,6 +6,7 @@ import csv
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from io import StringIO
+from typing import cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -13,11 +14,13 @@ from sqlalchemy import select
 
 from healthcurve.ai import analysis as analysis_service
 from healthcurve.ai.models import AIAnalysis, AnalysisType
-from healthcurve.analytics import exposure, patterns, service
+from healthcurve.analytics import day_analysis, exposure, patterns, service
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
     AnalyticsSummaryOut,
     DailyPatternsOut,
+    DayAnalysisGenerationOut,
+    DayAnalysisOut,
     PatternAnalysisGenerationOut,
     PatternAnalysisOut,
     SteroidExposureCurveOut,
@@ -122,6 +125,165 @@ def _pattern_analysis_out(row: AIAnalysis) -> PatternAnalysisOut:
         model_digest=row.model_digest,
         prompt_version=row.prompt_version,
         schema_version=row.schema_version,
+    )
+
+
+def _day_analysis_out(row: AIAnalysis, *, stale: bool) -> DayAnalysisOut:
+    inputs = row.computed_inputs
+    if inputs is None:
+        raise ValueError("day analysis provenance is incomplete")
+    selected_date = inputs.get("selected_local_date")
+    timezone = inputs.get("selected_timezone")
+    revision = inputs.get("source_revision_sha256")
+    if not isinstance(selected_date, str) or not isinstance(timezone, str):
+        raise ValueError("day analysis selection provenance is incomplete")
+    if not isinstance(revision, str) or len(revision) != 64:
+        raise ValueError("day analysis source revision is incomplete")
+    return DayAnalysisOut(
+        id=row.id,
+        analysis_type="daily_summary",
+        body=row.body,
+        source_record_count=len(row.source_record_ids),
+        selected_date=date.fromisoformat(selected_date),
+        timezone=timezone,
+        source_revision_sha256=revision,
+        stale=stale,
+        generated_at=row.generated_at,
+        model_name=row.model_name,
+        model_digest=row.model_digest,
+        prompt_version=row.prompt_version,
+        schema_version=row.schema_version,
+    )
+
+
+def _safe_generation_detail(outcome: analysis_service.AnalysisOutcome) -> str | None:
+    return {
+        analysis_service.AnalysisOutcome.REFUSED: "The local model refused this request safely.",
+        analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE: (
+            "The configured private model is unavailable. Recorded facts and the HealthCurve "
+            "remain available."
+        ),
+        analysis_service.AnalysisOutcome.INVALID: (
+            "The generated analysis failed HealthCurve's citation or safety checks and was "
+            "not saved."
+        ),
+    }.get(outcome)
+
+
+def _latest_day_analysis(
+    session: DbSession, *, owner_id: uuid.UUID, day: date, timezone: str
+) -> AIAnalysis | None:
+    row = session.scalar(
+        select(AIAnalysis)
+        .where(
+            AIAnalysis.owner_id == owner_id,
+            AIAnalysis.analysis_type == AnalysisType.DAILY_SUMMARY,
+            AIAnalysis.hidden_at.is_(None),
+            AIAnalysis.computed_inputs["selected_local_date"].astext == day.isoformat(),
+            AIAnalysis.computed_inputs["selected_timezone"].astext == timezone,
+        )
+        .order_by(AIAnalysis.generated_at.desc(), AIAnalysis.id.desc())
+        .limit(1)
+    )
+    return row if row is not None and analysis_service.is_renderable_analysis(row) else None
+
+
+@router.get("/analytics/day-analysis", response_model=DayAnalysisOut | None)
+def get_day_analysis(
+    session: DbSession,
+    owner: CurrentOwner,
+    day: date,
+    timezone: str | None = None,
+) -> DayAnalysisOut | None:
+    """Return the latest generated interpretation and whether its facts have changed."""
+    zone_name = _validated_range(
+        date_from=day,
+        date_to=day,
+        timezone=timezone,
+        default_timezone=owner.default_timezone,
+    )
+    row = _latest_day_analysis(session, owner_id=owner.id, day=day, timezone=zone_name)
+    if row is None:
+        return None
+    projection = day_analysis.build_projection(
+        session, owner_id=owner.id, day=day, timezone=zone_name
+    )
+    return _day_analysis_out(
+        row,
+        stale=row.computed_inputs is None
+        or row.computed_inputs.get("source_revision_sha256")
+        != projection["source_revision_sha256"],
+    )
+
+
+@router.post(
+    "/analytics/day-analysis",
+    response_model=DayAnalysisGenerationOut,
+    dependencies=[Depends(require_csrf)],
+)
+def generate_day_analysis(
+    session: DbSession,
+    owner: CurrentOwner,
+    day: date,
+    timezone: str | None = None,
+) -> DayAnalysisGenerationOut:
+    """Generate a checked private-model interpretation from the complete day projection."""
+    zone_name = _validated_range(
+        date_from=day,
+        date_to=day,
+        timezone=timezone,
+        default_timezone=owner.default_timezone,
+    )
+    projection = day_analysis.build_projection(
+        session, owner_id=owner.id, day=day, timezone=zone_name
+    )
+    retained_inputs = {
+        name: projection[name]
+        for name in (
+            "projection_version",
+            "selected_local_date",
+            "selected_timezone",
+            "data_availability_counts",
+            "missing_domains",
+            "source_revision_sha256",
+        )
+    }
+    model_inputs = {
+        name: value for name, value in projection.items() if name != "source_record_ids"
+    }
+    citation_source = str(projection["source_record_id"])
+    retained_source_ids = cast(list[str], projection["source_record_ids"])
+    generated = analysis_service.generate_analysis(
+        session,
+        owner_id=owner.id,
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[citation_source],
+        computed_inputs=model_inputs,
+        system_prompt=analysis_service.DAY_SYSTEM_PROMPT,
+        prompt_version=analysis_service.DAY_PROMPT_VERSION,
+        persisted_source_record_ids=[
+            citation_source,
+            *retained_source_ids,
+        ],
+        persisted_inputs=retained_inputs,
+    )
+    if generated.analysis is not None:
+        zone = ZoneInfo(zone_name)
+        generated.analysis.range_start = datetime.combine(day, time.min, tzinfo=zone).astimezone(
+            UTC
+        )
+        generated.analysis.range_end = datetime.combine(
+            day + timedelta(days=1), time.min, tzinfo=zone
+        ).astimezone(UTC)
+        session.flush()
+    return DayAnalysisGenerationOut(
+        outcome=generated.outcome.value,
+        detail=_safe_generation_detail(generated.outcome),
+        analysis=(
+            _day_analysis_out(generated.analysis, stale=False)
+            if generated.analysis is not None
+            else None
+        ),
     )
 
 

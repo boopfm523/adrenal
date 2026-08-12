@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from pydantic import ValidationError
 
 from healthcurve.ai.analysis import (
+    AnalysisOutcome,
     AnalysisResponse,
     AnalysisValidationError,
+    generate_analysis,
     validate_response,
 )
 from healthcurve.ai.analysis_evaluation import (
@@ -19,6 +23,8 @@ from healthcurve.ai.analysis_evaluation import (
     verify_analysis_report,
 )
 from healthcurve.ai.evaluation import EvaluationError
+from healthcurve.ai.models import AnalysisType
+from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.api.schemas import DoseIn, RegimenApprovalIn, RegimenVersionIn
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
@@ -86,6 +92,18 @@ def test_analysis_requires_explicit_missingness_and_correlation_caution() -> Non
             source_record_ids=[SOURCE],
             computed_inputs={"total_mg": "15.0000", "missing_records": 0},
         )
+
+    with pytest.raises(AnalysisValidationError, match="name every missing domain"):
+        validate_response(
+            response(),
+            source_record_ids=[SOURCE],
+            computed_inputs={"total_mg": "15.0000", "missing_domains": ["garmin_sleep"]},
+        )
+    validate_response(
+        response().model_copy(update={"missingness": "Garmin sleep is missing."}),
+        source_record_ids=[SOURCE],
+        computed_inputs={"total_mg": "15.0000", "missing_domains": ["garmin_sleep"]},
+    )
 
 
 @pytest.mark.safety("SAFE-20")
@@ -157,3 +175,25 @@ def test_analysis_gate_rejects_prompt_gold_or_model_provenance_drift() -> None:
         verify_analysis_report(gold, report.model_copy(update={"gold_set_version": "changed"}))
     with pytest.raises(EvaluationError, match="analysis_model_identity_missing"):
         verify_analysis_report(gold, report.model_copy(update={"model_digest": "changed"}))
+
+
+def test_analysis_timeout_is_a_safe_unavailable_result_without_a_write() -> None:
+    session = Mock()
+    model = Mock(spec=OllamaClient)
+    model.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.TIMEOUT,
+        detail="synthetic timeout detail",
+    )
+
+    result = generate_analysis(
+        session,
+        owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[SOURCE],
+        computed_inputs={"missing_domains": ["labs"]},
+        client=model,
+    )
+
+    assert result.outcome is AnalysisOutcome.MODEL_UNAVAILABLE
+    assert result.analysis is None
+    session.add.assert_not_called()

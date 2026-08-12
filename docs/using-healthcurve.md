@@ -500,6 +500,27 @@ is unavailable, deterministic results continue to work. The owner can delete the
 generated draft without changing facts or physician-approved plans; while retained,
 it is included only when an export explicitly includes AI analysis.
 
+For one selected day, **Analyze this day** builds a fresh fingerprinted projection from
+all supported recorded domains and the physician-approved plan active that day. Dense
+Garmin and theoretical-exposure readings are summarized into fixed 15-minute local-time
+windows so every sample contributes without overwhelming the private model. Sparse
+records retain their exact times and values; absent domains remain explicitly missing.
+The projection may include sensitive diary and life-event text, which is stated beside the button,
+but exact coordinates are withheld. It is sent only to the configured host-native
+Ollama model—never a cloud AI service.
+
+The saved result is visibly AI-generated and retains its selected date/timezone, source
+revision fingerprint, source-record manifest, model digest, prompt version, and schema
+version. The full day projection is sent transiently to local Ollama but is not duplicated
+in the saved provenance row. HealthCurve
+rejects output that lacks citations, invents numeric values, omits missingness, or gives
+medication guidance. A timeout or missing/malformed model response leaves the daily
+HealthCurve usable and saves nothing. If a later Garmin sync or fact correction changes
+the projection, the saved interpretation is marked stale until you analyze the day
+again. The analysis may suggest descriptive associations or questions to review; it
+does not establish causation or diagnosis, measure cortisol, determine medication need,
+or alter any recorded fact or physician-approved plan.
+
 Historical dose timing is resolved against the physician-approved plan whose half-open
 effective interval contained each scheduled or recorded instant, including retired
 plans and a plan transition within a day. The timing result shows signed minutes

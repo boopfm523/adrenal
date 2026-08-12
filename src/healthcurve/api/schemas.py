@@ -1085,6 +1085,25 @@ class PatternAnalysisGenerationOut(ApiModel):
     analysis: PatternAnalysisOut | None = None
 
 
+class DayAnalysisOut(AiResource):
+    id: uuid.UUID
+    analysis_type: Literal["daily_summary"]
+    body: str
+    selected_date: date
+    timezone: str
+    source_revision_sha256: str = Field(min_length=64, max_length=64)
+    source_record_count: int = Field(ge=1)
+    model_digest: str
+    schema_version: str
+    stale: bool
+
+
+class DayAnalysisGenerationOut(ApiModel):
+    outcome: Literal["created", "refused", "model_unavailable", "invalid"]
+    detail: str | None = None
+    analysis: DayAnalysisOut | None = None
+
+
 class DailyPatternsOut(ApiModel):
     date_from: date
     date_to: date

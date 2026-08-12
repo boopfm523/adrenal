@@ -44,6 +44,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/day-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Day Analysis
+         * @description Return the latest generated interpretation and whether its facts have changed.
+         */
+        get: operations["get_day_analysis_api_v1_analytics_day_analysis_get"];
+        put?: never;
+        /**
+         * Generate Day Analysis
+         * @description Generate a checked private-model interpretation from the complete day projection.
+         */
+        post: operations["generate_day_analysis_api_v1_analytics_day_analysis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/pattern-analysis": {
         parameters: {
             query?: never;
@@ -1804,6 +1828,69 @@ export interface components {
             /** Findings */
             findings: components["schemas"]["DataQualityFindingOut"][];
             page: components["schemas"]["PageMetadata"];
+        };
+        /** DayAnalysisGenerationOut */
+        DayAnalysisGenerationOut: {
+            analysis?: components["schemas"]["DayAnalysisOut"] | null;
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "refused" | "model_unavailable" | "invalid";
+        };
+        /** DayAnalysisOut */
+        DayAnalysisOut: {
+            /**
+             * Analysis Type
+             * @constant
+             */
+            analysis_type: "daily_summary";
+            /** Body */
+            body: string;
+            /**
+             * Category
+             * @default ai
+             * @constant
+             */
+            category: "ai";
+            /**
+             * Disclaimer
+             * @default Generated analysis. Not medical advice, not a plan, and not a substitute for your physician-approved instructions.
+             */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model Digest */
+            model_digest: string;
+            /** Model Name */
+            model_name: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Selected Date
+             * Format: date
+             */
+            selected_date: string;
+            /** Source Record Count */
+            source_record_count: number;
+            /** Source Revision Sha256 */
+            source_revision_sha256: string;
+            /** Stale */
+            stale: boolean;
+            /** Timezone */
+            timezone: string;
         };
         /** DecimalRangeOut */
         DecimalRangeOut: {
@@ -3817,6 +3904,76 @@ export interface operations {
                 };
                 content: {
                     "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_day_analysis_api_v1_analytics_day_analysis_get: {
+        parameters: {
+            query: {
+                day: string;
+                timezone?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayAnalysisOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_day_analysis_api_v1_analytics_day_analysis_post: {
+        parameters: {
+            query: {
+                day: string;
+                timezone?: string | null;
+            };
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayAnalysisGenerationOut"];
                 };
             };
             /** @description Validation Error */

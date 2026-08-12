@@ -603,6 +603,19 @@ def _versions_active_during(
     return active
 
 
+def approved_versions_during(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> list[RegimenVersion]:
+    """Return physician-approved plan versions active during a half-open UTC window."""
+    return _versions_active_during(
+        _historical_versions_overlapping(session, owner_id, start, end), start, end
+    )
+
+
 def association_for_event_time(
     session: Session,
     *,

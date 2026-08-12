@@ -15,6 +15,7 @@ import {
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { AccessibleLineChart } from "../components/AccessibleLineChart";
+import { DayAnalysisCard } from "../components/DayAnalysisCard";
 import { DailyHealthCurve } from "../components/DailyHealthCurve";
 import { DailyPatternsTable } from "../components/DailyPatternsTable";
 import { formatDecimal, formatMeasurement } from "../format";
@@ -137,6 +138,7 @@ export function AnalyticsPage(): React.JSX.Element {
     {dailyCurve.isPending ? <p role="status">Building your daily HealthCurve…</p> : null}
     {dailyCurve.isError ? <p className="error-summary" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</p> : null}
     {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} />}
+    {dailyCurve.data === undefined ? null : <DayAnalysisCard day={dayFilter.day} timezone={dayFilter.timezone} />}
     <section className="analytics-history" aria-labelledby="analytics-history-title"><h2 id="analytics-history-title">Longer-range analytics</h2><p>Use these deterministic totals to compare days across a longer period. Daily pattern analysis builds on the selected-day HealthCurve.</p></section>
     <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><label>From date<input required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Through date<input required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label><button type="submit">Calculate metrics</button></form>
     {patterns.isPending ? <p role="status">Deriving comparable daily features…</p> : null}{patterns.isError ? <p className="error-summary" role="alert">Daily pattern features could not be calculated. Check the date range and IANA timezone.</p> : null}

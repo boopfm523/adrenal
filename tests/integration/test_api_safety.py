@@ -6,6 +6,7 @@ here is only true if the database constraints exist.
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from collections.abc import Iterator
@@ -33,6 +34,7 @@ from healthcurve import privacy
 from healthcurve.ai import analysis as analysis_service
 from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
+from healthcurve.analytics import day_analysis as day_analysis_service
 from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
@@ -3568,9 +3570,13 @@ def test_generate_and_delete_ai_analysis_leaves_fact_and_plan_rows_bit_identical
             source_record_ids=[str(dose_id)],
             computed_inputs={"recorded_total_mg": "10.0000", "missing_records": 0},
             client=cast(OllamaClient, fake_client),
+            persisted_source_record_ids=[str(dose_id), str(plan_id)],
+            persisted_inputs={"source_revision_sha256": "b" * 64},
         )
         assert generated.outcome is analysis_service.AnalysisOutcome.CREATED
         assert generated.analysis is not None
+        assert generated.analysis.source_record_ids == [str(dose_id), str(plan_id)]
+        assert generated.analysis.computed_inputs == {"source_revision_sha256": "b" * 64}
         session.delete(generated.analysis)
         session.flush()
         fact_after = dict(
@@ -5462,6 +5468,48 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
         first_sample_id = heart_samples[0].id
         second_dose_id = second_dose.id
         expected_plan_ids = {str(first_plan.id), str(second_plan.id)}
+        owner_id = owner.id
+
+    with Session(engine) as session:
+        projection = day_analysis_service.build_projection(
+            session,
+            owner_id=owner_id,
+            day=day,
+            timezone="America/New_York",
+        )
+    assert projection["projection_version"] == "hc-day-analysis-v1"
+    revision_value = projection["source_revision_sha256"]
+    assert isinstance(revision_value, str) and len(revision_value) == 64
+    availability = cast(dict[str, int], projection["data_availability_counts"])
+    facts = cast(dict[str, list[dict[str, Any]]], projection["recorded_facts_and_plan_context"])
+    assert availability["garmin_intraday_samples"] == 2
+    assert set(availability) == {
+        "doses",
+        "symptoms",
+        "stress_episodes",
+        "emergency_injections",
+        "blood_pressure",
+        "weight",
+        "diary",
+        "life_events",
+        "labs",
+        "garmin_intraday_samples",
+        "garmin_daily_or_point_metrics",
+        "garmin_sleep",
+        "garmin_activities",
+        "context",
+        "physician_approved_plans",
+    }
+    assert len(facts["doses"]) == 2
+    assert len(facts["symptoms"]) == 1
+    assert len(facts["physician_approved_plans"]) == 1
+    assert facts["physician_approved_plans"][0]["version_label"] == (
+        "Synthetic post-transition plan"
+    )
+    buckets = facts["garmin_intraday_15_minute_buckets"]
+    assert len(buckets) == 1
+    assert buckets[0]["sample_count"] == 2
+    assert buckets[0]["average"] == "72.5000"
 
     login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
     assert login.status_code == 200, login.text
@@ -5607,6 +5655,151 @@ def test_pattern_analysis_fails_safely_when_private_model_is_unavailable(
         ),
         "analysis": None,
     }
+    assert "synthetic private model detail" not in response.text
+
+
+def test_day_analysis_persists_provenance_and_detects_late_data(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner_email = f"day-ai-{uuid.uuid4().hex[:12]}@example.com"
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email=owner_email,
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(owner)
+
+    login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    csrf = login.json()["csrf_token"]
+    revision = "a" * 64
+
+    def projection(*args: object, **kwargs: object) -> dict[str, object]:
+        return {
+            "projection_version": "hc-day-analysis-v1",
+            "selected_local_date": "2026-08-11",
+            "selected_timezone": "UTC",
+            "data_availability_counts": {"symptoms": 1},
+            "missing_domains": ["labs"],
+            "recorded_facts_and_plan_context": {"diary": "SYNTHETIC_PRIVATE_DAY_TEXT"},
+            "source_revision_sha256": revision,
+            "source_record_id": f"healthcurve-day:2026-08-11:{revision}",
+            "source_record_ids": ["11111111-1111-4111-8111-111111111111"],
+        }
+
+    def generated(session: Session, **kwargs: object) -> analysis_service.AnalysisGenerationResult:
+        row = AIAnalysis(
+            owner_id=kwargs["owner_id"],
+            analysis_type=AnalysisType.DAILY_SUMMARY,
+            body=(
+                "- Synthetic temporal association. [sources: healthcurve-day]"
+                "\n\nMissingness: labs missing.\n"
+                "Correlation caution: association does not establish causation or diagnosis."
+            ),
+            source_record_ids=kwargs["persisted_source_record_ids"],
+            computed_inputs=kwargs["persisted_inputs"],
+            model_name="qwen3:30b",
+            model_digest="sha256:synthetic",
+            prompt_version=kwargs["prompt_version"],
+            schema_version="analysis-v1",
+        )
+        session.add(row)
+        session.flush()
+        return analysis_service.AnalysisGenerationResult(
+            outcome=analysis_service.AnalysisOutcome.CREATED,
+            analysis=row,
+        )
+
+    monkeypatch.setattr(day_analysis_service, "build_projection", projection)
+    monkeypatch.setattr(analysis_service, "generate_analysis", generated)
+    created = client.post(
+        "/api/v1/analytics/day-analysis",
+        params={"day": "2026-08-11", "timezone": "UTC"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["outcome"] == "created"
+    assert body["analysis"]["category"] == "ai"
+    assert body["analysis"]["analysis_type"] == "daily_summary"
+    assert body["analysis"]["source_revision_sha256"] == revision
+    assert body["analysis"]["source_record_count"] == 2
+    assert body["analysis"]["prompt_version"] == "healthcurve-day-analysis-v1"
+    assert body["analysis"]["stale"] is False
+    with Session(engine) as session:
+        retained = session.scalar(
+            select(AIAnalysis).where(AIAnalysis.id == uuid.UUID(body["analysis"]["id"]))
+        )
+        assert retained is not None
+        assert "SYNTHETIC_PRIVATE_DAY_TEXT" not in json.dumps(retained.computed_inputs)
+
+    revision = "b" * 64
+    stale = client.get(
+        "/api/v1/analytics/day-analysis",
+        params={"day": "2026-08-11", "timezone": "UTC"},
+    )
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["stale"] is True
+
+
+@pytest.mark.parametrize(
+    ("outcome", "safe_fragment"),
+    [
+        (analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE, "private model is unavailable"),
+        (analysis_service.AnalysisOutcome.INVALID, "citation or safety checks"),
+    ],
+)
+def test_day_analysis_failure_paths_do_not_leak_model_details(
+    client: TestClient,
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: analysis_service.AnalysisOutcome,
+    safe_fragment: str,
+) -> None:
+    owner_email = f"day-ai-failure-{uuid.uuid4().hex[:10]}@example.com"
+    with Session(engine) as session, session.begin():
+        session.add(
+            Owner(
+                email=owner_email,
+                password_hash=auth.hash_password(PASSWORD),
+                default_timezone="UTC",
+            )
+        )
+    login = client.post("/api/v1/auth/login", json={"email": owner_email, "password": PASSWORD})
+    csrf = login.json()["csrf_token"]
+
+    def empty_projection(*args: object, **kwargs: object) -> dict[str, object]:
+        return {
+            "projection_version": "hc-day-analysis-v1",
+            "selected_local_date": "2026-08-11",
+            "selected_timezone": "UTC",
+            "data_availability_counts": {},
+            "missing_domains": ["all supported domains"],
+            "source_revision_sha256": "c" * 64,
+            "source_record_id": f"healthcurve-day:2026-08-11:{'c' * 64}",
+            "source_record_ids": [],
+        }
+
+    def failed_generation(
+        *args: object, **kwargs: object
+    ) -> analysis_service.AnalysisGenerationResult:
+        return analysis_service.AnalysisGenerationResult(
+            outcome=outcome,
+            detail="synthetic private model detail must not cross the API",
+        )
+
+    monkeypatch.setattr(day_analysis_service, "build_projection", empty_projection)
+    monkeypatch.setattr(analysis_service, "generate_analysis", failed_generation)
+    response = client.post(
+        "/api/v1/analytics/day-analysis",
+        params={"day": "2026-08-11", "timezone": "UTC"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["outcome"] == outcome.value
+    assert safe_fragment in response.json()["detail"]
+    assert response.json()["analysis"] is None
     assert "synthetic private model detail" not in response.text
 
 

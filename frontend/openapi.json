@@ -1692,6 +1692,139 @@
         "title": "DataQualityOut",
         "type": "object"
       },
+      "DayAnalysisGenerationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DayAnalysisOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "outcome": {
+            "enum": [
+              "created",
+              "refused",
+              "model_unavailable",
+              "invalid"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "DayAnalysisGenerationOut",
+        "type": "object"
+      },
+      "DayAnalysisOut": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_type": {
+            "const": "daily_summary",
+            "title": "Analysis Type",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "category": {
+            "const": "ai",
+            "default": "ai",
+            "title": "Category",
+            "type": "string"
+          },
+          "disclaimer": {
+            "default": "Generated analysis. Not medical advice, not a plan, and not a substitute for your physician-approved instructions.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_digest": {
+            "title": "Model Digest",
+            "type": "string"
+          },
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "selected_date": {
+            "format": "date",
+            "title": "Selected Date",
+            "type": "string"
+          },
+          "source_record_count": {
+            "minimum": 1.0,
+            "title": "Source Record Count",
+            "type": "integer"
+          },
+          "source_revision_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Source Revision Sha256",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "model_name",
+          "prompt_version",
+          "id",
+          "analysis_type",
+          "body",
+          "selected_date",
+          "timezone",
+          "source_revision_sha256",
+          "source_record_count",
+          "model_digest",
+          "schema_version",
+          "stale"
+        ],
+        "title": "DayAnalysisOut",
+        "type": "object"
+      },
       "DecimalRangeOut": {
         "additionalProperties": false,
         "properties": {
@@ -7795,6 +7928,180 @@
           }
         },
         "summary": "Daily Patterns Csv",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/day-analysis": {
+      "get": {
+        "description": "Return the latest generated interpretation and whether its facts have changed.",
+        "operationId": "get_day_analysis_api_v1_analytics_day_analysis_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Day",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DayAnalysisOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Day Analysis Api V1 Analytics Day Analysis Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Day Analysis",
+        "tags": [
+          "analytics"
+        ]
+      },
+      "post": {
+        "description": "Generate a checked private-model interpretation from the complete day projection.",
+        "operationId": "generate_day_analysis_api_v1_analytics_day_analysis_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Day",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayAnalysisGenerationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Day Analysis",
         "tags": [
           "analytics"
         ]
