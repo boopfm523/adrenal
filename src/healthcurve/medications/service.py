@@ -335,6 +335,10 @@ def activate_version(
         predecessor_end = from_instant(resolved_start.replace(tzinfo=UTC), predecessor_timezone)
         predecessor.effective_to_local = predecessor_end.local_time
         predecessor.effective_to_utc_offset_minutes = predecessor_end.utc_offset_minutes
+        # PostgreSQL checks the exclusion constraint after each statement. Flush the
+        # shortened predecessor before approving the successor so the two effective
+        # periods never overlap, even transiently within this transaction.
+        session.flush([predecessor])
 
     version.status = RegimenStatus.APPROVED
     version.approved_at = approved_at or datetime.now(UTC)

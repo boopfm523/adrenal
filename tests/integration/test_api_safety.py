@@ -6874,17 +6874,23 @@ def test_data_quality_distinguishes_problems_from_provider_absence(
 def test_data_quality_flags_only_owner_scoped_open_episodes_at_24_hour_boundary(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
+    del logged_in
     now = datetime(2026, 8, 12, 16, 0, tzinfo=UTC)
+    email = f"episode-boundary-{uuid.uuid4()}@example.com"
     with Session(engine) as session, session.begin():
-        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
-        assert owner_id is not None
+        owner = Owner(
+            email=email,
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="America/New_York",
+        )
         other = Owner(
             email="other-open-episode@example.test",
             password_hash=auth.hash_password(PASSWORD),
             default_timezone="UTC",
         )
-        session.add(other)
+        session.add_all([owner, other])
         session.flush()
+        owner_id = owner.id
         episodes = [
             StressEpisode(
                 owner_id=owner_id,
@@ -6943,6 +6949,9 @@ def test_data_quality_flags_only_owner_scoped_open_episodes_at_24_hour_boundary(
         other_id = episodes[-1].id
 
         findings = findings_for_owner(session, owner_id, now=now)
+
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
 
     episode_findings = [item for item in findings if item.id.startswith("open-episode:")]
     assert len(episode_findings) == 1
