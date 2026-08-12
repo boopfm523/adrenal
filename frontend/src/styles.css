@@ -190,6 +190,14 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .episode-close-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .episode-close-form input { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
 .episode-review-target { scroll-margin-top: 1rem; outline: 0.2rem solid #9b6a18; outline-offset: -0.2rem; }
+.episode-entry-form textarea { min-height: 6rem; }
+.episode-table-region { border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.episode-table { min-width: 66rem; font-size: 0.94rem; }
+.episode-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
+.episode-table thead th { background: #e7ece8; }
+.episode-table th, .episode-table td { padding: 0.55rem 0.65rem; vertical-align: top; }
+.episode-table td > span, .episode-table th > span { display: block; }
+.episode-table tbody > tr:not(.correction-table-row) > :first-child { border-left: 0.35rem solid #365f50; }
 .metric-card { margin-block: 1rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .metric-metadata, .metric-values { display: grid; grid-template-columns: repeat(3, minmax(10rem, 1fr)); gap: 0.75rem; }
 .metric-metadata div, .metric-values div { border-top: 1px solid #dce2dd; padding-top: 0.5rem; }
@@ -485,6 +493,16 @@ circle.chart-series { fill: white; }
 .lab-unparsed summary { cursor: pointer; font-weight: 800; }
 
 @media (max-width: 720px) {
+  .episode-table-region { overflow: hidden; }
+  .episode-table { min-width: 0; }
+  .episode-table caption { display: block; width: auto; }
+  .episode-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .episode-table, .episode-table tbody, .episode-table tr, .episode-table th, .episode-table td { display: block; width: 100%; box-sizing: border-box; }
+  .episode-table tbody > tr:not(.correction-table-row) { padding: 0.85rem; border-top: 1px solid #d8dfda; }
+  .episode-table th, .episode-table td { display: grid; grid-template-columns: minmax(7rem, .8fr) minmax(0, 1.2fr); gap: .75rem; padding: .35rem 0; border: 0; text-align: left; }
+  .episode-table th::before, .episode-table td::before { content: attr(data-label); color: #52625a; font-size: .8rem; font-weight: 700; }
+  .episode-table .correction-table-row td { display: block; }
+  .episode-table .correction-table-row td::before { content: none; }
   .plan-history-region { overflow: hidden; }
   .plan-history-table { min-width: 0; }
   .plan-history-table caption { display: block; width: auto; padding: .75rem; }

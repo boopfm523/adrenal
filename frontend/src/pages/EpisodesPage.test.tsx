@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "../auth/context";
 import { sessionStore } from "../api/session";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { localDate, shiftIsoDate } from "../time";
 import { EpisodesPage } from "./EpisodesPage";
 
@@ -30,7 +31,7 @@ describe("Episodes page", () => {
       if (method === "GET") return Promise.resolve(response(url.includes("status_filter=open") ? page([episode("open")]) : page([{ ...episode("resolved"), id: "22222222-2222-4222-8222-222222222222" }], url.includes("page=2") ? 2 : 1, 2)));
       return Promise.resolve(response(episode(method === "PATCH" && (JSON.parse(init?.body as string) as { status?: string }).status === "resolved" ? "resolved" : "open")));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/episodes?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=Europe%2FLondon"]}><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/episodes?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=Europe%2FLondon"]}><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(await screen.findByText(/A dose linked to an episode records what happened/)).toBeVisible();
     expect(await screen.findAllByText("2 linked doses")).toHaveLength(2);
@@ -72,7 +73,7 @@ describe("Episodes page", () => {
       requests.push(requestUrl(input));
       return Promise.resolve(response(requestUrl(input).includes("/emergency-injections") ? { ...page([]), revisions: [] } : page([])));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
     const today = localDate(new Date(), "Europe/London");
     const sevenDayStart = shiftIsoDate(today, -6);
 
@@ -101,7 +102,7 @@ describe("Episodes page", () => {
       if (url.includes("status_filter=open")) return Promise.resolve(response(page([episode("open")])));
       return Promise.resolve(response(page([])));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/episodes?history=all&review_episode=11111111-1111-4111-8111-111111111111#episode-11111111-1111-4111-8111-111111111111"]}><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/episodes?history=all&review_episode=11111111-1111-4111-8111-111111111111#episode-11111111-1111-4111-8111-111111111111"]}><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(await screen.findByText(/selected from Data quality/i)).toBeVisible();
     await waitFor(() => { expect(requests.some((url) => url.includes("status_filter=open") && url.includes("episode_id=11111111-1111-4111-8111-111111111111"))).toBe(true); });
