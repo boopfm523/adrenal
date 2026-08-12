@@ -267,9 +267,46 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByRole("img")).toHaveTextContent("explicit Garmin awake interval");
     expect(screen.queryByText(/Garmin reported one or more awakenings without their exact times/)).not.toBeInTheDocument();
 
+    expect(hoverAt(60).tooltip).toHaveTextContent("Sleep: started");
+    expect(screen.getByRole("tooltip").textContent.match(/GMT-5/g)).toHaveLength(1);
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent(/Garmin|provider|imported/i);
+    expect(hoverAt(180).tooltip).toHaveTextContent("Awakening: started");
+    expect(screen.getByRole("tooltip").textContent.match(/GMT-4/g)).toHaveLength(1);
+    expect(hoverAt(190).tooltip).toHaveTextContent("Awakening: ended");
+    expect(hoverAt(420).tooltip).toHaveTextContent("Sleep: final wake / sleep ended");
+
     view.rerender(<DailyHealthCurve data={data({ garmin: [{ ...sleep, id: "50000000-0000-4000-8000-000000000002", sleep_intervals: [] }] })} />);
     expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(0);
     expect(screen.getByText(/Garmin reported one or more awakenings without their exact times/)).toBeVisible();
+    expect(hoverAt(60).tooltip).toHaveTextContent("Awakenings: 2 reported; exact times unavailable");
+  });
+
+  it("clips overnight sleep and distinguishes multiple sessions in the tooltip", () => {
+    const overnight: GarminRecord = {
+      ...sample(0),
+      id: "50000000-0000-4000-8000-000000000010",
+      kind: "sleep",
+      summary: "Overnight sleep",
+      time: { ...sample(0).time, occurred_at: "2026-03-08T04:00:00Z" },
+      ended_at: "2026-03-08T05:30:00Z",
+      awakenings: 0,
+      sleep_intervals: [],
+    };
+    const later: GarminRecord = {
+      ...overnight,
+      id: "50000000-0000-4000-8000-000000000011",
+      summary: "Later sleep",
+      time: { ...sample(0).time, occurred_at: "2026-03-08T15:00:00Z" },
+      ended_at: "2026-03-08T16:00:00Z",
+    };
+    render(<DailyHealthCurve data={data({ garmin: [overnight, later] })} />);
+
+    expect(document.querySelectorAll(".healthcurve-sleep-band")).toHaveLength(2);
+    expect(document.querySelectorAll(".healthcurve-sleep-marker--start")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-sleep-marker--end")).toHaveLength(2);
+    expect(hoverAt(30).tooltip).toHaveTextContent("Sleep: final wake / sleep ended");
+    expect(hoverAt(600).tooltip).toHaveTextContent("Sleep: started");
+    expect(hoverAt(660).tooltip).toHaveTextContent("Sleep: final wake / sleep ended");
   });
 
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {

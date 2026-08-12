@@ -46,6 +46,13 @@ interface SymptomObservation {
   source: string;
 }
 
+interface TooltipObservation {
+  id: string;
+  time: string;
+  series: string;
+  value: string;
+}
+
 const WIDTH = 960;
 const HEIGHT = 430;
 const LEFT = 74;
@@ -330,6 +337,83 @@ function nearbySymptomObservations(
   );
 }
 
+function sleepTooltipObservations(
+  records: GarminRecord[],
+  dayStart: number,
+  dayEnd: number,
+): TooltipObservation[] {
+  return records.flatMap((record) => {
+    const observations: TooltipObservation[] = [];
+    const sessionStart = Date.parse(record.time.occurred_at);
+    const sessionEnd = Date.parse(record.ended_at ?? record.time.occurred_at);
+    const awakeIntervals = record.sleep_intervals ?? [];
+    const startIsVisible = sessionStart >= dayStart && sessionStart < dayEnd;
+    const endIsVisible = sessionEnd > dayStart && sessionEnd <= dayEnd;
+
+    if (startIsVisible) {
+      observations.push({
+        id: `${record.id}-sleep-start`,
+        time: record.time.occurred_at,
+        series: "Sleep",
+        value: "started",
+      });
+    }
+    if (endIsVisible) {
+      observations.push({
+        id: `${record.id}-sleep-end`,
+        time: record.ended_at ?? record.time.occurred_at,
+        series: "Sleep",
+        value: "final wake / sleep ended",
+      });
+    }
+    for (const [index, interval] of awakeIntervals.entries()) {
+      const intervalStart = Date.parse(interval.started_at);
+      const intervalEnd = Date.parse(interval.ended_at);
+      if (intervalStart >= dayStart && intervalStart < dayEnd) {
+        observations.push({
+          id: `${record.id}-awake-${index.toString()}-start`,
+          time: interval.started_at,
+          series: "Awakening",
+          value: "started",
+        });
+      }
+      if (intervalEnd > dayStart && intervalEnd <= dayEnd) {
+        observations.push({
+          id: `${record.id}-awake-${index.toString()}-end`,
+          time: interval.ended_at,
+          series: "Awakening",
+          value: "ended",
+        });
+      }
+    }
+
+    const awakeningCount = record.awakenings ?? 0;
+    if (awakeningCount > 0 && awakeIntervals.length === 0) {
+      const boundaryTime = startIsVisible
+        ? record.time.occurred_at
+        : endIsVisible ? (record.ended_at ?? record.time.occurred_at) : null;
+      if (boundaryTime !== null) {
+        observations.push({
+          id: `${record.id}-untimed-awakenings`,
+          time: boundaryTime,
+          series: "Awakenings",
+          value: `${awakeningCount.toString()} reported; exact ${awakeningCount === 1 ? "time" : "times"} unavailable`,
+        });
+      }
+    }
+    return observations;
+  });
+}
+
+function nearbyTooltipObservations(
+  observations: TooltipObservation[],
+  cursorTime: number,
+): TooltipObservation[] {
+  return observations.filter(
+    (observation) => Math.abs(Date.parse(observation.time) - cursorTime) <= 60_000,
+  );
+}
+
 export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): React.JSX.Element {
   const [visible, setVisible] = useState(DEFAULT_VISIBLE);
   const start = Date.parse(data.exposure.day_start);
@@ -344,6 +428,8 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
   const missingWakeTiming = sleepRecords.some(
     (record) => (record.awakenings ?? 0) > 0 && (record.sleep_intervals ?? []).length === 0,
   );
+  const sleepObservations = sleepTooltipObservations(sleepRecords, start, end);
+  const cursorSleepObservations = nearbyTooltipObservations(sleepObservations, cursorTime);
   const cursorPoints = nearestVisiblePoints(shownLanes, cursorTime);
   const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
   const cursorUnscoredSymptoms = visible.symptoms
@@ -372,6 +458,11 @@ export function DailyHealthCurve({ data }: { data: DailyHealthCurveData }): Reac
       key: `unscored-symptom-${symptom.id}`,
       series: "Symptoms",
       value: symptom.label,
+    })),
+    ...cursorSleepObservations.map((observation) => ({
+      key: observation.id,
+      series: observation.series,
+      value: observation.value,
     })),
   ];
   const cursorLabel = experiencedTime(new Date(cursorTime).toISOString(), data.exposure.timezone);
