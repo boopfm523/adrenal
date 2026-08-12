@@ -311,6 +311,43 @@ function dailyAggregateValue(record: GarminRecord): string {
   return formatMeasurement(record.value, record.unit);
 }
 
+function summaryNumber(value: number, maximumFractionDigits = 1): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(value);
+}
+
+function summaryValues(lane: Lane, data: DailyHealthCurveData): number[] {
+  if (lane.key === "exposure") return lane.points.map((point) => point.value);
+  const definition = METRIC_LANES.find((candidate) => candidate.key === lane.key);
+  if (definition === undefined) return [];
+  return data.garmin.flatMap((record) => {
+    if (record.kind !== "sample" || record.metric_type !== definition.metric) return [];
+    const value = numeric(record.value);
+    return value === null ? [] : [value];
+  });
+}
+
+function laneMetadata(lane: Lane, data: DailyHealthCurveData, unscoredSymptomCount: number): string {
+  if (lane.key === "blood_pressure") return `${data.bloodPressure.length.toString()} recorded measurement(s); values use mmHg; missing times remain missing.`;
+  if (lane.key === "temperature") return `${data.temperature.length.toString()} recorded measurement(s); the graph uses a fixed ${TEMPERATURE_DISPLAY_MIN.toString()}–${TEMPERATURE_DISPLAY_MAX.toString()} °F display range and exact Fahrenheit and Celsius values remain in the Timeline.`;
+  if (lane.key === "symptoms") return `${data.symptoms.length.toString()} recorded event(s); ${lane.points.length.toString()} with severity and ${unscoredSymptomCount.toString()} without severity. Missing severity is not treated as zero.`;
+  const displayNote = lane.key === "respiration_rate"
+    ? ` The graph uses a display-only 5-sample rolling median within each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min range; underlying values are unchanged.`
+    : ["stress", "heart_rate", "hrv"].includes(lane.key)
+      ? " Dense sample dots are hidden from the graph."
+      : "";
+  return `${summaryValues(lane, data).length.toString()} exact point(s); ${lane.unit}; gaps remain missing.${displayNote} Exact values remain in the chart tooltip and Timeline.`;
+}
+
+function SummaryInfo({ id, label, children }: { id: string; label: string; children: string }): React.JSX.Element {
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const visible = focused || hovered;
+  return <span className="curve-summary-info">
+    <button type="button" className="curve-summary-info-button" aria-label={`About ${label} data`} aria-describedby={visible ? id : undefined} onFocus={() => { setFocused(true); }} onBlur={() => { setFocused(false); }} onPointerEnter={() => { setHovered(true); }} onPointerLeave={() => { setHovered(false); }}>ⓘ</button>
+    {visible ? <span id={id} className="curve-summary-tooltip" role="tooltip">{children}</span> : null}
+  </span>;
+}
+
 function lanes(data: DailyHealthCurveData): Lane[] {
   const exposure: Lane = {
     key: "exposure",
@@ -746,9 +783,23 @@ export function DailyHealthCurve({
     </div>
     {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
     <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => {
-      if (lane.key === "symptoms") return <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p>;
       const aggregates = dailyAggregatesForLane(data, lane);
-      return <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{aggregates.map((record) => <span key={record.id}> <strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)} ({record.period_label ?? "provider-defined period"}; untimed).</span>)}{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and Timeline.` : lane.key === "temperature" ? ` Discrete points use a fixed ${TEMPERATURE_DISPLAY_MIN.toString()}–${TEMPERATURE_DISPLAY_MAX.toString()} °F structural display domain; exact Fahrenheit and Celsius values remain in the tooltip, table, and Timeline.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and Timeline." : ""}</p>;
+      const values = summaryValues(lane, data);
+      const average = values.length === 0 ? null : values.reduce((total, value) => total + value, 0) / values.length;
+      const metadataId = `curve-summary-metadata-${lane.key}`;
+      return <section key={lane.key} className="curve-summary-card" aria-labelledby={`curve-summary-title-${lane.key}`}>
+        <h3 id={`curve-summary-title-${lane.key}`}>{lane.label}<SummaryInfo id={metadataId} label={lane.label}>{laneMetadata(lane, data, unscoredSymptoms.length)}</SummaryInfo></h3>
+        <div className="curve-summary-values">
+          {aggregates.map((record) => <p key={record.id}><strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)}</p>)}
+          {lane.key === "exposure" ? <p><strong>Peak:</strong> {summaryNumber(Math.max(...values, 0), 3)} REU</p> : null}
+          {["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) && average !== null ? <><p><strong>Observed average:</strong> {summaryNumber(average)} {lane.unit}</p><p><strong>Observed range:</strong> {summaryNumber(Math.min(...values))}–{summaryNumber(Math.max(...values))} {lane.unit}</p></> : null}
+          {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => <p key={record.id}><strong>{record.systolic_mmhg.toString()}/{record.diastolic_mmhg.toString()} mmHg</strong>{record.pulse_bpm == null ? null : ` · pulse ${record.pulse_bpm.toString()} bpm`}</p>) : null}
+          {lane.key === "temperature" ? data.temperature.map((record) => <p key={record.id}><strong>{record.display_f} °F</strong> ({record.display_c} °C)</p>) : null}
+          {lane.key === "symptoms" ? data.symptoms.map((record) => <p key={record.id}><strong>{record.name}</strong>{record.severity == null ? " · severity not recorded" : ` · ${record.severity.toString()}/10`}</p>) : null}
+          {aggregates.length === 0 && values.length === 0 && lane.key !== "symptoms" ? <p className="muted">No values recorded.</p> : null}
+          {lane.key === "symptoms" && data.symptoms.length === 0 ? <p className="muted">No symptoms recorded.</p> : null}
+        </div>
+      </section>;
     })}</div>
     {data.temperature.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Selected-day temperature exact values"><table className="vital-table"><caption>Exact selected-day body-temperature facts. Missing intervals remain blank.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Temperature</th></tr></thead><tbody>{data.temperature.map((record) => <tr key={record.id}><td>{experiencedTime(record.time.occurred_at, data.exposure.timezone)}</td><td>{record.display_f} °F ({record.display_c} °C)</td></tr>)}</tbody></table></div>}
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>

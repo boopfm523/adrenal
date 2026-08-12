@@ -127,7 +127,9 @@ describe("Daily HealthCurve", () => {
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
     expect(document.querySelectorAll("circle.healthcurve-point--heart_rate")).toHaveLength(0);
-    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("Dense sample dots are hidden");
+    fireEvent.focus(screen.getByRole("button", { name: "About Heart rate data" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("4 exact point(s)");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Dense sample dots are hidden");
   });
 
   it("calms the respiration line without changing exact samples or bridging gaps", () => {
@@ -149,7 +151,10 @@ describe("Daily HealthCurve", () => {
     expect(paths[0]).toHaveAttribute("d", expect.stringContaining("236.25"));
     expect(paths[0]).not.toHaveAttribute("d", expect.stringContaining("112.50"));
     expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("calmer 5-sample median line");
-    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("fixed 0–40 breaths/min display domain");
+    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("Observed average: 18.6 breaths/min");
+    fireEvent.focus(screen.getByRole("button", { name: "About Respiration data" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("fixed 0–40 breaths/min range");
+    fireEvent.blur(screen.getByRole("button", { name: "About Respiration data" }));
 
     const { tooltip } = hoverAt(2);
     expect(tooltip).toHaveTextContent("Respiration: 30 breaths/min");
@@ -183,14 +188,28 @@ describe("Daily HealthCurve", () => {
       time: { occurred_at: "2026-03-08T16:00:00Z", local_time: "2026-03-08T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
       provenance: { ...provenance, source_type: "telegram", confirmation_state: "confirmed_from_draft" },
       notes: null,
+    }, {
+      id: "30000000-0000-4000-8000-000000000002",
+      category: "fact",
+      systolic_mmhg: 130,
+      diastolic_mmhg: 85,
+      pulse_bpm: null,
+      measurement_setting: "provider",
+      time: { occurred_at: "2026-03-08T18:00:00Z", local_time: "2026-03-08T14:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+      provenance: { ...provenance, source_type: "web", confirmation_state: "direct" },
+      notes: null,
     }] })} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Blood pressure" }));
-    expect(document.querySelectorAll("circle.healthcurve-point--blood_pressure")).toHaveLength(2);
-    expect(document.querySelectorAll("line.healthcurve-blood-pressure-link")).toHaveLength(1);
+    expect(document.querySelectorAll("circle.healthcurve-point--blood_pressure")).toHaveLength(4);
+    expect(document.querySelectorAll("line.healthcurve-blood-pressure-link")).toHaveLength(2);
     expect(document.querySelector(".healthcurve-point--systolic")).not.toBeNull();
     expect(document.querySelector(".healthcurve-point--diastolic")).not.toBeNull();
     expect(screen.getByRole("img")).toHaveTextContent("Blood pressure 121/81 mmHg");
+    const summaries = screen.getByLabelText("Series sample counts");
+    expect(within(summaries).getByText("121/81 mmHg")).toBeVisible();
+    expect(within(summaries).getByText("130/85 mmHg")).toBeVisible();
+    expect(summaries).toHaveTextContent("121/81 mmHg · pulse 88 bpm");
     const { tooltip } = hoverAt(660);
     expect(within(tooltip).getAllByText("Blood pressure:")).toHaveLength(1);
     expect(tooltip).toHaveTextContent("Blood pressure: 121/81 mmHg");
@@ -221,7 +240,10 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("Temperature: 100.4 °F (38.0 °C)");
     const exactValues = screen.getByRole("region", { name: "Selected-day temperature exact values" });
     expect(exactValues).toHaveTextContent("100.4 °F (38.0 °C)");
-    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("Temperature: 1 exact point(s)");
+    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("100.4 °F (38.0 °C)");
+    const info = screen.getByRole("button", { name: "About Temperature data" });
+    fireEvent.focus(info);
+    expect(document.getElementById(info.getAttribute("aria-describedby") ?? "")).toHaveTextContent("1 recorded measurement(s)");
   });
 
   it("shows Garmin daily aggregates in their persistent series cards without inventing chart points", () => {
@@ -272,7 +294,15 @@ describe("Daily HealthCurve", () => {
       measurement_label: "Resting heart rate",
       period_label: "daily summary",
     };
-    render(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration, restingHeartRate] })} />);
+    const observedStress: GarminRecord = {
+      ...sample(60),
+      id: "20000000-0000-4000-8000-000000000005",
+      metric_type: "stress",
+      value: "44",
+      unit: "garmin_score",
+      sample_interval_seconds: 180,
+    };
+    render(<DailyHealthCurve data={data({ garmin: [dailyStress, nightlyHrv, wakingRespiration, restingHeartRate, observedStress] })} />);
 
     expect(document.querySelectorAll("circle.healthcurve-point--stress")).toHaveLength(0);
     expect(document.querySelectorAll("path.healthcurve-series--stress")).toHaveLength(0);
@@ -280,10 +310,18 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll("circle.healthcurve-point--respiration_rate")).toHaveLength(0);
     expect(screen.queryByRole("region", { name: "Garmin aggregate context" })).not.toBeInTheDocument();
     const summaries = screen.getByLabelText("Series sample counts");
-    expect(within(summaries).getByText(/Garmin stress:/).parentElement).toHaveTextContent("Stress: 31 (daily average; untimed)");
-    expect(within(summaries).getByText(/Heart rate:/).parentElement).toHaveTextContent("Resting heart rate: 59 bpm (daily summary; untimed)");
-    expect(within(summaries).getByText(/^HRV:$/).parentElement).toHaveTextContent("Nightly average HRV: 41 ms (previous night; untimed)");
-    expect(within(summaries).getByText(/Respiration:/).parentElement).toHaveTextContent("Average waking respiration: 14.2 breaths/min (waking period; untimed)");
+    const stressCard = within(summaries).getByRole("heading", { name: /Garmin stress/ }).parentElement;
+    expect(stressCard).toHaveTextContent("Stress: 31");
+    expect(stressCard).toHaveTextContent("Observed average: 44");
+    if (stressCard === null) throw new Error("Garmin stress summary missing");
+    const aggregate = within(stressCard).getByText("Stress:").parentElement;
+    const observed = within(stressCard).getByText("Observed average:").parentElement;
+    if (aggregate === null || observed === null) throw new Error("Garmin stress values missing");
+    expect(aggregate.compareDocumentPosition(observed) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(within(summaries).getByRole("heading", { name: /Heart rate/ }).parentElement).toHaveTextContent("Resting heart rate: 59 bpm");
+    expect(within(summaries).getByRole("heading", { name: /^HRV/ }).parentElement).toHaveTextContent("Nightly average HRV: 41 ms");
+    expect(within(summaries).getByRole("heading", { name: /Respiration/ }).parentElement).toHaveTextContent("Average waking respiration: 14.2 breaths/min");
+    expect(summaries).not.toHaveTextContent(/untimed|exact point|gaps remain missing/);
     expect(hoverAt(0).tooltip).not.toHaveTextContent("Garmin stress: 31 score");
   });
 
@@ -435,7 +473,16 @@ describe("Daily HealthCurve", () => {
 
     expect(screen.getByText("23 hours")).toBeVisible();
     const summaries = screen.getByLabelText("Series sample counts");
-    expect(within(summaries).getByText(/Garmin stress:/).parentElement).toHaveTextContent("0 exact point");
+    expect(within(summaries).getByRole("heading", { name: /Garmin stress/ }).parentElement).toHaveTextContent("No values recorded");
+    fireEvent.focus(screen.getByRole("button", { name: "About Garmin stress data" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("0 exact point(s)");
+    fireEvent.blur(screen.getByRole("button", { name: "About Garmin stress data" }));
+    const info = screen.getByRole("button", { name: "About Heart rate data" });
+    fireEvent.pointerEnter(info);
+    expect(info).toHaveAttribute("aria-describedby", "curve-summary-metadata-heart_rate");
+    expect(document.getElementById("curve-summary-metadata-heart_rate")).toHaveAttribute("role", "tooltip");
+    fireEvent.pointerLeave(info);
+    expect(info).not.toHaveAttribute("aria-describedby");
     fireEvent.click(screen.getByText("HealthCurve context and limits"));
     expect(screen.getByText(/expected missing counts are not invented/)).toBeVisible();
   });
@@ -482,8 +529,13 @@ describe("Daily HealthCurve", () => {
     expect(symptomList).toHaveTextContent("Synthetic fatigue — severity not recorded");
     expect(symptomList).toHaveTextContent("Synthetic dizziness — severity not recorded");
     const summaryCards = screen.getByLabelText("Series sample counts");
-    const summary = within(summaryCards).getByText(/Symptoms:/).parentElement;
-    expect(summary).toHaveTextContent("2 recorded events; 0 with recorded severity; 2 without severity");
+    const summary = within(summaryCards).getByRole("heading", { name: /Symptoms/ }).parentElement;
+    expect(summary).toHaveTextContent("Synthetic fatigue · severity not recorded");
+    expect(summary).toHaveTextContent("Synthetic dizziness · severity not recorded");
+    const info = screen.getByRole("button", { name: "About Symptoms data" });
+    fireEvent.focus(info);
+    expect(document.getElementById(info.getAttribute("aria-describedby") ?? "")).toHaveTextContent("2 recorded event(s); 0 with severity and 2 without severity");
+    fireEvent.blur(info);
     const summaryCount = summaryCards.children.length;
     fireEvent.click(screen.getByRole("checkbox", { name: "Symptoms" }));
     expect(document.querySelectorAll(".healthcurve-unscored-symptom-marker")).toHaveLength(0);

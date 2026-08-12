@@ -72,8 +72,8 @@ describe("Analytics page", () => {
     expect(context).toHaveAttribute("open");
     expect(screen.getByLabelText("Garmin stress")).toBeChecked();
     const seriesSummary = screen.getByLabelText("Series sample counts");
-    expect(within(seriesSummary).getByText(/Garmin stress:/).parentElement).toHaveTextContent("1 exact point");
-    expect(within(seriesSummary).getByText(/Symptoms:/).parentElement).toHaveTextContent("1 recorded event");
+    expect(within(seriesSummary).getByRole("heading", { name: /Garmin stress/ }).parentElement).toHaveTextContent("Stress: 28");
+    expect(within(seriesSummary).getByRole("heading", { name: /Symptoms/ }).parentElement).toHaveTextContent("Dizzy · 7/10");
     expect(await screen.findByRole("heading", { name: "Daily medication totals versus plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Compare daily patterns" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Daily pattern exact values" })).toBeVisible();
@@ -105,7 +105,7 @@ describe("Analytics page", () => {
     expect(within(periods).getByText(/2026-08-01T00:00:00 through ongoing/)).toBeVisible();
 
     fireEvent.click(screen.getByLabelText("Garmin stress"));
-    expect(within(seriesSummary).getByText(/Garmin stress:/)).toBeVisible();
+    expect(within(seriesSummary).getByRole("heading", { name: /Garmin stress/ })).toBeVisible();
     expect(document.querySelectorAll("[data-series='stress']")).toHaveLength(0);
 
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-07-01" } });
