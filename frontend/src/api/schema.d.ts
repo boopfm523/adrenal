@@ -2406,6 +2406,7 @@ export interface components {
             last_error_code?: string | null;
             /** Last Success At */
             last_success_at?: string | null;
+            latest_sync_origin?: components["schemas"]["GarminSyncOrigin"] | null;
             /** Latest Sync Status */
             latest_sync_status?: string | null;
             /** Latest Sync Warning Codes */
@@ -2418,6 +2419,12 @@ export interface components {
          * @enum {string}
          */
         GarminSyncDisposition: "queued" | "refresh_queued" | "coalesced_active" | "cooldown_reused" | "idempotent_replay";
+        /**
+         * GarminSyncOrigin
+         * @description How the provider read that produced a sync run was requested.
+         * @enum {string}
+         */
+        GarminSyncOrigin: "legacy" | "scheduled" | "manual" | "manual_refresh";
         /** GarminSyncRequestOut */
         GarminSyncRequestOut: {
             /** Cooldown Until */
@@ -2428,6 +2435,7 @@ export interface components {
              * Format: uuid
              */
             job_id: string;
+            origin: components["schemas"]["GarminSyncOrigin"];
             /**
              * Requested End Date
              * Format: date

@@ -37,6 +37,7 @@ from healthcurve.integrations.garmin.models import (
     GarminSleepEvent,
     GarminSleepStage,
     GarminSleepStageInterval,
+    GarminSyncOrigin,
     GarminSyncRun,
     GarminSyncStatus,
 )
@@ -160,7 +161,13 @@ def fetch_window(
     )
 
 
-def persist_window(session: Session, *, owner_id: uuid.UUID, fetched: FetchedWindow) -> SyncResult:
+def persist_window(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    fetched: FetchedWindow,
+    origin: GarminSyncOrigin = GarminSyncOrigin.LEGACY,
+) -> SyncResult:
     connection = session.scalar(
         select(GarminConnection).where(GarminConnection.owner_id == owner_id).with_for_update()
     )
@@ -173,6 +180,7 @@ def persist_window(session: Session, *, owner_id: uuid.UUID, fetched: FetchedWin
         requested_start_date=fetched.start_date,
         requested_end_date=fetched.end_date,
         timezone=fetched.timezone,
+        origin=origin,
         status=(
             GarminSyncStatus.COMPLETED_WITH_WARNINGS
             if fetched.warnings

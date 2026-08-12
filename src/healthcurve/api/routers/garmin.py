@@ -30,6 +30,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminSleepEvent,
     GarminSleepStageInterval,
+    GarminSyncOrigin,
     GarminSyncRun,
 )
 from healthcurve.integrations.garmin.parser import (
@@ -62,6 +63,7 @@ class GarminStatusOut(BaseModel):
     last_error_code: str | None = None
     client_version: str | None = None
     latest_sync_status: str | None = None
+    latest_sync_origin: GarminSyncOrigin | None = None
     latest_sync_warning_codes: list[str] = Field(default_factory=list)
 
 
@@ -117,6 +119,7 @@ class GarminSyncRequestOut(BaseModel):
     job_id: uuid.UUID
     status: str
     disposition: GarminSyncDisposition
+    origin: GarminSyncOrigin
     requested_start_date: date
     requested_end_date: date
     cooldown_until: datetime | None = None
@@ -144,6 +147,7 @@ def connection_status(
         last_error_code=None if connection is None else connection.last_error_code,
         client_version=None if connection is None else connection.client_version,
         latest_sync_status=None if latest is None else latest.status.value,
+        latest_sync_origin=None if latest is None else latest.origin,
         latest_sync_warning_codes=[] if latest is None else latest.warning_codes,
     )
 
@@ -178,6 +182,7 @@ def request_sync(
     if end > local_today:
         raise HTTPException(status_code=422, detail={"code": "garmin_sync_future_window"})
     try:
+        origin = GarminSyncOrigin.MANUAL_REFRESH if refresh else GarminSyncOrigin.MANUAL
         result = enqueue_sync(
             session,
             owner_id=owner.id,
@@ -186,6 +191,7 @@ def request_sync(
             timezone=owner.default_timezone,
             idempotency_key=f"manual:{owner.id}:{idempotency_key}",
             force_refresh=refresh,
+            origin=origin,
         )
     except JobQueueError as exc:
         if exc.reason_code == "garmin_sync_window_invalid":
@@ -195,6 +201,9 @@ def request_sync(
         job_id=result.job.id,
         status=result.job.status.value,
         disposition=result.disposition,
+        origin=GarminSyncOrigin(
+            str(result.job.payload.get("origin", GarminSyncOrigin.LEGACY.value))
+        ),
         requested_start_date=start,
         requested_end_date=end,
         cooldown_until=result.cooldown_until,

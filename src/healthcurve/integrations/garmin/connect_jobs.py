@@ -25,6 +25,7 @@ from healthcurve.integrations.garmin.connect_sync import fetch_window, persist_w
 from healthcurve.integrations.garmin.models import (
     GarminConnection,
     GarminConnectionState,
+    GarminSyncOrigin,
     GarminSyncRun,
     GarminSyncStatus,
 )
@@ -61,6 +62,7 @@ def enqueue_sync(
     timezone: str,
     idempotency_key: str,
     force_refresh: bool = False,
+    origin: GarminSyncOrigin = GarminSyncOrigin.MANUAL,
     now: datetime | None = None,
 ) -> GarminSyncEnqueueResult:
     if end_date < start_date or (end_date - start_date).days >= 31:
@@ -70,11 +72,16 @@ def enqueue_sync(
         timezone = ZoneInfo(timezone).key
     except (ValueError, TypeError, KeyError) as exc:
         raise JobQueueError("garmin_job_payload_invalid") from exc
+    if force_refresh:
+        if origin not in {GarminSyncOrigin.MANUAL, GarminSyncOrigin.MANUAL_REFRESH}:
+            raise JobQueueError("garmin_sync_origin_invalid")
+        origin = GarminSyncOrigin.MANUAL_REFRESH
     payload = {
         "owner_id": str(owner_id),
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "timezone": timezone,
+        "origin": origin.value,
     }
 
     # A running handler holds the owner connection lock while contacting Garmin. The
@@ -98,7 +105,7 @@ def enqueue_sync(
         select(Job)
         .where(
             Job.task == GARMIN_SYNC_TASK,
-            Job.payload == payload,
+            *_window_clauses(payload),
             Job.status == JobStatus.COMPLETED,
             Job.finished_at.is_not(None),
         )
@@ -205,6 +212,7 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
             end_date=local_day,
             timezone=owner.default_timezone,
             idempotency_key=daily_key,
+            origin=GarminSyncOrigin.SCHEDULED,
             now=now,
         )
 
@@ -217,7 +225,7 @@ def make_garmin_handler(
     factory = client_factory or (lambda: _configured_client(settings))
 
     def handle(session: Session, payload: Mapping[str, Any]) -> None:
-        owner_id, start_date, end_date, timezone = _payload(payload)
+        owner_id, start_date, end_date, timezone, origin = _payload(payload)
         connection = session.scalar(
             select(GarminConnection).where(GarminConnection.owner_id == owner_id).with_for_update()
         )
@@ -244,7 +252,7 @@ def make_garmin_handler(
         except (ValueError, OverflowError, TypeError):
             connection.last_error_code = "garmin_response_invalid"
             return
-        persist_window(session, owner_id=owner_id, fetched=fetched)
+        persist_window(session, owner_id=owner_id, fetched=fetched, origin=origin)
         connection.last_error_code = None
 
     return handle
@@ -314,7 +322,7 @@ def _existing_sync_request(
         select(Job).where(Job.task == GARMIN_SYNC_TASK, Job.idempotency_key == idempotency_key)
     )
     if exact is not None:
-        if exact.payload != payload:
+        if not _idempotency_payloads_compatible(exact.payload, payload):
             raise JobQueueError("garmin_idempotency_conflict")
         disposition = (
             GarminSyncDisposition.COALESCED_ACTIVE
@@ -331,7 +339,7 @@ def _existing_sync_request(
         select(Job)
         .where(
             Job.task == GARMIN_SYNC_TASK,
-            Job.payload == dict(payload),
+            *_window_clauses(payload),
             Job.status.in_((JobStatus.QUEUED, JobStatus.RUNNING)),
         )
         .order_by(Job.started_at.desc().nullslast(), Job.created_at, Job.id)
@@ -345,16 +353,42 @@ def _existing_sync_request(
     )
 
 
-def _payload(payload: Mapping[str, Any]) -> tuple[uuid.UUID, date, date, str]:
-    if set(payload) != {"owner_id", "start_date", "end_date", "timezone"}:
+def _payload(
+    payload: Mapping[str, Any],
+) -> tuple[uuid.UUID, date, date, str, GarminSyncOrigin]:
+    legacy_keys = {"owner_id", "start_date", "end_date", "timezone"}
+    if frozenset(payload) not in {frozenset(legacy_keys), frozenset({*legacy_keys, "origin"})}:
         raise JobQueueError("garmin_job_payload_invalid")
     try:
         owner_id = uuid.UUID(str(payload["owner_id"]))
         start_date = date.fromisoformat(str(payload["start_date"]))
         end_date = date.fromisoformat(str(payload["end_date"]))
         timezone = ZoneInfo(str(payload["timezone"])).key
+        origin = GarminSyncOrigin(str(payload.get("origin", GarminSyncOrigin.LEGACY.value)))
     except (ValueError, TypeError, KeyError) as exc:
         raise JobQueueError("garmin_job_payload_invalid") from exc
     if end_date < start_date or (end_date - start_date).days >= 31:
         raise JobQueueError("garmin_sync_window_invalid")
-    return owner_id, start_date, end_date, timezone
+    return owner_id, start_date, end_date, timezone, origin
+
+
+def _window_clauses(payload: Mapping[str, Any]) -> tuple[Any, ...]:
+    return tuple(
+        Job.payload[key].as_string() == str(payload[key])
+        for key in ("owner_id", "start_date", "end_date", "timezone")
+    )
+
+
+def _idempotency_payloads_compatible(
+    stored: Mapping[str, Any], requested: Mapping[str, Any]
+) -> bool:
+    window_keys = ("owner_id", "start_date", "end_date", "timezone")
+    if any(stored.get(key) != requested.get(key) for key in window_keys):
+        return False
+    stored_origin = stored.get("origin", GarminSyncOrigin.LEGACY.value)
+    requested_origin = requested.get("origin", GarminSyncOrigin.LEGACY.value)
+    return (
+        stored_origin == requested_origin
+        or stored_origin == GarminSyncOrigin.LEGACY.value
+        or requested_origin == GarminSyncOrigin.LEGACY.value
+    )

@@ -178,6 +178,13 @@ completed-window cooldown; it still coalesces with equivalent queued or running 
 Future-dated and over-31-day windows are rejected. A queued sync that races with
 disconnect becomes a no-op, so Garmin is not contacted after consent is withdrawn.
 
+Each completed sync also keeps its request origin: **Scheduled automatic sync**,
+**Manual sync**, or **Manual refresh**. Rows created before origin tracking are
+explicitly labeled **Origin unavailable (older sync)**. Settings shows the latest
+completed origin, and completed-warning notices on Data quality include it. Origin is
+provenance, not a reason to duplicate work: equivalent active windows are still shared
+and ordinary completed-window cooldown still applies across request origins.
+
 ## Reauthentication and failures
 
 Safe status codes such as `garmin_authentication_required`, `garmin_mfa_required`,

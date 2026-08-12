@@ -32,6 +32,7 @@ from healthcurve.integrations.garmin.connect_jobs import (
 from healthcurve.integrations.garmin.models import (
     GarminConnection,
     GarminConnectionState,
+    GarminSyncOrigin,
     GarminSyncRun,
 )
 from healthcurve.integrations.telegram.draft_jobs import (
@@ -410,7 +411,8 @@ def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
     assert client.login_count == 1
 
     with factory() as session:
-        assert session.scalar(select(func.count()).select_from(GarminSyncRun)) == 1
+        run = session.scalar(select(GarminSyncRun))
+        assert run is not None and run.origin is GarminSyncOrigin.MANUAL
         stored = session.get(Job, manual.job.id)
         assert stored is not None and stored.status is JobStatus.COMPLETED
 
@@ -435,6 +437,82 @@ def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
         (initial_start.isoformat(), NOW.date().isoformat()),
         ((NOW.date() - timedelta(days=2)).isoformat(), next_day.date().isoformat()),
     }
+    with factory() as session:
+        scheduled = session.scalar(
+            select(Job).where(Job.idempotency_key == f"scheduled:{owner_id}:{next_day.date()}")
+        )
+        assert scheduled is not None
+        assert scheduled.payload["origin"] == GarminSyncOrigin.SCHEDULED.value
+
+
+@pytest.mark.parametrize(
+    ("origin", "force_refresh", "expected"),
+    [
+        (GarminSyncOrigin.SCHEDULED, False, GarminSyncOrigin.SCHEDULED),
+        (GarminSyncOrigin.MANUAL_REFRESH, True, GarminSyncOrigin.MANUAL_REFRESH),
+    ],
+)
+def test_garmin_worker_persists_explicit_sync_origin(
+    factory: sessionmaker[Session],
+    origin: GarminSyncOrigin,
+    force_refresh: bool,
+    expected: GarminSyncOrigin,
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email=f"garmin-origin-{origin.value}@example.test")
+    settings = Settings.model_validate({"garmin_enabled": True})
+    with factory() as session, session.begin():
+        result = enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"origin:{owner_id}:{origin.value}",
+            force_refresh=force_refresh,
+            origin=origin,
+            now=NOW,
+        )
+        assert result.job.payload["origin"] == expected.value
+
+    claimed = run_once(
+        factory,
+        {GARMIN_SYNC_TASK: make_garmin_handler(settings, client_factory=_SyntheticGarminClient)},
+        worker_id=f"garmin-origin-{origin.value}",
+    )
+    assert claimed is not None
+    with factory() as session:
+        run = session.scalar(select(GarminSyncRun).where(GarminSyncRun.owner_id == owner_id))
+        assert run is not None and run.origin is expected
+
+
+def test_garmin_worker_accepts_legacy_payload_and_marks_run_origin(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email="garmin-legacy-origin@example.test")
+    settings = Settings.model_validate({"garmin_enabled": True})
+    with factory() as session, session.begin():
+        enqueue(
+            session,
+            task=GARMIN_SYNC_TASK,
+            payload={
+                "owner_id": str(owner_id),
+                "start_date": NOW.date().isoformat(),
+                "end_date": NOW.date().isoformat(),
+                "timezone": "UTC",
+            },
+            idempotency_key=f"legacy:{owner_id}",
+            run_at=NOW,
+        )
+
+    claimed = run_once(
+        factory,
+        {GARMIN_SYNC_TASK: make_garmin_handler(settings, client_factory=_SyntheticGarminClient)},
+        worker_id="garmin-legacy-origin",
+    )
+    assert claimed is not None
+    with factory() as session:
+        run = session.scalar(select(GarminSyncRun).where(GarminSyncRun.owner_id == owner_id))
+        assert run is not None and run.origin is GarminSyncOrigin.LEGACY
 
 
 def test_concurrent_garmin_requests_with_different_keys_coalesce(
@@ -529,6 +607,7 @@ def test_garmin_completed_cooldown_refresh_and_distinct_windows_are_deterministi
             end_date=NOW.date(),
             timezone="UTC",
             idempotency_key=f"manual:{owner_id}:cooldown-b",
+            origin=GarminSyncOrigin.SCHEDULED,
             now=NOW + timedelta(minutes=1),
         )
         assert cooled.job.id == first.job.id
@@ -590,6 +669,7 @@ def test_garmin_completed_cooldown_refresh_and_distinct_windows_are_deterministi
         )
 
     assert refresh.disposition is GarminSyncDisposition.REFRESH_QUEUED
+    assert refresh.job.payload["origin"] == GarminSyncOrigin.MANUAL_REFRESH.value
     assert replay.job.id == refresh.job.id
     assert replay.disposition is GarminSyncDisposition.COALESCED_ACTIVE
     assert distinct.job.id != refresh.job.id

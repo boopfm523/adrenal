@@ -53,6 +53,15 @@ class GarminSyncStatus(StrEnum):
     COMPLETED_WITH_WARNINGS = "completed_with_warnings"
 
 
+class GarminSyncOrigin(StrEnum):
+    """How the provider read that produced a sync run was requested."""
+
+    LEGACY = "legacy"
+    SCHEDULED = "scheduled"
+    MANUAL = "manual"
+    MANUAL_REFRESH = "manual_refresh"
+
+
 class GarminSleepStage(StrEnum):
     AWAKE = "awake"
 
@@ -92,6 +101,12 @@ class GarminSyncRun(OpsBase):
     requested_start_date: Mapped[date] = mapped_column(Date, nullable=False)
     requested_end_date: Mapped[date] = mapped_column(Date, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin: Mapped[GarminSyncOrigin] = mapped_column(
+        StrEnumType(GarminSyncOrigin, 24),
+        nullable=False,
+        default=GarminSyncOrigin.LEGACY,
+        server_default=GarminSyncOrigin.LEGACY.value,
+    )
     status: Mapped[GarminSyncStatus] = mapped_column(
         StrEnumType(GarminSyncStatus, 32), nullable=False
     )

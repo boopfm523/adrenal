@@ -16,6 +16,7 @@ from healthcurve.integrations.garmin.models import (
     GarminImportBatch,
     GarminSyncRun,
 )
+from healthcurve.integrations.garmin.presentation import sync_origin_label
 from healthcurve.labs.models import LabDocument, LabDocumentStatus
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditEntry
@@ -233,15 +234,17 @@ def findings_for_owner(session: Session, owner_id: uuid.UUID) -> list[Finding]:
             corrected = latest_sync.counts.get("corrected", 0)
             unchanged = latest_sync.counts.get("unchanged", 0)
             warning_word = "warning" if count == 1 else "warnings"
+            origin = sync_origin_label(latest_sync.origin)
             findings.append(
                 Finding(
                     id=f"garmin-sync:{latest_sync.id}",
                     finding_kind="problem",
                     severity="attention",
-                    source="Garmin Connect · completed sync",
+                    source=f"Garmin Connect · {origin.lower()}",
                     title=f"Garmin sync completed with {count} data {warning_word}",
                     detail=(
-                        f"Completed {finished} for {window}. This is a completed sync notice, "
+                        f"Request origin: {origin}. Completed {finished} for {window}. "
+                        "This is a completed sync notice, "
                         "not queued or running work. Other supplied Garmin data was saved "
                         f"({imported} new, {corrected} corrected, {unchanged} unchanged). "
                         f"Review: {'; '.join(warnings)}. Missing values remain missing, never zero."

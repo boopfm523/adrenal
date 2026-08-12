@@ -81,6 +81,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricType,
     GarminSleepEvent,
     GarminSleepStageInterval,
+    GarminSyncOrigin,
     GarminSyncRun,
     GarminSyncStatus,
 )
@@ -321,6 +322,64 @@ def test_regimen_time_migration_marks_legacy_rows_ambiguous(
         assert row == (None, None, None, "legacy_naive_utc_ambiguous")
         connection.execute(
             text("DELETE FROM plan.regimen_version WHERE id = :id"), {"id": legacy_id}
+        )
+        connection.execute(
+            text("DELETE FROM identity.owner WHERE id = :id"), {"id": legacy_owner_id}
+        )
+
+
+def test_garmin_sync_origin_migration_marks_existing_rows_legacy(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    legacy_id = uuid.uuid4()
+    legacy_owner_id = uuid.uuid4()
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "0c9e4b7a1d23",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO identity.owner "
+                    "(id, email, password_hash, default_timezone, locale, "
+                    "failed_login_count, mfa_enabled) VALUES "
+                    "(:id, :email, 'synthetic-non-login-hash', 'UTC', 'en-GB', 0, false)"
+                ),
+                {"id": legacy_owner_id, "email": f"legacy-{legacy_owner_id}@example.test"},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO ops.garmin_sync_run "
+                    "(id, owner_id, requested_start_date, requested_end_date, timezone, "
+                    "status, started_at, finished_at, counts, warning_codes, client_version) "
+                    "VALUES (:id, :owner_id, '2026-08-10', '2026-08-11', 'UTC', "
+                    "'completed', '2026-08-11T08:00:00Z', '2026-08-11T08:01:00Z', "
+                    "'{}'::jsonb, '[]'::jsonb, 'synthetic')"
+                ),
+                {"id": legacy_id, "owner_id": legacy_owner_id},
+            )
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.begin() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT origin FROM ops.garmin_sync_run WHERE id = :id"),
+                {"id": legacy_id},
+            )
+            == "legacy"
+        )
+        connection.execute(
+            text("DELETE FROM ops.garmin_sync_run WHERE id = :id"), {"id": legacy_id}
         )
         connection.execute(
             text("DELETE FROM identity.owner WHERE id = :id"), {"id": legacy_owner_id}
@@ -1757,6 +1816,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert status_response.json()["last_success_at"] is not None
     assert status_response.json()["capabilities"]["hrv_daily_average"] == "unsupported"
     assert status_response.json()["capabilities"]["hrv_nightly_average"] == "available"
+    assert status_response.json()["latest_sync_origin"] == "legacy"
     garmin_timeline = client.get(
         "/api/v1/timeline?types=garmin_daily,garmin_activity&sort_order=asc"
     )
@@ -1831,6 +1891,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         assert requested_sync.json()["job_id"] == duplicate_sync.json()["job_id"]
         assert requested_sync.json()["job_id"] == equivalent_sync.json()["job_id"]
         assert requested_sync.json()["disposition"] == "queued"
+        assert requested_sync.json()["origin"] == "manual"
         assert duplicate_sync.json()["disposition"] == "coalesced_active"
         assert equivalent_sync.json()["disposition"] == "coalesced_active"
     finally:
@@ -6050,6 +6111,7 @@ def test_data_quality_groups_and_acknowledges_latest_garmin_sync_warning(
             requested_start_date=date(2026, 8, 5),
             requested_end_date=date(2026, 8, 11),
             timezone="America/New_York",
+            origin=GarminSyncOrigin.MANUAL_REFRESH,
             status=GarminSyncStatus.COMPLETED_WITH_WARNINGS,
             started_at=datetime(2026, 8, 11, 8, 0, tzinfo=UTC),
             finished_at=datetime(2026, 8, 11, 8, 1, tzinfo=UTC),
@@ -6098,7 +6160,9 @@ def test_data_quality_groups_and_acknowledges_latest_garmin_sync_warning(
     assert len(garmin_findings) == 1
     finding = garmin_findings[0]
     assert finding["title"] == "Garmin sync completed with 3 data warnings"
+    assert finding["source"] == "Garmin Connect · manual refresh"
     assert finding["can_acknowledge"] is True
+    assert "Request origin: Manual refresh" in finding["detail"]
     assert "not queued or running work" in finding["detail"]
     assert "2026-08-05 through 2026-08-11" in finding["detail"]
     assert "intraday respiration was missing or unusable" in finding["detail"]

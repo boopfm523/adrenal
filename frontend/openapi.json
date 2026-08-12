@@ -3297,6 +3297,16 @@
             ],
             "title": "Last Success At"
           },
+          "latest_sync_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GarminSyncOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "latest_sync_status": {
             "anyOf": [
               {
@@ -3338,6 +3348,17 @@
         "title": "GarminSyncDisposition",
         "type": "string"
       },
+      "GarminSyncOrigin": {
+        "description": "How the provider read that produced a sync run was requested.",
+        "enum": [
+          "legacy",
+          "scheduled",
+          "manual",
+          "manual_refresh"
+        ],
+        "title": "GarminSyncOrigin",
+        "type": "string"
+      },
       "GarminSyncRequestOut": {
         "properties": {
           "cooldown_until": {
@@ -3360,6 +3381,9 @@
             "title": "Job Id",
             "type": "string"
           },
+          "origin": {
+            "$ref": "#/components/schemas/GarminSyncOrigin"
+          },
           "requested_end_date": {
             "format": "date",
             "title": "Requested End Date",
@@ -3379,6 +3403,7 @@
           "job_id",
           "status",
           "disposition",
+          "origin",
           "requested_start_date",
           "requested_end_date"
         ],

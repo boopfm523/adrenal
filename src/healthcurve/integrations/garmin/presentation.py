@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from healthcurve.integrations.garmin.models import GarminMetricType
+from healthcurve.integrations.garmin.models import GarminMetricType, GarminSyncOrigin
 
 _FIELD_PRESENTATION: dict[str, tuple[str, str]] = {
     "totalSteps": ("Steps", "daily total"),
@@ -16,6 +16,17 @@ _FIELD_PRESENTATION: dict[str, tuple[str, str]] = {
     "lowestRespirationValue": ("Lowest respiration", "selected day"),
     "highestRespirationValue": ("Highest respiration", "selected day"),
 }
+
+_SYNC_ORIGIN_LABELS: dict[GarminSyncOrigin, str] = {
+    GarminSyncOrigin.LEGACY: "Origin unavailable (older sync)",
+    GarminSyncOrigin.SCHEDULED: "Scheduled automatic sync",
+    GarminSyncOrigin.MANUAL: "Manual sync",
+    GarminSyncOrigin.MANUAL_REFRESH: "Manual refresh",
+}
+
+
+def sync_origin_label(origin: GarminSyncOrigin) -> str:
+    return _SYNC_ORIGIN_LABELS[origin]
 
 
 def measurement_label(metric_type: GarminMetricType, field_name: str) -> str:

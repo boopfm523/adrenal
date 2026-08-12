@@ -47,6 +47,14 @@ function syncResultMessage(result: GarminSyncRequest): string {
     : `Garmin sync for ${window} was queued.`;
 }
 
+function garminOriginLabel(origin: string | null | undefined): string {
+  if (origin === "scheduled") return "Scheduled automatic sync";
+  if (origin === "manual") return "Manual sync";
+  if (origin === "manual_refresh") return "Manual refresh";
+  if (origin === "legacy") return "Origin unavailable (older sync)";
+  return "Not yet completed";
+}
+
 function GarminControl(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [deleteData, setDeleteData] = useState(true);
@@ -88,6 +96,7 @@ function GarminControl(): React.JSX.Element {
       <div><dt>Configuration</dt><dd>{status.data.configured ? "Enabled" : "Disabled"}</dd></div>
       <div><dt>Connection</dt><dd>{status.data.state.replaceAll("_", " ")}</dd></div>
       <div><dt>Last successful sync</dt><dd>{status.data.last_success_at ?? "Not yet completed"}</dd></div>
+      <div><dt>Latest sync origin</dt><dd>{garminOriginLabel(status.data.latest_sync_origin)}</dd></div>
       <div><dt>Last safe error code</dt><dd>{status.data.last_error_code ?? "None"}</dd></div>
     </dl>}
     {capabilities.length === 0 ? null : <details><summary>Latest metric availability</summary><ul>{capabilities.map(([name, value]) => <li key={name}>{name.replaceAll("_", " ")}: {value}</li>)}</ul></details>}
