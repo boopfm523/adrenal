@@ -19,9 +19,10 @@ describe("Data quality page", () => {
       completeness_notice: "No known findings does not mean the health record is clinically complete.",
       findings: [
         { id: "job:synthetic", finding_kind: "problem", severity: "high", source: "job queue", title: "Import stopped after retries", detail: "A synthetic import requires review.", record_id: "11111111-1111-4111-8111-111111111111", href: "/data-quality#operations", action_label: "Review failed operation" },
+        { id: "open-episode:33333333-3333-4333-8333-333333333333", finding_kind: "problem", severity: "attention", source: "Stress episode", title: "Episode may still be open", detail: "Synthetic episode started Aug 10 at 09:00 EDT and has remained open for 2 days. HealthCurve has not inferred an end.", record_id: "33333333-3333-4333-8333-333333333333", href: "/episodes?history=all&review_episode=33333333-3333-4333-8333-333333333333#episode-33333333-3333-4333-8333-333333333333", action_label: "Review or close episode" },
         { id: "garmin:synthetic:hrv", finding_kind: "genuine_absence", severity: "information", source: "Garmin", title: "HRV was not supplied", detail: "The provider did not supply HRV; no zero value was inferred.", record_id: "22222222-2222-4222-8222-222222222222", href: "/settings#integration-heading", action_label: "Review Garmin connection" },
       ],
-      page: { page: 1, page_size: 25, total_items: 2, total_pages: 1 },
+      page: { page: 1, page_size: 25, total_items: 3, total_pages: 1 },
     }));
     renderPage();
 
@@ -32,6 +33,8 @@ describe("Data quality page", () => {
     expect(screen.getByRole("heading", { name: "Known genuine absences" })).toBeVisible();
     expect(screen.getByText(/not a recorded value of zero/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Review failed operation" })).toHaveAttribute("href", "/data-quality#operations");
+    expect(screen.getByRole("link", { name: "Review or close episode" })).toHaveAttribute("href", "/episodes?history=all&review_episode=33333333-3333-4333-8333-333333333333#episode-33333333-3333-4333-8333-333333333333");
+    expect(screen.getByText(/appear here after 24 hours/i)).toBeVisible();
     expect(screen.getByRole("link", { name: "Review Garmin connection" })).toHaveAttribute("href", "/settings#integration-heading");
   });
 

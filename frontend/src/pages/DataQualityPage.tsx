@@ -38,7 +38,7 @@ export function DataQualityPage(): React.JSX.Element {
   return (
     <Page title="Data quality" description="Review drafts, import failures, integration gaps, and operational failures.">
       <aside className="safety-note"><strong>Completeness boundary:</strong> {query.data.completeness_notice}</aside>
-      <p className="privacy-note">This is a current derived review queue, not a dated event history. A Garmin warning notice describes a completed sync unless it explicitly says otherwise; it is not another queued run. Clear reviewed notice hides that notice without deleting sync history or health data. A later sync with new warnings can create a new notice.</p>
+      <p className="privacy-note">This is a current derived review queue, not a dated event history. Open stress episodes appear here after 24 hours so you can confirm that they are continuing or record their actual end; HealthCurve never invents an end time. A Garmin warning notice describes a completed sync unless it explicitly says otherwise; it is not another queued run. Clear reviewed notice hides that notice without deleting sync history or health data. A later sync with new warnings can create a new notice.</p>
       {visibleFindings.length === 0 ? <section className="empty-state"><h2>No known data-quality findings</h2><p>The checks found no current items to review. This does not establish that the health record is complete.</p></section> : null}
       <section aria-labelledby="problems-heading">
         <span id="drafts" className="anchor-target" aria-hidden="true" />

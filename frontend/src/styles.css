@@ -189,6 +189,7 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .episode-close-form { display: flex; align-items: end; gap: 0.75rem; margin-top: 1rem; border-top: 1px solid #ccd4ce; padding-top: 1rem; }
 .episode-close-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .episode-close-form input { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
+.episode-review-target { scroll-margin-top: 1rem; outline: 0.2rem solid #9b6a18; outline-offset: -0.2rem; }
 .metric-card { margin-block: 1rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .metric-metadata, .metric-values { display: grid; grid-template-columns: repeat(3, minmax(10rem, 1fr)); gap: 0.75rem; }
 .metric-metadata div, .metric-values div { border-top: 1px solid #dce2dd; padding-top: 0.5rem; }

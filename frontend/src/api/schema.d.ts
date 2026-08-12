@@ -6791,6 +6791,7 @@ export interface operations {
                 local_date_to?: string | null;
                 timezone?: string | null;
                 overlaps_window?: boolean;
+                episode_id?: string | null;
                 page?: number;
                 page_size?: number;
             };

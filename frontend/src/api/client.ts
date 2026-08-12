@@ -291,9 +291,10 @@ function recordedHistoryQuery(filters: RecordedHistoryFilters, page: number): UR
   return params;
 }
 
-export function getEpisodes(filters: RecordedHistoryFilters, page = 1, status?: "open" | "resolved"): Promise<EpisodePage> {
+export function getEpisodes(filters: RecordedHistoryFilters, page = 1, status?: "open" | "resolved", episodeId?: string): Promise<EpisodePage> {
   const params = recordedHistoryQuery(filters, page);
   if (status !== undefined) params.set("status_filter", status);
+  if (episodeId !== undefined) params.set("episode_id", episodeId);
   return apiRequest<EpisodePage>(`/stress-episodes?${params.toString()}`);
 }
 

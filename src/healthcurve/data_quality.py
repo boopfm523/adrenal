@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.models import DraftState, ExtractionDraft
+from healthcurve.episodes.models import EpisodeStatus, StressEpisode
 from healthcurve.integrations.garmin.models import (
     GarminConnection,
     GarminConnectionState,
@@ -45,6 +48,30 @@ GARMIN_WARNING_LABELS = {
     "hrv_nightly_average_shape_invalid": "nightly-average HRV used an unexpected response format",
 }
 
+# An open episode is valid and may span days. After one full day, however, it is
+# useful to ask the owner whether it is genuinely continuing. This is a review
+# threshold only: HealthCurve never infers or writes an end time.
+OPEN_EPISODE_REVIEW_AFTER = timedelta(hours=24)
+
+
+def _elapsed_label(duration: timedelta) -> str:
+    total_minutes = max(0, int(duration.total_seconds() // 60))
+    days, remaining_minutes = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(remaining_minutes, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    if hours:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if not parts or minutes:
+        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    return " ".join(parts)
+
+
+def _episode_start_label(episode: StressEpisode) -> str:
+    local = episode.started_at.astimezone(ZoneInfo(episode.timezone))
+    return f"{local.strftime('%b')} {local.day}, {local.year} at {local.strftime('%H:%M %Z')}"
+
 
 def _garmin_warning_label(code: str) -> str:
     known = GARMIN_WARNING_LABELS.get(code)
@@ -78,8 +105,39 @@ def _garmin_sync_acknowledged(
     )
 
 
-def findings_for_owner(session: Session, owner_id: uuid.UUID) -> list[Finding]:
+def findings_for_owner(
+    session: Session, owner_id: uuid.UUID, *, now: datetime | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
+    current_time = (now or datetime.now(UTC)).astimezone(UTC)
+    review_cutoff = current_time - OPEN_EPISODE_REVIEW_AFTER
+    old_open_episodes = session.scalars(
+        select(StressEpisode).where(
+            StressEpisode.owner_id == owner_id,
+            StressEpisode.status == EpisodeStatus.OPEN,
+            StressEpisode.ended_at.is_(None),
+            StressEpisode.started_at <= review_cutoff,
+        )
+    )
+    for episode in old_open_episodes:
+        elapsed = current_time - episode.started_at.astimezone(UTC)
+        findings.append(
+            Finding(
+                id=f"open-episode:{episode.id}",
+                finding_kind="problem",
+                severity="attention",
+                source="Stress episode",
+                title="Episode may still be open",
+                detail=(
+                    f"“{episode.trigger}” started {_episode_start_label(episode)} and has "
+                    f"remained open for {_elapsed_label(elapsed)}. Confirm that it is still "
+                    "continuing or record its actual end time; HealthCurve has not inferred an end."
+                ),
+                record_id=episode.id,
+                href=(f"/episodes?history=all&review_episode={episode.id}#episode-{episode.id}"),
+                action_label="Review or close episode",
+            )
+        )
     drafts = session.scalars(
         select(ExtractionDraft).where(
             ExtractionDraft.owner_id == owner_id,

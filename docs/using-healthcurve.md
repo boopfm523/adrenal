@@ -615,6 +615,12 @@ warning when selected.
 
 ## Data quality
 
+An open stress episode is valid and may span days. After it has remained open for
+24 hours, HealthCurve adds a review item to Data quality with its recorded start
+time and elapsed duration. The item links to the normal episode workflow, where you
+can leave it open or enter its actual end time. HealthCurve never infers or writes an
+episode end time from elapsed duration.
+
 The authenticated `/data-quality` page collects items that need attention from AI
 extraction drafts, rejected lab imports, and background jobs. Each finding links to
 the relevant review or correction destination. It also shows metrics that the latest

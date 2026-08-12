@@ -17,7 +17,7 @@ function episode(status: "open" | "resolved") { return { id: "11111111-1111-4111
 function injection() { return { id: "33333333-3333-4333-8333-333333333333", category: "fact", medication_id: "44444444-4444-4444-8444-444444444444", amount: "100.0000", unit: "mg", route: "intramuscular", time: { occurred_at: "2026-08-09T10:00:00Z", local_time: "2026-08-09T11:00:00", timezone: "Europe/London", utc_offset_minutes: 60 }, provenance: { recorded_at: "2026-08-09T10:01:00Z", source_type: "web", confirmation_state: "direct", supersedes_id: null, correction_reason: null, is_correction: false }, injection_site: null, reason: "Synthetic emergency", injected_by: null, response: null, emergency_services_called: true, transported_to_hospital: false, episode_id: null }; }
 
 describe("Episodes page", () => {
-  beforeEach(() => { sessionStore.set(session); });
+  beforeEach(() => { sessionStore.set(session); Element.prototype.scrollIntoView = vi.fn(); });
   afterEach(() => { sessionStore.clear(); vi.restoreAllMocks(); });
 
   it("labels linked doses as facts and creates, updates, and closes an episode", async () => {
@@ -90,5 +90,25 @@ describe("Episodes page", () => {
     expect(await screen.findByText(/Showing all history/)).toBeVisible();
     expect(screen.getByLabelText("From date")).toHaveValue("");
     expect(screen.getByLabelText("Through date")).toHaveValue("");
+  });
+
+  it("opens and focuses the exact stale episode selected from Data quality", async () => {
+    const requests: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      requests.push(url);
+      if (url.includes("/emergency-injections")) return Promise.resolve(response({ ...page([]), revisions: [] }));
+      if (url.includes("status_filter=open")) return Promise.resolve(response(page([episode("open")])));
+      return Promise.resolve(response(page([])));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/episodes?history=all&review_episode=11111111-1111-4111-8111-111111111111#episode-11111111-1111-4111-8111-111111111111"]}><EpisodesPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+
+    expect(await screen.findByText(/selected from Data quality/i)).toBeVisible();
+    await waitFor(() => { expect(requests.some((url) => url.includes("status_filter=open") && url.includes("episode_id=11111111-1111-4111-8111-111111111111"))).toBe(true); });
+    const row = screen.getByRole("row", { name: /Synthetic illness/ });
+    expect(row).toHaveAttribute("id", "episode-11111111-1111-4111-8111-111111111111");
+    expect(row).toHaveClass("episode-review-target");
+    expect(row).toHaveFocus();
+    expect(within(row.nextElementSibling as HTMLElement).getByRole("button", { name: "Close episode" })).toBeVisible();
   });
 });

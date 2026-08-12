@@ -48,6 +48,7 @@ from healthcurve.context.models import (
 from healthcurve.context.models import (
     TemperatureUnit as ContextTemperatureUnit,
 )
+from healthcurve.data_quality import findings_for_owner
 from healthcurve.development_cleanup import (
     SyntheticBootstrapCleanupError,
     execute_synthetic_bootstrap_cleanup,
@@ -6868,6 +6869,115 @@ def test_data_quality_distinguishes_problems_from_provider_absence(
         assert finding["href"].startswith("/")
         assert finding["action_label"]
     assert "does not mean" in body["completeness_notice"]
+
+
+def test_data_quality_flags_only_owner_scoped_open_episodes_at_24_hour_boundary(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    now = datetime(2026, 8, 12, 16, 0, tzinfo=UTC)
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        other = Owner(
+            email="other-open-episode@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        episodes = [
+            StressEpisode(
+                owner_id=owner_id,
+                trigger="Synthetic boundary episode",
+                status=EpisodeStatus.OPEN,
+                severity=EpisodeSeverity.MILD,
+                started_at=now - timedelta(hours=24),
+                ended_at=None,
+                timezone="America/New_York",
+                recorded_at=now - timedelta(hours=24),
+            ),
+            StressEpisode(
+                owner_id=owner_id,
+                trigger="Synthetic recent episode",
+                status=EpisodeStatus.OPEN,
+                severity=None,
+                started_at=now - timedelta(hours=23, minutes=59),
+                ended_at=None,
+                timezone="America/New_York",
+                recorded_at=now - timedelta(hours=23, minutes=59),
+            ),
+            StressEpisode(
+                owner_id=owner_id,
+                trigger="Synthetic resolved episode",
+                status=EpisodeStatus.RESOLVED,
+                severity=None,
+                started_at=now - timedelta(days=3),
+                ended_at=now - timedelta(days=2),
+                timezone="UTC",
+                recorded_at=now - timedelta(days=3),
+            ),
+            StressEpisode(
+                owner_id=owner_id,
+                trigger="Synthetic escalated episode",
+                status=EpisodeStatus.ESCALATED,
+                severity=EpisodeSeverity.SEVERE,
+                started_at=now - timedelta(days=3),
+                ended_at=None,
+                timezone="UTC",
+                recorded_at=now - timedelta(days=3),
+            ),
+            StressEpisode(
+                owner_id=other.id,
+                trigger="Other owner's old open episode",
+                status=EpisodeStatus.OPEN,
+                severity=None,
+                started_at=now - timedelta(days=4),
+                ended_at=None,
+                timezone="UTC",
+                recorded_at=now - timedelta(days=4),
+            ),
+        ]
+        session.add_all(episodes)
+        session.flush()
+        boundary_id = episodes[0].id
+        other_id = episodes[-1].id
+
+        findings = findings_for_owner(session, owner_id, now=now)
+
+    episode_findings = [item for item in findings if item.id.startswith("open-episode:")]
+    assert len(episode_findings) == 1
+    finding = episode_findings[0]
+    assert finding.record_id == boundary_id
+    assert finding.detail == (
+        "“Synthetic boundary episode” started Aug 11, 2026 at 12:00 EDT and has "
+        "remained open for 1 day. Confirm that it is still continuing or record its "
+        "actual end time; HealthCurve has not inferred an end."
+    )
+    assert finding.href == (
+        f"/episodes?history=all&review_episode={boundary_id}#episode-{boundary_id}"
+    )
+    assert finding.action_label == "Review or close episode"
+
+    selected = client.get(
+        f"/api/v1/stress-episodes?status_filter=open&episode_id={boundary_id}&history=all"
+    )
+    assert selected.status_code == 200
+    assert [item["id"] for item in selected.json()["items"]] == [str(boundary_id)]
+    forbidden = client.get(
+        f"/api/v1/stress-episodes?status_filter=open&episode_id={other_id}&history=all"
+    )
+    assert forbidden.status_code == 200
+    assert forbidden.json()["items"] == []
+
+    with Session(engine) as session, session.begin():
+        boundary = session.get(StressEpisode, boundary_id)
+        assert boundary is not None
+        assert boundary.ended_at is None
+        boundary.status = EpisodeStatus.RESOLVED
+        boundary.ended_at = now - timedelta(hours=1)
+    with Session(engine) as session:
+        corrected_findings = findings_for_owner(session, owner_id, now=now)
+    assert all(item.record_id != boundary_id for item in corrected_findings)
 
 
 def test_data_quality_groups_and_acknowledges_latest_garmin_sync_warning(
