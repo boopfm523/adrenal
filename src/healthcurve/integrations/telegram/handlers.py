@@ -297,6 +297,10 @@ def _cmd_bd_operation(
     now: datetime,
 ) -> Reply:
     """Queue one fixed read-only Beads operation for the trusted host bridge."""
+    operation_name = {
+        BeadsOperation.LIST: "current Beads issue list",
+        BeadsOperation.STATUS: "current Beads project status",
+    }[operation]
     settings = get_settings()
     if settings.beads_outbox_dir is None:
         return Reply("Beads status is temporarily unavailable. Nothing was run; try again later.")
@@ -305,10 +309,10 @@ def _cmd_bd_operation(
         existing = queued_operation(settings.beads_outbox_dir, message_id=safe_message_id)
         if existing is not None:
             return Reply(
-                f"bd {operation.value} is already queued as {existing.request_id}. "
-                "The trusted host bridge will return the result here."
+                f"I'm already getting the {operation_name}. "
+                "I'll post it here as soon as it's ready."
             )
-        queued = queue_operation(
+        queue_operation(
             settings.beads_outbox_dir,
             message_id=safe_message_id,
             operation=operation,
@@ -317,8 +321,8 @@ def _cmd_bd_operation(
     except FeatureRequestRejected:
         return Reply("Beads status is temporarily unavailable. Nothing was run; try again later.")
     return Reply(
-        f"Queued bd {operation.value} as {queued.request_id}. "
-        "The trusted host bridge will return the bounded command output here."
+        f"Got it — I'm getting the {operation_name} now. "
+        "I'll post it here as soon as it's ready."
     )
 
 
@@ -364,8 +368,8 @@ def _cmd_bd_add(
         )
     if existing is not None:
         return Reply(
-            f"Feature request already queued as {existing.request_id}. "
-            "The safe host bridge will reply with its hc-* Beads ID."
+            "That feature request is already on its way to the HealthCurve task list. "
+            "I'll post the Bead ID here as soon as it's ready."
         )
     if limiter is not None and model_policy is not None:
         try:
@@ -381,7 +385,7 @@ def _cmd_bd_add(
             )
     try:
         evaluated = evaluate_request(request, client=client)
-        queued = queue_request(
+        queue_request(
             settings.beads_outbox_dir,
             message_id=safe_message_id,
             evaluated=evaluated,
@@ -398,9 +402,9 @@ def _cmd_bd_add(
     except FeatureRequestRejected:
         return Reply("That request could not be queued safely. Nothing was created.")
     return Reply(
-        f"Evaluated locally and queued as {queued.request_id}: {evaluated.proposal.title}. "
-        "The safe host bridge will search for duplicates and reply with an hc-* Beads ID; "
-        "no agent or code was started."
+        f"Got it — I'm adding \"{evaluated.proposal.title}\" to the HealthCurve task list. "
+        "I'll post the Bead ID here as soon as it's ready. "
+        "This creates a task only; it doesn't start any work."
     )
 
 

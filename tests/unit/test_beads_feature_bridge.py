@@ -398,7 +398,9 @@ def test_handler_rejects_bad_input_and_model_failure_then_queues_only_normalized
         client=model_client(),
         now=NOW,  # type: ignore[arg-type]
     )
-    assert "Evaluated locally and queued" in success.text
+    assert 'I\'m adding "Track daily hydration entries"' in success.text
+    assert "Bead ID" in success.text
+    assert "tg-" not in success.text and "host bridge" not in success.text
     pending = list((tmp_path / "pending").glob("*.json"))
     assert len(pending) == 1
     raw_envelope = pending[0].read_text(encoding="utf-8")
@@ -415,7 +417,8 @@ def test_handler_rejects_bad_input_and_model_failure_then_queues_only_normalized
         client=retry_client,
         now=NOW,  # type: ignore[arg-type]
     )
-    assert "already queued" in retry.text
+    assert "already on its way" in retry.text
+    assert "tg-" not in retry.text and "host bridge" not in retry.text
     assert retry_client.calls == []
 
 
@@ -434,7 +437,10 @@ def test_bd_read_commands_queue_only_fixed_operations_and_add_aliases_remain_saf
         now=NOW,  # type: ignore[arg-type]
     )
     list_path = next((tmp_path / "pending").glob("tg-*.json"))
-    assert "Queued bd list" in list_reply.text
+    assert list_reply.text == (
+        "Got it — I'm getting the current Beads issue list now. "
+        "I'll post it here as soon as it's ready."
+    )
     assert load_operation_envelope(list_path).operation is BeadsOperation.LIST
 
     status_reply = handlers.handle_message(
@@ -445,7 +451,10 @@ def test_bd_read_commands_queue_only_fixed_operations_and_add_aliases_remain_saf
         now=NOW,  # type: ignore[arg-type]
     )
     status_paths = [path for path in (tmp_path / "pending").glob("tg-*.json") if path != list_path]
-    assert "Queued bd status" in status_reply.text
+    assert status_reply.text == (
+        "Got it — I'm getting the current Beads project status now. "
+        "I'll post it here as soon as it's ready."
+    )
     assert len(status_paths) == 1
     assert load_operation_envelope(status_paths[0]).operation is BeadsOperation.STATUS
 
@@ -470,7 +479,8 @@ def test_bd_read_commands_queue_only_fixed_operations_and_add_aliases_remain_saf
             client=model_client(),
             now=NOW,  # type: ignore[arg-type]
         )
-        assert "Evaluated locally and queued" in reply.text
+        assert 'I\'m adding "Track daily hydration entries"' in reply.text
+        assert "tg-" not in reply.text and "host bridge" not in reply.text
         assert len(list((alias_root / "pending").glob("tg-*.json"))) == 1
 
 
@@ -499,7 +509,12 @@ def test_natural_language_read_intents_queue_the_same_fixed_operations(
         now=NOW,  # type: ignore[arg-type]
     )
 
-    assert f"Queued bd {operation.value}" in reply.text
+    expected_name = {
+        BeadsOperation.LIST: "current Beads issue list",
+        BeadsOperation.STATUS: "current Beads project status",
+    }[operation]
+    assert f"I'm getting the {expected_name} now" in reply.text
+    assert "tg-" not in reply.text and "host bridge" not in reply.text
     path = next((tmp_path / "pending").glob("tg-*.json"))
     assert load_operation_envelope(path).operation is operation
     assert len(client.calls) == 1
@@ -520,7 +535,8 @@ def test_natural_language_add_uses_intent_then_existing_safe_proposal_boundary(
         now=NOW,  # type: ignore[arg-type]
     )
 
-    assert "Evaluated locally and queued" in reply.text
+    assert 'I\'m adding "Track daily hydration entries"' in reply.text
+    assert "tg-" not in reply.text and "host bridge" not in reply.text
     pending = next((tmp_path / "pending").glob("tg-*.json"))
     assert load_envelope(pending).proposal.title == "Track daily hydration entries"
     assert len(client.calls) == 2
