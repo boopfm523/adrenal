@@ -67,13 +67,18 @@ describe("Health data page", () => {
     expect(await screen.findByRole("rowheader", { name: "118/76 mmHg" })).toBeVisible();
 
     const bpForm = screen.getByRole("form", { name: "Record blood pressure" });
+    expect(within(bpForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
+    expect(within(bpForm).getByLabelText("Date")).toHaveAttribute("type", "date");
+    expect(within(bpForm).getByLabelText("Time")).toHaveAttribute("type", "time");
     await userEvent.type(within(bpForm).getByLabelText("Systolic (mmHg)"), "120");
     await userEvent.type(within(bpForm).getByLabelText("Diastolic (mmHg)"), "80");
     await userEvent.click(within(bpForm).getByRole("button", { name: "Record blood pressure" }));
     const weightForm = screen.getByRole("form", { name: "Record weight" });
+    expect(within(weightForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
     await userEvent.type(within(weightForm).getByLabelText("Value"), "181");
     await userEvent.click(within(weightForm).getByRole("button", { name: "Record weight" }));
     const temperatureForm = screen.getByRole("form", { name: "Record body temperature" });
+    expect(within(temperatureForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
     await userEvent.type(within(temperatureForm).getByLabelText("Value"), "98.6");
     await userEvent.click(within(temperatureForm).getByRole("button", { name: "Record temperature" }));
 

@@ -47,6 +47,15 @@ function displayTime(value: string): string {
   return value.replace("T", " ").slice(0, 16);
 }
 
+function CompactLocalDateTime({ value, onChange }: { value: string; onChange: (value: string) => void }): React.JSX.Element {
+  const [date = "", time = ""] = value.split("T");
+  return <fieldset className="compact-local-time form-wide">
+    <legend>Experienced local time</legend>
+    <label>Date<input required type="date" value={date} onChange={(event) => { onChange(`${event.target.value}T${time || "00:00"}`); }} /></label>
+    <label>Time<input required type="time" value={time.slice(0, 5)} onChange={(event) => { onChange(`${date}T${event.target.value}`); }} /></label>
+  </fieldset>;
+}
+
 interface HealthDataViewState extends HealthDataFilters {
   bpPage: number;
   weightPage: number;
@@ -269,7 +278,7 @@ function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Eleme
     <label>Systolic (mmHg)<input required type="number" inputMode="numeric" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} /></label>
     <label>Diastolic (mmHg)<input required type="number" inputMode="numeric" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} /></label>
     <label>Pulse (bpm, optional)<input type="number" inputMode="numeric" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} /></label>
-    <label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label>
+    <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
     <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. HealthCurve records the values without interpreting them.</p>
     {mutation.isSuccess ? <p className="success-message form-wide" role="status">Blood pressure recorded.</p> : null}
@@ -296,7 +305,7 @@ function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
     <h3>Weight</h3>
     <label>Value<input required type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label>
     <label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }}><option value="lb">lb</option><option value="kg">kg</option></select></label>
-    <label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label>
+    <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
     <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. The entered unit is preserved; kilograms use 1 lb = 0.45359237 kg.</p>
     {mutation.isSuccess ? <p className="success-message form-wide" role="status">Weight recorded.</p> : null}
@@ -324,7 +333,7 @@ function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element
     <h3>Body temperature</h3>
     <label>Value<input required type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label>
     <label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }}><option value="f">°F</option><option value="c">°C</option></select></label>
-    <label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label>
+    <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
     <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. Entered units are preserved. HealthCurve converts with °F = (°C × 9/5) + 32 and does not diagnose fever.</p>
     {mutation.isSuccess ? <p className="success-message form-wide" role="status">Temperature recorded.</p> : null}
