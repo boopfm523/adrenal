@@ -82,6 +82,25 @@ _INJECTION_PATTERNS: Final = (
     r"</?(system|instruction)>",
 )
 
+_EXPLICIT_WEIGHT_PATTERN: Final = re.compile(
+    r"\b(?:(?:body\s+)?weight|weigh(?:ed|s|ing)?)\b"
+    r"\s*(?:(?:is|was|of|at)\s*)?"
+    r"(?P<value>\d+(?:\.\d+)?)\s*"
+    r"(?P<unit>lbs?|pounds?|kgs?|kilograms?)\b",
+    re.IGNORECASE,
+)
+
+_WEIGHT_UNIT_ALIASES: Final = {
+    "lb": WeightUnit.LB,
+    "lbs": WeightUnit.LB,
+    "pound": WeightUnit.LB,
+    "pounds": WeightUnit.LB,
+    "kg": WeightUnit.KG,
+    "kgs": WeightUnit.KG,
+    "kilogram": WeightUnit.KG,
+    "kilograms": WeightUnit.KG,
+}
+
 SYSTEM_PROMPT: Final = """\
 You extract structured candidate health events from a person's own message.
 
@@ -300,6 +319,25 @@ def is_hypothetical(text: str) -> bool:
     return any(re.search(p, lowered) for p in _HYPOTHETICAL_PATTERNS)
 
 
+def find_explicit_weight(text: str) -> tuple[str, WeightUnit] | None:
+    """Return only an explicitly paired body-weight value and unit.
+
+    This is a deterministic recovery for schema-constrained model output that
+    correctly labels a weight event but drops the value or unit. It deliberately
+    requires a weight word, a decimal, and a nearby supported unit; it never infers
+    pounds from a bare number.
+    """
+    match = _EXPLICIT_WEIGHT_PATTERN.search(text)
+    if match is None:
+        return None
+    return match.group("value"), _WEIGHT_UNIT_ALIASES[match.group("unit").lower()]
+
+
+def normalise_weight_unit(raw: str) -> WeightUnit | None:
+    """Normalize only explicit supported pound and kilogram spellings."""
+    return _WEIGHT_UNIT_ALIASES.get(raw.strip().lower())
+
+
 def extract(
     session: Session,
     *,
@@ -444,13 +482,17 @@ def _validate_candidate(
     elif candidate.type is CandidateType.WEIGHT:
         raw_weight = candidate.weight_value or candidate.amount
         raw_unit = candidate.weight_unit or candidate.unit
+        explicit_weight = find_explicit_weight(message)
+        if explicit_weight is not None:
+            explicit_value, explicit_unit = explicit_weight
+            raw_weight = raw_weight or explicit_value
+            raw_unit = raw_unit or explicit_unit.value
         if raw_weight is None or raw_unit is None:
             flags.append(FlagCode.MISSING_VITAL_VALUE)
         else:
             weight_value = normalise_amount(raw_weight)
-            try:
-                weight_unit = WeightUnit(raw_unit.lower())
-            except ValueError:
+            weight_unit = normalise_weight_unit(raw_unit)
+            if weight_unit is None:
                 flags.append(FlagCode.INVALID_VITAL_VALUE)
             if weight_value is None or not Decimal(0) < weight_value <= Decimal(5000):
                 flags.append(FlagCode.INVALID_VITAL_VALUE)

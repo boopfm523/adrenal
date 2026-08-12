@@ -17,13 +17,16 @@ from healthcurve.ai.extraction import (
     MAX_PLAUSIBLE_MG,
     SYSTEM_PROMPT,
     ExtractionResponse,
+    find_explicit_weight,
     find_time_expression,
     has_negation,
     is_hypothetical,
     looks_like_prompt_injection,
     normalise_amount,
     normalise_local_time,
+    normalise_weight_unit,
 )
+from healthcurve.vitals.models import WeightUnit
 
 
 @pytest.mark.safety("SAFE-19")
@@ -161,6 +164,51 @@ def test_amount_is_carried_as_a_string_not_a_float() -> None:
     )
     assert parsed.candidates[0].amount == "2.5"
     assert isinstance(parsed.candidates[0].amount, str)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_value", "expected_unit"),
+    [
+        ("Add a weight of 173.4 lbs.", "173.4", WeightUnit.LB),
+        ("Add a body weight of 173.4 pounds.", "173.4", WeightUnit.LB),
+        ("I weighed 173.4 lb at 08:20.", "173.4", WeightUnit.LB),
+        ("My weight is 78.6 kilograms.", "78.6", WeightUnit.KG),
+        ("I weigh 78.6 kgs.", "78.6", WeightUnit.KG),
+    ],
+)
+def test_explicit_body_weight_value_and_unit_are_recovered(
+    message: str, expected_value: str, expected_unit: WeightUnit
+) -> None:
+    assert find_explicit_weight(message) == (expected_value, expected_unit)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Add a body weight of 173.4.",
+        "My weighted average was 173.4.",
+        "Add 173.4 lbs to a diary note.",
+    ],
+)
+def test_weight_recovery_never_infers_a_missing_meaning(message: str) -> None:
+    assert find_explicit_weight(message) is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("lb", WeightUnit.LB),
+        ("lbs", WeightUnit.LB),
+        ("pound", WeightUnit.LB),
+        ("pounds", WeightUnit.LB),
+        ("kg", WeightUnit.KG),
+        ("kgs", WeightUnit.KG),
+        ("kilogram", WeightUnit.KG),
+        ("kilograms", WeightUnit.KG),
+    ],
+)
+def test_weight_unit_spellings_are_normalized(raw: str, expected: WeightUnit) -> None:
+    assert normalise_weight_unit(raw) is expected
 
 
 # ---------------------------------------------------------------------------

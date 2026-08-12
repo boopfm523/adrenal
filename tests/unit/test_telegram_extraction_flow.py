@@ -260,3 +260,92 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
         "temperature",
         "weight",
     }
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Add a weight of 173.4 lbs.",
+        "Add a body weight of 173.4 lbs.",
+    ],
+)
+def test_explicit_weight_is_recovered_when_model_drops_value_and_unit(
+    monkeypatch: pytest.MonkeyPatch, message: str
+) -> None:
+    reply, stored, privileged = _handle_weight_candidate(monkeypatch, message)
+
+    assert reply.draft_id == DRAFT_ID
+    assert "Weight: 173.4 lb" in reply.text
+    assert "value or unit missing" not in reply.text
+    assert "Nothing is recorded yet" in reply.text
+    privileged.add.assert_not_called()
+    candidate = stored.candidates[0]
+    assert candidate["weight_value"] == "173.4"
+    assert candidate["weight_unit"] == "lb"
+    assert candidate["is_actionable"] is True
+
+
+def test_bare_weight_number_remains_blocked_when_model_drops_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reply, stored, privileged = _handle_weight_candidate(
+        monkeypatch, "Add a body weight of 173.4."
+    )
+
+    assert reply.draft_id == DRAFT_ID
+    assert "Weight: value or unit missing" in reply.text
+    assert "need fixing before I can record them" in reply.text
+    privileged.add.assert_not_called()
+    candidate = stored.candidates[0]
+    assert candidate["weight_value"] is None
+    assert candidate["weight_unit"] is None
+    assert candidate["is_actionable"] is False
+
+
+def _handle_weight_candidate(
+    monkeypatch: pytest.MonkeyPatch, message: str
+) -> tuple[Any, ExtractionDraft, MagicMock]:
+    session, privileged = _empty_session()
+    restricted = MagicMock(spec=Session)
+    restricted.scalar.return_value = None
+    restricted.begin.return_value = nullcontext()
+
+    def assign_database_default() -> None:
+        draft = restricted.add.call_args.args[0]
+        assert isinstance(draft, ExtractionDraft)
+        draft.id = DRAFT_ID
+
+    restricted.flush.side_effect = assign_database_default
+    factory = MagicMock(return_value=nullcontext(cast(Session, restricted)))
+    monkeypatch.setattr(handlers, "get_ai_session_factory", lambda: factory)
+    client = StubOllamaClient(
+        ModelResult(
+            outcome=ModelOutcome.OK,
+            model_name="qwen3:30b",
+            data={
+                "candidates": [
+                    {
+                        "type": "weight",
+                        "weight_value": None,
+                        "weight_unit": None,
+                        "local_time": None,
+                        "negated": False,
+                        "hypothetical": False,
+                        "confidence": 0.9,
+                    }
+                ]
+            },
+        )
+    )
+
+    reply = handlers.handle_message(
+        session,
+        _owner(),
+        text=f"{SYNTHETIC_MARKER}: {message}",
+        client=client,
+        now=NOW,
+    )
+
+    stored = restricted.add.call_args.args[0]
+    assert isinstance(stored, ExtractionDraft)
+    return reply, stored, privileged
