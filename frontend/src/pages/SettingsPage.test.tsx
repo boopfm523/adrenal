@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext, type AuthContextValue } from "../auth/context";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { SettingsPage } from "./SettingsPage";
 
 const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London" } };
@@ -20,7 +21,7 @@ describe("Settings and privacy page", () => {
     const requests: { url: string; method: string; body: unknown }[] = [];
     const exportItem = { id: "44444444-4444-4444-8444-444444444444", job_id: "55555555-5555-4555-8555-555555555555", status: "queued", include_ai: false, include_sensitive: true, processed_rows: 0, total_rows: null, progress_percent: null, attempt_count: 0, max_attempts: 5, next_attempt_at: "2026-08-11T20:00:00Z", last_error_code: null, created_at: "2026-08-11T19:59:00Z", started_at: null, completed_at: null, expires_at: "2026-08-18T19:59:00Z", download_url: null, sha256: null, byte_size: null };
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); requests.push({ url, method: init?.method ?? "GET", body: init?.body === undefined ? null : JSON.parse(init.body as string) }); if (url.endsWith("/integrations/garmin/status")) return Promise.resolve(new Response(JSON.stringify({ configured: true, state: "connected", automatic_sync_hour_local: 9, last_success_at: "2026-08-10T12:00:00Z", checkpoint_date: "2026-08-10", capabilities: { steps: "available", stress: "unavailable" }, last_error_code: null, client_version: "synthetic", latest_sync_status: "completed", latest_sync_origin: "manual_refresh", latest_sync_warning_codes: [] }), { headers: { "Content-Type": "application/json" } })); if (url.endsWith("/integrations/garmin/disconnect-preview")) return Promise.resolve(new Response(JSON.stringify({ state: "connected", automatic_fact_rows: 5, reviewed_import_fact_rows: 2, sync_run_rows: 1, delete_data_confirmation: "DISCONNECT GARMIN AND DELETE DATA", retain_data_confirmation: "DISCONNECT GARMIN" }), { headers: { "Content-Type": "application/json" } })); if (url.includes("/integrations/garmin/sync")) return Promise.resolve(new Response(JSON.stringify({ job_id: "synthetic-job", status: "queued", disposition: url.includes("refresh=true") ? "refresh_queued" : "queued", origin: url.includes("refresh=true") ? "manual_refresh" : "manual", requested_start_date: "2026-08-04", requested_end_date: "2026-08-10", cooldown_until: null }), { status: 202, headers: { "Content-Type": "application/json" } })); if (url.includes("/privacy/exports?") && (init?.method ?? "GET") === "GET") return Promise.resolve(new Response(JSON.stringify({ items: [exportItem], page: { page: 1, page_size: 10, total_items: 1, total_pages: 1 } }), { headers: { "Content-Type": "application/json" } })); if (url.endsWith("/privacy/export")) return Promise.resolve(new Response(JSON.stringify(exportItem), { status: 202, headers: { "Content-Type": "application/json" } })); if (url.includes("/privacy/integrations/")) return Promise.resolve(new Response(JSON.stringify({ credentials_deleted: 1, data_rows_deleted: 2, disconnect_requested: url.endsWith("/garmin") }), { headers: { "Content-Type": "application/json" } })); return Promise.resolve(new Response(null, { status: 204 })); });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(screen.getByText(/Telegram itself may retain messages/)).toBeVisible();
     expect(screen.getByText(/record-completeness reminder 30 minutes/)).toBeVisible();
@@ -46,7 +47,7 @@ describe("Settings and privacy page", () => {
       const button = screen.getByRole("button", { name: `Disconnect ${provider}` });
       const form = button.closest("form");
       if (form === null) throw new Error("integration form missing");
-      fireEvent.change(within(form).getByLabelText("Current password"), { target: { value: submittedPassword } });
+      fireEvent.change(within(form).getByLabelText(/Current password/), { target: { value: submittedPassword } });
       fireEvent.click(button);
     }
     const garminButton = screen.getByRole("button", { name: "Disconnect Garmin" });
@@ -103,7 +104,7 @@ describe("Settings and privacy page", () => {
       if (url.includes("/context-events?")) return Promise.resolve(new Response(JSON.stringify({ items: [], revisions: [], page: { page: 1, page_size: 25, total_items: 0, total_pages: 0 } }), { headers: { "Content-Type": "application/json" } }));
       return Promise.resolve(new Response(null, { status: 204 }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(await screen.findByText("Scheduled automatic sync")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Sync Garmin now" }));
@@ -136,7 +137,7 @@ describe("Settings and privacy page", () => {
       if (url.endsWith("/context-events") && method === "POST") return Promise.resolve(new Response(JSON.stringify(recorded[0]), { status: 201, headers: { "Content-Type": "application/json" } }));
       return Promise.resolve(new Response(null, { status: 204 }));
     });
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(await screen.findByRole("rowheader", { name: "Synthetic Boston" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Context records table" })).toBeVisible();
@@ -188,7 +189,7 @@ describe("Settings and privacy page", () => {
 
   it("offers no HealthCurve MFA or passkey controls", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
     expect(screen.queryByText(/multi-factor authentication|recovery code|passkey/i)).not.toBeInTheDocument();
     expect(screen.getByText(/reachable only through the approved Tailscale network/)).toBeVisible();

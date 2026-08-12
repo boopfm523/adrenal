@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Button, Checkbox, Group, Paper, PasswordInput, Stack, Text, Title } from "@mantine/core";
 import { useRef, useState } from "react";
 
 import {
@@ -22,7 +23,7 @@ function IntegrationControl({ provider, description }: { provider: "telegram" | 
   const mutation = useMutation({ mutationFn: ({ password, deleteData }: { password: string; deleteData: boolean }) => disconnectIntegration(provider, password, deleteData) });
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ password: data.get("password") as string, deleteData: data.get("delete_data") === "on" }); }
   const title = provider === "telegram" ? "Telegram logging" : "Open-Meteo weather";
-  return <article className="settings-card"><h3>{title}</h3><p>{description}</p><form className="privacy-action" onSubmit={submit}><label>Current password<input name="password" type="password" required autoComplete="current-password" /></label><label className="checkbox-label"><input name="delete_data" type="checkbox" defaultChecked />Delete imported/provider-derived data as well as disconnecting</label><button type="submit" disabled={mutation.isPending}>Disconnect {provider}</button></form>{mutation.isSuccess ? <p className="success-message" role="status">Disconnected. {formatDecimal(mutation.data.credentials_deleted)} credential(s) and {formatDecimal(mutation.data.data_rows_deleted)} provider row(s) deleted.</p> : null}{mutation.isError ? <p className="error-summary" role="alert">The integration was not disconnected. Check your password.</p> : null}</article>;
+  return <Paper component="article" className="settings-card" withBorder radius="md" p="lg"><Title order={3}>{title}</Title><Text>{description}</Text><form onSubmit={submit}><Stack gap="md" mt="md"><PasswordInput name="password" label="Current password" aria-label="Current password" required autoComplete="current-password" /><Checkbox name="delete_data" label="Delete imported/provider-derived data as well as disconnecting" defaultChecked /><Button type="submit" loading={mutation.isPending}>Disconnect {provider}</Button></Stack></form>{mutation.isSuccess ? <Alert color="green" role="status" mt="md">Disconnected. {formatDecimal(mutation.data.credentials_deleted)} credential(s) and {formatDecimal(mutation.data.data_rows_deleted)} provider row(s) deleted.</Alert> : null}{mutation.isError ? <Alert color="red" role="alert" mt="md">The integration was not disconnected. Check your password.</Alert> : null}</Paper>;
 }
 
 function requestKey(): string {
@@ -141,11 +142,11 @@ function GarminControl(): React.JSX.Element {
   const canSync = status.data?.configured === true && status.data.state === "connected";
   const automaticHour = (status.data?.automatic_sync_hour_local ?? 9).toString().padStart(2, "0");
 
-  return <article className="settings-card" id="garmin-connection">
-    <h3>Garmin Connect</h3>
-    <p>Read-only automatic sync uses the owner-selected unofficial client. First sign-in and any Garmin MFA happen only in the local setup command; credentials and tokens are never shown here. Reviewed FIT/CSV import remains available as a fallback.</p>
-    {status.isPending ? <p role="status">Checking Garmin status…</p> : null}
-    {status.isError ? <p className="error-summary" role="alert">Garmin status is unavailable.</p> : null}
+  return <Paper component="article" className="settings-card" id="garmin-connection" withBorder radius="md" p="lg">
+    <Title order={3}>Garmin Connect</Title>
+    <Text>Read-only automatic sync uses the owner-selected unofficial client. First sign-in and any Garmin MFA happen only in the local setup command; credentials and tokens are never shown here. Reviewed FIT/CSV import remains available as a fallback.</Text>
+    {status.isPending ? <Text role="status">Checking Garmin status…</Text> : null}
+    {status.isError ? <Alert color="red" role="alert">Garmin status is unavailable.</Alert> : null}
     {status.data === undefined ? null : <dl className="integration-status">
       <div><dt>Configuration</dt><dd>{status.data.configured ? "Enabled" : "Disabled"}</dd></div>
       <div><dt>Connection</dt><dd>{status.data.state.replaceAll("_", " ")}</dd></div>
@@ -156,13 +157,13 @@ function GarminControl(): React.JSX.Element {
     {capabilities.length === 0 ? null : <details><summary>Latest metric availability</summary><ul>{capabilities.map(([name, value]) => <li key={name}>{name.replaceAll("_", " ")}: {value}</li>)}</ul></details>}
     {warningCodes.length === 0 ? null : <p className="privacy-note">Latest safe warning codes: {warningCodes.join(", ")}. Missing values remain unavailable, never zero.</p>}
     <p>Automatic sync runs once per local day at or after {automaticHour}:00 in your local timezone, giving your watch time to sync with Garmin Connect first. Manual sync remains available anytime. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
-    <div className="button-row">
-      <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(false); }}>{sync.isPending ? "Queueing sync…" : "Sync Garmin now"}</button>
-      <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</button>
-    </div>
-    {sync.isSuccess ? <p className="success-message" role="status">{syncResultMessage(sync.data)}</p> : null}
-    {isStatusPolling ? <p className="privacy-note" role="status">Garmin sync is queued or running. This status will update automatically.</p> : null}
-    {sync.isError ? <p className="error-summary" role="alert">The Garmin sync was not queued. Review the connection status.</p> : null}
+    <Group mt="md">
+      <Button type="button" loading={sync.isPending} disabled={!canSync} onClick={() => { sync.mutate(false); }}>Sync Garmin now</Button>
+      <Button type="button" variant="outline" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</Button>
+    </Group>
+    {sync.isSuccess ? <Alert color="green" role="status" mt="md">{syncResultMessage(sync.data)}</Alert> : null}
+    {isStatusPolling ? <Alert color="blue" role="status" mt="md">Garmin sync is queued or running. This status will update automatically.</Alert> : null}
+    {sync.isError ? <Alert color="red" role="alert" mt="md">The Garmin sync was not queued. Review the connection status.</Alert> : null}
     <form className="privacy-action danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); disconnect.mutate({ password: data.get("password") as string, confirmation: data.get("confirmation") as string }); }}>
       <h4>Disconnect Garmin</h4>
       <p>{preview.data === undefined ? "Loading impact preview…" : `${formatDecimal(preview.data.automatic_fact_rows)} automatic fact row(s), ${formatDecimal(preview.data.reviewed_import_fact_rows)} reviewed import fact row(s), and ${formatDecimal(preview.data.sync_run_rows)} sync provenance row(s) are currently recorded.`}</p>
@@ -173,7 +174,7 @@ function GarminControl(): React.JSX.Element {
     </form>
     {disconnect.isSuccess ? <p className="success-message" role="status">Disconnect accepted. {formatDecimal(disconnect.data.data_rows_deleted)} provider row(s) deleted. Local Garmin token cleanup is {disconnect.data.disconnect_requested ? "queued" : "already complete"}.</p> : null}
     {disconnect.isError ? <p className="error-summary" role="alert">Garmin was not disconnected. Check the password and exact confirmation phrase.</p> : null}
-  </article>;
+  </Paper>;
 }
 
 export function SettingsPage(): React.JSX.Element {

@@ -552,7 +552,8 @@ circle.chart-series { fill: white; }
   .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values, .plan-form-grid, .repeatable-row, .plan-timeline-item { grid-template-columns: 1fr; }
   .wide-field { grid-column: auto; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
-  .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: 1fr; }
+  .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: minmax(0, 1fr); }
+  .settings-grid > *, .settings-card { min-width: 0; }
   .quality-grid { grid-template-columns: 1fr; }
   .report-layout, .report-range, .report-preview-counts, .report-summary-grid { grid-template-columns: 1fr; }
   .help-category-grid, .help-command-grid, .help-workflow-grid { grid-template-columns: 1fr; }
