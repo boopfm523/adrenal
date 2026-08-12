@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   deleteAccount,
@@ -56,17 +56,69 @@ function garminOriginLabel(origin: string | null | undefined): string {
   return "Not yet completed";
 }
 
+const GARMIN_STATUS_POLL_MS = 2_000;
+const GARMIN_STATUS_POLL_LIMIT_MS = 120_000;
+
+interface GarminStatusPolling {
+  baselineLastSuccess: string | null;
+  expiresAt: number;
+  sawActiveStatus: boolean;
+}
+
 function GarminControl(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [deleteData, setDeleteData] = useState(true);
-  const status = useQuery({ queryKey: ["garmin-status"], queryFn: getGarminStatus });
+  const [isStatusPolling, setIsStatusPolling] = useState(false);
+  const statusPolling = useRef<GarminStatusPolling | null>(null);
+  const status = useQuery({
+    queryKey: ["garmin-status"],
+    queryFn: getGarminStatus,
+    refetchInterval: (query) => {
+      const tracker = statusPolling.current;
+      if (tracker === null) return false;
+      if (Date.now() >= tracker.expiresAt) {
+        statusPolling.current = null;
+        queueMicrotask(() => { setIsStatusPolling(false); });
+        return false;
+      }
+      const current = query.state.data;
+      if (current === undefined) return GARMIN_STATUS_POLL_MS;
+      const latest = current.latest_sync_status;
+      if (latest === "queued" || latest === "running") tracker.sawActiveStatus = true;
+      const terminal = latest === "completed" || latest === "completed_with_warnings" || latest === "failed";
+      const successChanged = current.last_success_at !== tracker.baselineLastSuccess;
+      if (terminal && (tracker.sawActiveStatus || successChanged)) {
+        statusPolling.current = null;
+        queueMicrotask(() => { setIsStatusPolling(false); });
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["garmin-records"] }),
+          queryClient.invalidateQueries({ queryKey: ["garmin-samples"] }),
+          queryClient.invalidateQueries({ queryKey: ["garmin-sleep"] }),
+          queryClient.invalidateQueries({ queryKey: ["healthcurve"] }),
+        ]);
+        return false;
+      }
+      return GARMIN_STATUS_POLL_MS;
+    },
+  });
   const preview = useQuery({
     queryKey: ["garmin-disconnect-preview"],
     queryFn: getGarminDisconnectPreview,
   });
   const sync = useMutation({
     mutationFn: (refresh: boolean) => requestGarminSync(requestKey(), refresh),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (["queued", "refresh_queued", "coalesced_active"].includes(result.disposition)) {
+        statusPolling.current = {
+          baselineLastSuccess: status.data?.last_success_at ?? null,
+          expiresAt: Date.now() + GARMIN_STATUS_POLL_LIMIT_MS,
+          sawActiveStatus: false,
+        };
+        setIsStatusPolling(true);
+      } else {
+        statusPolling.current = null;
+        setIsStatusPolling(false);
+      }
       await queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
     },
   });
@@ -108,6 +160,7 @@ function GarminControl(): React.JSX.Element {
       <button type="button" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</button>
     </div>
     {sync.isSuccess ? <p className="success-message" role="status">{syncResultMessage(sync.data)}</p> : null}
+    {isStatusPolling ? <p className="privacy-note" role="status">Garmin sync is queued or running. This status will update automatically.</p> : null}
     {sync.isError ? <p className="error-summary" role="alert">The Garmin sync was not queued. Review the connection status.</p> : null}
     <form className="privacy-action danger-zone" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); disconnect.mutate({ password: data.get("password") as string, confirmation: data.get("confirmation") as string }); }}>
       <h4>Disconnect Garmin</h4>

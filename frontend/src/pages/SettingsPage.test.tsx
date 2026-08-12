@@ -73,6 +73,44 @@ describe("Settings and privacy page", () => {
     await waitFor(() => { expect(requests.some((request) => request.url.endsWith("/privacy/account") && (request.body as { confirmation?: string }).confirmation === "DELETE MY HEALTHCURVE ACCOUNT")).toBe(true); });
   });
 
+  it("refreshes Garmin status until a manually queued sync completes", async () => {
+    let statusReads = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/integrations/garmin/status")) {
+        statusReads += 1;
+        const running = statusReads === 2;
+        const completed = statusReads >= 3;
+        return Promise.resolve(new Response(JSON.stringify({
+          configured: true,
+          state: "connected",
+          last_success_at: completed ? "2026-08-12T13:00:00Z" : "2026-08-11T13:00:00Z",
+          checkpoint_date: completed ? "2026-08-12" : "2026-08-11",
+          capabilities: { stress: completed ? "available" : "unavailable" },
+          last_error_code: null,
+          client_version: "synthetic",
+          latest_sync_status: running ? "running" : "completed",
+          latest_sync_origin: statusReads === 1 ? "scheduled" : "manual",
+          latest_sync_warning_codes: [],
+        }), { headers: { "Content-Type": "application/json" } }));
+      }
+      if (url.includes("/integrations/garmin/sync") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify({ job_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", status: "queued", disposition: "queued", origin: "manual", requested_start_date: "2026-08-06", requested_end_date: "2026-08-12", cooldown_until: null }), { status: 202, headers: { "Content-Type": "application/json" } }));
+      if (url.endsWith("/integrations/garmin/disconnect-preview")) return Promise.resolve(new Response(JSON.stringify({ state: "connected", automatic_fact_rows: 0, reviewed_import_fact_rows: 0, sync_run_rows: 0, delete_data_confirmation: "DISCONNECT GARMIN AND DELETE DATA", retain_data_confirmation: "DISCONNECT GARMIN" }), { headers: { "Content-Type": "application/json" } }));
+      if (url.includes("/privacy/exports?")) return Promise.resolve(new Response(JSON.stringify({ items: [], page: { page: 1, page_size: 10, total_items: 0, total_pages: 0 } }), { headers: { "Content-Type": "application/json" } }));
+      if (url.includes("/context-events?")) return Promise.resolve(new Response(JSON.stringify({ items: [], revisions: [], page: { page: 1, page_size: 25, total_items: 0, total_pages: 0 } }), { headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider>);
+
+    expect(await screen.findByText("Scheduled automatic sync")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Sync Garmin now" }));
+    expect(await screen.findByText("Garmin sync is queued or running. This status will update automatically.")).toBeVisible();
+    expect(await screen.findByText("2026-08-12T13:00:00Z", {}, { timeout: 4_000 })).toBeVisible();
+    expect(screen.getByText("Manual sync")).toBeVisible();
+    expect(screen.queryByText("Garmin sync is queued or running. This status will update automatically.")).not.toBeInTheDocument();
+    expect(statusReads).toBeGreaterThanOrEqual(3);
+  });
+
   it("gates exact coordinates and supports manual context review and deletion", async () => {
     const requests: { url: string; method: string; body: unknown }[] = [];
     const recordId = "33333333-3333-4333-8333-333333333333";
