@@ -20,7 +20,7 @@ from actual recorded dose times. It plots a versioned theoretical exposure shape
 supported immediate-release oral hydrocortisone, including absorption, half-life,
 carryover from the prior day, and the summed effect of doses taken close together.
 Focused controls compare that shape with Garmin stress, heart rate, HRV,
-respiration, blood pressure, symptoms, stress episodes, and sleep on the same local
+respiration, blood pressure, body temperature, symptoms, stress episodes, and sleep on the same local
 time axis. Hover, keyboard, and mobile controls reveal the exact time and native
 value; the adjacent table remains authoritative. Daily and nightly Garmin summaries
 without an observation time are shown as context rather than invented as intraday

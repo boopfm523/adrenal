@@ -26,7 +26,7 @@ from healthcurve.medications.models import DoseEvent, RegimenStatus, RegimenVers
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.reports.service import create_snapshot
 from healthcurve.vitals import service as vitals
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
+from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
 
 SUPPORTED_SECTIONS: Final = frozenset(
     {
@@ -153,6 +153,27 @@ def build_snapshot(
                     "presentation_definition": (
                         "Pounds are primary, rounded half up to 0.1 lb; original value and unit "
                         "are retained; 1 lb = 0.45359237 kg"
+                    ),
+                }
+            )
+            manifest["fact"].append(str(row.id))
+        for row in _current_events(
+            session, TemperatureEvent, owner_id=owner_id, start=start, end=end
+        ):
+            facts.append(
+                {
+                    **_base_event(row),
+                    "record_type": "temperature",
+                    "value": row.value,
+                    "unit": row.unit,
+                    "display_f": vitals.display_temperature_f(row.value, row.unit),
+                    "display_c": vitals.display_temperature_c(row.value, row.unit),
+                    "normalized_c": row.normalized_c,
+                    "conversion_definition": "°F = (°C x 9/5) + 32",
+                    "presentation_definition": (
+                        "Fahrenheit is primary and Celsius follows in parentheses; both are "
+                        "rounded half up to 0.1 degree while the original value and unit "
+                        "remain retained"
                     ),
                 }
             )

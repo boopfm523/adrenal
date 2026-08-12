@@ -31,6 +31,7 @@ function data(overrides: Partial<DailyHealthCurveData> = {}): DailyHealthCurveDa
     garmin: [],
     symptoms: [],
     bloodPressure: [],
+    temperature: [],
     episodes: [],
     ...overrides,
   };
@@ -177,6 +178,30 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).not.toHaveTextContent("88 bpm");
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(screen.getByRole("tooltip")).toHaveTextContent("Blood-pressure pulse: 88 bpm");
+  });
+
+  it("shows temperature as discrete Fahrenheit-first facts with exact accessible values", () => {
+    render(<DailyHealthCurve data={data({ temperature: [{
+      id: "50000000-0000-4000-8000-000000000001",
+      category: "fact",
+      value: "38.00",
+      unit: "c",
+      normalized_c: "38.00",
+      display_f: "100.4",
+      display_c: "38.0",
+      time: { occurred_at: "2026-03-08T16:00:00Z", local_time: "2026-03-08T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+      provenance: { ...provenance, source_type: "web", confirmation_state: "direct" },
+      notes: null,
+    }] })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Temperature" }));
+    expect(document.querySelectorAll("circle.healthcurve-point--temperature")).toHaveLength(1);
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Temperature · °F (°C)");
+    const { tooltip } = hoverAt(660);
+    expect(tooltip).toHaveTextContent("Temperature: 100.4 °F (38.0 °C)");
+    const exactValues = screen.getByRole("region", { name: "Selected-day temperature exact values" });
+    expect(exactValues).toHaveTextContent("100.4 °F (38.0 °C)");
+    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("Temperature: 1 exact point(s)");
   });
 
   it("shows Garmin daily aggregates in their persistent series cards without inventing chart points", () => {

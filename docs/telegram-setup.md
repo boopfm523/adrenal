@@ -63,6 +63,9 @@ While you're still in BotFather, harden the bot:
   ```
   dose - Record a dose: /dose 15 hydrocortisone
   symptom - Record a symptom: /symptom nausea 4
+  bp - Record blood pressure: /bp 120/80 62 08:15
+  weight - Record body weight: /weight 180 lb 08:15
+  temperature - Record body temperature: /temperature 98.6 F 08:15
   injection - Log an emergency injection
   episode - /episode start <trigger> or /episode end
   today - What's recorded today vs your plan
@@ -280,7 +283,8 @@ to ADR-0010's `qwen3:30b`. With native Ollama on macOS, run `ollama list` and
 `ollama pull qwen3:30b`; with the bundled CPU-only service, use
 `docker compose exec ollama ollama list` and
 `docker compose exec ollama ollama pull qwen3:30b`. Confirm `HC_OLLAMA_MODEL` names the
-installed tag. The commands (`/dose`, `/symptom`, `/today`) remain deterministic and
+installed tag. The commands (`/dose`, `/symptom`, `/bp`, `/weight`, `/temperature`,
+`/today`) remain deterministic and
 keep working without any model at all.
 
 **`telegram update failed` with a `reason_code`.**

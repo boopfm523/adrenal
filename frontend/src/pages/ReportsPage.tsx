@@ -14,7 +14,7 @@ const sectionOptions = [
   ["approved_plan", "Physician-approved plan"],
   ["episodes", "Stress/up-dose episodes"],
   ["symptoms", "Symptoms"],
-  ["vitals", "Blood pressure and weight"],
+  ["vitals", "Blood pressure, weight, and temperature"],
   ["emergency_injections", "Emergency injections"],
   ["patient_notes", "Patient notes and questions"],
   ["life_events", "Life events"],
@@ -54,6 +54,7 @@ function recordSummary(value: unknown): { title: string; details: string[] } {
   if (record.record_type === "symptom") return { title: display(record.name), details: [when, record.severity === null || record.severity === undefined ? "severity not recorded" : `severity ${display(record.severity)}/10`, record.body_area === null || record.body_area === undefined ? "" : display(record.body_area)] };
   if (record.record_type === "stress_episode") return { title: display(record.trigger), details: [when, `${display(record.severity)}; ${display(record.status)}`] };
   if (record.record_type === "blood_pressure") return { title: `Blood pressure ${display(record.systolic_mmhg)}/${display(record.diastolic_mmhg)} mmHg`, details: [when, record.pulse_bpm === null || record.pulse_bpm === undefined ? "" : `pulse ${display(record.pulse_bpm)} bpm`] };
+  if (record.record_type === "temperature") return { title: `Temperature ${String(record.display_f)} °F (${String(record.display_c)} °C)`, details: [when] };
   if (record.record_type === "garmin_metric") return { title: `${display(record.metric_type)}: ${display(record.value)} ${display(record.unit)}`, details: [when, "Garmin observation"] };
   if (record.record_type === "garmin_metric_summary") return { title: `${display(record.metric_type)} — ${display(record.local_date)}`, details: [`average ${display(record.average)}; low ${display(record.low)}; high ${display(record.high)} ${display(record.unit)}`, `${display(record.sample_count)} samples`] };
   if (record.record_type === "approved_regimen") return { title: display(record.version_label), details: [`Effective ${when}`, `${records(record.slots).length.toString()} scheduled slot(s)`] };

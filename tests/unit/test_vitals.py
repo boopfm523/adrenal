@@ -5,9 +5,16 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from healthcurve.api.schemas import BloodPressureIn, WeightIn
-from healthcurve.vitals.models import WeightUnit
-from healthcurve.vitals.service import display_weight_lb, normalize_weight_kg
+from healthcurve.api.schemas import BloodPressureIn, TemperatureIn, WeightIn
+from healthcurve.vitals.models import TemperatureUnit, WeightUnit
+from healthcurve.vitals.service import (
+    display_temperature_c,
+    display_temperature_f,
+    display_weight_lb,
+    normalize_temperature_c,
+    normalize_weight_kg,
+    temperature_in_range,
+)
 
 SYNTHETIC_TIME = {"local_time": "2026-08-09T08:15:00", "timezone": "Europe/London"}
 
@@ -62,3 +69,62 @@ def test_blood_pressure_requires_both_positive_components(payload: dict[str, obj
 def test_weight_requires_an_explicit_positive_value_and_unit() -> None:
     with pytest.raises(ValidationError):
         WeightIn.model_validate({"value": "0", "unit": "kg", "time": SYNTHETIC_TIME})
+
+
+@pytest.mark.parametrize(
+    ("value", "unit", "normalized", "display_f", "display_c"),
+    [
+        (
+            Decimal("38"),
+            TemperatureUnit.CELSIUS,
+            Decimal("38.00"),
+            Decimal("100.4"),
+            Decimal("38.0"),
+        ),
+        (
+            Decimal("98.6"),
+            TemperatureUnit.FAHRENHEIT,
+            Decimal("37.00"),
+            Decimal("98.6"),
+            Decimal("37.0"),
+        ),
+        (
+            Decimal("37.25"),
+            TemperatureUnit.CELSIUS,
+            Decimal("37.25"),
+            Decimal("99.1"),
+            Decimal("37.3"),
+        ),
+    ],
+)
+def test_temperature_conversion_is_deterministic_and_fahrenheit_first(
+    value: Decimal,
+    unit: TemperatureUnit,
+    normalized: Decimal,
+    display_f: Decimal,
+    display_c: Decimal,
+) -> None:
+    assert normalize_temperature_c(value, unit) == normalized
+    assert display_temperature_f(value, unit) == display_f
+    assert display_temperature_c(value, unit) == display_c
+
+
+@pytest.mark.parametrize(
+    ("value", "unit", "expected"),
+    [
+        (Decimal("77"), TemperatureUnit.FAHRENHEIT, True),
+        (Decimal("113"), TemperatureUnit.FAHRENHEIT, True),
+        (Decimal("25"), TemperatureUnit.CELSIUS, True),
+        (Decimal("76.9"), TemperatureUnit.FAHRENHEIT, False),
+        (Decimal("45.1"), TemperatureUnit.CELSIUS, False),
+    ],
+)
+def test_temperature_bounds_are_structural_not_diagnostic(
+    value: Decimal, unit: TemperatureUnit, expected: bool
+) -> None:
+    assert temperature_in_range(value, unit) is expected
+
+
+def test_temperature_schema_requires_explicit_unit() -> None:
+    with pytest.raises(ValidationError):
+        TemperatureIn.model_validate({"value": "98.6", "time": SYNTHETIC_TIME})

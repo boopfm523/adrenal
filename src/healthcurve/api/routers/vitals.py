@@ -1,4 +1,4 @@
-"""Manual blood-pressure and body-weight facts."""
+"""Manual blood-pressure, body-weight, and body-temperature facts."""
 
 from __future__ import annotations
 
@@ -21,6 +21,11 @@ from healthcurve.api.schemas import (
     BloodPressureIn,
     BloodPressureOut,
     BloodPressurePage,
+    TemperatureCorrectionChanges,
+    TemperatureCorrectionIn,
+    TemperatureIn,
+    TemperatureOut,
+    TemperaturePage,
     WeightCorrectionChanges,
     WeightCorrectionIn,
     WeightIn,
@@ -30,10 +35,18 @@ from healthcurve.api.schemas import (
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.vitals import service as vitals
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
+from healthcurve.vitals.models import (
+    BloodPressureEvent,
+    TemperatureEvent,
+    TemperatureUnit,
+    WeightEvent,
+    WeightUnit,
+)
 
 router = APIRouter(tags=["vitals"])
-CorrectionChanges = BloodPressureCorrectionChanges | WeightCorrectionChanges
+CorrectionChanges = (
+    BloodPressureCorrectionChanges | WeightCorrectionChanges | TemperatureCorrectionChanges
+)
 
 
 @router.post(
@@ -200,7 +213,97 @@ def correct_weight(
     return _weight_out(row)
 
 
-def _date_predicates[VitalEvent: (BloodPressureEvent, WeightEvent)](
+@router.post(
+    "/temperature",
+    response_model=TemperatureOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def create_temperature(payload: TemperatureIn, session: DbSession, owner: CurrentOwner):
+    _validate_temperature(payload.value, payload.unit)
+    row = events.create_event(
+        session,
+        TemperatureEvent,
+        owner_id=owner.id,
+        event_time=resolve_time(payload.time),
+        source_type=SourceType.WEB,
+        confirmation_state=ConfirmationState.DIRECT,
+        value=payload.value,
+        unit=payload.unit,
+        normalized_c=vitals.normalize_temperature_c(payload.value, payload.unit),
+        notes=payload.notes,
+    )
+    return _temperature_out(row)
+
+
+@router.get("/temperature", response_model=TemperaturePage)
+def list_temperature(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
+):
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates = _date_predicates(
+        TemperatureEvent,
+        window.start or date_from,
+        window.end_exclusive or date_to,
+        end_exclusive=window.end_exclusive is not None,
+    )
+    page = paginate_current_facts(
+        session,
+        TemperatureEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=predicates,
+    )
+    return TemperaturePage(
+        items=[_temperature_out(row) for row in page.items],
+        revisions=[_temperature_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
+
+
+@router.post(
+    "/temperature/{event_id}/correct",
+    response_model=TemperatureOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def correct_temperature(
+    event_id: uuid.UUID,
+    payload: TemperatureCorrectionIn,
+    session: DbSession,
+    owner: CurrentOwner,
+):
+    original = _owned(session, TemperatureEvent, owner.id, event_id)
+    changes = payload.changes.model_dump(exclude_unset=True, exclude={"time"})
+    if "value" in changes or "unit" in changes:
+        value = Decimal(changes.get("value", original.value))
+        unit = TemperatureUnit(changes.get("unit", original.unit))
+        _validate_temperature(value, unit)
+        changes["normalized_c"] = vitals.normalize_temperature_c(value, unit)
+    row = _correct(
+        session,
+        TemperatureEvent,
+        original,
+        payload.reason,
+        payload.changes,
+        prepared_changes=changes,
+    )
+    return _temperature_out(row)
+
+
+def _date_predicates[VitalEvent: (BloodPressureEvent, WeightEvent, TemperatureEvent)](
     model: type[VitalEvent],
     start: datetime | None,
     end: datetime | None,
@@ -215,7 +318,7 @@ def _date_predicates[VitalEvent: (BloodPressureEvent, WeightEvent)](
     return tuple(predicates)
 
 
-def _owned[VitalEvent: (BloodPressureEvent, WeightEvent)](
+def _owned[VitalEvent: (BloodPressureEvent, WeightEvent, TemperatureEvent)](
     session: DbSession,
     model: type[VitalEvent],
     owner_id: uuid.UUID,
@@ -227,7 +330,7 @@ def _owned[VitalEvent: (BloodPressureEvent, WeightEvent)](
     return row
 
 
-def _correct[VitalEvent: (BloodPressureEvent, WeightEvent)](
+def _correct[VitalEvent: (BloodPressureEvent, WeightEvent, TemperatureEvent)](
     session: DbSession,
     model: type[VitalEvent],
     original: VitalEvent,
@@ -276,3 +379,25 @@ def _weight_out(row: WeightEvent) -> WeightOut:
         provenance=provenance_out(row),
         notes=row.notes,
     )
+
+
+def _temperature_out(row: TemperatureEvent) -> TemperatureOut:
+    return TemperatureOut(
+        id=row.id,
+        value=row.value,
+        unit=row.unit,
+        normalized_c=row.normalized_c,
+        display_f=vitals.display_temperature_f(row.value, row.unit),
+        display_c=vitals.display_temperature_c(row.value, row.unit),
+        time=time_out(row),
+        provenance=provenance_out(row),
+        notes=row.notes,
+    )
+
+
+def _validate_temperature(value: Decimal, unit: TemperatureUnit) -> None:
+    if not vitals.temperature_in_range(value, unit):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="temperature must be between 25 and 45 °C (77 and 113 °F)",
+        )

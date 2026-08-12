@@ -4,17 +4,23 @@ import { useSearchParams } from "react-router-dom";
 
 import {
   correctBloodPressure,
+  correctTemperature,
   correctWeight,
   createBloodPressure,
+  createTemperature,
   createWeight,
   getBloodPressure,
   getGarminRecords,
+  getTemperature,
   getWeight,
   type BloodPressure,
   type BloodPressureCorrectionInput,
   type BloodPressureInput,
   type GarminRecord,
   type HealthDataFilters,
+  type Temperature,
+  type TemperatureCorrectionInput,
+  type TemperatureInput,
   type Weight,
   type WeightCorrectionInput,
   type WeightInput,
@@ -44,6 +50,7 @@ function displayTime(value: string): string {
 interface HealthDataViewState extends HealthDataFilters {
   bpPage: number;
   weightPage: number;
+  temperaturePage: number;
   garminPage: number;
 }
 
@@ -60,6 +67,7 @@ function viewStateFromSearch(search: string, profileTimezone: string): HealthDat
     timezone: params.get("timezone") ?? profileTimezone,
     bpPage: pageFromSearch(params, "bp_page"),
     weightPage: pageFromSearch(params, "weight_page"),
+    temperaturePage: pageFromSearch(params, "temperature_page"),
     garminPage: pageFromSearch(params, "garmin_page"),
   };
 }
@@ -70,6 +78,7 @@ function searchFromViewState(state: HealthDataViewState): URLSearchParams {
   if (state.dateTo !== "") params.set("local_date_to", state.dateTo);
   if (state.bpPage > 1) params.set("bp_page", state.bpPage.toString());
   if (state.weightPage > 1) params.set("weight_page", state.weightPage.toString());
+  if (state.temperaturePage > 1) params.set("temperature_page", state.temperaturePage.toString());
   if (state.garminPage > 1) params.set("garmin_page", state.garminPage.toString());
   return params;
 }
@@ -113,7 +122,7 @@ function GarminRecordsTable({ records }: { records: GarminRecord[] }): React.JSX
   </div>;
 }
 
-function dateRange(records: (BloodPressure | Weight)[]): string {
+function dateRange(records: (BloodPressure | Weight | Temperature)[]): string {
   if (records.length === 0) return "No recorded readings";
   const dates = records.map((record) => record.time.local_time.slice(0, 10)).sort();
   return `${dates[0] ?? ""} through ${dates.at(-1) ?? ""}`;
@@ -140,6 +149,15 @@ function weightSeries(records: Weight[]): ChartSeries[] {
   }];
 }
 
+function temperatureSeries(records: Temperature[]): ChartSeries[] {
+  const ordered = [...records].sort((left, right) => left.time.occurred_at.localeCompare(right.time.occurred_at));
+  return [{
+    name: "Temperature",
+    source: "current recorded facts",
+    values: ordered.map((row) => ({ label: displayTime(row.time.local_time), value: row.display_f })),
+  }];
+}
+
 function WeightHistoryTable({ records, byId, editing, setEditing }: {
   records: Weight[];
   byId: Map<string, Weight>;
@@ -161,6 +179,35 @@ function WeightHistoryTable({ records, byId, editing, setEditing }: {
             <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : null}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct weight"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{formatDecimal(prior.display_lb)} lb</strong> · entered {formatDecimal(prior.value)} {prior.unit}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
           </tr>
           {editing === record.id ? <tr className="correction-table-row"><td colSpan={5}><WeightCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
+        </Fragment>;
+      })}</tbody>
+    </table>
+  </div>;
+}
+
+function TemperatureHistoryTable({ records, byId, editing, setEditing }: {
+  records: Temperature[];
+  byId: Map<string, Temperature>;
+  editing: string | null;
+  setEditing: (id: string | null) => void;
+}): React.JSX.Element {
+  const ordered = [...records].sort((left, right) => right.time.occurred_at.localeCompare(left.time.occurred_at));
+  return <div className="table-scroll vital-table-region" tabIndex={0} role="region" aria-label="Temperature records table">
+    <table className="vital-table">
+      <caption>Current recorded body-temperature facts, shown Fahrenheit first with Celsius in parentheses. Original values and correction history remain preserved.</caption>
+      <thead><tr><th scope="col">Experienced time</th><th scope="col">Temperature</th><th scope="col">Entered value</th><th scope="col">Source</th><th scope="col">Notes</th><th scope="col">Action</th></tr></thead>
+      <tbody>{ordered.map((record) => {
+        const history = historyFor(record, byId);
+        return <Fragment key={record.id}>
+          <tr data-category="fact">
+            <td className="timeline-time">{displayTime(record.time.local_time)}<span>{timezoneAbbreviation(record.time.timezone, record.time.occurred_at)}</span></td>
+            <th scope="row">{record.display_f} °F ({record.display_c} °C)</th>
+            <td>{formatDecimal(record.value)} °{record.unit.toUpperCase()}</td>
+            <td>{humanizeSource(record.provenance.source_type)}</td>
+            <td>{record.notes ?? <span className="missing-value">None</span>}</td>
+            <td>{record.provenance.is_correction ? <span>{`Corrected · ${record.provenance.correction_reason ?? "reason recorded"}`}</span> : <span>Original record</span>}<button type="button" onClick={() => { setEditing(editing === record.id ? null : record.id); }}>{editing === record.id ? "Close correction form" : "Correct temperature"}</button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Superseded value</h3><p><strong>{prior.display_f} °F ({prior.display_c} °C)</strong> · entered {formatDecimal(prior.value)} °{prior.unit.toUpperCase()}</p><p>{displayTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p><p>Source: {source(prior)}</p></article>)}</details>}</td>
+          </tr>
+          {editing === record.id ? <tr className="correction-table-row"><td colSpan={6}><TemperatureCorrection record={record} close={() => { setEditing(null); }} /></td></tr> : null}
         </Fragment>;
       })}</tbody>
     </table>
@@ -258,6 +305,34 @@ function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
   </form>;
 }
 
+function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ value: "", unit: "f" as TemperatureInput["unit"], localTime: localNow(), notes: "" });
+  const mutation = useMutation({
+    mutationFn: createTemperature,
+    onSuccess: async () => {
+      setForm({ value: "", unit: form.unit, localTime: localNow(), notes: "" });
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ["temperature"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]);
+    },
+  });
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    mutation.mutate({ value: form.value, unit: form.unit, time: { local_time: form.localTime, timezone }, notes: form.notes === "" ? null : form.notes });
+  }
+  const bounds = form.unit === "f" ? { min: 77, max: 113 } : { min: 25, max: 45 };
+  return <form className="vital-entry-form" aria-label="Record body temperature" onSubmit={submit}>
+    <h3>Body temperature</h3>
+    <label>Value<input required type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label>
+    <label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }}><option value="f">°F</option><option value="c">°C</option></select></label>
+    <label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label>
+    <label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label>
+    <p className="form-wide privacy-note">Timezone: {timezoneAbbreviation(timezone)}. Entered units are preserved. HealthCurve converts with °F = (°C × 9/5) + 32 and does not diagnose fever.</p>
+    {mutation.isSuccess ? <p className="success-message form-wide" role="status">Temperature recorded.</p> : null}
+    {mutation.isError ? <p className="error-summary form-wide" role="alert">Temperature was not saved. Use 77–113 °F or 25–45 °C and check the time.</p> : null}
+    <button className="form-wide" type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Record temperature"}</button>
+  </form>;
+}
+
 function BloodPressureCorrection({ record, close }: { record: BloodPressure; close: () => void }): React.JSX.Element {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ systolic: record.systolic_mmhg.toString(), diastolic: record.diastolic_mmhg.toString(), pulse: record.pulse_bpm?.toString() ?? "", localTime: record.time.local_time.slice(0, 16), timezone: record.time.timezone, notes: record.notes ?? "", reason: "" });
@@ -294,6 +369,24 @@ function WeightCorrection({ record, close }: { record: Weight; close: () => void
   return <form className="correction-form" aria-label="Correct weight" onSubmit={submit}><p className="correction-warning">This creates a corrected fact and preserves the original.</p><label>Value<input required type="number" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label><label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as Weight["unit"] }); }}><option value="lb">lb</option><option value="kg">kg</option></select></label><label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label><label>Timezone<input required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} /></label><label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label><label className="form-wide">Correction reason<input required value={form.reason} onChange={(event) => { setForm({ ...form, reason: event.target.value }); }} /></label>{validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}{mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved.</p> : null}<div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>Save corrected fact</button><button className="button-secondary" type="button" onClick={close}>Cancel</button></div></form>;
 }
 
+function TemperatureCorrection({ record, close }: { record: Temperature; close: () => void }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ value: record.value, unit: record.unit, localTime: record.time.local_time.slice(0, 16), timezone: record.time.timezone, notes: record.notes ?? "", reason: "" });
+  const [validation, setValidation] = useState<string | null>(null);
+  const mutation = useMutation({ mutationFn: (payload: TemperatureCorrectionInput) => correctTemperature(record.id, payload), onSuccess: async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ["temperature"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]); close(); } });
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault(); const changes: TemperatureCorrectionInput["changes"] = {};
+    if (form.value !== record.value) changes.value = form.value;
+    if (form.unit !== record.unit) changes.unit = form.unit;
+    if (form.localTime !== record.time.local_time.slice(0, 16) || form.timezone !== record.time.timezone) changes.time = { local_time: form.localTime, timezone: form.timezone };
+    if (form.notes !== (record.notes ?? "")) changes.notes = form.notes === "" ? null : form.notes;
+    if (form.reason.trim() === "" || Object.keys(changes).length === 0) { setValidation(form.reason.trim() === "" ? "Explain why this fact needs correction." : "Change at least one recorded field."); return; }
+    setValidation(null); mutation.mutate({ reason: form.reason.trim(), changes });
+  }
+  const bounds = form.unit === "f" ? { min: 77, max: 113 } : { min: 25, max: 45 };
+  return <form className="correction-form" aria-label="Correct temperature" onSubmit={submit}><p className="correction-warning">This creates a corrected fact and preserves the original.</p><label>Value<input required type="number" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} /></label><label>Unit<select value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as Temperature["unit"], value: "" }); }}><option value="f">°F</option><option value="c">°C</option></select></label><label>Experienced local time<input required type="datetime-local" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} /></label><label>Timezone<input required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} /></label><label className="form-wide">Notes<textarea value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} /></label><label className="form-wide">Correction reason<input required value={form.reason} onChange={(event) => { setForm({ ...form, reason: event.target.value }); }} /></label>{validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}{mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved. Use 77–113 °F or 25–45 °C.</p> : null}<div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>Save corrected fact</button><button className="button-secondary" type="button" onClick={close}>Cancel</button></div></form>;
+}
+
 export function HealthDataPage(): React.JSX.Element {
   const { session } = useAuth();
   const timezone = session?.user.defaultTimezone ?? "UTC";
@@ -310,15 +403,18 @@ export function HealthDataPage(): React.JSX.Element {
   const [editing, setEditing] = useState<string | null>(null);
   const bp = useQuery({ queryKey: ["blood-pressure", filters, view.bpPage], queryFn: () => getBloodPressure(filters, view.bpPage), enabled: !appliedRangeInvalid });
   const weight = useQuery({ queryKey: ["weight", filters, view.weightPage], queryFn: () => getWeight(filters, view.weightPage), enabled: !appliedRangeInvalid });
+  const temperature = useQuery({ queryKey: ["temperature", filters, view.temperaturePage], queryFn: () => getTemperature(filters, view.temperaturePage), enabled: !appliedRangeInvalid });
   const garmin = useQuery({ queryKey: ["garmin-records", filters, view.garminPage], queryFn: () => getGarminRecords(filters, view.garminPage), enabled: !appliedRangeInvalid });
   const currentBp = bp.data?.items ?? [];
   const currentWeight = weight.data?.items ?? [];
+  const currentTemperature = temperature.data?.items ?? [];
   const bpById = new Map([...currentBp, ...(bp.data?.revisions ?? [])].map((record) => [record.id, record]));
   const weightById = new Map([...currentWeight, ...(weight.data?.revisions ?? [])].map((record) => [record.id, record]));
-  return <Page title="Health data" description="Record and review blood pressure, weight, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
-    <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /></div></section>
+  const temperatureById = new Map([...currentTemperature, ...(temperature.data?.revisions ?? [])].map((record) => [record.id, record]));
+  return <Page title="Health data" description="Record and review blood pressure, weight, body temperature, and Garmin observations as measured facts. HealthCurve does not diagnose or recommend treatment from these values.">
+    <section aria-labelledby="quick-entry-heading"><h2 id="quick-entry-heading">Quick entry</h2><div className="vital-entry-grid"><BloodPressureEntry timezone={timezone} /><WeightEntry timezone={timezone} /><TemperatureEntry timezone={timezone} /></div></section>
     <section aria-labelledby="health-data-filter-heading"><h2 id="health-data-filter-heading">Filter recorded health data</h2>
-      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, garminPage: 1 })); }}>
+      <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setFilterValidation("From date must be on or before Through date."); return; } setFilterValidation(null); setEditing(null); setSearchParams(searchFromViewState({ ...draft, bpPage: 1, weightPage: 1, temperaturePage: 1, garminPage: 1 })); }}>
         <label>From date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label>
         <label>Through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label>
         <label>IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>
@@ -327,14 +423,16 @@ export function HealthDataPage(): React.JSX.Element {
       </form>
       <p className="privacy-note">Inclusive calendar dates are interpreted in {timezoneAbbreviation(filters.timezone)}. Records keep their original experienced timezone.</p>
     </section>
-    {bp.isFetching || weight.isFetching || garmin.isFetching ? <p role="status">Loading recorded health data…</p> : null}
-    {bp.isError || weight.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded. Check the date range and IANA timezone.</p> : null}
+    {bp.isFetching || weight.isFetching || temperature.isFetching || garmin.isFetching ? <p role="status">Loading recorded health data…</p> : null}
+    {bp.isError || weight.isError || temperature.isError || garmin.isError ? <p className="error-summary" role="alert">Some health records could not be loaded. Check the date range and IANA timezone.</p> : null}
     <section aria-labelledby="trends-heading"><h2 id="trends-heading">Recorded trends</h2><p className="privacy-note">Charts connect recorded observations only. They do not infer readings between observations; absence of a record is not a zero.</p>
       {currentBp.length === 0 ? <p>{hasActiveDates ? "No blood-pressure readings match the selected dates." : "No blood-pressure readings recorded."}</p> : <AccessibleLineChart title="Blood pressure" summary="Systolic and diastolic measurements on the visible records page." unit="mmHg" timezone={timezone} timezoneReferenceDate={currentBp[0]?.time.local_time.slice(0, 10)} dateRange={dateRange(currentBp)} definition="Each point is one current blood-pressure fact on the visible records page. Missing intervals are not inferred; the table contains every plotted reading." sampleCount={currentBp.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Blood pressure" series={bpSeries(currentBp)} />}
       {currentWeight.length === 0 ? <p>{hasActiveDates ? "No weight readings match the selected dates." : "No weight readings recorded."}</p> : <AccessibleLineChart title="Weight" summary="Weight measurements on the visible records page, shown on one consistent pounds scale." unit="lb" timezone={timezone} timezoneReferenceDate={currentWeight[0]?.time.local_time.slice(0, 10)} dateRange={dateRange(currentWeight)} definition="Each point is one current weight fact on the visible records page, converted deterministically to pounds and rounded half up to 0.1 lb using 1 lb = 0.45359237 kg. The chart adds one pound of visual padding above and below the observed range; exact values remain in the chart points and records table. Missing intervals are not inferred." sampleCount={currentWeight.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Weight" yPadding={1} compactPlot series={weightSeries(currentWeight)} />}
+      {currentTemperature.length === 0 ? <p>{hasActiveDates ? "No temperature readings match the selected dates." : "No temperature readings recorded."}</p> : <AccessibleLineChart title="Body temperature" summary="Body-temperature measurements on the visible records page, shown Fahrenheit first." unit="°F" timezone={timezone} timezoneReferenceDate={currentTemperature[0]?.time.local_time.slice(0, 10)} dateRange={dateRange(currentTemperature)} definition="Each point is one current body-temperature fact, shown in Fahrenheit after deterministic conversion when entered in Celsius. The chart adds one degree of visual padding; exact Fahrenheit and Celsius values remain in the records table. Missing intervals are not inferred." sampleCount={currentTemperature.length} missingCount={0} xAxisLabel="Experienced date / time" yAxisLabel="Body temperature" yPadding={1} compactPlot series={temperatureSeries(currentTemperature)} />}
     </section>
     <section aria-labelledby="garmin-records-heading"><h2 id="garmin-records-heading">Garmin recorded observations</h2><p className="privacy-note">These are provider-imported facts, separate from physician-approved plans and AI analysis. Scores and missing values are not interpreted as medical conclusions.</p>{garmin.data?.records.length === 0 ? <p>No Garmin observations match the selected dates.</p> : garmin.data === undefined ? null : <GarminRecordsTable records={garmin.data.records} />}{garmin.data === undefined ? null : <PaginationControls label="Garmin records" metadata={garmin.data.page} onPageChange={(garminPage) => { setSearchParams(searchFromViewState({ ...view, garminPage })); }} />}</section>
     <section aria-labelledby="bp-records-heading"><h2 id="bp-records-heading">Blood pressure records and provenance</h2>{currentBp.length === 0 ? <p>No blood-pressure readings match the selected dates.</p> : <BloodPressureHistoryTable records={currentBp} byId={bpById} editing={editing} setEditing={setEditing} />}{bp.data === undefined ? null : <PaginationControls label="Blood pressure records" metadata={bp.data.page} onPageChange={(bpPage) => { setEditing(null); setSearchParams(searchFromViewState({ ...view, bpPage })); }} />}</section>
     <section aria-labelledby="weight-records-heading"><h2 id="weight-records-heading">Weight records and provenance</h2>{currentWeight.length === 0 ? <p>No weight readings match the selected dates.</p> : <WeightHistoryTable records={currentWeight} byId={weightById} editing={editing} setEditing={setEditing} />}{weight.data === undefined ? null : <PaginationControls label="Weight records" metadata={weight.data.page} onPageChange={(weightPage) => { setEditing(null); setSearchParams(searchFromViewState({ ...view, weightPage })); }} />}</section>
+    <section aria-labelledby="temperature-records-heading"><h2 id="temperature-records-heading">Body temperature records and provenance</h2>{currentTemperature.length === 0 ? <p>No temperature readings match the selected dates.</p> : <TemperatureHistoryTable records={currentTemperature} byId={temperatureById} editing={editing} setEditing={setEditing} />}{temperature.data === undefined ? null : <PaginationControls label="Temperature records" metadata={temperature.data.page} onPageChange={(temperaturePage) => { setEditing(null); setSearchParams(searchFromViewState({ ...view, temperaturePage })); }} />}</section>
   </Page>;
 }

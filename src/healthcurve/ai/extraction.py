@@ -38,12 +38,13 @@ from healthcurve.events.timekeeping import (
     resolve_event_time,
 )
 from healthcurve.medications.models import DoseEvent, Medication
-from healthcurve.vitals.models import WeightUnit
+from healthcurve.vitals import service as vitals
+from healthcurve.vitals.models import TemperatureUnit, WeightUnit
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
-PROMPT_VERSION: Final = "extract-v3"
-SCHEMA_VERSION: Final = "candidates-v2"
+PROMPT_VERSION: Final = "extract-v4"
+SCHEMA_VERSION: Final = "candidates-v3"
 
 #: Nothing plausible for adrenal replacement exceeds this. A larger number is a parse
 #: error until a human says otherwise.
@@ -96,6 +97,9 @@ You are a parser, not an adviser. You must:
   values and optional pulse. Do not interpret or comment on the reading.
 - A weight candidate must preserve the stated decimal value in the amount field and
   explicit lb or kg in the unit field. Do not infer a missing unit or comment on it.
+- A temperature candidate must put the stated decimal value in temperature_value and
+  the explicit lowercase f or c in temperature_unit; leave amount and unit null. Do
+  not infer a missing unit, diagnose fever, or comment on the reading.
 - Write amount as a decimal string only (for example "2.5"), with the unit only in
   the unit field.
 - Write local_time as an ISO 8601 local datetime without a UTC offset. A clock time
@@ -116,6 +120,7 @@ class CandidateType(StrEnum):
     LIFE_EVENT = "life_event"
     BLOOD_PRESSURE = "blood_pressure"
     WEIGHT = "weight"
+    TEMPERATURE = "temperature"
 
 
 class ExtractedCandidate(BaseModel):
@@ -136,6 +141,8 @@ class ExtractedCandidate(BaseModel):
     pulse_bpm: int | None = None
     weight_value: str | None = Field(default=None, description="Decimal as a string")
     weight_unit: str | None = None
+    temperature_value: str | None = Field(default=None, description="Decimal as a string")
+    temperature_unit: str | None = None
     local_time: str | None = Field(default=None, description="ISO 8601 local, no offset")
     negated: bool = False
     hypothetical: bool = False
@@ -169,6 +176,11 @@ CANDIDATE_JSON_SCHEMA: Final[dict[str, Any]] = {
                     "pulse_bpm": {"type": ["integer", "null"]},
                     "weight_value": {"type": ["string", "null"]},
                     "weight_unit": {"type": ["string", "null"], "enum": ["lb", "kg", None]},
+                    "temperature_value": {"type": ["string", "null"]},
+                    "temperature_unit": {
+                        "type": ["string", "null"],
+                        "enum": ["f", "c", None],
+                    },
                     "local_time": {"type": ["string", "null"]},
                     "negated": {"type": "boolean"},
                     "hypothetical": {"type": "boolean"},
@@ -240,6 +252,8 @@ class ValidatedCandidate(BaseModel):
     pulse_bpm: int | None = None
     weight_value: Decimal | None = None
     weight_unit: WeightUnit | None = None
+    temperature_value: Decimal | None = None
+    temperature_unit: TemperatureUnit | None = None
     local_time: datetime | None = None
     timezone: str
     confidence: float = 0.0
@@ -417,6 +431,8 @@ def _validate_candidate(
 
     weight_value: Decimal | None = None
     weight_unit: WeightUnit | None = None
+    temperature_value: Decimal | None = None
+    temperature_unit: TemperatureUnit | None = None
     if candidate.type is CandidateType.BLOOD_PRESSURE:
         values = (candidate.systolic_mmhg, candidate.diastolic_mmhg)
         if any(value is None for value in values):
@@ -437,6 +453,23 @@ def _validate_candidate(
             except ValueError:
                 flags.append(FlagCode.INVALID_VITAL_VALUE)
             if weight_value is None or not Decimal(0) < weight_value <= Decimal(5000):
+                flags.append(FlagCode.INVALID_VITAL_VALUE)
+    elif candidate.type is CandidateType.TEMPERATURE:
+        raw_temperature = candidate.temperature_value or candidate.amount
+        raw_unit = candidate.temperature_unit or candidate.unit
+        if raw_temperature is None or raw_unit is None:
+            flags.append(FlagCode.MISSING_VITAL_VALUE)
+        else:
+            temperature_value = normalise_amount(raw_temperature)
+            try:
+                temperature_unit = TemperatureUnit(raw_unit.lower().replace("°", ""))
+            except ValueError:
+                flags.append(FlagCode.INVALID_VITAL_VALUE)
+            if (
+                temperature_value is None
+                or temperature_unit is None
+                or not vitals.temperature_in_range(temperature_value, temperature_unit)
+            ):
                 flags.append(FlagCode.INVALID_VITAL_VALUE)
 
     local_time = _validate_time(candidate.local_time, timezone, now, flags, message=message)
@@ -467,6 +500,8 @@ def _validate_candidate(
         pulse_bpm=candidate.pulse_bpm,
         weight_value=weight_value,
         weight_unit=weight_unit,
+        temperature_value=temperature_value,
+        temperature_unit=temperature_unit,
         local_time=local_time,
         timezone=timezone,
         confidence=candidate.confidence,

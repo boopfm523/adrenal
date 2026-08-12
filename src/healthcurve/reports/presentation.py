@@ -230,7 +230,11 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
         for record in by_type["stress_episode"]
     ]
     vital_rows = []
-    for record in [*by_type["blood_pressure"], *by_type["weight"]]:
+    for record in [
+        *by_type["blood_pressure"],
+        *by_type["weight"],
+        *by_type["temperature"],
+    ]:
         if record.get("record_type") == "blood_pressure":
             reading = (
                 f"{_value(record.get('systolic_mmhg'))}/{_value(record.get('diastolic_mmhg'))} mmHg"
@@ -238,9 +242,12 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
             if record.get("pulse_bpm") is not None:
                 reading += f"; pulse {_value(record.get('pulse_bpm'))} bpm"
             kind = "Blood pressure"
-        else:
+        elif record.get("record_type") == "weight":
             kind = "Weight"
             reading = f"{_value(record.get('value'))} {_value(record.get('unit'))}"
+        else:
+            kind = "Temperature"
+            reading = f"{_value(record.get('display_f'))} °F ({_value(record.get('display_c'))} °C)"
         vital_rows.append([_time(record), kind, reading, _notes(record, "notes")])
 
     injection_rows = [
@@ -333,7 +340,7 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
             "Vitals",
             ["Local time", "Measurement", "Value", "Notes"],
             vital_rows,
-            "No blood pressure or weight records selected for this period.",
+            "No blood pressure, weight, or temperature records selected for this period.",
             "vitals",
         ),
         _table(

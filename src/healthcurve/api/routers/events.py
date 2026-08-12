@@ -45,7 +45,12 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.integrations.garmin.presentation import measurement_summary
 from healthcurve.medications.models import DoseEvent
 from healthcurve.vitals import service as vitals
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
+from healthcurve.vitals.models import (
+    BloodPressureEvent,
+    TemperatureEvent,
+    WeightEvent,
+    WeightUnit,
+)
 
 router = APIRouter(tags=["events"])
 
@@ -349,6 +354,7 @@ _TIMELINE_TYPES: tuple[tuple[type[EventMixin], str], ...] = (
     (ContextEvent, "context"),
     (BloodPressureEvent, "blood_pressure"),
     (WeightEvent, "weight"),
+    (TemperatureEvent, "temperature"),
     (GarminMetricEvent, "garmin_daily"),
     (GarminSleepEvent, "garmin_sleep"),
     (GarminActivityEvent, "garmin_activity"),
@@ -522,6 +528,10 @@ def _summarize(row: EventMixin, type_name: str) -> str:
                 else ""
             )
             return f"Weight {pounds} lb{entered}"
+        case "temperature":
+            fahrenheit = vitals.display_temperature_f(row.value, row.unit)  # type: ignore[attr-defined]
+            celsius = vitals.display_temperature_c(row.value, row.unit)  # type: ignore[attr-defined]
+            return f"Temperature {fahrenheit} °F ({celsius} °C)"
         case "garmin_daily":
             return measurement_summary(  # type: ignore[arg-type]
                 row.metric_type,  # type: ignore[attr-defined]

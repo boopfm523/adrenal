@@ -1167,6 +1167,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/temperature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Temperature */
+        get: operations["list_temperature_api_v1_temperature_get"];
+        put?: never;
+        /** Create Temperature */
+        post: operations["create_temperature_api_v1_temperature_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/temperature/{event_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct Temperature */
+        post: operations["correct_temperature_api_v1_temperature__event_id__correct_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/timeline": {
         parameters: {
             query?: never;
@@ -3652,6 +3687,65 @@ export interface components {
             page: components["schemas"]["PageMetadata"];
             /** Revisions */
             revisions: components["schemas"]["SymptomOut"][];
+        };
+        /** TemperatureCorrectionChanges */
+        TemperatureCorrectionChanges: {
+            /** Notes */
+            notes?: string | null;
+            time?: components["schemas"]["EventTimeIn"] | null;
+            unit?: components["schemas"]["TemperatureUnit"] | null;
+            /** Value */
+            value?: number | string | null;
+        };
+        /** TemperatureCorrectionIn */
+        TemperatureCorrectionIn: {
+            changes: components["schemas"]["TemperatureCorrectionChanges"];
+            /** Reason */
+            reason: string;
+        };
+        /** TemperatureIn */
+        TemperatureIn: {
+            /** Notes */
+            notes?: string | null;
+            time: components["schemas"]["EventTimeIn"];
+            unit: components["schemas"]["TemperatureUnit"];
+            /** Value */
+            value: number | string;
+        };
+        /** TemperatureOut */
+        TemperatureOut: {
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /** Display C */
+            display_c: string;
+            /** Display F */
+            display_f: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Normalized C */
+            normalized_c: string;
+            /** Notes */
+            notes: string | null;
+            provenance: components["schemas"]["ProvenanceOut"];
+            time: components["schemas"]["EventTimeOut"];
+            unit: components["schemas"]["TemperatureUnit"];
+            /** Value */
+            value: string;
+        };
+        /** TemperaturePage */
+        TemperaturePage: {
+            /** Items */
+            items: components["schemas"]["TemperatureOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["TemperatureOut"][];
         };
         /**
          * TemperatureUnit
@@ -6651,6 +6745,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SymptomOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_temperature_api_v1_temperature_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemperaturePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_temperature_api_v1_temperature_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemperatureIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemperatureOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_temperature_api_v1_temperature__event_id__correct_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemperatureCorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemperatureOut"];
                 };
             };
             /** @description Validation Error */

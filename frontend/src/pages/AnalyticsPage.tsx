@@ -9,6 +9,7 @@ import {
   getDailyEpisodes,
   getDailyGarminContext,
   getDailySymptoms,
+  getDailyTemperature,
   getSteroidExposure,
   type AnalyticsSummary,
 } from "../api/client";
@@ -137,6 +138,7 @@ export function AnalyticsPage(): React.JSX.Element {
     hrv: false,
     respiration_rate: false,
     blood_pressure: false,
+    temperature: false,
     symptoms: false,
     episodes: false,
   });
@@ -145,14 +147,15 @@ export function AnalyticsPage(): React.JSX.Element {
   const dailyCurve = useQuery({
     queryKey: ["daily-healthcurve", dayFilter],
     queryFn: async () => {
-      const [exposure, garmin, symptoms, bloodPressure, episodes] = await Promise.all([
+      const [exposure, garmin, symptoms, bloodPressure, temperature, episodes] = await Promise.all([
         getSteroidExposure(dayFilter.day, dayFilter.timezone),
         getDailyGarminContext(dayFilter.day, dayFilter.timezone),
         getDailySymptoms(dayFilter.day, dayFilter.timezone),
         getDailyBloodPressure(dayFilter.day, dayFilter.timezone),
+        getDailyTemperature(dayFilter.day, dayFilter.timezone),
         getDailyEpisodes(dayFilter.day, dayFilter.timezone),
       ]);
-      return { exposure, garmin, symptoms, bloodPressure, episodes };
+      return { exposure, garmin, symptoms, bloodPressure, temperature, episodes };
     },
     refetchInterval: 60_000,
   });

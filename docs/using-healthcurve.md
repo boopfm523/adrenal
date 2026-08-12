@@ -143,6 +143,19 @@ table shows the entered measurement as provenance and keeps immutable correction
 history and correction controls available. The chart's adjacent data table is the
 authoritative accessible alternative; missing intervals are not inferred as zero.
 
+### Body-temperature display and history
+
+HealthCurve accepts measured body temperature in Fahrenheit or Celsius and preserves
+the entered decimal value and unit as the recorded fact. Presentation is always
+Fahrenheit first with Celsius in parentheses—for example `100.4 °F (38.0 °C)`—in
+Health data, Timeline, exports, reports, Telegram confirmations, and HealthCurve.
+
+Conversion is deterministic: `°F = (°C × 9/5) + 32`, with displayed values rounded
+half up to `0.1` degree. The API accepts the broad structural human-measurement range
+`25–45 °C` (`77–113 °F`) to reject unit mistakes; this is not a fever classification
+and HealthCurve does not diagnose or interpret the reading. Corrections create a new
+fact and retain the original value, unit, time, source, and correction reason.
+
 ## The HTTP API
 
 Everything is behind Caddy on `http://localhost:8080`, and every API route is
@@ -381,7 +394,7 @@ exposure units (REU), not serum cortisol, biological effect, clinical coverage, 
 dosing advice. See [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
 
 The selected-day HealthCurve overlays the actual-dose exposure shape, Garmin stress/
-HRV/respiration/heart rate, blood pressure, discrete symptom markers, dose markers,
+HRV/respiration/heart rate, blood pressure, body temperature, discrete symptom markers, dose markers,
 stress-episode windows, and Garmin sleep sessions on one local-time graph. Sleep start
 and wake/end use labeled vertical markers; explicitly timed awake intervals use a
 distinct amber background. Overnight sessions appear on every selected local day they
@@ -394,6 +407,7 @@ units and timestamps. Continuous shapes use a clearly labeled relative 0–100 d
 position so unlike units can be compared in time without implying that their values
 are equivalent. The initial focused view compares theoretical exposure with Garmin
 stress; one-click controls switch to heart rate, HRV, respiration, blood pressure,
+temperature,
 recorded events, or an intentionally busy all-series view. Dense wearable sample dots
 are hidden from the graph while every exact value remains available through hover and
 the table. Lines connect only samples with an observed contiguous cadence;

@@ -13,6 +13,7 @@ const provenance = { recorded_at: "2026-08-09T12:16:00Z", source_type: "telegram
 const pressure = { id: "11111111-1111-4111-8111-111111111111", category: "fact", systolic_mmhg: 118, diastolic_mmhg: 76, pulse_bpm: 62, time, provenance, notes: null };
 const weight = { id: "22222222-2222-4222-8222-222222222222", category: "fact", value: "180.0000", unit: "lb", normalized_kg: "81.6466", display_lb: "180.0", time, provenance, notes: null };
 const kgWeight = { ...weight, id: "44444444-4444-4444-8444-444444444444", value: "83.1000", unit: "kg", normalized_kg: "83.1000", display_lb: "183.2", time: { ...time, occurred_at: "2026-08-10T12:15:00Z", local_time: "2026-08-10T08:15:00" } };
+const temperature = { id: "12121212-1212-4212-8212-121212121212", category: "fact", value: "38.00", unit: "c", normalized_c: "38.00", display_f: "100.4", display_c: "38.0", time, provenance, notes: null };
 const garminProvenance = { ...provenance, source_type: "provider", confirmation_state: "provider_imported" };
 const correctedGarminProvenance = { ...garminProvenance, supersedes_id: "88888888-8888-4888-8888-888888888888", correction_reason: "Synthetic provider revision", is_correction: true };
 const garminRecords = {
@@ -57,10 +58,10 @@ describe("Health data page", () => {
       if (init?.method === "POST") {
         const rawBody = typeof init.body === "string" ? init.body : "{}";
         writes.push({ url, body: JSON.parse(rawBody) as unknown, csrf: new Headers(init.headers).get("X-CSRF-Token") });
-        return Promise.resolve(json(url.endsWith("/weight") ? weight : pressure, 201));
+        return Promise.resolve(json(url.endsWith("/weight") ? weight : url.endsWith("/temperature") ? temperature : pressure, 201));
       }
       if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ records: [], notice: "Synthetic", page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 } }));
-      return Promise.resolve(json(url.includes("blood-pressure") ? page([pressure]) : page([weight])));
+      return Promise.resolve(json(url.includes("blood-pressure") ? page([pressure]) : url.includes("/temperature") ? page([temperature]) : page([weight])));
     });
     renderPage();
     expect(await screen.findByRole("rowheader", { name: "118/76 mmHg" })).toBeVisible();
@@ -72,10 +73,14 @@ describe("Health data page", () => {
     const weightForm = screen.getByRole("form", { name: "Record weight" });
     await userEvent.type(within(weightForm).getByLabelText("Value"), "181");
     await userEvent.click(within(weightForm).getByRole("button", { name: "Record weight" }));
+    const temperatureForm = screen.getByRole("form", { name: "Record body temperature" });
+    await userEvent.type(within(temperatureForm).getByLabelText("Value"), "98.6");
+    await userEvent.click(within(temperatureForm).getByRole("button", { name: "Record temperature" }));
 
-    await waitFor(() => { expect(writes).toHaveLength(2); });
+    await waitFor(() => { expect(writes).toHaveLength(3); });
     expect(writes[0]).toEqual(expect.objectContaining({ url: "/api/v1/blood-pressure", csrf: "synthetic-csrf", body: expect.objectContaining({ systolic_mmhg: 120, diastolic_mmhg: 80, time: expect.objectContaining({ timezone: "America/New_York" }) }) }));
     expect(writes[1]).toEqual(expect.objectContaining({ url: "/api/v1/weight", csrf: "synthetic-csrf", body: expect.objectContaining({ value: "181", unit: "lb" }) }));
+    expect(writes[2]).toEqual(expect.objectContaining({ url: "/api/v1/temperature", csrf: "synthetic-csrf", body: expect.objectContaining({ value: "98.6", unit: "f" }) }));
   });
 
   it("renders equivalent trend tables, explicit units, missingness, and correction provenance", async () => {
@@ -85,7 +90,7 @@ describe("Health data page", () => {
       const url = requestUrl(input);
       if (url.endsWith(`/blood-pressure/${corrected.id}/correct`) && init?.method === "POST") return Promise.resolve(json({ ...corrected, diastolic_mmhg: 77 }, 201));
       if (url.includes("/integrations/garmin/records")) return Promise.resolve(json(garminRecords));
-      return Promise.resolve(json(url.includes("blood-pressure") ? page([corrected, withoutPulse], [pressure]) : page([kgWeight, weight])));
+      return Promise.resolve(json(url.includes("blood-pressure") ? page([corrected, withoutPulse], [pressure]) : url.includes("/temperature") ? page([temperature]) : page([kgWeight, weight])));
     });
     renderPage();
     expect(await screen.findByRole("img", { name: /Blood pressure/ })).toBeVisible();
@@ -93,6 +98,7 @@ describe("Health data page", () => {
     expect(screen.getByText("X axis: Experienced date / time (EDT). Y axis: Weight (lb).")).toBeVisible();
     expect(screen.getByRole("region", { name: "Blood pressure scrollable graph" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Weight scrollable graph" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Body temperature scrollable graph" })).toBeVisible();
     expect(screen.getAllByText("Missing values")[0]).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Systolic (mmHg)" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Weight (lb)" })).toHaveLength(1);
@@ -105,6 +111,9 @@ describe("Health data page", () => {
     expect(within(weightTable).getByRole("columnheader", { name: "Source" })).toBeVisible();
     expect(within(weightTable).getAllByRole("cell", { name: "Telegram" })).toHaveLength(2);
     const pressureTable = screen.getByRole("region", { name: "Blood pressure records table" });
+    const temperatureTable = screen.getByRole("region", { name: "Temperature records table" });
+    expect(temperatureTable).toHaveTextContent("100.4 °F (38.0 °C)");
+    expect(temperatureTable).toHaveTextContent("38 °C");
     expect(pressureTable).toHaveAttribute("tabindex", "0");
     expect(within(pressureTable).getByText(/Current recorded blood-pressure facts in latest-experienced-time order/)).toBeVisible();
     expect(within(pressureTable).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Experienced time", "Systolic / diastolic", "Pulse", "Source and confirmation", "Notes", "Action"]);
@@ -168,7 +177,7 @@ describe("Health data page", () => {
       const pageNumber = Number(new URL(url, "http://healthcurve.test").searchParams.get("page") ?? "1");
       const metadata = { page: pageNumber, page_size: 25, total_items: 50, total_pages: 2 };
       if (url.includes("/integrations/garmin/records")) return Promise.resolve(json({ ...garminRecords, page: metadata }));
-      return Promise.resolve(json({ items: url.includes("blood-pressure") ? [pressure] : [weight], revisions: [], page: metadata }));
+      return Promise.resolve(json({ items: url.includes("blood-pressure") ? [pressure] : url.includes("/temperature") ? [temperature] : [weight], revisions: [], page: metadata }));
     });
     renderPage("/health-data?local_date_from=2026-08-09&local_date_to=2026-08-10&timezone=America%2FLos_Angeles");
 
@@ -176,7 +185,7 @@ describe("Health data page", () => {
     expect(screen.getByLabelText("Through date")).toHaveValue("2026-08-10");
     expect(screen.getByLabelText("IANA timezone")).toHaveValue("America/Los_Angeles");
     await waitFor(() => {
-      expect(urls.filter((url) => url.includes("local_date_from=2026-08-09") && url.includes("local_date_to=2026-08-10") && url.includes("timezone=America%2FLos_Angeles"))).toHaveLength(3);
+      expect(urls.filter((url) => url.includes("local_date_from=2026-08-09") && url.includes("local_date_to=2026-08-10") && url.includes("timezone=America%2FLos_Angeles"))).toHaveLength(4);
     });
 
     await userEvent.click(within(screen.getByRole("navigation", { name: "Blood pressure records pagination" })).getByRole("button", { name: "Next" }));
@@ -203,6 +212,6 @@ describe("Health data page", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    await waitFor(() => { expect(fetchMock).toHaveBeenCalledTimes(3); });
+    await waitFor(() => { expect(fetchMock).toHaveBeenCalledTimes(4); });
   });
 });

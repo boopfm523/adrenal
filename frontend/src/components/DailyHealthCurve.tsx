@@ -6,6 +6,7 @@ import type {
   GarminRecord,
   SteroidExposureCurve,
   Symptom,
+  Temperature,
 } from "../api/client";
 import {
   formatDecimal,
@@ -19,10 +20,11 @@ export interface DailyHealthCurveData {
   garmin: GarminRecord[];
   symptoms: Symptom[];
   bloodPressure: BloodPressure[];
+  temperature: Temperature[];
   episodes: Episode[];
 }
 
-export type HealthCurveLaneKey = "exposure" | "stress" | "heart_rate" | "hrv" | "respiration_rate" | "blood_pressure" | "symptoms" | "episodes";
+export type HealthCurveLaneKey = "exposure" | "stress" | "heart_rate" | "hrv" | "respiration_rate" | "blood_pressure" | "temperature" | "symptoms" | "episodes";
 export type HealthCurveVisibility = Record<HealthCurveLaneKey, boolean>;
 
 type LaneKey = HealthCurveLaneKey;
@@ -67,6 +69,8 @@ const PLOT_HEIGHT = HEIGHT - TOP - BOTTOM;
 const RESPIRATION_DISPLAY_MIN = 0;
 const RESPIRATION_DISPLAY_MAX = 40;
 const RESPIRATION_MEDIAN_RADIUS = 2;
+const TEMPERATURE_DISPLAY_MIN = 77;
+const TEMPERATURE_DISPLAY_MAX = 113;
 
 const DEFAULT_VISIBLE: HealthCurveVisibility = {
   exposure: true,
@@ -75,6 +79,7 @@ const DEFAULT_VISIBLE: HealthCurveVisibility = {
   hrv: false,
   respiration_rate: false,
   blood_pressure: false,
+  temperature: false,
   symptoms: false,
   episodes: false,
 };
@@ -85,6 +90,7 @@ const FOCUS_PRESETS: readonly { label: string; keys: readonly LaneKey[] }[] = [
   { label: "HRV", keys: ["exposure", "hrv"] },
   { label: "Respiration", keys: ["exposure", "respiration_rate"] },
   { label: "Blood pressure", keys: ["exposure", "blood_pressure"] },
+  { label: "Temperature", keys: ["exposure", "temperature"] },
   { label: "Recorded events", keys: ["exposure", "symptoms", "episodes"] },
   { label: "All series (busy)", keys: Object.keys(DEFAULT_VISIBLE) as LaneKey[] },
 ];
@@ -170,9 +176,10 @@ function relativeValue(lane: Lane, value: number): number {
   const bounds = lane.key === "stress" ? { minimum: 0, maximum: 100 }
     : lane.key === "symptoms" ? { minimum: 0, maximum: 10 }
       : lane.key === "respiration_rate" ? { minimum: RESPIRATION_DISPLAY_MIN, maximum: RESPIRATION_DISPLAY_MAX }
+        : lane.key === "temperature" ? { minimum: TEMPERATURE_DISPLAY_MIN, maximum: TEMPERATURE_DISPLAY_MAX }
       : scale(lane.points.map((point) => point.value));
   const relative = (value - bounds.minimum) / Math.max(bounds.maximum - bounds.minimum, 1) * 100;
-  return lane.key === "respiration_rate" ? Math.max(0, Math.min(100, relative)) : relative;
+  return ["respiration_rate", "temperature"].includes(lane.key) ? Math.max(0, Math.min(100, relative)) : relative;
 }
 
 function yPosition(lane: Lane, value: number): number {
@@ -302,7 +309,18 @@ function lanes(data: DailyHealthCurveData): Lane[] {
       source: `${record.provenance.source_type}; ${record.provenance.confirmation_state}`,
     }]),
   };
-  return [exposure, ...metricSeries, bloodPressure, symptoms];
+  const temperature: Lane = {
+    key: "temperature",
+    label: "Temperature",
+    unit: "°F (°C)",
+    points: data.temperature.map((record) => ({
+      time: record.time.occurred_at,
+      value: Number(record.display_f),
+      label: `${record.display_f} °F (${record.display_c} °C)`,
+      source: `${record.provenance.source_type}; ${record.provenance.confirmation_state}`,
+    })),
+  };
+  return [exposure, ...metricSeries, bloodPressure, temperature, symptoms];
 }
 
 function nearestVisiblePoints(shownLanes: Lane[], cursorTime: number): { lane: Lane; point: Point }[] {
@@ -549,6 +567,7 @@ export function DailyHealthCurve({
         hrv: "HRV",
         respiration_rate: "Respiration",
         blood_pressure: "Blood pressure",
+        temperature: "Temperature",
         symptoms: "Symptoms",
         episodes: "Stress episodes",
       } satisfies Record<LaneKey, string>).map(([key, label]) => <label key={key} className="checkbox-label"><input type="checkbox" checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />{label}</label>)}</fieldset></div>
@@ -609,6 +628,7 @@ export function DailyHealthCurve({
             </g>;
           }) : null}
           {lane.key === "symptoms" ? lane.points.map((point, index) => <circle key={`${point.time}-${index.toString()}`} className={`healthcurve-point healthcurve-point--${lane.key}`} cx={xPosition(point.time, start, end)} cy={yPosition(lane, point.value)} r="6"><title>{experiencedTime(point.time, data.exposure.timezone)}: {point.label}; source {point.source}</title></circle>) : null}
+          {lane.key === "temperature" ? lane.points.map((point, index) => <circle key={`${point.time}-${index.toString()}`} className={`healthcurve-point healthcurve-point--${lane.key}`} cx={xPosition(point.time, start, end)} cy={yPosition(lane, point.value)} r="6"><title>{experiencedTime(point.time, data.exposure.timezone)}: Temperature {point.label}</title></circle>) : null}
         </g>)}
         {visible.exposure ? data.exposure.dose_markers.map((dose) => {
           const x = xPosition(dose.occurred_at, start, end);
@@ -630,8 +650,9 @@ export function DailyHealthCurve({
     <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => {
       if (lane.key === "symptoms") return <p key={lane.key}><strong>Symptoms:</strong> {data.symptoms.length.toString()} recorded {data.symptoms.length === 1 ? "event" : "events"}; {lane.points.length.toString()} with recorded severity; {unscoredSymptoms.length.toString()} without severity. Missing-severity markers sit outside the numeric scale.</p>;
       const aggregates = dailyAggregatesForLane(data, lane);
-      return <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{aggregates.map((record) => <span key={record.id}> <strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)} ({record.period_label ?? "provider-defined period"}; untimed).</span>)}{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and Timeline.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and Timeline." : ""}</p>;
+      return <p key={lane.key}><strong>{lane.label}:</strong> {lane.points.length.toString()} exact point(s); {lane.unit}; gaps remain missing.{aggregates.map((record) => <span key={record.id}> <strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)} ({record.period_label ?? "provider-defined period"}; untimed).</span>)}{lane.key === "respiration_rate" ? ` The line uses a display-only 5-sample rolling median on each contiguous segment and a fixed 0–${RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain; exact unsmoothed values remain in the tooltip and Timeline.` : lane.key === "temperature" ? ` Discrete points use a fixed ${TEMPERATURE_DISPLAY_MIN.toString()}–${TEMPERATURE_DISPLAY_MAX.toString()} °F structural display domain; exact Fahrenheit and Celsius values remain in the tooltip, table, and Timeline.` : ["stress", "heart_rate", "hrv"].includes(lane.key) ? " Dense sample dots are hidden from the graph but every value remains in the tooltip and Timeline." : ""}</p>;
     })}</div>
+    {data.temperature.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Selected-day temperature exact values"><table className="vital-table"><caption>Exact selected-day body-temperature facts. Missing intervals remain blank.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Temperature</th></tr></thead><tbody>{data.temperature.map((record) => <tr key={record.id}><td>{experiencedTime(record.time.occurred_at, data.exposure.timezone)}</td><td>{record.display_f} °F ({record.display_c} °C)</td></tr>)}</tbody></table></div>}
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
       <h3>Exact implemented exposure formula</h3>
@@ -645,7 +666,7 @@ export function DailyHealthCurve({
       <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>
       <ul>{REQUIREMENT_EVIDENCE.map((source) => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>{` — ${source.use}.`}</li>)}</ul>
       <h3>Overlay display formula</h3>
-      <p>For every non-stress, non-symptom, non-respiration numeric lane, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment; values outside the display domain are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and authoritative Timeline. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
+      <p>For every numeric lane without a fixed domain, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment. Body temperature uses a fixed {TEMPERATURE_DISPLAY_MIN.toString()}–{TEMPERATURE_DISPLAY_MAX.toString()} °F structural display domain and discrete points; conversion uses <code>°F = (°C × 9/5) + 32</code>. Values outside fixed domains are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and authoritative Timeline. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
     </details>
   </section>;
 }

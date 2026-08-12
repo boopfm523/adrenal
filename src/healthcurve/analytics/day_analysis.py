@@ -35,7 +35,8 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.labs.models import LabPanel
 from healthcurve.medications import service as medication_service
 from healthcurve.medications.models import DoseEvent, RegimenVersion
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
+from healthcurve.vitals import service as vitals
+from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
 
 PROJECTION_VERSION: Final = "hc-day-analysis-v1"
 MODEL_INPUT_VERSION: Final = "hc-day-model-input-v1"
@@ -250,6 +251,9 @@ def build_projection(
         session, BloodPressureEvent, owner_id=owner_id, start=start, end=end
     )
     weights = _current_events(session, WeightEvent, owner_id=owner_id, start=start, end=end)
+    temperatures = _current_events(
+        session, TemperatureEvent, owner_id=owner_id, start=start, end=end
+    )
     diary = _current_events(session, DiaryEvent, owner_id=owner_id, start=start, end=end)
     life_events = _current_events(session, LifeEvent, owner_id=owner_id, start=start, end=end)
     contexts = _current_events(session, ContextEvent, owner_id=owner_id, start=start, end=end)
@@ -362,6 +366,16 @@ def build_projection(
             }
             for row in weights
         ],
+        "temperature": [
+            {
+                **_event_time(row, zone),
+                "entered_value": row.value,
+                "entered_unit": row.unit,
+                "fahrenheit": vitals.display_temperature_f(row.value, row.unit),
+                "celsius": vitals.display_temperature_c(row.value, row.unit),
+            }
+            for row in temperatures
+        ],
         "diary": [
             {
                 **_event_time(row, zone),
@@ -473,6 +487,7 @@ def build_projection(
         "emergency_injections": len(injections),
         "blood_pressure": len(blood_pressure),
         "weight": len(weights),
+        "temperature": len(temperatures),
         "diary": len(diary),
         "life_events": len(life_events),
         "labs": len(lab_panels),
@@ -492,6 +507,7 @@ def build_projection(
             injections,
             blood_pressure,
             weights,
+            temperatures,
             diary,
             life_events,
             contexts,

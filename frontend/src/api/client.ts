@@ -53,6 +53,10 @@ export type Weight = components["schemas"]["WeightOut"];
 export type WeightPage = components["schemas"]["WeightPage"];
 export type WeightInput = components["schemas"]["WeightIn"];
 export type WeightCorrectionInput = components["schemas"]["WeightCorrectionIn"];
+export type Temperature = components["schemas"]["TemperatureOut"];
+export type TemperaturePage = components["schemas"]["TemperaturePage"];
+export type TemperatureInput = components["schemas"]["TemperatureIn"];
+export type TemperatureCorrectionInput = components["schemas"]["TemperatureCorrectionIn"];
 export type LabResult = components["schemas"]["LabResultOut"];
 export type LabResultPage = components["schemas"]["LabResultPage"];
 export type PageMetadata = components["schemas"]["PageMetadata"];
@@ -429,6 +433,24 @@ export function correctWeight(id: string, payload: WeightCorrectionInput): Promi
   return apiRequest<Weight>(`/weight/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
+export function getTemperature(filters: HealthDataFilters, page = 1): Promise<TemperaturePage> {
+  return apiRequest<TemperaturePage>(`/temperature?${healthDataQuery(filters, page)}`);
+}
+
+export function createTemperature(payload: TemperatureInput): Promise<Temperature> {
+  return apiRequest<Temperature>("/temperature", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function correctTemperature(
+  id: string,
+  payload: TemperatureCorrectionInput,
+): Promise<Temperature> {
+  return apiRequest<Temperature>(`/temperature/${id}/correct`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteContextEvent(id: string, password: string): Promise<void> {
   await apiRequest<unknown>(`/context-events/${id}`, {
     method: "DELETE",
@@ -637,6 +659,13 @@ export function getDailySymptoms(day: string, timezone: string): Promise<Symptom
 export function getDailyBloodPressure(day: string, timezone: string): Promise<BloodPressure[]> {
   return collectPages(async (page) => {
     const response = await apiRequest<BloodPressurePage>(`/blood-pressure?${selectedDayParams(day, timezone, page).toString()}`);
+    return { items: response.items, totalPages: response.page.total_pages };
+  });
+}
+
+export function getDailyTemperature(day: string, timezone: string): Promise<Temperature[]> {
+  return collectPages(async (page) => {
+    const response = await apiRequest<TemperaturePage>(`/temperature?${selectedDayParams(day, timezone, page).toString()}`);
     return { items: response.items, totalPages: response.page.total_pages };
   });
 }

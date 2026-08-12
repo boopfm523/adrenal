@@ -222,6 +222,15 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
                         "hypothetical": False,
                         "confidence": 0.99,
                     },
+                    {
+                        "type": "temperature",
+                        "temperature_value": "38",
+                        "temperature_unit": "c",
+                        "local_time": "2026-08-09T08:25:00",
+                        "negated": False,
+                        "hypothetical": False,
+                        "confidence": 0.99,
+                    },
                 ]
             },
         )
@@ -230,7 +239,10 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
     reply = handlers.handle_message(
         session,
         _owner(),
-        text=f"{SYNTHETIC_MARKER}: blood pressure 40/250 pulse 1 and weight 180 lb",
+        text=(
+            f"{SYNTHETIC_MARKER}: blood pressure 40/250 pulse 1, weight 180 lb, "
+            "and temperature 38 C"
+        ),
         client=client,
         now=NOW,
     )
@@ -239,10 +251,12 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
     assert "Nothing is recorded yet" in reply.text
     assert "Blood pressure: 40/250 mmHg, pulse 1 bpm" in reply.text
     assert "Weight: 180.0 lb" in reply.text
+    assert "Temperature: 100.4 °F (38.0 °C)" in reply.text
     privileged.add.assert_not_called()
     stored = restricted.add.call_args.args[0]
     assert isinstance(stored, ExtractionDraft)
     assert {candidate["type"] for candidate in stored.candidates} == {
         "blood_pressure",
+        "temperature",
         "weight",
     }

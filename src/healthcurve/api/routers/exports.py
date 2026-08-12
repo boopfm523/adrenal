@@ -32,7 +32,7 @@ from healthcurve.integrations.garmin.models import (
 from healthcurve.medications.models import DoseEvent, Medication, RegimenVersion
 from healthcurve.operations import audit
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
+from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
 
 
 def _rows(session: DbSession, model: type, owner_id: Any) -> list[dict[str, Any]]:
@@ -145,6 +145,7 @@ def create_export(
             "context_events": _rows(session, ContextEvent, owner.id),
             "blood_pressure": _rows(session, BloodPressureEvent, owner.id),
             "weight": _rows(session, WeightEvent, owner.id),
+            "temperature": _rows(session, TemperatureEvent, owner.id),
             "garmin_import_batches": _rows(session, GarminImportBatch, owner.id),
             "garmin_metrics": _rows(session, GarminMetricEvent, owner.id),
             "garmin_sleep": _rows(session, GarminSleepEvent, owner.id),

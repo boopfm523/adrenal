@@ -25,7 +25,7 @@ from healthcurve.integrations.telegram.handlers import (
 )
 from healthcurve.integrations.telegram.models import TelegramLocationRequest
 from healthcurve.medications.models import DoseEvent, DoseUnit, Medication, Route
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent
+from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
@@ -197,6 +197,22 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         kg_reply = handle_message(session, owner, text="/weight 83.1 kg 08:25", now=NOW)
         assert "Weight: 183.2 lb (entered 83.1 kg)" in kg_reply.text
         assert "Nothing is recorded yet" in kg_reply.text
+
+        temperature_reply = handle_message(session, owner, text="/temperature 38 C 08:30", now=NOW)
+        assert temperature_reply.draft_id is not None
+        assert "Temperature: 100.4 °F (38.0 °C)" in temperature_reply.text
+        assert session.scalar(select(TemperatureEvent)) is None
+        temperature_confirmed = confirm_draft(session, owner, temperature_reply.draft_id)
+        session.flush()
+        temperature = session.scalar(
+            select(TemperatureEvent).where(TemperatureEvent.owner_id == owner.id)
+        )
+        assert temperature is not None
+        assert temperature.value == Decimal("38.00")
+        assert temperature.unit.value == "c"
+        assert temperature.normalized_c == Decimal("38.00")
+        assert temperature.confirmation_state.value == "confirmed_from_draft"
+        assert temperature_confirmed.text.startswith("Recorded:")
 
 
 def test_phone_location_is_rounded_linked_and_consumed_with_draft(engine: Engine) -> None:

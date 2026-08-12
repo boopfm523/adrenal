@@ -61,7 +61,13 @@ from healthcurve.operations.rate_limit import (
     RateLimitUnavailable,
 )
 from healthcurve.vitals import service as vitals
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
+from healthcurve.vitals.models import (
+    BloodPressureEvent,
+    TemperatureEvent,
+    TemperatureUnit,
+    WeightEvent,
+    WeightUnit,
+)
 
 #: A draft the owner never answers is purged rather than left to be confirmed days
 #: later against a time nobody remembers.
@@ -83,6 +89,7 @@ SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
         "start",
         "symptom",
         "today",
+        "temperature",
         "undo",
         "weight",
     }
@@ -100,6 +107,7 @@ Recording commands (these work even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
 /bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
 /weight <value> <lb|kg> [HH:MM] - record body weight
+/temperature <value> <F|C> [HH:MM] - record body temperature
 /symptom <name> [0-10] - record a symptom
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
@@ -228,6 +236,8 @@ def _handle_command(
             return _cmd_blood_pressure(session, owner, args, now=now)
         case "weight":
             return _cmd_weight(session, owner, args, now=now)
+        case "temperature":
+            return _cmd_temperature(session, owner, args, now=now)
         case "beads-add":
             return _cmd_beads_add(
                 raw_argument,
@@ -483,6 +493,38 @@ def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetim
     return _draft_reply(draft, [candidate])
 
 
+def _cmd_temperature(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = "Usage: /temperature <value> <F|C> [HH:MM]\nExample: /temperature 98.6 F 08:15"
+    if len(args) < 2:
+        return Reply(usage)
+    try:
+        value = Decimal(args[0])
+        unit = TemperatureUnit(args[1].lower().replace("°", ""))
+    except (InvalidOperation, ValueError):
+        return Reply(usage)
+    if not vitals.temperature_in_range(value, unit):
+        return Reply("Temperature must be between 25 and 45 °C (77 and 113 °F).")
+    if len(args) > 3:
+        return Reply(usage)
+    time_token = args[2] if len(args) == 3 else None
+    local = _local_now(owner, now)
+    if time_token:
+        parsed = _parse_time_token(time_token, local)
+        if parsed is None:
+            return Reply(f"I couldn't read '{time_token}' as a time. Use HH:MM.")
+        local = parsed
+    candidate = ValidatedCandidate(
+        type=CandidateType.TEMPERATURE,
+        temperature_value=value,
+        temperature_unit=unit,
+        local_time=local,
+        timezone=owner.default_timezone,
+        confidence=1.0,
+    )
+    draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
+    return _draft_reply(draft, [candidate])
+
+
 def _cmd_injection(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
     """Emergency injection. Recorded immediately -- no confirmation round trip.
 
@@ -658,7 +700,11 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
     if index < 0 or index >= len(candidates):
         return Reply(f"That draft has {len(candidates)} item(s). {usage}")
     candidate = candidates[index]
-    if candidate.type in {CandidateType.BLOOD_PRESSURE, CandidateType.WEIGHT}:
+    if candidate.type in {
+        CandidateType.BLOOD_PRESSURE,
+        CandidateType.WEIGHT,
+        CandidateType.TEMPERATURE,
+    }:
         return _edit_vital_candidate(
             draft,
             candidates,
@@ -775,7 +821,7 @@ def _edit_vital_candidate(
                     field
                 ]
             ] = int(value)
-    else:
+    elif candidate.type is CandidateType.WEIGHT:
         if field in {"amount", "value"}:
             try:
                 amount = Decimal(value)
@@ -791,6 +837,27 @@ def _edit_vital_candidate(
                 return Reply("Weight unit must be lb or kg.")
         else:
             return Reply("For weight, edit amount, unit, or time.")
+    else:
+        if field in {"amount", "value"}:
+            try:
+                amount = Decimal(value)
+            except InvalidOperation:
+                return Reply("I couldn't read that temperature. Example: /edit 1 value 98.6")
+            unit = candidate.temperature_unit
+            if unit is None or not vitals.temperature_in_range(amount, unit):
+                return Reply("Temperature must be between 25 and 45 °C (77 and 113 °F).")
+            changes["temperature_value"] = amount
+        elif field == "unit":
+            try:
+                unit = TemperatureUnit(value.lower().replace("°", ""))
+            except ValueError:
+                return Reply("Temperature unit must be F or C.")
+            amount = candidate.temperature_value
+            if amount is None or not vitals.temperature_in_range(amount, unit):
+                return Reply("Temperature must be between 25 and 45 °C (77 and 113 °F).")
+            changes["temperature_unit"] = unit
+        else:
+            return Reply("For temperature, edit value, unit, or time.")
 
     edited = ValidatedCandidate.model_validate({**candidate.model_dump(mode="python"), **changes})
     flags = list(edited.flags)
@@ -820,6 +887,11 @@ def _edit_vital_candidate(
         if edited.weight_value is None or edited.weight_unit is None:
             flags.append(FlagCode.MISSING_VITAL_VALUE)
         elif not Decimal(0) < edited.weight_value <= Decimal(5000):
+            flags.append(FlagCode.INVALID_VITAL_VALUE)
+    if edited.type is CandidateType.TEMPERATURE:
+        if edited.temperature_value is None or edited.temperature_unit is None:
+            flags.append(FlagCode.MISSING_VITAL_VALUE)
+        elif not vitals.temperature_in_range(edited.temperature_value, edited.temperature_unit):
             flags.append(FlagCode.INVALID_VITAL_VALUE)
     edited = edited.model_copy(
         update={
@@ -968,8 +1040,10 @@ _FLAG_EXPLANATIONS: Final[dict[FlagCode, str]] = {
     FlagCode.POSSIBLE_DUPLICATE: "there's already a similar dose near that time",
     FlagCode.LOW_CONFIDENCE: "I'm not confident about this one",
     FlagCode.PROMPT_INJECTION_SUSPECTED: "this message contains text aimed at the parser",
-    FlagCode.MISSING_VITAL_VALUE: "a required blood-pressure or weight value is missing",
-    FlagCode.INVALID_VITAL_VALUE: "a blood-pressure or weight value needs correction",
+    FlagCode.MISSING_VITAL_VALUE: (
+        "a required blood-pressure, weight, or temperature value is missing"
+    ),
+    FlagCode.INVALID_VITAL_VALUE: "a blood-pressure, weight, or temperature value needs correction",
 }
 
 
@@ -1111,6 +1185,7 @@ def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Repl
         "Dose fields: amount, unit, time, medication.\n"
         "Blood pressure: systolic, diastolic, pulse, time.\n"
         "Weight: amount, unit, time."
+        "\nTemperature: value, unit, time."
     )
     return reply
 
@@ -1144,6 +1219,16 @@ def _describe(candidate: ValidatedCandidate) -> str:
                 else ""
             )
             return f"Weight: {pounds} lb{entered} at {when}"
+        case CandidateType.TEMPERATURE:
+            if candidate.temperature_value is None or candidate.temperature_unit is None:
+                return f"Temperature: value or unit missing at {when}"
+            fahrenheit = vitals.display_temperature_f(
+                candidate.temperature_value, candidate.temperature_unit
+            )
+            celsius = vitals.display_temperature_c(
+                candidate.temperature_value, candidate.temperature_unit
+            )
+            return f"Temperature: {fahrenheit} °F ({celsius} °C) at {when}"
         case _:  # pragma: no cover
             return str(candidate.type)
 
@@ -1284,6 +1369,22 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 unit=candidate.weight_unit,
                 normalized_kg=vitals.normalize_weight_kg(
                     candidate.weight_value, candidate.weight_unit
+                ),
+            )
+        case CandidateType.TEMPERATURE:
+            if candidate.temperature_value is None or candidate.temperature_unit is None:
+                return None
+            return events.create_event(
+                session,
+                TemperatureEvent,
+                owner_id=owner.id,
+                event_time=event_time,
+                source_type=SourceType.TELEGRAM,
+                confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+                value=candidate.temperature_value,
+                unit=candidate.temperature_unit,
+                normalized_c=vitals.normalize_temperature_c(
+                    candidate.temperature_value, candidate.temperature_unit
                 ),
             )
         case _:  # pragma: no cover

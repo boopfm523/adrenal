@@ -39,7 +39,13 @@ from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
 from healthcurve.config import Environment, Settings, get_settings
-from healthcurve.context.models import ContextEvent, LocationPrecision, TemperatureUnit
+from healthcurve.context.models import (
+    ContextEvent,
+    LocationPrecision,
+)
+from healthcurve.context.models import (
+    TemperatureUnit as ContextTemperatureUnit,
+)
 from healthcurve.development_cleanup import (
     SyntheticBootstrapCleanupError,
     execute_synthetic_bootstrap_cleanup,
@@ -115,7 +121,13 @@ from healthcurve.reports.cleanup_jobs import (
     make_snapshot_artifact_cleanup_handler,
 )
 from healthcurve.reports.models import ReportArtifact, ReportSnapshot
-from healthcurve.vitals.models import BloodPressureEvent, WeightEvent, WeightUnit
+from healthcurve.vitals.models import (
+    BloodPressureEvent,
+    TemperatureEvent,
+    TemperatureUnit,
+    WeightEvent,
+    WeightUnit,
+)
 from tests.fixtures.garmin import synthetic_activity_csv, synthetic_fit
 from tests.fixtures.pdf import (
     OcrToolRunner,
@@ -670,6 +682,17 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
             unit=WeightUnit.KG,
             normalized_kg=Decimal("1.0000"),
         )
+        events.create_event(
+            session,
+            TemperatureEvent,
+            owner_id=other.id,
+            event_time=event_time,
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            value=Decimal("98.6"),
+            unit=TemperatureUnit.FAHRENHEIT,
+            normalized_c=Decimal("37.00"),
+        )
 
     event_time_payload = {
         "local_time": "2026-08-09T08:15:00",
@@ -710,6 +733,33 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert weight["normalized_kg"] == "81.6466"
     assert weight["display_lb"] == "180.0"
 
+    assert (
+        client.post(
+            "/api/v1/temperature",
+            json={"value": "98.6", "unit": "f", "time": event_time_payload},
+        ).status_code
+        == 403
+    )
+    invalid_temperature = client.post(
+        "/api/v1/temperature",
+        headers=logged_in,
+        json={"value": "200", "unit": "f", "time": event_time_payload},
+    )
+    assert invalid_temperature.status_code == 422
+    temperature_response = client.post(
+        "/api/v1/temperature",
+        headers=logged_in,
+        json={"value": "38", "unit": "c", "time": event_time_payload, "notes": "Synthetic"},
+    )
+    assert temperature_response.status_code == 201, temperature_response.text
+    temperature = temperature_response.json()
+    assert temperature["value"] == "38.00"
+    assert temperature["unit"] == "c"
+    assert temperature["normalized_c"] == "38.00"
+    assert temperature["display_f"] == "100.4"
+    assert temperature["display_c"] == "38.0"
+    assert temperature["time"]["occurred_at"] == "2026-08-09T07:15:00Z"
+
     bp_correction = client.post(
         f"/api/v1/blood-pressure/{bp['id']}/correct",
         headers=logged_in,
@@ -737,24 +787,44 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert corrected_weight["normalized_kg"] == "82.0000"
     assert corrected_weight["display_lb"] == "180.8"
 
+    temperature_correction = client.post(
+        f"/api/v1/temperature/{temperature['id']}/correct",
+        headers=logged_in,
+        json={"reason": "Synthetic unit correction", "changes": {"value": "98.6", "unit": "f"}},
+    )
+    assert temperature_correction.status_code == 201, temperature_correction.text
+    corrected_temperature = temperature_correction.json()
+    assert corrected_temperature["display_f"] == "98.6"
+    assert corrected_temperature["display_c"] == "37.0"
+    assert corrected_temperature["provenance"]["supersedes_id"] == temperature["id"]
+
     current_bp = client.get("/api/v1/blood-pressure").json()
     current_weight = client.get("/api/v1/weight").json()
+    current_temperature = client.get("/api/v1/temperature").json()
     assert {row["id"] for row in current_bp["items"]} == {corrected_bp["id"]}
     assert {row["id"] for row in current_weight["items"]} == {corrected_weight["id"]}
     assert {row["id"] for row in current_bp["revisions"]} == {bp["id"]}
+    assert {row["id"] for row in current_temperature["items"]} == {corrected_temperature["id"]}
+    assert {row["id"] for row in current_temperature["revisions"]} == {temperature["id"]}
 
-    timeline = client.get("/api/v1/timeline", params={"types": "blood_pressure,weight"})
+    timeline = client.get("/api/v1/timeline", params={"types": "blood_pressure,weight,temperature"})
     assert timeline.status_code == 200, timeline.text
     items = timeline.json()["items"]
-    assert {item["event_type"] for item in items} == {"blood_pressure", "weight"}
+    assert {item["event_type"] for item in items} == {
+        "blood_pressure",
+        "weight",
+        "temperature",
+    }
     assert any(item["summary"] == "Blood pressure 118/80 mmHg" for item in items)
     assert any(item["summary"] == "Weight 180.8 lb (entered 82.0000 kg)" for item in items)
+    assert any(item["summary"] == "Temperature 98.6 °F (37.0 °C)" for item in items)
 
     exported = client.post("/api/v1/privacy/export", headers=logged_in, json={"password": PASSWORD})
     assert exported.status_code == 200, exported.text
     facts = exported.json()["facts"]
     assert corrected_bp["id"] in {row["id"] for row in facts["blood_pressure"]}
     assert corrected_weight["id"] in {row["id"] for row in facts["weight"]}
+    assert corrected_temperature["id"] in {row["id"] for row in facts["temperature"]}
 
     with Session(engine) as session, session.begin():
         session.execute(
@@ -763,6 +833,10 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
         )
         session.execute(
             text("DELETE FROM fact.weight_event WHERE owner_id = :owner_id"),
+            {"owner_id": other_owner_id},
+        )
+        session.execute(
+            text("DELETE FROM fact.temperature_event WHERE owner_id = :owner_id"),
             {"owner_id": other_owner_id},
         )
         session.delete(session.get(Owner, other_owner_id))
@@ -1168,7 +1242,7 @@ def test_weather_deletion_is_independent_of_the_coarse_location(engine: Engine) 
             weather_observation_id="synthetic-observation",
             weather_observed_at=observed_at,
             temperature=Decimal("20.0"),
-            temperature_unit=TemperatureUnit.CELSIUS,
+            temperature_unit=ContextTemperatureUnit.CELSIUS,
             provider_id=f"open-meteo:{source.id}",
             source_revision="synthetic-weather-v1",
         )
@@ -4609,6 +4683,16 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
         },
     )
     assert weight.status_code == 201, weight.text
+    temperature = client.post(
+        "/api/v1/temperature",
+        headers=logged_in,
+        json={
+            "value": "38",
+            "unit": "c",
+            "time": {"local_time": "2025-08-09T08:25:00", "timezone": "Europe/London"},
+        },
+    )
+    assert temperature.status_code == 201, temperature.text
     request = {
         "date_from": "2025-08-09",
         "date_to": "2025-08-09",
@@ -4641,10 +4725,15 @@ def test_report_snapshot_generation_companions_immutable_retrieval_and_audit(
     assert facts_by_type["weight"]["normalized_kg"] == "81.6466"
     assert facts_by_type["weight"]["display_lb"] == "180.0"
     assert facts_by_type["weight"]["normalization_definition"] == "1 lb = 0.45359237 kg"
+    assert facts_by_type["temperature"]["value"] == "38.00"
+    assert facts_by_type["temperature"]["unit"] == "c"
+    assert facts_by_type["temperature"]["display_f"] == "100.4"
+    assert facts_by_type["temperature"]["display_c"] == "38.0"
     assert frozen["snapshot_content"]["plan"][0]["record_type"] == "approved_regimen"
     assert dose.json()["id"] in frozen["source_manifest"]["fact"]
     assert blood_pressure.json()["id"] in frozen["source_manifest"]["fact"]
     assert weight.json()["id"] in frozen["source_manifest"]["fact"]
+    assert temperature.json()["id"] in frozen["source_manifest"]["fact"]
     assert regimen.json()["id"] in frozen["source_manifest"]["plan"]
     assert all(
         metric["definition"] and metric["timezone"] for metric in frozen["metric_values"].values()
@@ -5400,6 +5489,22 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
             pulse_bpm=None,
             notes=None,
         )
+        temperature = events.create_event(
+            session,
+            TemperatureEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 3, 8, 4, 20),  # noqa: DTZ001
+                "America/New_York",
+            ),
+            source_type=SourceType.WEB,
+            confirmation_state=ConfirmationState.DIRECT,
+            value=Decimal("38"),
+            unit=TemperatureUnit.CELSIUS,
+            normalized_c=Decimal("38"),
+            notes=None,
+        )
+        temperature_id = temperature.id
         session.add(
             StressEpisode(
                 owner_id=owner.id,
@@ -5489,6 +5594,7 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
         "stress_episodes",
         "emergency_injections",
         "blood_pressure",
+        "temperature",
         "weight",
         "diary",
         "life_events",
@@ -5502,6 +5608,14 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     }
     assert len(facts["doses"]) == 2
     assert len(facts["symptoms"]) == 1
+    assert len(facts["temperature"]) == 1
+    temperature_fact = facts["temperature"][0]
+    assert temperature_fact["id"] == str(temperature_id)
+    assert temperature_fact["local_time"] == "2026-03-08T04:20:00-04:00"
+    assert temperature_fact["entered_value"] == "38.00"
+    assert temperature_fact["entered_unit"] == "c"
+    assert temperature_fact["fahrenheit"] == "100.4"
+    assert temperature_fact["celsius"] == "38.0"
     assert len(facts["physician_approved_plans"]) == 1
     assert facts["physician_approved_plans"][0]["version_label"] == (
         "Synthetic post-transition plan"

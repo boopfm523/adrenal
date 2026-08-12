@@ -21,6 +21,7 @@ const eventTypes = [
   ["context", "Environmental context"],
   ["blood_pressure", "Blood pressure"],
   ["weight", "Weight"],
+  ["temperature", "Body temperature"],
 ] as const;
 
 function localTime(value: string): string {

@@ -1,4 +1,4 @@
-"""Narrowly scoped blood-pressure and body-weight recorded facts."""
+"""Narrowly scoped blood-pressure, body-weight, and temperature facts."""
 
 from __future__ import annotations
 
@@ -15,6 +15,11 @@ from healthcurve.events.base import EventMixin, event_table_args
 class WeightUnit(StrEnum):
     KG = "kg"
     LB = "lb"
+
+
+class TemperatureUnit(StrEnum):
+    CELSIUS = "c"
+    FAHRENHEIT = "f"
 
 
 class BloodPressureEvent(EventMixin, FactBase):
@@ -52,4 +57,19 @@ class WeightEvent(EventMixin, FactBase):
             name="normalized_kg_structural_range",
         ),
         *event_table_args("weight_event"),
+    )
+
+
+class TemperatureEvent(EventMixin, FactBase):
+    """Measured body temperature preserving entered units plus Celsius."""
+
+    __tablename__ = "temperature_event"
+
+    value: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    unit: Mapped[TemperatureUnit] = mapped_column(StrEnumType(TemperatureUnit, 8), nullable=False)
+    normalized_c: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("normalized_c BETWEEN 25 AND 45", name="human_measurement_range"),
+        *event_table_args("temperature_event"),
     )

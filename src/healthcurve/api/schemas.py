@@ -28,7 +28,7 @@ from healthcurve.medications.models import (
     RegimenStatus,
     Route,
 )
-from healthcurve.vitals.models import WeightUnit
+from healthcurve.vitals.models import TemperatureUnit, WeightUnit
 
 #: A positive clinical quantity. Bounded above so a typo cannot record 15000 mg.
 Amount = Annotated[Decimal, Field(gt=0, le=10000, max_digits=10, decimal_places=4)]
@@ -311,7 +311,7 @@ class DoseCorrectionIn(ApiModel):
 
 
 # ---------------------------------------------------------------------------
-# Blood pressure and weight (fact)
+# Blood pressure, weight, and temperature (facts)
 # ---------------------------------------------------------------------------
 
 
@@ -407,6 +407,58 @@ class WeightCorrectionIn(ApiModel):
     changes: WeightCorrectionChanges
 
 
+TemperatureValue = Annotated[Decimal, Field(max_digits=6, decimal_places=2)]
+
+
+class TemperatureIn(ApiModel):
+    value: TemperatureValue
+    unit: TemperatureUnit
+    time: EventTimeIn
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class TemperatureOut(FactResource):
+    id: uuid.UUID
+    value: Decimal
+    unit: TemperatureUnit
+    normalized_c: Decimal
+    display_f: Decimal
+    display_c: Decimal
+    time: EventTimeOut
+    provenance: ProvenanceOut
+    notes: str | None
+
+    @field_serializer("value", "normalized_c")
+    def _decimal(self, value: Decimal) -> str:
+        return format(value, ".2f")
+
+    @field_serializer("display_f", "display_c")
+    def _display(self, value: Decimal) -> str:
+        return format(value, ".1f")
+
+
+class TemperatureCorrectionChanges(ApiModel):
+    value: TemperatureValue | None = None
+    unit: TemperatureUnit | None = None
+    time: EventTimeIn | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _required_values_cannot_be_null(self) -> TemperatureCorrectionChanges:
+        nullable = {"notes"}
+        null_fields = {
+            name for name in self.model_fields_set - nullable if getattr(self, name) is None
+        }
+        if null_fields:
+            raise ValueError(f"correction field(s) cannot be null: {sorted(null_fields)}")
+        return self
+
+
+class TemperatureCorrectionIn(ApiModel):
+    reason: str = Field(min_length=1, max_length=500)
+    changes: TemperatureCorrectionChanges
+
+
 # ---------------------------------------------------------------------------
 # Laboratory results (fact plus explicitly derived normalization)
 # ---------------------------------------------------------------------------
@@ -485,6 +537,12 @@ class BloodPressurePage(ApiModel):
 class WeightPage(ApiModel):
     items: list[WeightOut]
     revisions: list[WeightOut]
+    page: PageMetadata
+
+
+class TemperaturePage(ApiModel):
+    items: list[TemperatureOut]
+    revisions: list[TemperatureOut]
     page: PageMetadata
 
 
