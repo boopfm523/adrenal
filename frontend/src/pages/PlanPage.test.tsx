@@ -9,9 +9,9 @@ import { PlanPage } from "./PlanPage";
 const auth = { status: "authenticated" as const, session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } }, signIn: vi.fn(), signOut: vi.fn() };
 function renderPage(initialEntry = "/plan", client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) { return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={auth}><PlanPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider>); }
 
-function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string) {
+function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string, effectiveTo: string | null = null) {
   return {
-    id, category: "plan", version_label: label, status, effective_from: effective, effective_to: null,
+    id, category: "plan", version_label: label, status, effective_from: effective, effective_to: effectiveTo,
     approved_at: status === "approved" ? "2026-08-01T14:00:00Z" : null,
     approved_by: status === "approved" ? "Dr Synthetic" : null,
     approval_source: status === "approved" ? "Synthetic clinic letter" : null,
@@ -28,6 +28,60 @@ function response(body: unknown): Response { return new Response(JSON.stringify(
 function versionPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
 describe("Medication plan page", () => {
+  it("shows an accessible empty plan timeline", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([])));
+      if (url.endsWith("/medications")) return Promise.resolve(response([]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Plan timeline" })).toBeVisible();
+    expect(screen.getByText("No plan versions to place on the timeline.")).toBeVisible();
+  });
+
+  it("shows adjacent and open-ended periods without inventing an overlap", async () => {
+    const first = version("11111111-1111-4111-8111-111111111111", "First synthetic plan", "retired", "2026-08-01T07:00:00", "2026-08-02T07:00:00");
+    const second = version("22222222-2222-4222-8222-222222222222", "Ongoing synthetic plan", "approved", "2026-08-02T07:00:00");
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(second));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([second, first])));
+      if (url.includes("/diff/")) return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+      if (url.endsWith("/medications")) return Promise.resolve(response([]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    renderPage();
+
+    await screen.findAllByText("Ongoing synthetic plan");
+    const timeline = (await screen.findByRole("heading", { name: "Plan timeline" })).closest("section");
+    expect(timeline).not.toBeNull();
+    if (timeline === null) throw new Error("plan timeline is missing");
+    expect(within(timeline).getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "Aug 2, 2026, 7:00 AM through ongoing")).toBeVisible();
+    expect(within(timeline).queryByRole("heading", { name: "Overlapping effective periods" })).not.toBeInTheDocument();
+  });
+
+  it("distinguishes draft overlaps from overlaps between approved historical periods", async () => {
+    const retired = version("11111111-1111-4111-8111-111111111111", "Retired synthetic plan", "retired", "2026-08-01T07:00:00", "2026-08-10T07:00:00");
+    const approved = version("22222222-2222-4222-8222-222222222222", "Approved synthetic plan", "approved", "2026-08-05T07:00:00", "2026-08-20T07:00:00");
+    const draft = version("33333333-3333-4333-8333-333333333333", "Draft synthetic plan", "draft", "2026-08-15T07:00:00");
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(approved));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([draft, approved, retired])));
+      if (url.includes("/diff/")) return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+      if (url.endsWith("/medications")) return Promise.resolve(response([]));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    renderPage();
+
+    expect(await screen.findByText("Approved-plan overlap:")).toBeVisible();
+    expect(screen.getByText("Draft overlap:")).toBeVisible();
+    expect(screen.getByText(/never changes effective dates automatically/i)).toBeVisible();
+  });
+
   it("loads shareable effective-date filters and keeps them while paging", async () => {
     const urls: string[] = [];
     const row = version("33333333-3333-4333-8333-333333333333", "Filtered synthetic plan", "retired", "2026-08-09T00:00:00");
@@ -191,6 +245,9 @@ describe("Medication plan page", () => {
     expect(screen.getByRole("heading", { name: "Create your first plan draft" })).toHaveFocus();
     await userEvent.type(screen.getByLabelText("Version label"), "My real plan");
     await userEvent.type(screen.getByLabelText("Effective from"), "2026-08-15T07:00");
+    expect(screen.getByRole("heading", { name: "Proposed effective interval" })).toBeVisible();
+    expect(screen.getByText("No overlap with the plan versions shown in history.")).toBeVisible();
+    expect(screen.getByText(/later version may begin exactly at that through time without overlapping/i)).toBeVisible();
     const medicationSelect = screen.getByLabelText("Medication and formulation");
     expect(within(medicationSelect).getByRole("option", { name: "Synthetic medicine tablet — formulation strength: 10 mg" })).toBeInTheDocument();
     medicationSelect.focus();

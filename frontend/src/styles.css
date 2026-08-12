@@ -135,6 +135,26 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .version-card--approved { border: 2px solid #29437a; }
 .version-card--retired { background: #f2f0e9; }
 .version-card details summary { cursor: pointer; font-weight: 700; }
+.plan-timeline { margin-block: 1.25rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1rem; background: white; }
+.plan-timeline h3, .plan-timeline h4, .proposed-plan-interval h3 { margin-top: 0; }
+.plan-timeline-list { display: grid; gap: 0.9rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.plan-timeline-item { display: grid; grid-template-columns: minmax(13rem, 0.8fr) minmax(15rem, 1.6fr); gap: 1rem; align-items: center; border-left: 0.35rem solid #68756f; padding-left: 0.75rem; }
+.plan-timeline-item--draft { border-left-color: #a86712; border-left-style: dashed; }
+.plan-timeline-item--approved { border-left-color: #29437a; }
+.plan-timeline-item--retired { border-left-color: #68756f; }
+.plan-timeline-item--overlap { background: #fff7e8; }
+.plan-timeline-copy { display: grid; gap: 0.15rem; }
+.plan-timeline-copy span { color: #48554f; font-size: 0.9rem; }
+.plan-timeline-copy .plan-timeline-overlap-label { color: #8a260f; font-weight: 750; }
+.plan-timeline-track { position: relative; height: 1.25rem; border-radius: 999px; background: #e7ece8; overflow: hidden; }
+.plan-timeline-track span { position: absolute; top: 0.18rem; height: 0.89rem; min-width: 0.35rem; border-radius: 999px; background: #68756f; }
+.plan-timeline-item--draft .plan-timeline-track span { border: 2px dashed #a86712; background: #fff7e8; }
+.plan-timeline-item--approved .plan-timeline-track span { background: #29437a; }
+.plan-timeline-item--overlap .plan-timeline-track { outline: 2px solid #b34f00; outline-offset: 2px; }
+.plan-overlap-summary { margin-top: 1rem; border-left: 0.35rem solid #b34f00; padding: 0.8rem 1rem; background: #fff7e8; }
+.plan-overlap-summary li + li { margin-top: 0.5rem; }
+.proposed-plan-interval { border: 1px solid #89978f; border-radius: 0.5rem; padding: 0.85rem; background: white; }
+.proposed-plan-interval > :last-child { margin-bottom: 0; }
 .page-actions, .form-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
 .plan-editor { min-width: 0; border: 2px solid #a86712; border-radius: 0.75rem; padding: 1rem; background: #fffaf1; }
 .plan-editor fieldset { min-width: 0; margin: 1.25rem 0; border: 1px solid #89978f; border-radius: 0.5rem; padding: 1rem; }
@@ -446,7 +466,7 @@ circle.chart-series { fill: white; }
   .session-menu span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .dose-slot { align-items: stretch; flex-direction: column; }
   .dose-slot button { width: 100%; }
-  .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values, .plan-form-grid, .repeatable-row { grid-template-columns: 1fr; }
+  .filter-panel, .provenance-grid, .correction-form, .diff-controls, .version-diff, .metric-metadata, .metric-values, .plan-form-grid, .repeatable-row, .plan-timeline-item { grid-template-columns: 1fr; }
   .wide-field { grid-column: auto; }
   .episode-close-form { align-items: stretch; flex-direction: column; }
   .settings-grid, .context-entry-form, .coordinate-fields, .weather-fields, .context-delete-form { grid-template-columns: 1fr; }

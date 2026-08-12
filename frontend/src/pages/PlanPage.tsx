@@ -114,6 +114,101 @@ function EffectivePeriod({ version }: { version: RegimenVersion }): React.JSX.El
   return <><RecordedPlanTime value={version.effective_from} /> through {version.effective_to === null ? "ongoing" : <RecordedPlanTime value={version.effective_to} />}</>;
 }
 
+interface PlanInterval {
+  id: string;
+  label: string;
+  status: RegimenVersion["status"];
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+interface PlanOverlap {
+  first: PlanInterval;
+  second: PlanInterval;
+  kind: "draft" | "approved";
+  from: string;
+  to: string | null;
+}
+
+function intervalTime(value: string): number {
+  const explicitZone = /(?:Z|[+-]\d\d:\d\d)$/.test(value);
+  return Date.parse(explicitZone ? value : `${value}Z`);
+}
+
+function intervalsOverlap(first: PlanInterval, second: PlanInterval): boolean {
+  const firstEnd = first.effectiveTo === null ? Number.POSITIVE_INFINITY : intervalTime(first.effectiveTo);
+  const secondEnd = second.effectiveTo === null ? Number.POSITIVE_INFINITY : intervalTime(second.effectiveTo);
+  return intervalTime(first.effectiveFrom) < secondEnd && intervalTime(second.effectiveFrom) < firstEnd;
+}
+
+function findPlanOverlaps(intervals: PlanInterval[]): PlanOverlap[] {
+  const overlaps: PlanOverlap[] = [];
+  intervals.forEach((first, index) => {
+    intervals.slice(index + 1).forEach((second) => {
+      if (!intervalsOverlap(first, second)) return;
+      const from = intervalTime(first.effectiveFrom) >= intervalTime(second.effectiveFrom) ? first.effectiveFrom : second.effectiveFrom;
+      const firstEnd = first.effectiveTo === null ? Number.POSITIVE_INFINITY : intervalTime(first.effectiveTo);
+      const secondEnd = second.effectiveTo === null ? Number.POSITIVE_INFINITY : intervalTime(second.effectiveTo);
+      const to = firstEnd === Number.POSITIVE_INFINITY && secondEnd === Number.POSITIVE_INFINITY
+        ? null
+        : firstEnd <= secondEnd ? first.effectiveTo : second.effectiveTo;
+      overlaps.push({ first, second, kind: first.status === "draft" || second.status === "draft" ? "draft" : "approved", from, to });
+    });
+  });
+  return overlaps;
+}
+
+function planInterval(version: RegimenVersion): PlanInterval {
+  return { id: version.id, label: version.version_label, status: version.status, effectiveFrom: version.effective_from, effectiveTo: version.effective_to };
+}
+
+function statusLabel(status: RegimenVersion["status"]): string {
+  if (status === "draft") return "Draft—not physician approved";
+  if (status === "approved") return "Physician-approved";
+  return "Retired historical plan";
+}
+
+function OverlapList({ overlaps, headingLevel = 3 }: { overlaps: PlanOverlap[]; headingLevel?: 3 | 4 }): React.JSX.Element | null {
+  if (overlaps.length === 0) return null;
+  const Heading = `h${String(headingLevel)}` as "h3" | "h4";
+  return <section className="plan-overlap-summary" aria-labelledby={`plan-overlap-heading-${String(headingLevel)}`}>
+    <Heading id={`plan-overlap-heading-${String(headingLevel)}`}>Overlapping effective periods</Heading>
+    <ul>{overlaps.map((overlap) => <li key={`${overlap.first.id}-${overlap.second.id}`}>
+      <strong>{overlap.kind === "draft" ? "Draft overlap" : "Approved-plan overlap"}:</strong> “{overlap.first.label}” and “{overlap.second.label}” overlap from <RecordedPlanTime value={overlap.from} /> through {overlap.to === null ? "ongoing" : <RecordedPlanTime value={overlap.to} />}.
+    </li>)}</ul>
+    <p>HealthCurve never changes effective dates automatically. Review and edit a draft when needed; recording approval may be rejected while an approved period overlaps.</p>
+  </section>;
+}
+
+function PlanTimeline({ versions }: { versions: RegimenVersion[] }): React.JSX.Element {
+  if (versions.length === 0) return <section className="plan-timeline" aria-labelledby="plan-timeline-heading"><h3 id="plan-timeline-heading">Plan timeline</h3><p>No plan versions to place on the timeline.</p></section>;
+  const intervals = versions.map(planInterval).sort((a, b) => intervalTime(a.effectiveFrom) - intervalTime(b.effectiveFrom));
+  const overlaps = findPlanOverlaps(intervals);
+  const overlappingIds = new Set(overlaps.flatMap((overlap) => [overlap.first.id, overlap.second.id]));
+  const starts = intervals.map((interval) => intervalTime(interval.effectiveFrom));
+  const finiteEnds = intervals.flatMap((interval) => interval.effectiveTo === null ? [] : [intervalTime(interval.effectiveTo)]);
+  const minimum = Math.min(...starts);
+  const latestKnown = Math.max(...starts, ...finiteEnds);
+  const day = 24 * 60 * 60 * 1000;
+  const maximum = Math.max(latestKnown, minimum + day) + day;
+  const span = maximum - minimum;
+  return <section className="plan-timeline" aria-labelledby="plan-timeline-heading">
+    <h3 id="plan-timeline-heading">Plan timeline</h3>
+    <p>Effective periods are shown in date order. An ongoing bar extends to the right edge. Dates describe recorded plan metadata, not dosing advice.</p>
+    <ol className="plan-timeline-list">{intervals.map((interval) => {
+      const start = intervalTime(interval.effectiveFrom);
+      const end = interval.effectiveTo === null ? maximum : Math.min(intervalTime(interval.effectiveTo), maximum);
+      const left = Math.max(0, ((start - minimum) / span) * 100);
+      const width = Math.max(1.5, ((Math.max(end, start + day / 12) - start) / span) * 100);
+      return <li className={`plan-timeline-item plan-timeline-item--${interval.status}${overlappingIds.has(interval.id) ? " plan-timeline-item--overlap" : ""}`} key={interval.id}>
+        <div className="plan-timeline-copy"><strong>{interval.label}</strong><span>{statusLabel(interval.status)}</span><span><RecordedPlanTime value={interval.effectiveFrom} /> through {interval.effectiveTo === null ? "ongoing" : <RecordedPlanTime value={interval.effectiveTo} />}</span>{overlappingIds.has(interval.id) ? <span className="plan-timeline-overlap-label">Overlaps another effective period</span> : null}</div>
+        <div className="plan-timeline-track" aria-hidden="true"><span style={{ left: `${String(left)}%`, width: `${String(Math.min(width, 100 - left))}%` }} /></div>
+      </li>;
+    })}</ol>
+    <OverlapList overlaps={overlaps} />
+  </section>;
+}
+
 function ApprovalProvenance({ version, timezone }: { version: RegimenVersion; timezone: string }): React.JSX.Element {
   if (version.status !== "approved") return <p className="draft-warning">Draft plan—not physician approved. This version is not in force.</p>;
   return <dl className="provenance-grid">
@@ -183,10 +278,11 @@ function MedicationCreator({ onCreated }: { onCreated: (medication: Medication) 
   </details>;
 }
 
-function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
+function PlanEditor({ source, editDraft, medications, existingVersions, onCancel, onSaved }: {
   source: RegimenVersion | null;
   editDraft: RegimenVersion | null;
   medications: Medication[];
+  existingVersions: RegimenVersion[];
   onCancel: () => void;
   onSaved: (message: string, version: RegimenVersion) => void;
 }): React.JSX.Element {
@@ -195,6 +291,8 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
   const [slots, setSlots] = useState(() => initialSlots(basis));
   const [instructions, setInstructions] = useState(() => initialInstructions(basis));
   const [selectedNewMedication, setSelectedNewMedication] = useState<Medication | null>(null);
+  const [effectiveFrom, setEffectiveFrom] = useState(() => localInput(basis?.effective_from ?? null));
+  const [effectiveTo, setEffectiveTo] = useState(() => localInput(basis?.effective_to ?? null));
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
   const mutation = useMutation({
@@ -205,6 +303,17 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
     },
   });
   const available = selectedNewMedication === null || medications.some((item) => item.id === selectedNewMedication.id) ? medications : [...medications, selectedNewMedication];
+  const proposedInterval: PlanInterval | null = effectiveFrom === "" ? null : {
+    id: editDraft?.id ?? "proposed-draft",
+    label: editDraft?.version_label ?? "Proposed draft",
+    status: "draft",
+    effectiveFrom,
+    effectiveTo: effectiveTo === "" ? null : effectiveTo,
+  };
+  const proposedOverlaps = proposedInterval === null ? [] : findPlanOverlaps([
+    ...existingVersions.filter((version) => version.id !== editDraft?.id).map(planInterval),
+    proposedInterval,
+  ]).filter((overlap) => overlap.first.id === proposedInterval.id || overlap.second.id === proposedInterval.id);
 
   return <section className="plan-editor" aria-labelledby="plan-editor-heading">
     <h2 id="plan-editor-heading" ref={headingRef} tabIndex={-1}>{editDraft === null ? (source === null ? "Create your first plan draft" : "Create a new plan version") : "Edit unapproved plan draft"}</h2>
@@ -224,8 +333,16 @@ function PlanEditor({ source, editDraft, medications, onCancel, onSaved }: {
     }}>
       <div className="plan-form-grid">
         <label>Version label<input name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : `${source.version_label} — new version`)} /></label>
-        <label>Effective from<input name="effective_from" type="datetime-local" required defaultValue={localInput(basis?.effective_from ?? null)} /></label>
-        <label>Effective through (optional)<input name="effective_to" type="datetime-local" defaultValue={localInput(basis?.effective_to ?? null)} /></label>
+        <label>Effective from<input name="effective_from" type="datetime-local" required aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} /></label>
+        <label>Effective through (optional)<input name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} /></label>
+        <p className="field-hint wide-field" id="effective-period-help">The start is included and the through time is the first moment this version no longer applies. A later version may begin exactly at that through time without overlapping. Leave through blank for an ongoing period.</p>
+        <aside className="proposed-plan-interval wide-field" aria-live="polite" aria-labelledby="proposed-plan-interval-heading">
+          <h3 id="proposed-plan-interval-heading">Proposed effective interval</h3>
+          {proposedInterval === null ? <p>Choose an effective start to preview this draft against the versions shown in history.</p> : <>
+            <p><RecordedPlanTime value={proposedInterval.effectiveFrom} /> through {proposedInterval.effectiveTo === null ? "ongoing" : <RecordedPlanTime value={proposedInterval.effectiveTo} />}</p>
+            {proposedOverlaps.length === 0 ? <p>No overlap with the plan versions shown in history.</p> : <OverlapList overlaps={proposedOverlaps} headingLevel={4} />}
+          </>}
+        </aside>
         <label className="wide-field">Draft notes<textarea name="notes" defaultValue={basis?.notes ?? ""} /></label>
       </div>
 
@@ -335,11 +452,12 @@ export function PlanPage(): React.JSX.Element {
     {(active.isError || history.isError || medications.isError) ? <p className="error-summary" role="alert">Medication plan data could not be loaded.</p> : null}
     {message === "" ? null : <p className="success-message" role="status">{message}</p>}
     {editor === null ? <div className="page-actions"><button type="button" onClick={() => { setMessage(""); setEditor({ source: active.data ?? null, edit: null }); }}>{active.data === null ? "Create first plan draft" : "Create new version from active plan"}</button></div> : null}
-    {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
+    {editor === null || medications.data === undefined ? null : <PlanEditor source={editor.source} editDraft={editor.edit} medications={medications.data} existingVersions={versions} onCancel={() => { setEditor(null); }} onSaved={completeDraft} />}
     {active.data === null ? <section className="empty-state"><h2>No approved plan currently in force</h2><p>Draft and historical versions appear below, but HealthCurve will not treat them as the active plan.</p></section> : null}
     {active.data === undefined || active.data === null ? null : <PlanCard title={`${active.data.version_label} · currently in force`}><PlanContents version={active.data} timezone={profileTimezone} /></PlanCard>}
 
     <section aria-labelledby="history-heading"><h2 id="history-heading">Version history</h2><p>Approved and retired versions are immutable history. Edit a draft or create a new version to change a schedule.</p>
+      <PlanTimeline versions={versions} />
       <form className="filter-panel" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setOlderId(""); setNewerId(""); setSearchParams(planHistorySearch({ ...draft, page: 1 })); }}><label>Effective from date<input type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /></label><label>Effective through date<input type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /></label><label>History IANA timezone<input required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></label>{validation === null && !invalidRange ? null : <p className="error-summary form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</p>}<div className="filter-actions"><button type="submit">Apply history filters</button><button className="button-secondary" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone: profileTimezone }; setValidation(null); setDraftState({ search: "", filters: reset }); setOlderId(""); setNewerId(""); setSearchParams(new URLSearchParams()); }}>Clear history filters</button></div></form>
       <p className="privacy-note">Inclusive dates use {timezoneAbbreviation(filters.timezone)} and select versions by when the plan becomes effective. This does not change plan approval or active status.</p>
       {history.data?.page.total_items === 0 ? <p>No plan versions recorded.</p> : null}
