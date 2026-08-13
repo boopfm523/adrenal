@@ -16,13 +16,19 @@ export function DayAnalysisCard({ day, timezone }: { day: string; timezone: stri
   });
   const generate = useMutation({
     mutationFn: () => generateDayAnalysis(day, timezone),
-    onSuccess: (result) => {
-      if (result.analysis !== null) queryClient.setQueryData<DayAnalysis | null>(queryKey, result.analysis);
+    onSuccess: async (result) => {
+      if (result.analysis !== null) {
+        queryClient.setQueryData<DayAnalysis | null>(queryKey, result.analysis);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey });
     },
   });
   const result = generate.data;
   const analysis = result?.analysis ?? saved.data ?? null;
-  const notice = result?.detail ?? null;
+  const notice = result?.detail ?? (result?.analysis === null
+    ? "The private model completed, but did not return a usable checked interpretation. Try again; recorded facts and the HealthCurve are unchanged."
+    : null);
 
   return <details className="metric-definition healthcurve-day-analysis">
     <summary>AI HealthCurve analysis</summary>
@@ -35,8 +41,9 @@ export function DayAnalysisCard({ day, timezone }: { day: string; timezone: stri
       {generate.isError ? <p className="error-summary" role="alert">{generate.error instanceof AnalysisRequestTimeoutError
         ? "The analysis did not finish within 75 seconds. The private host model may still be loading or the connection may have been interrupted. Wait a moment and try again; recorded facts and the HealthCurve are unchanged."
         : "The private-model request could not be completed. Check that the host and connection are available, then try again. The HealthCurve and recorded data are unchanged."}</p> : null}
-      {notice === null ? null : <p role="status">{notice}</p>}
-      {analysis === null ? <p>No AI interpretation has been saved for this selected day and timezone.</p> : <div className="healthcurve-day-analysis-result">
+      {notice === null ? null : <p className="analysis-generation-notice" role="status">{notice}</p>}
+      {analysis === null && notice === null ? <p>No AI interpretation has been saved for this selected day and timezone.</p> : null}
+      {analysis === null ? null : <div className="healthcurve-day-analysis-result">
         {analysis.stale ? <p className="error-summary" role="alert"><strong>Recorded data changed after this analysis.</strong> Analyze this day again to include the latest facts.</p> : <p className="success-summary"><strong>Current for this source revision.</strong></p>}
         <pre className="report-record">{analysisForDisplay(analysis.body)}</pre>
         <details className="metric-definition"><summary>AI analysis provenance</summary><dl className="metric-metadata"><div><dt>Selected day</dt><dd>{analysis.selected_date}</dd></div><div><dt>Timezone</dt><dd>{analysis.timezone}</dd></div><div><dt>Model</dt><dd>{analysis.model_name}</dd></div><div><dt>Model digest</dt><dd><code>{analysis.model_digest}</code></dd></div><div><dt>Prompt/schema</dt><dd>{analysis.prompt_version} / {analysis.schema_version}</dd></div><div><dt>Source-day revision</dt><dd><code>{analysis.source_revision_sha256}</code></dd></div></dl></details>

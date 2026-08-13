@@ -252,8 +252,12 @@ function PlanContents({ version, timezone }: { version: RegimenVersion; timezone
     <ApprovalProvenance version={version} timezone={timezone} />
     <h3>Scheduled slots</h3>
     {slots.length === 0 ? <p>No scheduled slots recorded.</p> : <ul className="plan-list">{slots.map((slot) => <li key={slot.id}><strong>{slot.scheduled_local_time.slice(0, 5)}</strong> · {slot.medication_name} · {formatMeasurement(slot.amount, slot.unit)} · {slot.route}{slot.condition === null ? null : <span> · {slot.condition}</span>}</li>)}</ul>}
-    <h3>Physician-authored instructions</h3>
-    {instructions.length === 0 ? <p>No instructions recorded in this version.</p> : instructions.map((instruction) => <article className="instruction-card" key={instruction.id}><h4>{instruction.title}</h4><p>{instruction.body}</p><p>Authored by {instruction.authored_by} on {instruction.authored_on}</p></article>)}
+    <details className="metric-definition physician-instructions">
+      <summary>Physician-authored instructions</summary>
+      <div className="physician-instructions__content">
+        {instructions.length === 0 ? <p>No instructions recorded in this version.</p> : instructions.map((instruction) => <article className="instruction-card" key={instruction.id}><h4>{instruction.title}</h4><p>{instruction.body}</p><p>Authored by {instruction.authored_by} on {instruction.authored_on}</p></article>)}
+      </div>
+    </details>
   </>;
 }
 

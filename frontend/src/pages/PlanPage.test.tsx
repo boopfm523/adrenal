@@ -142,7 +142,19 @@ describe("Medication plan page", () => {
   });
 
   it("keeps approval provenance visible, distinguishes drafts, and renders a deterministic diff", async () => {
-    const approved = version("22222222-2222-4222-8222-222222222222", "Approved synthetic plan", "approved", "2026-08-01T00:00:00");
+    const approved = {
+      ...version("22222222-2222-4222-8222-222222222222", "Approved synthetic plan", "approved", "2026-08-01T00:00:00"),
+      instructions: [{
+        id: "77777777-7777-4777-8777-777777777777",
+        category: "plan",
+        instruction_category: "daily",
+        title: "Synthetic clinician instruction",
+        body: "Synthetic approved instruction body.",
+        authored_by: "Dr Synthetic",
+        authored_on: "2026-08-01",
+        sort_order: 0,
+      }],
+    };
     const retired = version("11111111-1111-4111-8111-111111111111", "Retired synthetic plan", "retired", "2026-01-01T00:00:00");
     const draft = version("33333333-3333-4333-8333-333333333333", "Future synthetic draft", "draft", "2026-09-01T00:00:00");
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
@@ -158,6 +170,16 @@ describe("Medication plan page", () => {
     expect(screen.getByRole("region", { name: "Medication plan version history table" })).toBeVisible();
     expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Synthetic clinic letter").length).toBeGreaterThan(0);
+    const instructionSummary = screen.getAllByText("Physician-authored instructions")[0];
+    expect(instructionSummary).toBeDefined();
+    const instructionDisclosure = instructionSummary?.closest("details") ?? null;
+    expect(instructionDisclosure).not.toHaveAttribute("open");
+    if (instructionDisclosure === null) throw new Error("physician instruction disclosure is missing");
+    expect(within(instructionDisclosure).getByText("Synthetic approved instruction body.")).not.toBeVisible();
+    if (instructionSummary === undefined) throw new Error("physician instruction disclosure is missing");
+    await userEvent.click(instructionSummary);
+    expect(instructionDisclosure).toHaveAttribute("open");
+    expect(within(instructionDisclosure).getByText("Synthetic approved instruction body.")).toBeVisible();
     expect(screen.getAllByText("Aug 1, 2026, 10:00 AM EDT").length).toBeGreaterThan(0);
     const effectiveStart = screen.getAllByText("Aug 1, 2026, 12:00 AM")[0];
     expect(effectiveStart?.closest("dd")).toHaveTextContent("Aug 1, 2026, 12:00 AM (America/New_York, UTC−04:00) through ongoing");

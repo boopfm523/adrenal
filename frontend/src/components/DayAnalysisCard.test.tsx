@@ -81,6 +81,21 @@ describe("day analysis card", () => {
     await waitFor(() => { expect(screen.getByText(/Recorded data changed after this analysis/)).toBeVisible(); });
   });
 
+  it("never silently returns to the empty state after an unusable model response", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => Promise.resolve(new Response(JSON.stringify(init?.method === "POST"
+      ? { outcome: "invalid", detail: null, analysis: null }
+      : null), { headers: { "Content-Type": "application/json" } })));
+    renderCard();
+
+    fireEvent.click(screen.getByText("AI HealthCurve analysis"));
+    expect(await screen.findByText(/No AI interpretation has been saved/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Analyze this day" }));
+
+    await waitFor(() => { expect(screen.getByText(/did not return a usable checked interpretation/i)).toBeVisible(); });
+    expect(screen.queryByText(/No AI interpretation has been saved/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyze this day" })).toBeEnabled();
+  });
+
   it("recovers from a request that never completes and permits a safe retry", async () => {
     vi.useFakeTimers();
     vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
