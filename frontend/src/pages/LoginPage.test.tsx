@@ -16,7 +16,7 @@ describe("Login page", () => {
     expect(screen.queryByText(/authenticator|recovery code|passkey/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sign in to HealthCurve.ai" })).toBeVisible();
     expect(screen.getByRole("img", { name: "HealthCurve.ai" })).toBeVisible();
-    expect(screen.getByText(/Artificial intelligence for adrenal insufficiency/)).toBeVisible();
+    expect(screen.getByText(/Artificial Intelligence for Adrenal Insufficiency/)).toBeVisible();
     expect(document.title).toBe("Sign in · HealthCurve.ai");
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 

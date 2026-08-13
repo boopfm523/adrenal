@@ -49,7 +49,7 @@ export function LoginPage(): React.JSX.Element {
           <Box>
             <Text className="eyebrow" mb="xs">Private health record</Text>
             <Title id="login-heading" order={1}>Sign in to HealthCurve.ai</Title>
-            <Text className="brand-tagline" mt="sm"><strong>AI for AI:</strong> Artificial intelligence for adrenal insufficiency.</Text>
+            <Text className="brand-tagline" mt="sm"><strong>AI for AI:</strong> Artificial Intelligence for Adrenal Insufficiency.</Text>
           </Box>
           <Paper className="login-safety-note" radius="md" p="md">
             <Text fw={650}>For organizing and reviewing your records—not diagnosis, emergency care, or medication advice.</Text>

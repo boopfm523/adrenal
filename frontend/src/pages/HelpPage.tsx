@@ -80,7 +80,7 @@ export function HelpPage(): React.JSX.Element {
     <Page title="Help" description="Practical, current instructions for recording, reviewing, importing, correcting, and exporting HealthCurve.ai data.">
       <Paper component="section" withBorder radius="md" p="lg" aria-labelledby="help-brand-title">
         <Title order={2} id="help-brand-title">AI for AI</Title>
-        <Text><strong>Artificial intelligence for adrenal insufficiency.</strong> HealthCurve.ai helps organize and review your recorded information. Its AI output stays separate from recorded facts and physician-approved plans and is not diagnosis, emergency care, or medication advice.</Text>
+        <Text><strong>Artificial Intelligence for Adrenal Insufficiency.</strong> HealthCurve.ai helps organize and review your recorded information. Its AI output stays separate from recorded facts and physician-approved plans and is not diagnosis, emergency care, or medication advice.</Text>
       </Paper>
       <Alert component="aside" color="red" variant="light" role="note">
         <Title order={2}>HealthCurve.ai is not emergency care or dosing advice</Title>

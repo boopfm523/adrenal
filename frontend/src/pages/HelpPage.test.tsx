@@ -29,7 +29,7 @@ describe("Help page", () => {
 
     expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeVisible();
     expect(screen.getByRole("heading", { name: "AI for AI" })).toBeVisible();
-    expect(screen.getByText(/Artificial intelligence for adrenal insufficiency/)).toBeVisible();
+    expect(screen.getByText(/Artificial Intelligence for Adrenal Insufficiency/)).toBeVisible();
     expect(screen.getByText(/not diagnosis, emergency care, or medication advice/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Help" })).toHaveClass("active");
     const safety = screen.getByRole("heading", { name: "HealthCurve.ai is not emergency care or dosing advice" }).closest("aside");
