@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
@@ -32,6 +32,11 @@ function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.href;
   return input.url;
+}
+
+function LocationProbe(): React.JSX.Element {
+  const location = useLocation();
+  return <output data-testid="location-search">{location.search}</output>;
 }
 
 function comparison(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -84,6 +89,7 @@ function renderToday(): void {
           signOut: vi.fn(),
         }}>
           <TodayPage />
+          <LocationProbe />
         </AuthContext.Provider>
       </MemoryRouter>
     </QueryClientProvider></HealthCurveProvider>,
@@ -216,5 +222,28 @@ describe("Today page", () => {
     expect(await screen.findByRole("heading", { name: "2 approved plan periods" })).toBeVisible();
     expect(screen.getByText(/physician-approved plan changed during this day/)).toBeVisible();
     expect(screen.queryByRole("heading", { name: "No approved plan for this date" })).not.toBeInTheDocument();
+  });
+
+  it("keeps table pagination in the URL", async () => {
+    const slots = Array.from({ length: 11 }, (_, index) => plannedSlot({
+      slot_id: `11111111-1111-4111-8111-${(index + 1).toString().padStart(12, "0")}`,
+      scheduled_local_time: `${(index + 1).toString().padStart(2, "0")}:00:00`,
+    }));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("plan-comparison")) return Promise.resolve(jsonResponse(comparison({
+        regimen_versions: [{ id: "44444444-4444-4444-8444-444444444444", version_label: "Synthetic approved regimen", effective_from: "2026-01-01T00:00:00", effective_to: null }],
+        slots,
+      })));
+      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse(episodePage([])));
+      return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
+    });
+
+    renderToday();
+    await screen.findByRole("navigation", { name: "Today's approved schedule pagination" });
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?plan_page=2");
+    expect(screen.getByText("Showing 11–11 of 11. Page 2 of 2.")).toBeVisible();
   });
 });

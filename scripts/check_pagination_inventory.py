@@ -57,7 +57,10 @@ def _table_files(root: Path) -> set[str]:
     return {
         path.relative_to(root).as_posix()
         for path in frontend.rglob("*.tsx")
-        if "<table" in path.read_text(encoding="utf-8")
+        if any(
+            marker in path.read_text(encoding="utf-8")
+            for marker in ("<table", "<Table ", "<Table>")
+        )
     }
 
 

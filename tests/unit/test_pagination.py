@@ -72,3 +72,38 @@ def test_pagination_inventory_rejects_new_mapped_card_history(tmp_path: Path) ->
     assert audit(tmp_path) == [
         "unclassified_frontend_mapped_cards:frontend/src/pages/NewHistory.tsx"
     ]
+
+
+def test_pagination_inventory_discovers_mantine_tables(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    page = tmp_path / "frontend/src/pages/NewTable.tsx"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        'import { Table } from "@mantine/core"; '
+        'export function NewTable() { return <Table className="records" />; }',
+        encoding="utf-8",
+    )
+    api_entry = {
+        "status": "paginated",
+        "issue": "hc-test",
+        "pagination_contract": "PageRequest",
+        "date_filter": "experienced_local",
+        "timezone": "explicit_iana",
+        "sensitivity": "owner_scoped_health",
+    }
+    inventory = {
+        "api_collections": {
+            "routers/data_quality.py:/data-quality": api_entry,
+            "routers/events.py:/timeline": api_entry,
+            "routers/garmin.py:/records": api_entry,
+            "routers/garmin.py:/samples": api_entry,
+        },
+        "frontend_tables": {},
+        "frontend_mapped_card_files": {},
+        "additional_ui_collections": {},
+    }
+    (tmp_path / "docs/pagination-inventory.json").write_text(
+        json.dumps(inventory), encoding="utf-8"
+    )
+
+    assert audit(tmp_path) == ["unclassified_frontend_table:frontend/src/pages/NewTable.tsx"]

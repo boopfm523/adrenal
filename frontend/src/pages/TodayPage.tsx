@@ -1,7 +1,6 @@
 import { Alert, Anchor, Button, Group, Paper, Stack, Table, Text, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   getOpenEpisodes,
@@ -31,6 +30,11 @@ function displayTime(value: string | null): string {
   if (value === null) return "Time not recorded";
   const time = value.includes("T") ? value.split("T")[1] : value;
   return time?.slice(0, 5) ?? value;
+}
+
+function positivePage(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
 function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: string }): React.JSX.Element {
@@ -85,6 +89,7 @@ export function TodayPage(): React.JSX.Element {
   const { session } = useAuth();
   const timezone = session?.user.defaultTimezone ?? "UTC";
   const day = localDate(new Date(), timezone);
+  const [searchParams, setSearchParams] = useSearchParams();
   const comparison = useQuery({
     queryKey: ["today", day, timezone],
     queryFn: () => getPlanComparison(day, timezone),
@@ -98,8 +103,14 @@ export function TodayPage(): React.JSX.Element {
   const openEpisode = episodes.data?.items[0];
   const healthCurveUrl = `/healthcurve?${new URLSearchParams({ day, timezone }).toString()}`;
   const pageSize = 10;
-  const [planPage, setPlanPage] = useState(1);
-  const [recordedPage, setRecordedPage] = useState(1);
+  const planPage = positivePage(searchParams.get("plan_page"));
+  const recordedPage = positivePage(searchParams.get("recorded_page"));
+  const setPage = (key: "plan_page" | "recorded_page", page: number): void => {
+    const next = new URLSearchParams(searchParams);
+    if (page === 1) next.delete(key);
+    else next.set(key, page.toString());
+    setSearchParams(next);
+  };
   const visiblePlanSlots = planSlots.slice((planPage - 1) * pageSize, planPage * pageSize);
   const visibleRecordedDoses = unplannedDoses.slice((recordedPage - 1) * pageSize, recordedPage * pageSize);
 
@@ -131,7 +142,7 @@ export function TodayPage(): React.JSX.Element {
       {comparison.data !== undefined && planVersions.length > 0 ? (
         <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${formatDecimal(planVersions.length)} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
           <p>Schedule for {day} in {timezoneAbbreviationForLocalDate(timezone, day)}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
-          {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : <><div className="table-scroll today-table-region today-table-region--plan" tabIndex={0} role="region" aria-label="Today's approved schedule and recorded status"><Table className="today-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Approved schedule and corresponding recorded facts for today.</caption><thead><tr><th scope="col">Scheduled time</th><th scope="col">Medication</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody>{visiblePlanSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}</tbody></Table></div><PaginationControls label="Today's approved schedule" metadata={{ page: planPage, page_size: pageSize, total_items: planSlots.length, total_pages: Math.ceil(planSlots.length / pageSize) }} onPageChange={setPlanPage} /></>}
+          {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : <><div className="table-scroll today-table-region today-table-region--plan" tabIndex={0} role="region" aria-label="Today's approved schedule and recorded status"><Table className="today-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Approved schedule and corresponding recorded facts for today.</caption><thead><tr><th scope="col">Scheduled time</th><th scope="col">Medication</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody>{visiblePlanSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}</tbody></Table></div><PaginationControls label="Today's approved schedule" metadata={{ page: planPage, page_size: pageSize, total_items: planSlots.length, total_pages: Math.ceil(planSlots.length / pageSize) }} onPageChange={(page) => { setPage("plan_page", page); }} /></>}
           <details className="metric-definition">
             <summary>How timing status is calculated</summary>
             <p>{comparison.data.metric_definition}</p>
@@ -146,7 +157,7 @@ export function TodayPage(): React.JSX.Element {
         </Paper>
       ) : null}
 
-      {unplannedDoses.length === 0 ? null : <FactCard title="Additional recorded doses" metadata={<Link to="/timeline">Open recorded facts</Link>}><div className="table-scroll today-table-region today-table-region--fact" tabIndex={0} role="region" aria-label="Today's additional recorded doses"><Table className="today-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Recorded dose facts that do not correspond to an approved-plan slot.</caption><thead><tr><th scope="col">Recorded time</th><th scope="col">Medication</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{visibleRecordedDoses.map((dose) => <tr key={dose.dose_id}><td data-label="Recorded time">{displayTime(dose.actual_local_time)}</td><th data-label="Medication" scope="row">{dose.medication_name}</th><td data-label="Amount">{formatMeasurement(dose.actual_amount, dose.unit)}</td><td data-label="Status">{statusLabels[dose.status] ?? dose.status}</td></tr>)}</tbody></Table></div><PaginationControls label="Today's additional recorded doses" metadata={{ page: recordedPage, page_size: pageSize, total_items: unplannedDoses.length, total_pages: Math.ceil(unplannedDoses.length / pageSize) }} onPageChange={setRecordedPage} /></FactCard>}
+      {unplannedDoses.length === 0 ? null : <FactCard title="Additional recorded doses" metadata={<Link to="/timeline">Open recorded facts</Link>}><div className="table-scroll today-table-region today-table-region--fact" tabIndex={0} role="region" aria-label="Today's additional recorded doses"><Table className="today-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Recorded dose facts that do not correspond to an approved-plan slot.</caption><thead><tr><th scope="col">Recorded time</th><th scope="col">Medication</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{visibleRecordedDoses.map((dose) => <tr key={dose.dose_id}><td data-label="Recorded time">{displayTime(dose.actual_local_time)}</td><th data-label="Medication" scope="row">{dose.medication_name}</th><td data-label="Amount">{formatMeasurement(dose.actual_amount, dose.unit)}</td><td data-label="Status">{statusLabels[dose.status] ?? dose.status}</td></tr>)}</tbody></Table></div><PaginationControls label="Today's additional recorded doses" metadata={{ page: recordedPage, page_size: pageSize, total_items: unplannedDoses.length, total_pages: Math.ceil(unplannedDoses.length / pageSize) }} onPageChange={(page) => { setPage("recorded_page", page); }} /></FactCard>}
 
       {episodes.isError ? <Alert color="red" role="alert">Open-episode status could not be loaded.</Alert> : null}
       {openEpisode === undefined ? null : (

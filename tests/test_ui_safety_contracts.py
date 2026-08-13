@@ -88,7 +88,7 @@ def test_vitals_accessibility_safety_and_responsive_contracts_stay_under_ui_test
         assert tested_semantic in test
     for responsive_table_contract in (
         'className="table-scroll vital-table-region" tabIndex={0}',
-        '<table className="vital-table">',
+        '<table className="vital-table',
         ".table-scroll { overflow-x: auto; }",
         ".vital-table { min-width: 58rem;",
     ):

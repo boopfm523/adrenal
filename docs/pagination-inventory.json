@@ -38,7 +38,8 @@
     "frontend/src/pages/PlanPage.tsx": { "status": "paginated", "issue": "hc-inbox.20.3", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "effective_local", "sensitivity": "owner_scoped_plan" },
     "frontend/src/pages/ReportsPage.tsx": { "status": "paginated", "issue": "hc-inbox.20.3", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "created_local", "sensitivity": "owner_scoped_report" },
     "frontend/src/pages/SymptomsDiaryPage.tsx": { "status": "paginated", "issue": "hc-inbox.20.1", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "experienced_local", "sensitivity": "owner_scoped_sensitive_hidden_default" },
-    "frontend/src/pages/TimelinePage.tsx": { "status": "paginated", "issue": "hc-inbox.10.1", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "experienced_local", "sensitivity": "owner_scoped_sensitive_hidden_default" }
+    "frontend/src/pages/TimelinePage.tsx": { "status": "paginated", "issue": "hc-inbox.10.1", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "experienced_local", "sensitivity": "owner_scoped_sensitive_hidden_default" },
+    "frontend/src/pages/TodayPage.tsx": { "status": "paginated", "issue": "hc-7zj", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "experienced_local", "sensitivity": "owner_scoped_health" }
   },
   "frontend_mapped_card_files": {
     "frontend/src/pages/DosesPage.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "owner_scoped_health", "reason": "Mapped articles occur only inside revision details for rows on the bounded current page." },
