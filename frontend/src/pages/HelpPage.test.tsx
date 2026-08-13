@@ -27,7 +27,10 @@ describe("Help page", () => {
   it("is authenticated primary navigation with prominent safety and category boundaries", async () => {
     renderHelp();
 
-    expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeVisible();
+    const pageTitle = await screen.findByRole("heading", { name: "Help", level: 1 });
+    expect(pageTitle).toBeVisible();
+    expect(pageTitle).toHaveClass("page-title");
+    expect(pageTitle).toHaveFocus();
     expect(screen.getByRole("heading", { name: "AI for AI" })).toBeVisible();
     expect(screen.getByText(/Artificial Intelligence for Adrenal Insufficiency/)).toBeVisible();
     expect(screen.getByText(/not diagnosis, emergency care, or medication advice/)).toBeVisible();

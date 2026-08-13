@@ -18,7 +18,7 @@ export function Page({ title, description, documentTitle, children }: PageProps)
 
   return (
     <>
-      <h1 ref={heading} tabIndex={-1}>{title}</h1>
+      <h1 className="page-title" ref={heading} tabIndex={-1}>{title}</h1>
       <p className="page-description">{description}</p>
       {children}
     </>

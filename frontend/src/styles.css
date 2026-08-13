@@ -65,6 +65,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .sidebar-footer { display: grid; gap: var(--mantine-spacing-md); padding: var(--mantine-spacing-md); border-top: 1px solid var(--hc-color-border); }
 .main-content-inner { width: min(80rem, 100%); margin-inline: auto; padding: var(--mantine-spacing-xl) clamp(1rem, 4vw, 3rem) 4rem; }
 h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035em; }
+.page-title:focus-visible { outline: none; }
 .page-description { max-width: 68ch; color: #48554f; font-size: 1.05rem; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
 .button-link { display: inline-flex; align-items: center; background: #174c3c; color: white; text-decoration: none; font-weight: 700; }
