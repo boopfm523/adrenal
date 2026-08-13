@@ -283,10 +283,10 @@ function BloodPressureEntry({ timezone }: { timezone: string }): React.JSX.Eleme
   }
   return <form aria-label="Record blood pressure" onSubmit={submit}><Paper className="vital-entry-form" withBorder p="lg" radius="lg">
     <Title order={3}>Blood pressure</Title>
-    <TextInput label="Systolic (mmHg)" required aria-label="Systolic (mmHg)" type="number" inputMode="numeric" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} />
-    <TextInput label="Diastolic (mmHg)" required aria-label="Diastolic (mmHg)" type="number" inputMode="numeric" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} />
-    <TextInput label="Pulse (bpm, optional)" type="number" inputMode="numeric" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} />
-    <NativeSelect label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as BloodPressureInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} />
+    <div className="measurement-row measurement-row--equal"><TextInput label="Systolic (mmHg)" required aria-label="Systolic (mmHg)" type="number" inputMode="numeric" min="1" max="500" value={form.systolic} onChange={(event) => { setForm({ ...form, systolic: event.target.value }); }} />
+    <TextInput label="Diastolic (mmHg)" required aria-label="Diastolic (mmHg)" type="number" inputMode="numeric" min="1" max="500" value={form.diastolic} onChange={(event) => { setForm({ ...form, diastolic: event.target.value }); }} /></div>
+    <div className="vital-entry-secondary measurement-row--setting"><TextInput label="Pulse (bpm, optional)" type="number" inputMode="numeric" min="1" max="500" value={form.pulse} onChange={(event) => { setForm({ ...form, pulse: event.target.value }); }} />
+    <NativeSelect label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as BloodPressureInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} /></div>
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
     <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. HealthCurve records the values without interpreting them.</Text>
@@ -314,7 +314,7 @@ function WeightEntry({ timezone }: { timezone: string }): React.JSX.Element {
     <Title order={3}>Weight</Title>
     <div className="measurement-row"><TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min="0.0001" max="5000" step="any" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
     <NativeSelect className="unit-select" label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as WeightInput["unit"] }); }} data={["lb","kg"]} /></div>
-    <NativeSelect className="form-wide" label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as WeightInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} />
+    <div className="vital-entry-secondary measurement-row--setting"><NativeSelect label="Measurement setting" value={form.measurementSetting} onChange={(event) => { setForm({ ...form, measurementSetting: event.target.value as WeightInput["measurement_setting"] }); }} data={[{value:"home",label:"Home"},{value:"provider",label:"Provider / clinic"}]} /></div>
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
     <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. The entered unit is preserved; kilograms use 1 lb = 0.45359237 kg.</Text>
@@ -343,6 +343,7 @@ function TemperatureEntry({ timezone }: { timezone: string }): React.JSX.Element
     <Title order={3}>Body temperature</Title>
     <div className="measurement-row"><TextInput label="Value" required aria-label="Value" type="number" inputMode="decimal" min={bounds.min} max={bounds.max} step="0.1" value={form.value} onChange={(event) => { setForm({ ...form, value: event.target.value }); }} />
     <NativeSelect className="unit-select" label="Unit" value={form.unit} onChange={(event) => { setForm({ ...form, unit: event.target.value as TemperatureInput["unit"], value: "" }); }} data={[{value:"f",label:"°F"},{value:"c",label:"°C"}]} /></div>
+    <div className="vital-entry-secondary vital-entry-secondary--empty" aria-hidden="true" />
     <CompactLocalDateTime value={form.localTime} onChange={(localTime) => { setForm({ ...form, localTime }); }} />
     <Textarea className="form-wide" label="Notes" value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} />
     <Text className="form-wide" c="dimmed">Timezone: {timezoneAbbreviation(timezone)}. Entered units are preserved. HealthCurve converts with °F = (°C × 9/5) + 32 and does not diagnose fever.</Text>

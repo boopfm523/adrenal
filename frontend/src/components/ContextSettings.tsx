@@ -140,7 +140,7 @@ export function ContextSettings(): React.JSX.Element {
       </div>
 
       <form className="settings-card context-entry-form" onSubmit={submit}>
-        <h3>Record context</h3>
+        <h3 className="form-wide">Record context</h3>
         <label>Experienced local date and time<input name="local_time" type="datetime-local" required /></label>
         <label>IANA timezone<input name="timezone" defaultValue={profileTimezone} required /></label>
         <label>Location precision
