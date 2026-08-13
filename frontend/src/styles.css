@@ -64,7 +64,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .sidebar-link.active { background: var(--mantine-color-horizonTeal-0); color: var(--mantine-color-horizonTeal-9); font-weight: 750; box-shadow: inset 0.25rem 0 var(--mantine-color-horizonTeal-7); }
 .sidebar-footer { display: grid; gap: var(--mantine-spacing-md); padding: var(--mantine-spacing-md); border-top: 1px solid var(--hc-color-border); }
 .main-content-inner { width: min(80rem, 100%); margin-inline: auto; padding: var(--mantine-spacing-xl) clamp(1rem, 4vw, 3rem) 4rem; }
-h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035em; }
+h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035em; }
 .page-description { max-width: 68ch; color: #48554f; font-size: 1.05rem; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
 .button-link { display: inline-flex; align-items: center; background: #174c3c; color: white; text-decoration: none; font-weight: 700; }
@@ -95,13 +95,13 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .today-date { margin-block: 1.25rem 0; color: #48554f; }
 .dose-slots { display: grid; gap: 0.8rem; padding: 0; list-style: none; }
 .dose-slot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid #b6c0ba; border-radius: 0.6rem; padding: 1rem; background: #f8faf8; }
-.dose-slot--missing { border-left: 0.4rem solid #a86712; }
+.dose-slot.dose-slot--missing { border-left: 0.4rem solid #a86712; }
 .dose-slot__schedule, .dose-slot__status, .status-explanation { margin: 0.2rem 0; }
-.today-table-region { border: 1px solid var(--hc-color-border); border-radius: var(--mantine-radius-md); }
+.today-table-region { border-left-width: 0.35rem; }
+.today-table-region--plan { border-left-color: var(--hc-color-brand-navy); }
+.today-table-region--fact { border-left-color: #365f50; }
 .today-table { min-width: 46rem; }
 .today-table th > span { display: block; margin-top: 0.2rem; color: var(--hc-color-text-muted); font-family: "Rubik-Light", sans-serif; font-weight: 300; }
-.today-table tbody tr[class*="dose-slot--"] > :first-child { border-left: 0.3rem solid var(--hc-color-info); }
-.today-table tbody tr.dose-slot--missing > :first-child { border-left-color: var(--hc-color-warning); }
 .status-explanation { color: #48554f; font-size: 0.92rem; }
 .metric-definition { margin-top: 1rem; }
 .metric-definition summary { cursor: pointer; font-weight: 700; }
@@ -116,9 +116,8 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .filter-actions { display: flex; gap: 0.6rem; }
 .button-secondary { background: white; color: #174c3c; }
 .privacy-note { color: #48554f; }
-.timeline-table-region { margin-top: 1.25rem; border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.timeline-table-region { margin-top: 1rem; }
 .timeline-table { min-width: 54rem; font-size: 0.94rem; }
-.timeline-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
 .timeline-table thead th { background: #e7ece8; }
 .timeline-table th, .timeline-table td { padding: 0.55rem 0.65rem; }
 .timeline-table tbody tr:hover { background: #f8faf8; }
@@ -215,28 +214,37 @@ h1 { margin-top: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035
 .episode-close-form input { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
 .episode-review-target { scroll-margin-top: 1rem; outline: 0.2rem solid #9b6a18; outline-offset: -0.2rem; }
 .episode-entry-form textarea { min-height: 6rem; }
-.episode-table-region { border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.episode-table-region { border-left-width: 0.35rem; border-left-color: #365f50; }
 .episode-table { min-width: 66rem; font-size: 0.94rem; }
-.episode-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
 .episode-table thead th { background: #e7ece8; }
 .episode-table th, .episode-table td { padding: 0.55rem 0.65rem; vertical-align: top; }
 .episode-table td > span, .episode-table th > span { display: block; }
-.episode-table tbody > tr:not(.correction-table-row) > :first-child { border-left: 0.35rem solid #365f50; }
 .metric-card { margin-block: 1rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .metric-metadata, .metric-values { display: grid; grid-template-columns: repeat(3, minmax(10rem, 1fr)); gap: 0.75rem; }
 .metric-metadata div, .metric-values div { border-top: 1px solid #dce2dd; padding-top: 0.5rem; }
 .metric-metadata dt, .metric-values dt { color: #48554f; font-size: 0.9rem; font-weight: 700; }
 .metric-metadata dd, .metric-values dd { margin: 0.2rem 0 0; font-weight: 700; }
 .table-scroll { overflow-x: auto; }
+:is(.timeline-table-region, .episode-table-region, .symptom-table-region, .vital-table-region, .today-table-region, .plan-history-region) {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--hc-color-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--hc-color-surface);
+}
+.episode-table-region,
+.symptom-table-region,
+.vital-table-region,
+.today-table-region--fact { border-left: 0.35rem solid #365f50; }
+.today-table-region--plan { border-left: 0.35rem solid var(--hc-color-brand-navy); }
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ccd4ce; padding: 0.65rem; text-align: left; vertical-align: top; }
-caption { padding: 0.85rem 1rem; color: var(--hc-color-text-muted); text-align: left; }
-thead th { background: var(--hc-color-surface-muted); }
+caption { caption-side: bottom; border-top: 1px solid var(--hc-color-border); padding: 0.75rem 1rem; color: var(--hc-color-text-muted); background: var(--hc-color-surface); text-align: left; font-weight: 600; }
+thead th { border-bottom: 1px solid var(--hc-color-border); background: var(--hc-color-surface-muted); }
 tbody tr:last-child > * { border-bottom: 0; }
 tbody tr:hover { background: color-mix(in srgb, var(--hc-color-surface-muted) 55%, white); }
-.symptom-table-region { border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.symptom-table-region { border-left-width: 0.35rem; border-left-color: #365f50; }
 .symptom-records-table { min-width: 68rem; table-layout: fixed; font-size: 0.94rem; }
-.symptom-records-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
 .symptom-records-table thead th { background: #e7ece8; }
 .symptom-records-table th:nth-child(1) { width: 11rem; }
 .symptom-records-table th:nth-child(2) { width: 9rem; }
@@ -473,8 +481,9 @@ circle.chart-series { fill: white; }
 .help-endpoints code { overflow-wrap: anywhere; }
 .help-planned { border-left: 0.45rem solid #a86712; padding: 1rem 1.25rem; background: #fffbf3; }
 .help-planned li { margin-block: 0.7rem; }
-.vital-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 1rem; align-items: start; }
-.vital-entry-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 0.8rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
+.vital-entry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; align-items: stretch; }
+.vital-entry-grid > form, .vital-entry-form { min-width: 0; height: 100%; }
+.vital-entry-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 0.9rem 0.75rem; border: 1px solid #89978f; border-radius: 0.75rem; padding: 1.25rem; background: white; }
 .vital-entry-form h3 { grid-column: 1 / -1; margin-top: 0; }
 .vital-entry-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .vital-entry-form input, .vital-entry-form select, .vital-entry-form textarea { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
@@ -482,15 +491,15 @@ circle.chart-series { fill: white; }
 .vital-entry-form .measurement-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.25rem; gap: 0.75rem; grid-column: 1 / -1; }
 .vital-entry-form .measurement-row--setting { grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem); }
 .vital-entry-form .unit-select { width: 5.25rem; }
-.compact-local-time { display: grid; grid-template-columns: minmax(8rem, 10rem) minmax(6.5rem, 8rem); gap: 0.6rem; width: fit-content; max-width: 100%; margin: 0; border: 0; padding: 0; }
+.compact-local-time { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(6.5rem, 0.9fr); gap: 0.75rem; width: 100%; max-width: 100%; margin: 0; border: 0; padding: 0; }
 .compact-local-time legend { margin-bottom: 0.35rem; padding: 0; font-weight: 700; }
 .compact-local-time label { min-width: 0; color: #48554f; font-size: 0.82rem; }
 .compact-local-time input { width: 100%; min-width: 0; box-sizing: border-box; color: #17211d; font-size: 1rem; }
-.vital-table-region { border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.health-data-filter-panel { gap: 0.75rem; margin-block: 1rem; }
+.health-data-filter-actions { margin-top: 0.1rem; }
+.vital-table-region { border-left-width: 0.35rem; border-left-color: #365f50; }
 .vital-table { min-width: 58rem; font-size: 0.94rem; }
-.vital-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
 .vital-table thead th { background: #e7ece8; }
-.vital-table tbody tr[data-category="fact"] > :first-child { border-left: 0.35rem solid #365f50; }
 .vital-table td > span { display: block; }
 .blood-pressure-table { min-width: 60rem; }
 .blood-pressure-primary { white-space: nowrap; font-size: 1.05rem; }
@@ -499,12 +508,10 @@ circle.chart-series { fill: white; }
 .secondary-measurement { margin-top: 0.2rem; color: #48554f; font-size: 0.85rem; }
 .correction-table-row td { padding: 0; background: #fffbf3; }
 .correction-table-row .correction-form { margin: 0; border: 0; border-radius: 0; }
-.dose-table-region { border: 1px solid #89978f; border-radius: 0.55rem; background: white; }
+.dose-table-region { margin-top: 1rem; overflow: hidden; border: 1px solid var(--hc-color-border); border-left: 0.35rem solid #365f50; border-radius: var(--mantine-radius-md); background: var(--hc-color-surface); }
 .dose-table { min-width: 66rem; font-size: 0.94rem; }
-.dose-table caption { padding: 0.75rem; color: #48554f; text-align: left; font-weight: 700; }
 .dose-table thead th { background: #e7ece8; }
 .dose-table th, .dose-table td { padding: 0.55rem 0.65rem; vertical-align: top; }
-.dose-table tbody > tr:not(.correction-table-row) > :first-child { border-left: 0.35rem solid #365f50; }
 .dose-table td > span, .dose-table th > span { display: block; }
 .dose-table button { margin-top: 0.5rem; }
 .dose-time { white-space: nowrap; }

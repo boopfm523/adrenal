@@ -77,6 +77,8 @@ describe("Health data page", () => {
     const weightForm = screen.getByRole("form", { name: "Record weight" });
     expect(within(weightForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
     expect(within(weightForm).getByLabelText("Unit").closest(".measurement-row")).not.toBeNull();
+    expect(within(weightForm).getByLabelText("Measurement setting")).toHaveClass("mantine-NativeSelect-input");
+    expect(within(weightForm).getByLabelText("Measurement setting").closest(".form-wide")).not.toBeNull();
     await userEvent.type(within(weightForm).getByLabelText("Value"), "181");
     await userEvent.click(within(weightForm).getByRole("button", { name: "Record weight" }));
     const temperatureForm = screen.getByRole("form", { name: "Record body temperature" });

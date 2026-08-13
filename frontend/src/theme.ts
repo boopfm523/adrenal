@@ -45,6 +45,7 @@ const horizonOrange: MantineColorsTuple = [
 ];
 
 export const healthCurveTokens = {
+  brandNavy: "#113f73",
   canvas: "#f7f8f5",
   surface: "#ffffff",
   surfaceMuted: "#eef3f0",
@@ -97,6 +98,7 @@ export const healthCurveCssVariables: CSSVariablesResolver = () => ({
     "--hc-sidebar-collapsed-width": healthCurveTokens.sidebar.collapsedWidth,
   },
   light: {
+    "--hc-color-brand-navy": healthCurveTokens.brandNavy,
     "--hc-color-canvas": healthCurveTokens.canvas,
     "--hc-color-surface": healthCurveTokens.surface,
     "--hc-color-surface-muted": healthCurveTokens.surfaceMuted,

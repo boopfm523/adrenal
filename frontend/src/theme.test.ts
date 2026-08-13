@@ -10,6 +10,7 @@ describe("HealthCurve Mantine theme", () => {
     expect(healthCurveTheme.colors?.horizonOrange).toHaveLength(10);
 
     const variables = healthCurveCssVariables(DEFAULT_THEME);
+    expect(variables.light["--hc-color-brand-navy"]).toBe(healthCurveTokens.brandNavy);
     expect(variables.light["--hc-color-success"]).toBe(healthCurveTokens.status.success);
     expect(variables.light["--hc-color-error"]).toBe(healthCurveTokens.status.error);
     expect(variables.variables["--hc-sidebar-width"]).toBe(healthCurveTokens.sidebar.width);
