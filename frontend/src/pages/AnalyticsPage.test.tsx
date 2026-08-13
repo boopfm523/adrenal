@@ -77,7 +77,9 @@ describe("Analytics page", () => {
     expect(within(seriesSummary).getByRole("heading", { name: /Symptoms/ }).parentElement).toHaveTextContent("Dizzy · 7/10");
     expect(await screen.findByRole("heading", { name: "Daily medication totals versus plan" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Compare daily patterns" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Daily pattern exact values" })).toBeVisible();
+    const dailyPatternValues = screen.getByRole("region", { name: "Daily pattern exact values" });
+    expect(dailyPatternValues).toBeVisible();
+    expect(dailyPatternValues.parentElement).toHaveClass("standard-table-region", "standard-table-region--blue");
     expect(screen.getByRole("region", { name: "Longitudinal pattern summary" })).toBeVisible();
     expect(screen.getByRole("link", { name: "2026-08-01" })).toHaveAttribute("href", "/healthcurve?day=2026-08-01&timezone=Europe%2FLondon");
     expect(screen.getByText(/Withheld—fewer than 7 observed days/)).toBeVisible();
