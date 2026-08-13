@@ -1,5 +1,5 @@
 import { Button, Checkbox, Group, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type {
   BloodPressure,
@@ -593,6 +593,9 @@ export function DailyHealthCurve({
   const end = Date.parse(data.exposure.day_end);
   const [cursorMinute, setCursorMinute] = useState(0);
   const [hoveringChart, setHoveringChart] = useState(false);
+  const [touchSelected, setTouchSelected] = useState(false);
+  const [chartZoom, setChartZoom] = useState<1 | 1.5 | 2>(1);
+  const activeTouchPointer = useRef<number | null>(null);
   const cursorTime = Math.min(end, start + cursorMinute * 60_000);
   const allLanes = useMemo(() => lanes(data), [data]);
   const shownLanes = allLanes.filter((lane) => visible[lane.key]);
@@ -677,10 +680,24 @@ export function DailyHealthCurve({
   const tooltipWidth = 280;
   const tooltipX = Math.min(WIDTH - tooltipWidth - 8, Math.max(LEFT + 8, cursorX + (cursorX > WIDTH * 0.62 ? -tooltipWidth - 12 : 12)));
   const tooltipHeight = Math.min(PLOT_HEIGHT - 24, 52 + Math.max(1, cursorRows.length) * 26);
+  const navigableTimes: number[] = [...new Set<number>([
+    ...shownLanes.flatMap((lane) => lane.points.map((point) => Date.parse(point.time))),
+    ...(visible.exposure ? doseObservations.map((observation) => Date.parse(observation.time)) : []),
+    ...sleepObservations.map((observation) => Date.parse(observation.time)),
+    ...(visible.symptoms ? unscoredSymptoms.map((observation) => Date.parse(observation.time)) : []),
+    ...awakeIntervals.flatMap((interval) => [interval.startedAt, interval.endedAt]),
+  ])].filter((time) => Number.isFinite(time) && time >= start && time <= end).sort((left, right) => left - right);
+  const previousObservation = [...navigableTimes].reverse().find((time) => time < cursorTime);
+  const nextObservation = navigableTimes.find((time) => time > cursorTime);
 
   function moveCursor(clientX: number, left: number, width: number): void {
     const ratio = Math.max(0, Math.min(1, (clientX - left) / Math.max(width, 1)));
     setCursorMinute(Math.round(ratio * (end - start) / 60_000));
+  }
+
+  function selectTime(time: number): void {
+    setCursorMinute(Math.round((Math.max(start, Math.min(end, time)) - start) / 60_000));
+    setTouchSelected(true);
   }
 
   return <Paper component="section" className="healthcurve-card" withBorder radius="lg" p={{ base: "md", sm: "lg" }} aria-labelledby="daily-healthcurve-title">
@@ -709,8 +726,14 @@ export function DailyHealthCurve({
         episodes: "Stress episodes",
       } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}</SimpleGrid></Paper></Stack>
     <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
+    <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
+      <span>Chart zoom</span>
+      <button type="button" className="button-secondary" aria-label="Zoom chart out" disabled={chartZoom === 1} onClick={() => { setChartZoom(chartZoom === 2 ? 1.5 : 1); }}>−</button>
+      <output aria-live="polite">{chartZoom.toString()}×</output>
+      <button type="button" className="button-secondary" aria-label="Zoom chart in" disabled={chartZoom === 2} onClick={() => { setChartZoom(chartZoom === 1 ? 1.5 : 2); }}>+</button>
+    </div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className="healthcurve-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; relative display positions share one time axis and exact values follow.`}>
+      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; relative display positions share one time axis and exact values follow.`}>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
         {sleepRecords.length === 0 ? null : <g data-series="sleep">{sleepRecords.map((record) => {
           const sessionStart = Date.parse(record.time.occurred_at);
@@ -776,12 +799,25 @@ export function DailyHealthCurve({
           return <g key={symptom.id} className="healthcurve-unscored-symptom"><title>{experiencedTime(symptom.time, data.exposure.timezone)}: {symptom.label}; source {symptom.source}; marker is outside the severity scale</title><line className="healthcurve-unscored-symptom-line" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT} /><polygon className="healthcurve-unscored-symptom-marker" points={`${(x - 5).toString()},${y.toString()} ${x.toString()},${(y - 5).toString()} ${(x + 5).toString()},${y.toString()} ${x.toString()},${(y + 5).toString()}`} /></g>;
         })}</g> : null}
         <line className="healthcurve-cursor" x1={cursorX} y1={TOP} x2={cursorX} y2={TOP + PLOT_HEIGHT} />
-        <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} onPointerEnter={() => { setHoveringChart(true); }} onPointerLeave={() => { setHoveringChart(false); }} onPointerMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
+        <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT}
+          onPointerEnter={(event) => { if (event.pointerType !== "touch") setHoveringChart(true); }}
+          onPointerLeave={(event) => { if (event.pointerType !== "touch") setHoveringChart(false); }}
+          onPointerDown={(event) => { if (event.pointerType !== "touch") return; const bounds = event.currentTarget.getBoundingClientRect(); activeTouchPointer.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); moveCursor(event.clientX, bounds.left, bounds.width); setTouchSelected(true); setHoveringChart(false); }}
+          onPointerUp={(event) => { if (activeTouchPointer.current !== event.pointerId) return; activeTouchPointer.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}
+          onPointerCancel={() => { activeTouchPointer.current = null; }}
+          onPointerMove={(event) => { if (event.pointerType === "touch" && activeTouchPointer.current !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
         {hoveringChart ? <foreignObject className="healthcurve-hover-tooltip" x={tooltipX} y={TOP + 12} width={tooltipWidth} height={tooltipHeight}><div className="healthcurve-hover-tooltip-card" role="tooltip"><strong>{cursorLabel}</strong>{cursorRows.length === 0 ? <p>No exact observation at this time.</p> : <ul>{cursorRows.map((row) => <li key={`tooltip-${row.key}`}><strong>{row.series}:</strong> {row.value}</li>)}</ul>}</div></foreignObject> : null}
         <text transform={`translate(18 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="healthcurve-axis-title">Relative display position (0–100)</text>
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({timezoneAbbreviation(data.exposure.timezone, data.exposure.day_start)})</text>
       </svg>
     </div>
+    <section className="healthcurve-touch-readout" aria-label="Selected chart time and values">
+      {!touchSelected ? <p><strong>Explore the graph:</strong> tap a time, then drag left or right. Vertical swipes continue to scroll the page.</p> : <><h3>{cursorLabel}</h3>{cursorRows.length === 0 ? <p>No exact observation at this time.</p> : <ul>{cursorRows.map((row) => <li key={`touch-${row.key}`}><strong>{row.series}:</strong> {row.value}</li>)}</ul>}</>}
+      <div className="healthcurve-touch-navigation">
+        <button type="button" className="button-secondary" disabled={previousObservation === undefined} onClick={() => { if (previousObservation !== undefined) selectTime(previousObservation); }}>← Previous observation</button>
+        <button type="button" className="button-secondary" disabled={nextObservation === undefined} onClick={() => { if (nextObservation !== undefined) selectTime(nextObservation); }}>Next observation →</button>
+      </div>
+    </section>
     {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
     <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => {
       const aggregates = dailyAggregatesForLane(data, lane);

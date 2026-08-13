@@ -299,6 +299,9 @@ circle.chart-series { fill: white; }
 .curve-missingness { border-left: 0.3rem solid #6b3f82; padding: 0.75rem; background: #f8f3fb; }
 .healthcurve-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #ccd4ce; background: #fbfcfb; }
 .healthcurve-chart { display: block; min-width: 52rem; width: 100%; height: auto; }
+.healthcurve-chart--zoom-1-5 { min-width: 78rem; }
+.healthcurve-chart--zoom-2 { min-width: 104rem; }
+.healthcurve-mobile-controls, .healthcurve-touch-readout { display: none; }
 .healthcurve-time-grid { stroke: #dce2dd; stroke-width: 1; }
 .healthcurve-time-label { fill: #47554f; font-size: 10px; }
 .healthcurve-scale-label { fill: #47554f; font-size: 12px; }
@@ -539,6 +542,18 @@ circle.chart-series { fill: white; }
 
 @media (max-width: 720px) {
   html, body { overflow-x: clip; }
+  .healthcurve-mobile-controls { display: flex; align-items: center; gap: 0.55rem; margin-block: 0.75rem; }
+  .healthcurve-mobile-controls span { font-family: "Rubik-SemiBold", sans-serif; font-weight: 600; }
+  .healthcurve-mobile-controls button { width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: 1.25rem; }
+  .healthcurve-mobile-controls output { min-width: 2.25rem; text-align: center; }
+  .healthcurve-scroll { overscroll-behavior-inline: contain; scroll-snap-type: x proximity; }
+  .healthcurve-chart { scroll-snap-align: start; }
+  .healthcurve-hover-tooltip { display: none; }
+  .healthcurve-touch-readout { display: block; min-height: 8rem; margin-top: 0.75rem; padding: 0.85rem; border: 1px solid var(--hc-color-border); border-radius: var(--mantine-radius-md); background: var(--hc-color-surface-muted); }
+  .healthcurve-touch-readout h3, .healthcurve-touch-readout p, .healthcurve-touch-readout ul { margin-block: 0 0.65rem; }
+  .healthcurve-touch-readout ul { padding-left: 1.25rem; }
+  .healthcurve-touch-navigation { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+  .healthcurve-touch-navigation button { min-height: 3rem; padding-inline: 0.6rem; }
   .symptom-table-region { overflow: hidden; }
   .symptom-records-table { min-width: 0; table-layout: auto; }
   .symptom-records-table caption { display: block; width: auto; }

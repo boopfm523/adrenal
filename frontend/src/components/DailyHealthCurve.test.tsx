@@ -92,9 +92,11 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByRole("img")).toHaveAccessibleName(/interactive selected-day HealthCurve overlay/i);
     const controls = screen.getByLabelText("HealthCurve chart controls");
     const legend = screen.getByLabelText("Overlay series legend");
+    const mobileControls = screen.getByRole("group", { name: "Mobile chart controls" });
     const chart = screen.getByRole("region", { name: "Daily HealthCurve synchronized chart" });
     expect(controls.nextElementSibling).toBe(legend);
-    expect(legend.nextElementSibling).toBe(chart);
+    expect(legend.nextElementSibling).toBe(mobileControls);
+    expect(mobileControls.nextElementSibling).toBe(chart);
     expect(document.querySelectorAll("[data-series='exposure']")).toHaveLength(1);
     expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Stress" })).toHaveAttribute("aria-pressed", "true");
@@ -107,7 +109,6 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
 
     expect(screen.queryByRole("slider", { name: "Explore daily HealthCurve by time" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     const { target: pointerTarget, tooltip } = hoverAt(60);
     expect(tooltip).toHaveTextContent("Heart rate: 80 bpm");
     expect(tooltip).toHaveTextContent("Theoretical exposure: 5.510 REU");
@@ -125,6 +126,47 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("No exact observation at this time");
     fireEvent.pointerLeave(pointerTarget);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("pins touch-selected values below the chart and supports observation navigation", () => {
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [sample(60), sample(120)] })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
+
+    const target = document.querySelector<SVGRectElement>(".healthcurve-pointer-target");
+    if (target === null) throw new Error("pointer target missing");
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ left: 0, width: 1_380 } as DOMRect);
+    const setPointerCapture = vi.fn();
+    const releasePointerCapture = vi.fn();
+    target.setPointerCapture = setPointerCapture;
+    target.hasPointerCapture = vi.fn(() => true);
+    target.releasePointerCapture = releasePointerCapture;
+
+    const readout = screen.getByRole("region", { name: "Selected chart time and values" });
+    expect(readout).toHaveTextContent("tap a time, then drag left or right");
+    fireEvent.pointerDown(target, { pointerId: 7, pointerType: "touch", clientX: 60 });
+    expect(setPointerCapture).toHaveBeenCalledWith(7);
+    expect(readout).toHaveTextContent("Heart rate: 80 bpm");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    fireEvent.click(within(readout).getByRole("button", { name: "Next observation →" }));
+    expect(readout).toHaveTextContent("Heart rate: 60 bpm");
+    fireEvent.pointerUp(target, { pointerId: 7, pointerType: "touch" });
+    expect(releasePointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it("offers large mobile zoom controls without changing desktop hover behavior", () => {
+    renderWithTheme(<DailyHealthCurve data={data()} />);
+
+    const chart = screen.getByRole("img");
+    expect(chart).toHaveClass("healthcurve-chart--zoom-1");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom chart in" }));
+    expect(chart).toHaveClass("healthcurve-chart--zoom-1-5");
+    expect(screen.getByText("1.5×")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom chart in" }));
+    expect(chart).toHaveClass("healthcurve-chart--zoom-2");
+    expect(screen.getByRole("button", { name: "Zoom chart in" })).toBeDisabled();
+
+    expect(hoverAt(60).tooltip).toHaveTextContent("Theoretical exposure: 5.510 REU");
   });
 
   it("breaks recorded curves across missing cadence intervals", () => {
