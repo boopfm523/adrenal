@@ -280,7 +280,7 @@ circle.chart-series { fill: white; }
 .chart-unit-warning { border-left: 0.35rem solid #a86712; padding: 0.8rem; background: #fff7e8; }
 .chart-table { margin-top: 1rem; }
 .chart-table summary { cursor: pointer; font-weight: 750; }
-.healthcurve-card { border-color: #174c3c; box-shadow: 0 0.35rem 1.2rem rgb(23 76 60 / 10%); }
+.healthcurve-card { margin-top: var(--mantine-spacing-lg); border-color: #174c3c; box-shadow: 0 0.35rem 1.2rem rgb(23 76 60 / 10%); }
 .healthcurve-date-filter { grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1fr) auto; align-items: end; }
 .healthcurve-date-shortcuts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .healthcurve-date-shortcuts > span { margin-right: 0.2rem; font-weight: 800; }
