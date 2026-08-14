@@ -22,6 +22,12 @@ const navigation = [
   ["Help", "/help"],
 ] as const;
 
+// Phones and tablets share one predictable drawer interaction. Mantine's
+// default `lg` breakpoint is 75em (1200px at the default root font size), so
+// representative iPhone and iPad layouts use the same hamburger control while
+// wider desktop layouts retain the persistent sidebar.
+export const NAVIGATION_DRAWER_BREAKPOINT = "lg" as const;
+
 function Brand(): React.JSX.Element {
   return (
     <NavLink className="brand" to="/healthcurve" aria-label="HealthCurve.ai home">
@@ -58,13 +64,13 @@ export function AppLayout(): React.JSX.Element {
   return (
     <AppShell
       className="app-shell"
-      header={{ height: { base: 64, sm: 0 } }}
-      navbar={{ width: "var(--hc-sidebar-width)", breakpoint: "sm", collapsed: { mobile: !mobileOpened } }}
+      header={{ height: { base: 64, lg: 0 } }}
+      navbar={{ width: "var(--hc-sidebar-width)", breakpoint: NAVIGATION_DRAWER_BREAKPOINT, collapsed: { mobile: !mobileOpened } }}
       padding={0}
     >
       <a className="skip-link" href="#main-content">Skip to main content</a>
 
-      <AppShell.Header className="mobile-header" hiddenFrom="sm">
+      <AppShell.Header className="mobile-header" hiddenFrom={NAVIGATION_DRAWER_BREAKPOINT}>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Burger opened={mobileOpened} onClick={toggleMobile} aria-label={mobileOpened ? "Close navigation" : "Open navigation"} size="sm" />
           <Brand />
@@ -73,7 +79,7 @@ export function AppLayout(): React.JSX.Element {
       </AppShell.Header>
 
       <AppShell.Navbar className="sidebar" aria-label="Primary">
-        <AppShell.Section className="sidebar-brand" visibleFrom="sm">
+        <AppShell.Section className="sidebar-brand" visibleFrom={NAVIGATION_DRAWER_BREAKPOINT}>
           <Brand />
         </AppShell.Section>
 
@@ -88,7 +94,7 @@ export function AppLayout(): React.JSX.Element {
         </AppShell.Section>
 
         <AppShell.Section className="sidebar-footer">
-          <Box visibleFrom="sm"><EmergencyLink /></Box>
+          <Box visibleFrom={NAVIGATION_DRAWER_BREAKPOINT}><EmergencyLink /></Box>
           <Text size="sm" fw={650} truncate>{session?.user.displayName ?? "Owner"}</Text>
           <Button variant="light" fullWidth onClick={() => { void signOut(); }}>Sign out</Button>
         </AppShell.Section>
