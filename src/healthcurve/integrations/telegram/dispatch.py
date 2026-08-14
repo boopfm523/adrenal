@@ -9,7 +9,7 @@ so choosing a transport cannot accidentally choose a weaker set of checks.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -29,6 +29,7 @@ log = get_logger(__name__)
 
 #: Telegram's own cap is 4096; leave room for our framing.
 MAX_MESSAGE_LENGTH = 4000
+MAX_PROVIDER_CLOCK_SKEW = timedelta(minutes=5)
 
 
 class UpdateOutcome(StrEnum):
@@ -60,19 +61,27 @@ def process_update(
     model_client: OllamaClient | None = None,
     limiter: RateLimiter | None = None,
     model_policy: RateLimitPolicy | None = None,
+    now: datetime | None = None,
 ) -> UpdateOutcome:
     """Handle one update. Safe to call twice with the same update.
 
     Returns an outcome rather than raising, because a single bad update must never
     stop a poll loop or fail a webhook response.
     """
+    processing_time = now or datetime.now(UTC)
     update_id = update.get("update_id")
     if not isinstance(update_id, int):
         return UpdateOutcome.IGNORED
 
     chat_id = chat_id_of(update)
     if chat_id is None or chat_id != allowed_chat_id:
-        _claim(session, update_id, chat_id or 0, UpdateOutcome.REJECTED_CHAT)
+        _claim(
+            session,
+            update_id,
+            chat_id or 0,
+            UpdateOutcome.REJECTED_CHAT,
+            received_at=processing_time,
+        )
         log.warning(
             "telegram update from unknown chat",
             integration="telegram",
@@ -82,7 +91,20 @@ def process_update(
 
     # The poller's offset is the primary guard; this catches a replay after a crash
     # that lost the offset, and a webhook redelivery.
-    if not _claim(session, update_id, chat_id, UpdateOutcome.PROCESSED):
+    message = update.get("message") or {}
+    provider_sent_at = message_sent_at_of(message, processing_time=processing_time)
+    message_id = message.get("message_id")
+    if not _claim(
+        session,
+        update_id,
+        chat_id,
+        UpdateOutcome.PROCESSED,
+        received_at=processing_time,
+        provider_message_id=(
+            message_id if isinstance(message_id, int) and not isinstance(message_id, bool) else None
+        ),
+        provider_sent_at=provider_sent_at,
+    ):
         log.info("telegram duplicate update ignored", integration="telegram", outcome="duplicate")
         return UpdateOutcome.DUPLICATE
 
@@ -95,7 +117,6 @@ def process_update(
         _handle_callback(session, owner, callback, client)
         return UpdateOutcome.PROCESSED
 
-    message = update.get("message") or {}
     telegram_location = message.get("location")
     if isinstance(telegram_location, dict):
         if (message.get("chat") or {}).get("type") != "private":
@@ -137,6 +158,7 @@ def process_update(
         client=model_client,
         limiter=limiter,
         model_policy=model_policy,
+        now=provider_sent_at or processing_time,
     )
     client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
     return UpdateOutcome.PROCESSED
@@ -211,14 +233,55 @@ def _handle_callback(
         client.send_message(chat_id, reply.text)
 
 
-def _claim(session: Session, update_id: int, chat_id: int, outcome: UpdateOutcome) -> bool:
+def message_sent_at_of(message: dict[str, Any], *, processing_time: datetime) -> datetime | None:
+    """Return Telegram's trusted send instant, or ``None`` for a safe fallback.
+
+    Telegram documents ``message.date`` as Unix time. Delayed timestamps are valid
+    because updates may wait through an outage; malformed values and timestamps more
+    than a small clock-skew allowance into the future are not used as health-event
+    reference times.
+    """
+    raw = message.get("date")
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None
+    try:
+        sent_at = datetime.fromtimestamp(raw, UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+    if sent_at > processing_time + MAX_PROVIDER_CLOCK_SKEW:
+        return None
+    return sent_at
+
+
+def _claim(
+    session: Session,
+    update_id: int,
+    chat_id: int,
+    outcome: UpdateOutcome,
+    *,
+    received_at: datetime,
+    provider_message_id: int | None = None,
+    provider_sent_at: datetime | None = None,
+) -> bool:
     """Record an update id. False if it was already seen."""
     existing = session.scalar(
         select(TelegramUpdate.id).where(TelegramUpdate.update_id == update_id)
     )
     if existing is not None:
         return False
-    session.add(TelegramUpdate(update_id=update_id, chat_id=chat_id, outcome=outcome.value))
+    session.add(
+        TelegramUpdate(
+            update_id=update_id,
+            chat_id=chat_id,
+            outcome=outcome.value,
+            received_at=received_at,
+            provider_message_id=provider_message_id,
+            provider_sent_at=provider_sent_at,
+            reference_time_source=(
+                "telegram_message_date" if provider_sent_at else "processing_time_fallback"
+            ),
+        )
+    )
     try:
         session.flush()
     except IntegrityError:

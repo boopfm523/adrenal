@@ -40,6 +40,11 @@ class TelegramUpdate(OpsBase):
     #: Telegram's own monotonic update id. Unique, so a replay is a no-op.
     update_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
     chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    provider_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    provider_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reference_time_source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="processing_time_fallback"
+    )
 
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

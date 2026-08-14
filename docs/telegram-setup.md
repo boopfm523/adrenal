@@ -344,6 +344,17 @@ with BotFather's `/revoke` if you'd rather.
 
 ---
 
+## Message time after an outage
+
+Telegram includes the original send timestamp with each queued message. HealthCurve
+uses that validated timestamp as the reference time for commands and free-text health
+records when the message does not state a time, so a message processed after a local
+power or server outage keeps the time it was sent. An explicit time in the message
+remains authoritative. Missing, malformed, or future provider timestamps safely fall
+back to the local processing time; the update record preserves which source was used.
+
+---
+
 ## Disconnecting
 
 Stop the worker. If webhook mode was ever used, clear the remote webhook while the bot
