@@ -221,6 +221,9 @@ def approve_version(
     approved_at: datetime | None = None,
     source_document_checksum: str | None = None,
     activation_at: datetime | None = None,
+    activation_local_time: datetime | None = None,
+    activation_timezone: str | None = None,
+    activation_fold: int | None = None,
 ) -> RegimenVersion:
     """Approve a draft. Only ever called from a human-initiated request (SAFE-16).
 
@@ -235,6 +238,9 @@ def approve_version(
         approved_at=approved_at,
         source_document_checksum=source_document_checksum,
         activation_at=activation_at,
+        activation_local_time=activation_local_time,
+        activation_timezone=activation_timezone,
+        activation_fold=activation_fold,
     ).version
 
 
@@ -247,6 +253,9 @@ def activate_version(
     approved_at: datetime | None = None,
     source_document_checksum: str | None = None,
     activation_at: datetime | None = None,
+    activation_local_time: datetime | None = None,
+    activation_timezone: str | None = None,
+    activation_fold: int | None = None,
 ) -> PlanActivation:
     """Approve a draft and atomically end its single approved predecessor."""
     if version.status is RegimenStatus.RETIRED:
@@ -259,14 +268,24 @@ def activate_version(
     activated_at = activation_at or datetime.now(UTC)
     if activated_at.tzinfo is None or activated_at.utcoffset() is None:
         raise PlanError("activation time must include a UTC offset")
-    timezone = version.effective_timezone or "UTC"
+    timezone = activation_timezone or version.effective_timezone or "UTC"
     _validate_timezone(timezone)
-    if version.effective_from is None:
+    if activation_local_time is not None:
+        resolved_from = _resolve_plan_time(
+            activation_local_time,
+            timezone,
+            activation_fold,
+        )
+        resolved_start = _naive(resolved_from.occurred_at)
+        effective_time_provenance = "explicit_timezone"
+    elif version.effective_from is None:
         resolved_from = from_instant(activated_at, timezone)
         resolved_start = _naive(resolved_from.occurred_at)
+        effective_time_provenance = "activation_instant"
     else:
         resolved_from = None
         resolved_start = version.effective_from
+        effective_time_provenance = version.effective_time_provenance
     if version.effective_to is not None and version.effective_to <= resolved_start:
         raise PlanError("effective_to must be after the resolved effective_from")
 
@@ -302,7 +321,8 @@ def activate_version(
     predecessor = predecessors[0] if predecessors else None
     if predecessor is not None and predecessor.status is not RegimenStatus.APPROVED:
         raise PlanError(
-            "approved plan history overlaps the requested start and cannot be changed automatically"
+            f"Plan “{predecessor.version_label}” already covers the requested start. "
+            "Choose a start after that historical plan ends."
         )
     new_end = version.effective_to
     unsafe_overlaps = [
@@ -314,9 +334,12 @@ def activate_version(
         and (candidate.effective_to is None or candidate.effective_to > resolved_start)
     ]
     if unsafe_overlaps:
+        conflict = unsafe_overlaps[0]
+        conflict_start = conflict.effective_from.strftime("%b %-d, %Y at %H:%M")
         raise PlanError(
-            "the requested start or end conflicts with approved plan history and cannot be "
-            "handed off automatically"
+            f"Plan “{conflict.version_label}” starts {conflict_start} and conflicts with "
+            "this plan's requested dates. Choose a start after that plan ends, or shorten "
+            "this plan's optional end date."
         )
 
     # Only mutate after every check succeeds, so callers that catch PlanError cannot
@@ -325,7 +348,8 @@ def activate_version(
         version.effective_from = resolved_start
         version.effective_from_local = resolved_from.local_time
         version.effective_from_utc_offset_minutes = resolved_from.utc_offset_minutes
-        version.effective_time_provenance = "activation_instant"
+        version.effective_timezone = timezone
+        version.effective_time_provenance = effective_time_provenance
         version.effective_period = _period(resolved_start, version.effective_to)
 
     if predecessor is not None:

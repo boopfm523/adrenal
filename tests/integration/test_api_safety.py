@@ -4747,7 +4747,7 @@ def test_unsafe_retroactive_activation_is_clear_and_non_mutating(engine: Engine)
             effective_from=datetime(2044, 1, 1),  # noqa: DTZ001
         )
 
-        with pytest.raises(medication_service.PlanError, match="cannot be handed off"):
+        with pytest.raises(medication_service.PlanError, match="conflicts with"):
             medication_service.activate_version(
                 session,
                 draft,
@@ -5119,14 +5119,19 @@ def test_api_sets_undated_draft_live_and_audits_predecessor_handoff(
     activated = client.post(
         f"/api/v1/regimens/{created.json()['id']}/approve",
         headers=headers,
-        json={"approved_by": "Dr Synthetic", "approval_source": "synthetic fixture"},
+        json={
+            "approved_by": "Dr Synthetic",
+            "approval_source": "synthetic fixture",
+            "activation_local_time": "2030-06-01T00:00:00",
+            "activation_timezone": "Europe/London",
+        },
     )
     assert activated.status_code == 200, activated.text
     body = activated.json()
     assert body["status"] == "approved"
-    assert body["effective_from"] is not None
-    assert body["effective_from_local"] is not None
-    assert body["effective_time_provenance"] == "activation_instant"
+    assert body["effective_from"] == "2030-05-31T23:00:00"
+    assert body["effective_from_local"] == "2030-06-01T00:00:00"
+    assert body["effective_time_provenance"] == "explicit_timezone"
     assert body["effective_to"] is None
 
     history = client.get("/api/v1/regimens").json()["items"]

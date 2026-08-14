@@ -322,7 +322,7 @@ describe("Medication plan page", () => {
     expect(await screen.findByText(/Next, review it below and set it live/)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Next step: review and set this plan live" })).toHaveFocus();
     expect(screen.getByText(/Required provenance: the approving clinician or role and the source of approval/i)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Handoff preview" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "What will happen" })).toBeVisible();
     const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
     expect(creation?.body).toMatchObject({
       version_label: "My real plan",
@@ -367,8 +367,31 @@ describe("Medication plan page", () => {
 
     const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
     expect(creation?.body).toMatchObject({ effective_from: null, effective_to: null });
-    expect(await screen.findByText(/Current plan “Current synthetic plan” will end at the moment you set this plan live/)).toBeVisible();
+    expect(await screen.findByText(/automatically end “Current synthetic plan” at the new plan’s start/)).toBeVisible();
     expect(screen.getAllByText(/Starts when this draft is set live/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Leave blank to start now/)).toBeVisible();
+  });
+
+  it("does not recursively lengthen a copied plan label past the API limit", async () => {
+    const current = version(
+      "22222222-2222-4222-8222-222222222222",
+      "2026 replacement schedule — new version1 — new version",
+      "approved",
+      "2026-08-12T00:00:00",
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(current));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([current])));
+      if (url.endsWith("/medications")) return Promise.resolve(response([]));
+      return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create new version from active plan" }));
+    const label = screen.getByLabelText("Version label");
+    expect(label).toHaveValue("2026 replacement schedule — new version");
+    expect((label as HTMLInputElement).value.length).toBeLessThanOrEqual(60);
   });
 
   it("creates a medication in an independent, keyboard-operable form", async () => {
@@ -444,6 +467,7 @@ describe("Medication plan page", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Next step: review and set this plan live" })).toBeVisible();
+    expect(screen.getByText(/The saved draft start is shown. Change it here if needed/)).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Set physician-approved plan live" }));
     expect(requests.some((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST")).toBe(false);
     await userEvent.type(screen.getByLabelText("Approving clinician or role"), "Dr Synthetic");
@@ -457,6 +481,14 @@ describe("Medication plan page", () => {
     expect(await screen.findByRole("heading", { name: "Reviewed synthetic draft · currently in force" })).toBeVisible();
     expect(screen.getAllByText("Dr Synthetic").length).toBeGreaterThan(0);
     const approval = requests.filter((request) => request.url.endsWith(`/regimens/${draft.id}/approve`) && request.method === "POST").at(-1);
-    expect(approval?.body).toEqual({ approved_by: "Dr Synthetic", approval_source: "Portal message", approved_at: null, source_document_checksum: null });
+    expect(approval?.body).toEqual({
+      approved_by: "Dr Synthetic",
+      approval_source: "Portal message",
+      approved_at: null,
+      source_document_checksum: null,
+      activation_local_time: "2026-09-01T00:00",
+      activation_timezone: "America/New_York",
+      activation_fold: null,
+    });
   });
 });

@@ -6135,6 +6135,44 @@
         "additionalProperties": false,
         "description": "Approval is a human act with provenance (SAFE-16). None of this is optional.",
         "properties": {
+          "activation_fold": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Fold"
+          },
+          "activation_local_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional owner-selected wall time for this plan to start. When omitted, the saved draft start is used, or the approval instant when the draft is undated.",
+            "title": "Activation Local Time"
+          },
+          "activation_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Timezone"
+          },
           "approval_source": {
             "description": "Letter, consultation, portal message",
             "maxLength": 200,

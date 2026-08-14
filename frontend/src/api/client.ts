@@ -164,7 +164,7 @@ export interface LabDeletionAccepted {
 }
 
 interface ApiErrorBody {
-  detail?: string;
+  detail?: unknown;
 }
 
 export class ApiError extends Error {
@@ -213,6 +213,19 @@ async function parseError(response: Response): Promise<ApiError> {
   try {
     const body = (await response.json()) as ApiErrorBody;
     if (typeof body.detail === "string") detail = body.detail;
+    if (Array.isArray(body.detail)) {
+      const issues = body.detail.flatMap((item) => {
+        if (typeof item !== "object" || item === null) return [];
+        const issue = item as { loc?: unknown; msg?: unknown };
+        if (typeof issue.msg !== "string") return [];
+        const path = Array.isArray(issue.loc)
+          ? issue.loc.filter((part) => part !== "body").map(String).join(" → ")
+          : "";
+        const message = issue.msg.replace(/^Value error,\s*/u, "");
+        return [`${path === "" ? "Entry" : path}: ${message}`];
+      });
+      if (issues.length > 0) detail = issues.join("; ");
+    }
   } catch {
     // Privacy-safe fallback: never surface server response bodies as HTML or diagnostics.
   }

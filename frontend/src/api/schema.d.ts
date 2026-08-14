@@ -3372,6 +3372,15 @@ export interface components {
          * @description Approval is a human act with provenance (SAFE-16). None of this is optional.
          */
         RegimenApprovalIn: {
+            /** Activation Fold */
+            activation_fold?: number | null;
+            /**
+             * Activation Local Time
+             * @description Optional owner-selected wall time for this plan to start. When omitted, the saved draft start is used, or the approval instant when the draft is undated.
+             */
+            activation_local_time?: string | null;
+            /** Activation Timezone */
+            activation_timezone?: string | null;
             /**
              * Approval Source
              * @description Letter, consultation, portal message

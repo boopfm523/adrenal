@@ -82,6 +82,14 @@ function formString(data: FormData, name: string): string {
   return typeof value === "string" ? value : "";
 }
 
+function nextVersionLabel(current: string): string {
+  const suffix = " — new version";
+  const withoutRepeatedSuffix = current
+    .replace(/(?:\s+—\s+new version\d*)+$/iu, "")
+    .trim() || "Medication plan";
+  return `${withoutRepeatedSuffix.slice(0, 60 - suffix.length).trimEnd()}${suffix}`;
+}
+
 function initialSlots(version: RegimenVersion | null): SlotDraft[] {
   const slots = version?.slots ?? [];
   if (slots.length === 0) return [blankSlot()];
@@ -345,6 +353,10 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
     ...existingVersions.filter((version) => version.id !== editDraft?.id).flatMap((version) => { const interval = planInterval(version); return interval === null ? [] : [interval]; }),
     proposedInterval,
   ]).filter((overlap) => overlap.first.id === proposedInterval.id || overlap.second.id === proposedInterval.id);
+  const expectedHandoff = proposedOverlaps.find((overlap) =>
+    source !== null && (overlap.first.id === source.id || overlap.second.id === source.id)
+  );
+  const blockingOverlaps = proposedOverlaps.filter((overlap) => overlap !== expectedHandoff);
 
   return <section className="plan-editor" aria-labelledby="plan-editor-heading">
     <h2 id="plan-editor-heading" ref={headingRef} tabIndex={-1}>{editDraft === null ? (source === null ? "Create your first plan draft" : "Create a new plan version") : "Edit unapproved plan draft"}</h2>
@@ -364,7 +376,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
       });
     }}>
       <div className="plan-form-grid">
-        <TextInput label="Version label" aria-label="Version label" name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : `${source.version_label} — new version`)} />
+        <TextInput label="Version label" aria-label="Version label" name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : nextVersionLabel(source.version_label))} />
         <TextInput label="Effective start (optional)" name="effective_from" type="datetime-local" aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} />
         <TextInput label="Effective through (optional)" name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} />
         <p className="field-hint wide-field" id="effective-period-help">Leave the start blank to use the exact moment you set this plan live. Enter a start only when the plan should begin at a different time. The end is also optional. Times are entered in {timezone}; the start is included and the end is the first moment this plan no longer applies.</p>
@@ -372,7 +384,8 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
           <h3 id="proposed-plan-interval-heading">Proposed effective interval</h3>
           {proposedInterval === null ? <p>The start will be the moment you set this draft live. If one plan is live then, HealthCurve will end it at the same instant so the plans hand off without overlap.</p> : <>
             <p><RecordedPlanTime value={proposedInterval.effectiveFrom} /> through {proposedInterval.effectiveTo === null ? "ongoing" : <RecordedPlanTime value={proposedInterval.effectiveTo} />}</p>
-            {proposedOverlaps.length === 0 ? <p>No overlap with the plan versions shown in history.</p> : <OverlapList overlaps={proposedOverlaps} headingLevel={4} />}
+            {expectedHandoff === undefined ? null : <p><strong>Expected handoff:</strong> the current plan will end when this plan starts. You do not need to adjust the old plan yourself.</p>}
+            {blockingOverlaps.length === 0 ? <p>{expectedHandoff === undefined ? "No overlap with the plan versions shown in history." : "No other plan-date conflicts need your attention."}</p> : <OverlapList overlaps={blockingOverlaps} headingLevel={4} />}
           </>}
         </aside>
         <Textarea className="wide-field" label="Draft notes" name="notes" minRows={3} defaultValue={basis?.notes ?? ""} />
@@ -405,7 +418,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
         <Button type="button" variant="outline" onClick={() => { setInstructions((items) => [...items, blankInstruction()]); }}>Add physician instruction</Button>
       </fieldset>
       <Group className="form-actions"><Button type="submit" loading={mutation.isPending}>{editDraft === null ? "Save unapproved draft" : "Update unapproved draft"}</Button><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button></Group>
-      {mutation.isError ? <Alert color="red" role="alert">The draft was not saved. Check the dates, medication entries, and required fields.</Alert> : null}
+      {mutation.isError ? <Alert color="red" role="alert"><strong>The draft was not saved.</strong> {mutation.error instanceof ApiError ? mutation.error.message : "Review the highlighted fields and try again."}</Alert> : null}
     </form>
   </section>;
 }
@@ -414,17 +427,27 @@ function ApprovalForm({ version, activeVersion, focusOnMount, onComplete }: { ve
   const queryClient = useQueryClient();
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (focusOnMount) headingRef.current?.focus(); }, [focusOnMount]);
-  const mutation = useMutation({ mutationFn: (payload: { approved_by: string; approval_source: string; approved_at: string | null; source_document_checksum: null }) => approveRegimen(version.id, payload), onSuccess: async () => { await invalidatePlans(queryClient); onComplete("Plan set live with physician approval recorded. Any single live predecessor was ended at this plan’s start; recorded doses were not changed."); } });
+  const mutation = useMutation({ mutationFn: (payload: { approved_by: string; approval_source: string; approved_at: string | null; source_document_checksum: null; activation_local_time: string | null; activation_timezone: string; activation_fold: null }) => approveRegimen(version.id, payload), onSuccess: async () => { await invalidatePlans(queryClient); onComplete("Plan set live with physician approval recorded. Any single live predecessor was ended at this plan’s start; recorded doses were not changed."); } });
   const errorMessage = mutation.error instanceof ApiError ? mutation.error.message : "The plan could not be set live.";
   return <section className="approval-form" aria-labelledby={`approval-heading-${version.id}`}>
     <h4 id={`approval-heading-${version.id}`} ref={headingRef} tabIndex={-1}>Next step: review and set this plan live</h4>
     <p><strong>This draft is not active.</strong> Record approval here only after a physician has actually approved this plan. HealthCurve and its AI cannot approve it.</p>
     <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
-    <div className="proposed-plan-interval" aria-live="polite"><h5>Handoff preview</h5><p>New plan: <EffectivePeriod version={version} />.</p>{activeVersion === null ? <p>No plan is currently live, so no predecessor will be ended.</p> : <p>Current plan “{activeVersion.version_label}” will end at {version.effective_from === null ? "the moment you set this plan live" : <EffectivePlanTime canonical={version.effective_from} local={version.effective_from_local} timezone={version.effective_timezone} offsetMinutes={version.effective_from_utc_offset_minutes} />}. Its earlier history and all recorded doses remain unchanged.</p>}</div>
-    <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null }); }}>
+    <div className="proposed-plan-interval" aria-live="polite"><h5>What will happen</h5><p>Choose the start below. If left blank, this plan starts when you press the set-live button.</p>{activeVersion === null ? <p>No plan is currently live.</p> : <p>HealthCurve will automatically end “{activeVersion.version_label}” at the new plan’s start. Its earlier history and all recorded doses remain unchanged.</p>}</div>
+    <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null, activation_local_time: formString(data, "activation_local_time") || null, activation_timezone: version.effective_timezone ?? "UTC", activation_fold: null }); }}>
       <TextInput label="Approving clinician or role" aria-label="Approving clinician or role" name="approved_by" required maxLength={200} />
       <TextInput label="Approval source" aria-label="Approval source" name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" />
-      <TextInput label="Approval time (optional)" name="approved_at" type="datetime-local" />
+      <TextInput label="When the physician approved it (optional)" name="approved_at" type="datetime-local" />
+      <TextInput
+        className="wide-field"
+        label="Start this plan (optional)"
+        description={version.effective_from === null
+          ? `Leave blank to start now. Times use ${version.effective_timezone ?? "your profile timezone"}.`
+          : `The saved draft start is shown. Change it here if needed. Times use ${version.effective_timezone ?? "your profile timezone"}.`}
+        name="activation_local_time"
+        type="datetime-local"
+        defaultValue={localInput(version.effective_from_local ?? version.effective_from)}
+      />
       <Checkbox className="wide-field" required label="I confirm this records a real clinician-approved plan, not AI advice." />
       <Button type="submit" loading={mutation.isPending}>Set physician-approved plan live</Button>
       {mutation.isError ? <Alert color="red" role="alert">{errorMessage}</Alert> : null}

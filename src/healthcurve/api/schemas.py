@@ -216,6 +216,15 @@ class RegimenApprovalIn(ApiModel):
     )
     approved_at: datetime | None = None
     source_document_checksum: str | None = Field(default=None, max_length=128)
+    activation_local_time: datetime | None = Field(
+        default=None,
+        description=(
+            "Optional owner-selected wall time for this plan to start. When omitted, "
+            "the saved draft start is used, or the approval instant when the draft is undated."
+        ),
+    )
+    activation_timezone: str | None = Field(default=None, max_length=64)
+    activation_fold: int | None = Field(default=None, ge=0, le=1)
 
 
 class RegimenVersionOut(PlanResource):

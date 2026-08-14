@@ -47,6 +47,24 @@ describe("central API client", () => {
     expect(sessionStore.get()).toBeNull();
   });
 
+  it("turns API validation details into an actionable field message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      detail: [{
+        type: "string_too_long",
+        loc: ["body", "version_label"],
+        msg: "String should have at most 60 characters",
+      }],
+    }, 422));
+
+    await expect(apiRequest("/regimens", {
+      method: "POST",
+      body: JSON.stringify({ version_label: "synthetic" }),
+    })).rejects.toEqual(expect.objectContaining({
+      status: 422,
+      message: "version_label: String should have at most 60 characters",
+    }));
+  });
+
   it("collects paginated daily Garmin summaries with intraday samples and sleep", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

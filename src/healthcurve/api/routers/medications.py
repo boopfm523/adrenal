@@ -345,6 +345,9 @@ def approve_regimen(
             approval_source=payload.approval_source,
             approved_at=payload.approved_at,
             source_document_checksum=payload.source_document_checksum,
+            activation_local_time=payload.activation_local_time,
+            activation_timezone=payload.activation_timezone or owner.default_timezone,
+            activation_fold=payload.activation_fold,
         )
     except service.PlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
