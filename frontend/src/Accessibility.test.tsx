@@ -84,7 +84,9 @@ describe("automated accessibility audit", () => {
     expect(screen.getByLabelText("Approval source")).toHaveFocus();
     await user.keyboard("Synthetic consultation");
     await user.tab();
-    expect(screen.getByLabelText("Approval time (optional)")).toHaveFocus();
+    expect(screen.getByLabelText("When the physician approved it (optional)")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Start this plan (optional)")).toHaveFocus();
     await user.tab();
     expect(screen.getByLabelText(/confirm this records a real clinician-approved plan/i)).toHaveFocus();
     await user.keyboard("[Space]");
