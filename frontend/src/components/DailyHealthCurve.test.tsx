@@ -128,7 +128,7 @@ describe("Daily HealthCurve", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
-  it("pins touch-selected values below the chart and supports observation navigation", () => {
+  it("shows touch-selected values in the chart tooltip and stable phone readout", () => {
     renderWithTheme(<DailyHealthCurve data={data({ garmin: [sample(60), sample(120)] })} />);
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
 
@@ -146,10 +146,12 @@ describe("Daily HealthCurve", () => {
     fireEvent.pointerDown(target, { pointerId: 7, pointerType: "touch", clientX: 60 });
     expect(setPointerCapture).toHaveBeenCalledWith(7);
     expect(readout).toHaveTextContent("Heart rate: 80 bpm");
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Heart rate: 80 bpm");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("2026-03-08, 01:00 GMT-5");
 
     fireEvent.click(within(readout).getByRole("button", { name: "Next observation →" }));
     expect(readout).toHaveTextContent("Heart rate: 60 bpm");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Heart rate: 60 bpm");
     fireEvent.pointerUp(target, { pointerId: 7, pointerType: "touch" });
     expect(releasePointerCapture).toHaveBeenCalledWith(7);
   });
