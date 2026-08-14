@@ -521,11 +521,42 @@ def test_natural_language_read_intents_queue_the_same_fixed_operations(
     assert len(client.calls) == 1
 
 
+@pytest.mark.parametrize(
+    ("message", "operation"),
+    [
+        ("show me bead list", BeadsOperation.LIST),
+        ("show me bead status", BeadsOperation.STATUS),
+    ],
+)
+def test_clear_conversational_beads_reads_do_not_need_the_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    message: str,
+    operation: BeadsOperation,
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+    client = MagicMock(spec=OllamaClient)
+
+    reply = handlers.handle_message(
+        cast(Session, object()),
+        cast(Owner, object()),
+        text=message,
+        message_id="211" if operation is BeadsOperation.LIST else "212",
+        client=client,
+        now=NOW,  # type: ignore[arg-type]
+    )
+
+    assert "I'm getting the current Beads" in reply.text
+    envelope = load_operation_envelope(next((tmp_path / "pending").glob("tg-*.json")))
+    assert envelope.operation is operation
+    client.generate_json.assert_not_called()
+
+
 def test_natural_language_add_uses_intent_then_existing_safe_proposal_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
-    client = SequencedOllamaClient([intent_model_result("add", RAW_REQUEST), model_client().result])
+    client = SequencedOllamaClient([model_client().result])
 
     reply = handlers.handle_message(
         cast(Session, object()),
@@ -540,7 +571,7 @@ def test_natural_language_add_uses_intent_then_existing_safe_proposal_boundary(
     assert "tg-" not in reply.text and "host bridge" not in reply.text
     pending = next((tmp_path / "pending").glob("tg-*.json"))
     assert load_envelope(pending).proposal.title == "Track daily hydration entries"
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
 
 
 def test_natural_language_beads_model_outage_has_visible_command_fallback(

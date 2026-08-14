@@ -12,6 +12,7 @@ proposal. Natural-language project requests pass through a separate fixed intent
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -25,7 +26,10 @@ from healthcurve.ai.extraction import (
     CandidateType,
     FlagCode,
     ValidatedCandidate,
+    explicit_measurement_setting,
     extract,
+    find_explicit_weight,
+    find_time_expression,
 )
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
@@ -83,6 +87,42 @@ from healthcurve.vitals.models import (
 #: later against a time nobody remembers.
 DRAFT_TTL: Final = timedelta(hours=6)
 
+_EPISODE_START_PHRASE: Final = re.compile(
+    r"^(?:an?\s+)?episode\s+(?:is\s+)?(?:start(?:ing|ed)?|beg(?:in|inning|an))"
+    r"(?:\s*(?::|-|because of|due to)\s*(?P<trigger>.+))?[.!]?$",
+    re.IGNORECASE,
+)
+_EPISODE_END_PHRASE: Final = re.compile(
+    r"^(?:the\s+)?episode\s+(?:is\s+)?(?:end(?:ing|ed)?|over|resolved|stopped)[.!]?$",
+    re.IGNORECASE,
+)
+_SYMPTOM_PHRASE: Final = re.compile(
+    r"^(?:i\s+)?(?:just\s+)?(?:had|have|am having|felt|feel)\s+"
+    r"(?:a\s+)?symptom\s+(?:of\s+)?(?P<name>.+?)(?:\s+at\s+(?P<time>\d{1,2}[:.]\d{2}\s*(?:am|pm)?))?[.!]?$",
+    re.IGNORECASE,
+)
+_WEIGHT_ONLY_PHRASE: Final = re.compile(
+    r"^(?:please\s+)?(?:add\s+(?:a\s+)?(?:body\s+)?weight\s+of|"
+    r"my\s+(?:body\s+)?weight\s+(?:is|was)|i\s+(?:weigh|weighed))\s+"
+    r"\d+(?:\.\d+)?\s*(?:lbs?|pounds?|kgs?|kilograms?)"
+    r"(?:\s+at\s+\d{1,2}[:.]\d{2}\s*(?:am|pm)?)?[.!]?$",
+    re.IGNORECASE,
+)
+_BEADS_LIST_PHRASE: Final = re.compile(
+    r"^(?:please\s+)?(?:show|give|send|get|tell)\s+(?:me\s+)?(?:the\s+)?"
+    r"(?:current\s+)?(?:bd|beads?)\s+(?:list|issues?|tasks?)[?.!]*$",
+    re.IGNORECASE,
+)
+_BEADS_STATUS_PHRASE: Final = re.compile(
+    r"^(?:please\s+)?(?:show|give|send|get|tell)\s+(?:me\s+)?(?:the\s+)?"
+    r"(?:current\s+)?(?:bd|beads?)\s+(?:status|summary)[?.!]*$",
+    re.IGNORECASE,
+)
+_BEADS_ADD_PHRASE: Final = re.compile(
+    r"^(?:please\s+)?add\s+(?:a\s+)?(?:bd|bead)\s+(?:that|to|for)\s+(?P<request>.+)$",
+    re.IGNORECASE,
+)
+
 # Public command registry used by the in-app Help drift gate. Commands must be in
 # this set to reach dispatch below; adding one therefore requires documenting it.
 SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
@@ -119,7 +159,7 @@ Nothing is recorded until you confirm it.
 Recording commands (these work even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
 /bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
-/weight <value> <lb|kg> [HH:MM] - record body weight
+/weight <value> <lb|lbs|kg|kgs> [HH:MM] - record body weight
 /temperature <value> <F|C> [HH:MM] - record body temperature
 /symptom <name> [0-10] - record a symptom
 /injection <amount> - log an emergency injection
@@ -208,6 +248,19 @@ def handle_message(
             now=now,
         )
 
+    conversational = _handle_conversational_shortcut(
+        session,
+        owner,
+        text,
+        message_id=message_id,
+        client=client,
+        limiter=limiter,
+        model_policy=model_policy,
+        now=now,
+    )
+    if conversational is not None:
+        return conversational
+
     return _handle_free_text(
         session,
         owner,
@@ -218,6 +271,94 @@ def handle_message(
         model_policy=model_policy,
         now=now,
     )
+
+
+def _handle_conversational_shortcut(
+    session: Session,
+    owner: Owner,
+    text: str,
+    *,
+    message_id: str | None,
+    client: OllamaClient | None,
+    limiter: RateLimiter | None,
+    model_policy: RateLimitPolicy | None,
+    now: datetime,
+) -> Reply | None:
+    """Handle only narrow, unambiguous phrases; everything else uses extraction."""
+    if _EPISODE_END_PHRASE.fullmatch(text):
+        return _cmd_episode(session, owner, ["end"], now=now)
+    episode = _EPISODE_START_PHRASE.fullmatch(text)
+    if episode is not None:
+        trigger = (episode.group("trigger") or "unspecified").strip(" .")
+        return _cmd_episode(session, owner, ["start", trigger], now=now)
+    if _BEADS_LIST_PHRASE.fullmatch(text):
+        return _cmd_bd_operation(BeadsOperation.LIST, message_id=message_id, now=now)
+    if _BEADS_STATUS_PHRASE.fullmatch(text):
+        return _cmd_bd_operation(BeadsOperation.STATUS, message_id=message_id, now=now)
+    bead = _BEADS_ADD_PHRASE.fullmatch(text)
+    if bead is not None:
+        return _cmd_bd_add(
+            text,
+            message_id=message_id,
+            client=client,
+            limiter=limiter,
+            model_policy=model_policy,
+            now=now,
+        )
+
+    explicit_weight = find_explicit_weight(text) if _WEIGHT_ONLY_PHRASE.fullmatch(text) else None
+    if explicit_weight is not None:
+        raw_value, unit = explicit_weight
+        local = _local_now(owner, now)
+        stated_time = find_time_expression(text)
+        flags: list[FlagCode] = []
+        if stated_time is not None:
+            parsed = _parse_time_token(stated_time, local)
+            if parsed is None:
+                return None
+            local = parsed
+        else:
+            flags.append(FlagCode.ASSUMED_TIME)
+        candidate = ValidatedCandidate(
+            type=CandidateType.WEIGHT,
+            weight_value=Decimal(raw_value),
+            weight_unit=unit,
+            measurement_setting=explicit_measurement_setting(text),
+            local_time=local,
+            timezone=owner.default_timezone,
+            confidence=1.0,
+            flags=flags,
+        )
+        draft = _store_draft(
+            session, owner, [candidate], raw_text=text, source="telegram_conversational"
+        )
+        return _draft_reply(draft, [candidate])
+
+    symptom = _SYMPTOM_PHRASE.fullmatch(text)
+    if symptom is not None:
+        name = symptom.group("name").strip(" .")
+        local = _local_now(owner, now)
+        flags = []
+        if symptom.group("time"):
+            parsed = _parse_time_token(symptom.group("time"), local)
+            if parsed is None:
+                return None
+            local = parsed
+        else:
+            flags.append(FlagCode.ASSUMED_TIME)
+        candidate = ValidatedCandidate(
+            type=CandidateType.SYMPTOM,
+            symptom_name=name,
+            local_time=local,
+            timezone=owner.default_timezone,
+            confidence=1.0,
+            flags=flags,
+        )
+        draft = _store_draft(
+            session, owner, [candidate], raw_text=text, source="telegram_conversational"
+        )
+        return _draft_reply(draft, [candidate])
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -526,13 +667,19 @@ def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now:
 
 
 def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
-    usage = "Usage: /weight <value> <lb|kg> [HH:MM]\nExample: /weight 180 lb 08:15"
+    usage = "Usage: /weight <value> <lb|lbs|kg|kgs> [HH:MM]\nExample: /weight 180 lbs 08:15"
     if len(args) < 2:
         return Reply(usage)
     try:
         value = Decimal(args[0])
-        unit = WeightUnit(args[1].lower())
-    except (InvalidOperation, ValueError):
+        unit_alias = {
+            "lb": WeightUnit.LB,
+            "lbs": WeightUnit.LB,
+            "kg": WeightUnit.KG,
+            "kgs": WeightUnit.KG,
+        }
+        unit = unit_alias[args[1].lower()]
+    except (InvalidOperation, KeyError, ValueError):
         return Reply(usage)
     if not Decimal(0) < value <= Decimal(5000):
         return Reply("Weight must be greater than zero and at most 5000 lb or kg.")

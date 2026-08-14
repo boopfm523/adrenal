@@ -64,7 +64,7 @@ While you're still in BotFather, harden the bot:
   dose - Record a dose: /dose 15 hydrocortisone
   symptom - Record a symptom: /symptom nausea 4
   bp - Record blood pressure: /bp 120/80 62 08:15
-  weight - Record body weight: /weight 180 lb 08:15
+  weight - Record body weight: /weight 180 lbs 08:15
   temperature - Record body temperature: /temperature 98.6 F 08:15
   injection - Log an emergency injection
   episode - /episode start <trigger> or /episode end
@@ -230,7 +230,11 @@ Message your bot:
 | `/bd-list` | Queue the fixed host `bd list` operation, then receive its bounded output |
 | `/bd-status` | Queue the fixed host `bd status` operation, then receive its bounded output |
 | `/bd-add add hydration tracking` | A locally evaluated proposal queue ID, then an existing or new `hc-*` issue ID |
-| `What is the current bd list?` | The local model maps to the same fixed list operation; if unavailable, the bot points to `/bd-list` |
+| `Show me bead list` / `Show me bead status` | Queue the same fixed host read without needing the model |
+| `Add a Bead for hydration tracking` | Use the same locally evaluated, bounded feature-request queue as `/bd-add` |
+| `Episode starting` / `The episode is over` | Open an episode with an unspecified trigger, or close the current episode |
+| `Add a body weight of 179.6 lbs` | A confirmable home weight draft; `lb`, `lbs`, `kg`, and `kgs` are accepted |
+| `I just had a symptom of dizziness at 14:30` | A confirmable symptom draft; without a time the confirmation visibly uses message time |
 | `Took 15mg hydrocortisone at 7:08, slept badly` | A draft listing a dose *and* a symptom |
 
 Press **Confirm** and check the dose appears in the web app's timeline.

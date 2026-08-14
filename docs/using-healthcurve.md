@@ -111,6 +111,7 @@ even when the language model is unavailable:
 |---|---|
 | `/dose` | `/dose 15 hydrocortisone` |
 | `/symptom` | `/symptom nausea 4` |
+| `/weight` | `/weight 180 lbs 08:15`; accepts `lb`, `lbs`, `kg`, or `kgs` |
 | `/injection` | logs an emergency injection |
 | `/episode` | `/episode start vomiting` / `/episode end` |
 | `/today` | today's doses against your plan |
@@ -127,13 +128,20 @@ sensitive content creates nothing. It never starts an agent or implementation. S
 [Telegram Beads bridge](beads-feature-bridge.md) for the privacy boundary and
 recovery behavior.
 
-Ordinary phrases such as “show the current bd list,” “what is the Beads status,” and
-“add a Bead for hydration tracking” use a separate schema-constrained local-model
-intent with only `list`, `status`, `add`, or `none`. The first two queue the same fixed
-read operations as the slash commands; `add` still passes through the full proposal
-validation. The application and model never control a shell command, argument, path,
-priority, or status. If the model is unavailable, the bot guesses nothing and points
-back to `/bd-list`, `/bd-status`, and `/bd-add`.
+Clear phrases such as “show me bead list,” “show me bead status,” and “add a Bead for
+hydration tracking” route to the same bounded operations without a separate intent
+model call. Other project-request wording may use a schema-constrained local-model
+intent with only `list`, `status`, `add`, or `none`. Read operations remain fixed and
+`add` still passes through the full proposal validation. The application and model
+never control a shell command, argument, path, priority, or status. If the model is
+unavailable, the bot guesses nothing and points back to `/bd-list`, `/bd-status`, and
+`/bd-add`.
+
+Common health phrases are also accepted without exact command syntax. “Episode
+starting” opens an episode with an unspecified trigger, “the episode is over” closes
+the current episode, and clear weight or symptom statements create confirmation
+drafts. Missing symptom or weight time is shown as assumed from the Telegram message
+time; it is never silently hidden, and the draft still must be confirmed.
 
 Free text goes to the model: *"Took 15mg hydrocortisone at 7:08, slept badly"*. You get
 a draft with **Confirm** / **Cancel**. Nothing becomes a record until you confirm it.

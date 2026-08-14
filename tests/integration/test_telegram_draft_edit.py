@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import Engine, create_engine, select, text
@@ -15,6 +16,7 @@ from testcontainers.community.postgres import PostgresContainer
 import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from healthcurve.ai.extraction import CandidateType, ValidatedCandidate
 from healthcurve.ai.models import DraftState, ExtractionDraft
+from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.db import SCHEMAS, Base
 from healthcurve.episodes.models import EpisodeStatus, StressEpisode
@@ -251,6 +253,134 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         assert temperature.normalized_c == Decimal("38.00")
         assert temperature.confirmation_state.value == "confirmed_from_draft"
         assert temperature_confirmed.text.startswith("Recorded:")
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_value", "expected_unit"),
+    [
+        ("/weight 180.9 lbs", Decimal("180.9000"), WeightUnit.LB),
+        ("/weight 82.1 kgs", Decimal("82.1000"), WeightUnit.KG),
+        ("Add a weight of 179.6 lbs", Decimal("179.6000"), WeightUnit.LB),
+        ("Add a body weight of 81.5 kgs.", Decimal("81.5000"), WeightUnit.KG),
+    ],
+)
+def test_plural_and_conversational_weight_entries_create_confirmable_drafts(
+    engine: Engine, message: str, expected_value: Decimal, expected_unit: WeightUnit
+) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"weight-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        reply = handle_message(session, owner, text=message, now=NOW)
+
+        assert reply.draft_id is not None
+        assert "Nothing is recorded yet" in reply.text
+        assert session.scalar(select(WeightEvent).where(WeightEvent.owner_id == owner.id)) is None
+        draft = session.get(ExtractionDraft, reply.draft_id)
+        assert draft is not None
+        candidate = ValidatedCandidate.model_validate(draft.candidates[0])
+        assert candidate.weight_value == expected_value
+        assert candidate.weight_unit is expected_unit
+
+
+def test_conversational_episode_shortcuts_allow_an_unspecified_trigger(engine: Engine) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"episode-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        opened = handle_message(session, owner, text="episode starting", now=NOW)
+        episode = session.scalar(select(StressEpisode).where(StressEpisode.owner_id == owner.id))
+        assert opened.text == "Episode opened: unspecified. Doses you log now will be linked to it."
+        assert episode is not None and episode.status is EpisodeStatus.OPEN
+
+        closed = handle_message(
+            session, owner, text="the episode is over", now=NOW + timedelta(hours=1)
+        )
+        assert closed.text.startswith("Episode closed after about 1 hour(s)")
+        assert episode.status is EpisodeStatus.RESOLVED
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_name", "expected_time", "assumed_time"),
+    [
+        (
+            "I just had a symptom of dizziness at 14:30",
+            "dizziness",
+            datetime(2026, 8, 8, 14, 30),  # noqa: DTZ001
+            False,
+        ),
+        (
+            "I feel a symptom of nausea",
+            "nausea",
+            datetime(2026, 8, 9, 9, 0),  # noqa: DTZ001
+            True,
+        ),
+    ],
+)
+def test_conversational_symptoms_create_confirmable_drafts_with_visible_time_basis(
+    engine: Engine,
+    message: str,
+    expected_name: str,
+    expected_time: datetime,
+    assumed_time: bool,
+) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"symptom-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        reply = handle_message(session, owner, text=message, now=NOW)
+
+        assert reply.draft_id is not None
+        assert "Nothing is recorded yet" in reply.text
+        draft = session.get(ExtractionDraft, reply.draft_id)
+        assert draft is not None
+        candidate = ValidatedCandidate.model_validate(draft.candidates[0])
+        assert candidate.type is CandidateType.SYMPTOM
+        assert candidate.symptom_name == expected_name
+        assert candidate.local_time == expected_time
+        explanation = "you didn't give a time, so I've used when you sent this"
+        assert (explanation in reply.text) is assumed_time
+
+
+def test_ambiguous_conversational_phrase_does_not_start_an_episode(engine: Engine) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"ambiguous-episode-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        client = MagicMock(spec=OllamaClient)
+        client.generate_json.return_value = ModelResult(outcome=ModelOutcome.UNAVAILABLE)
+        reply = handle_message(
+            session, owner, text="I might have an episode", client=client, now=NOW
+        )
+
+        assert "Nothing was recorded" in reply.text
+        assert (
+            session.scalar(select(StressEpisode).where(StressEpisode.owner_id == owner.id)) is None
+        )
 
 
 def test_open_episode_links_dose_without_silently_reclassifying_it(engine: Engine) -> None:
