@@ -34,7 +34,13 @@ from testcontainers.community.postgres import PostgresContainer
 from healthcurve import models as all_models
 from healthcurve import privacy
 from healthcurve.ai import analysis as analysis_service
-from healthcurve.ai.models import AIAnalysis, AnalysisType, DraftState, ExtractionDraft
+from healthcurve.ai.models import (
+    AIAnalysis,
+    AnalysisType,
+    DraftState,
+    ExtractionDraft,
+    TelegramConversationContext,
+)
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import day_analysis as day_analysis_service
 from healthcurve.analytics import service as analytics_service
@@ -1586,6 +1592,46 @@ def test_integration_deletion_removes_provider_data_and_audits(
         assert entry is not None
 
 
+def test_telegram_disconnect_removes_short_lived_conversation_context(engine: Engine) -> None:
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email="telegram-context-delete@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(owner)
+        session.flush()
+        owner_id = owner.id
+        session.add(
+            TelegramConversationContext(
+                owner_id=owner_id,
+                chat_id=4242,
+                turns=[],
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
+        session.flush()
+
+        result = privacy.delete_integration(
+            session,
+            owner_id=owner_id,
+            provider="telegram",
+            delete_data=False,
+            telegram_chat_id=4242,
+        )
+        assert result.data_rows == 1
+
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(TelegramConversationContext).where(
+                    TelegramConversationContext.owner_id == owner_id
+                )
+            )
+            is None
+        )
+
+
 def test_weather_deletion_is_independent_of_the_coarse_location(engine: Engine) -> None:
     observed_at = datetime.now(UTC) - timedelta(minutes=5)
     with Session(engine) as session, session.begin():
@@ -1674,6 +1720,15 @@ def test_account_deletion_service_removes_data_but_retains_structural_audit(
                 default_route=Route.ORAL,
             )
         )
+        session.add(
+            TelegramConversationContext(
+                owner_id=owner_id,
+                chat_id=4243,
+                turns=[],
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
+        session.flush()
         privacy.delete_account(
             session,
             owner=secondary,
@@ -1684,6 +1739,14 @@ def test_account_deletion_service_removes_data_but_retains_structural_audit(
     with Session(engine) as session:
         assert session.get(Owner, owner_id) is None
         assert session.scalar(select(Medication).where(Medication.owner_id == owner_id)) is None
+        assert (
+            session.scalar(
+                select(TelegramConversationContext).where(
+                    TelegramConversationContext.owner_id == owner_id
+                )
+            )
+            is None
+        )
         entry = session.scalar(
             select(AuditEntry).where(
                 AuditEntry.action == AuditAction.DATA_DELETED,

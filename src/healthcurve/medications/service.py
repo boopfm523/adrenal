@@ -335,7 +335,10 @@ def activate_version(
     ]
     if unsafe_overlaps:
         conflict = unsafe_overlaps[0]
-        conflict_start = conflict.effective_from.strftime("%b %-d, %Y at %H:%M")
+        conflict_effective_from = conflict.effective_from
+        if conflict_effective_from is None:  # pragma: no cover - filtered above
+            raise AssertionError("conflicting plan start unexpectedly missing")
+        conflict_start = conflict_effective_from.strftime("%b %-d, %Y at %H:%M")
         raise PlanError(
             f"Plan “{conflict.version_label}” starts {conflict_start} and conflicts with "
             "this plan's requested dates. Choose a start after that plan ends, or shorten "

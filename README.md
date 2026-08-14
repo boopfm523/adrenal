@@ -147,7 +147,11 @@ commands record facts; supported free text becomes a reviewable draft that requi
 confirmation before high-impact fields become facts. The local Ollama model can help
 structure those drafts but cannot approve a plan or write directly to the record.
 Telegram itself retains chat history on Telegram's servers, so use the web app when
-that external copy is undesirable. `/bd-list` and `/bd-status` return bounded output
+that external copy is undesirable. When the bot asks a product-request clarification,
+HealthCurve keeps a bounded owner/chat-scoped working window (three hours by default)
+so the next short answer can resolve that question across worker restarts. A cancel,
+undo, or new explicit command clears or supersedes it; it never becomes a health fact
+or physician-approved plan. `/bd-list` and `/bd-status` return bounded output
 from the trusted host's fixed `bd list` and `bd status` operations. `/bd-add` creates a
 structured product request for later review; `/beads-add` remains a compatibility
 alias. None of these commands automatically implements or deploys anything, and the

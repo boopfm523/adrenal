@@ -133,6 +133,11 @@ class Settings(BaseSettings):
     #: receives repository or ``bd`` access; unset disables /bd-* safely.
     beads_outbox_dir: Path | None = None
     beads_backlog_epic_id: str = Field(default="hc-inbox", pattern=r"^hc-[a-z0-9.]+$")
+    #: Short-lived local conversation memory. This stores a deliberately small window
+    #: so a clarification can survive a worker restart without becoming chat history.
+    telegram_context_ttl_minutes: int = Field(default=180, ge=5, le=1_440)
+    telegram_context_max_turns: int = Field(default=12, ge=2, le=30)
+    telegram_context_max_chars: int = Field(default=8_000, ge=500, le=20_000)
 
     # --- Owner scoping (single-owner product; see docs/threat-model.md) ---
     owner_email: str | None = None

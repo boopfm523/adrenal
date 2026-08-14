@@ -218,8 +218,10 @@ conversation, which contains health content outside HealthCurve's control.
   titles, or notification text.
 - Sensitive diary entries support a private flag excluded from default views and
   reports.
-- Raw Telegram text retention minimized — the message is kept only as long as its draft
-  needs it, then discarded, leaving the structured fact (plan §8).
+- Raw Telegram text retention minimized — health-capture text is kept only as long as
+  its draft needs it, then discarded, leaving the structured fact (plan §8). A bounded
+  owner/chat-scoped product-request clarification window expires after three hours by
+  default and cannot write facts or plans.
 - Guidance in the privacy settings page that Telegram chat history is outside
   HealthCurve's control and should be cleared by the owner if that matters.
 

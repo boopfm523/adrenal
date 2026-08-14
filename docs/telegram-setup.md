@@ -270,6 +270,24 @@ Then test that nothing is recorded without you:
 - Send `I did not take my morning dose`. It should come back flagged
   *"this reads like a dose you did NOT take"* and refuse to record it.
 
+### Short-lived clarification memory
+
+When the bot asks a clarification about a product request, the question, original
+request, and bounded recent exchange are stored in the `ai` working-data namespace.
+The next short reply in the same owner/chat can answer that question even after the
+worker restarts. This does not give general chat history authority over deterministic
+commands, recorded facts, emergency information, or physician-approved plans.
+
+The default window expires after three hours and retains at most 12 turns or 8,000
+characters, whichever is smaller. `HC_TELEGRAM_CONTEXT_TTL_MINUTES`,
+`HC_TELEGRAM_CONTEXT_MAX_TURNS`, and `HC_TELEGRAM_CONTEXT_MAX_CHARS` can reduce or
+increase those bounds within the configured safety limits. Expired or malformed rows
+are deleted on read and during ordinary draft-expiry cleanup. `cancel`, `never mind`,
+`/undo`, and a new explicit command clear or supersede the pending exchange. Context
+is isolated by owner and Telegram chat, is not logged, and is removed with the AI
+working data when the account is deleted. Telegram's own chat-history retention is
+separate and remains under Telegram's controls.
+
 ---
 
 ## Troubleshooting

@@ -47,7 +47,7 @@ from healthcurve.events.timekeeping import (
     timezone_abbreviation,
 )
 from healthcurve.identity.models import Owner
-from healthcurve.integrations.telegram import location
+from healthcurve.integrations.telegram import conversation, location
 from healthcurve.integrations.telegram.beads_operations import (
     BeadsOperation,
     classify_beads_intent,
@@ -62,6 +62,7 @@ from healthcurve.integrations.telegram.feature_requests import (
     evaluate_request,
     queue_request,
     queued_request,
+    validate_clarification_answer,
     validate_request,
 )
 from healthcurve.integrations.telegram.models import DoseReminderState, TelegramDoseReminder
@@ -229,6 +230,7 @@ def handle_message(
     limiter: RateLimiter | None = None,
     model_policy: RateLimitPolicy | None = None,
     now: datetime | None = None,
+    chat_id: int | None = None,
 ) -> Reply:
     """Entry point for an inbound text message."""
     now = now or datetime.now(UTC)
@@ -237,6 +239,8 @@ def handle_message(
         return Reply("I didn't get any text. Try /help.")
 
     if text.startswith("/"):
+        if chat_id is not None:
+            conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
         return _handle_command(
             session,
             owner,
@@ -246,7 +250,13 @@ def handle_message(
             limiter=limiter,
             model_policy=model_policy,
             now=now,
+            chat_id=chat_id,
         )
+
+    if chat_id is not None and _is_conversational_shortcut(text):
+        # A complete new request supersedes an unanswered clarification. Clear first
+        # so a new Beads request may safely install its own pending question.
+        conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
 
     conversational = _handle_conversational_shortcut(
         session,
@@ -257,9 +267,26 @@ def handle_message(
         limiter=limiter,
         model_policy=model_policy,
         now=now,
+        chat_id=chat_id,
     )
     if conversational is not None:
         return conversational
+
+    if chat_id is not None:
+        pending = conversation.pending_intent(session, owner_id=owner.id, chat_id=chat_id, now=now)
+        if pending is not None:
+            return _resume_pending_intent(
+                session,
+                owner,
+                chat_id=chat_id,
+                pending=pending,
+                answer=text,
+                message_id=message_id,
+                client=client,
+                limiter=limiter,
+                model_policy=model_policy,
+                now=now,
+            )
 
     return _handle_free_text(
         session,
@@ -270,6 +297,22 @@ def handle_message(
         limiter=limiter,
         model_policy=model_policy,
         now=now,
+        chat_id=chat_id,
+    )
+
+
+def _is_conversational_shortcut(text: str) -> bool:
+    return any(
+        pattern.fullmatch(text) is not None
+        for pattern in (
+            _EPISODE_END_PHRASE,
+            _EPISODE_START_PHRASE,
+            _BEADS_LIST_PHRASE,
+            _BEADS_STATUS_PHRASE,
+            _BEADS_ADD_PHRASE,
+            _WEIGHT_ONLY_PHRASE,
+            _SYMPTOM_PHRASE,
+        )
     )
 
 
@@ -283,6 +326,7 @@ def _handle_conversational_shortcut(
     limiter: RateLimiter | None,
     model_policy: RateLimitPolicy | None,
     now: datetime,
+    chat_id: int | None,
 ) -> Reply | None:
     """Handle only narrow, unambiguous phrases; everything else uses extraction."""
     if _EPISODE_END_PHRASE.fullmatch(text):
@@ -298,12 +342,15 @@ def _handle_conversational_shortcut(
     bead = _BEADS_ADD_PHRASE.fullmatch(text)
     if bead is not None:
         return _cmd_bd_add(
+            session,
+            owner,
             text,
             message_id=message_id,
             client=client,
             limiter=limiter,
             model_policy=model_policy,
             now=now,
+            chat_id=chat_id,
         )
 
     explicit_weight = find_explicit_weight(text) if _WEIGHT_ONLY_PHRASE.fullmatch(text) else None
@@ -376,6 +423,7 @@ def _handle_command(
     limiter: RateLimiter | None,
     model_policy: RateLimitPolicy | None,
     now: datetime,
+    chat_id: int | None,
 ) -> Reply:
     command_part, *remainder = text.split(maxsplit=1)
     command = command_part.lower().lstrip("/").split("@")[0]
@@ -408,12 +456,15 @@ def _handle_command(
             return _cmd_bd_operation(BeadsOperation.STATUS, message_id=message_id, now=now)
         case "bd-add" | "beads-add":
             return _cmd_bd_add(
+                session,
+                owner,
                 raw_argument,
                 message_id=message_id,
                 client=client,
                 limiter=limiter,
                 model_policy=model_policy,
                 now=now,
+                chat_id=chat_id,
             )
         case "symptom":
             return _cmd_symptom(session, owner, args, now=now)
@@ -428,7 +479,7 @@ def _handle_command(
         case "edit":
             return _cmd_edit(session, owner, args, now=now)
         case "undo":
-            return _cmd_undo(session, owner)
+            return _cmd_undo(session, owner, chat_id=chat_id)
         case _:  # pragma: no cover - registry and dispatch are checked together
             raise AssertionError(f"registered Telegram command is not dispatched: {command}")
 
@@ -467,7 +518,67 @@ def _cmd_bd_operation(
     return Reply(f"{acknowledgement} I'll post it here as soon as it's ready.")
 
 
+def _remember_beads_clarification(
+    session: Session,
+    owner: Owner,
+    chat_id: int | None,
+    request: str,
+    question: str,
+    *,
+    now: datetime,
+) -> Reply:
+    reply = Reply(f"I need one clarification before creating a Bead:\n{question}")
+    if chat_id is not None:
+        conversation.remember_exchange(
+            session,
+            owner_id=owner.id,
+            chat_id=chat_id,
+            user_text=request,
+            assistant_text=reply.text,
+            pending=conversation.PendingIntent(
+                kind="beads_add", request=request, question=question
+            ),
+            now=now,
+        )
+    return reply
+
+
+def _resume_pending_intent(
+    session: Session,
+    owner: Owner,
+    *,
+    chat_id: int,
+    pending: conversation.PendingIntent,
+    answer: str,
+    message_id: str | None,
+    client: OllamaClient | None,
+    limiter: RateLimiter | None,
+    model_policy: RateLimitPolicy | None,
+    now: datetime,
+) -> Reply:
+    if answer.casefold().strip(" .!") in {"cancel", "never mind", "nevermind", "stop"}:
+        conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+        return Reply("Cancelled. I didn't create a Bead.")
+    if pending.kind == "beads_add":
+        return _cmd_bd_add(
+            session,
+            owner,
+            pending.request,
+            message_id=message_id,
+            client=client,
+            limiter=limiter,
+            model_policy=model_policy,
+            now=now,
+            chat_id=chat_id,
+            clarification_answer=answer,
+        )
+    conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+    return Reply("That earlier question expired. Please send the request again.")
+
+
 def _cmd_bd_add(
+    session: Session,
+    owner: Owner,
     request: str,
     *,
     message_id: str | None,
@@ -475,6 +586,8 @@ def _cmd_bd_add(
     limiter: RateLimiter | None,
     model_policy: RateLimitPolicy | None,
     now: datetime,
+    chat_id: int | None,
+    clarification_answer: str | None = None,
 ) -> Reply:
     """Evaluate locally and queue only a validated proposal, never raw text."""
     settings = get_settings()
@@ -485,10 +598,14 @@ def _cmd_bd_add(
         )
     safe_message_id = message_id or ""
     try:
-        validate_request(request)
+        validate_request(request, allow_high_risk_clarification=clarification_answer is not None)
+        if clarification_answer is not None:
+            validate_clarification_answer(clarification_answer)
         existing = queued_request(settings.beads_outbox_dir, message_id=safe_message_id)
     except FeatureRequestNeedsClarification as exc:
-        return Reply(f"I need one clarification before creating a Bead:\n{exc.question}")
+        return _remember_beads_clarification(
+            session, owner, chat_id, request, exc.question, now=now
+        )
     except FeatureRequestRejected as exc:
         if str(exc) == "request_too_long":
             return Reply("That feature request is too long. Keep it to 500 characters or fewer.")
@@ -525,7 +642,9 @@ def _cmd_bd_add(
                 "I can't safely check the feature-request limit right now. Nothing was created."
             )
     try:
-        evaluated = evaluate_request(request, client=client)
+        evaluated = evaluate_request(
+            request, client=client, clarification_answer=clarification_answer
+        )
         queue_request(
             settings.beads_outbox_dir,
             message_id=safe_message_id,
@@ -534,7 +653,9 @@ def _cmd_bd_add(
             now=now,
         )
     except FeatureRequestNeedsClarification as exc:
-        return Reply(f"I need one clarification before creating a Bead:\n{exc.question}")
+        return _remember_beads_clarification(
+            session, owner, chat_id, request, exc.question, now=now
+        )
     except FeatureRequestEvaluationFailed:
         return Reply(
             "The local language model couldn't safely evaluate that feature request. "
@@ -542,6 +663,8 @@ def _cmd_bd_add(
         )
     except FeatureRequestRejected:
         return Reply("That request could not be queued safely. Nothing was created.")
+    if chat_id is not None:
+        conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
     return Reply(
         f'Got it — I\'m adding "{evaluated.proposal.title}" to the HealthCurve task list. '
         "I'll post the Bead ID here as soon as it's ready. "
@@ -889,7 +1012,9 @@ def _today_slot_sort_key(slot: meds.SlotComparison, day: date) -> tuple[datetime
     return displayed_at, row_kind, slot.medication_name.casefold(), str(row_id or "")
 
 
-def _cmd_undo(session: Session, owner: Owner) -> Reply:
+def _cmd_undo(session: Session, owner: Owner, *, chat_id: int | None = None) -> Reply:
+    if chat_id is not None:
+        conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
     draft = _pending_draft(session, owner.id)
     if draft is None:
         return Reply("Nothing pending to undo.")
@@ -1147,6 +1272,7 @@ def _handle_free_text(
     limiter: RateLimiter | None,
     model_policy: RateLimitPolicy | None,
     now: datetime,
+    chat_id: int | None,
 ) -> Reply:
     if limiter is not None and model_policy is not None:
         try:
@@ -1166,7 +1292,9 @@ def _handle_free_text(
         try:
             intent_result = classify_beads_intent(text, client=client)
         except FeatureRequestNeedsClarification as exc:
-            return Reply(f"I need one clarification before creating a Bead:\n{exc.question}")
+            return _remember_beads_clarification(
+                session, owner, chat_id, text, exc.question, now=now
+            )
         except FeatureRequestRejected:
             return Reply(
                 "I couldn't safely interpret that project request. Nothing was run or "
@@ -1191,12 +1319,15 @@ def _handle_free_text(
                 return _cmd_bd_operation(BeadsOperation.STATUS, message_id=message_id, now=now)
             case "add":
                 return _cmd_bd_add(
+                    session,
+                    owner,
                     intent.feature_request or "",
                     message_id=message_id,
                     client=client,
                     limiter=None,
                     model_policy=None,
                     now=now,
+                    chat_id=chat_id,
                 )
             case "none":
                 pass
@@ -1702,6 +1833,7 @@ def expire_stale_drafts(session: Session, *, now: datetime | None = None) -> int
         draft.purge_raw_text()
         location.cancel_for_draft(session, draft.owner_id, draft.id, now=now)
     location.expire_requests(session, now=now)
+    conversation.expire_contexts(session, now=now)
     return len(stale)
 
 

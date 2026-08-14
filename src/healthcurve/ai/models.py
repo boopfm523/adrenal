@@ -14,7 +14,17 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, func, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -84,6 +94,37 @@ class ExtractionDraft(AIBase):
     def purge_raw_text(self) -> None:
         """Drop the verbatim message once the structured fact exists (C9 retention)."""
         self.raw_text = None
+
+
+class TelegramConversationContext(AIBase):
+    """Bounded, short-lived context for one owner and one Telegram chat.
+
+    This is AI working memory, never a recorded fact or approved plan. ``turns`` and
+    ``pending_intent`` are validated by the conversation service on every read; a
+    malformed row is deleted instead of being supplied to a model.
+    """
+
+    __tablename__ = "telegram_conversation_context"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    turns: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False, default=list)
+    pending_intent: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "chat_id", name="uq_telegram_context_owner_chat"),
+        CheckConstraint("jsonb_typeof(turns) = 'array'", name="turns_array"),
+        Index("ix_telegram_context_expiry", "expires_at"),
+        AI_SCHEMA,
+    )
 
 
 class AnalysisType(StrEnum):

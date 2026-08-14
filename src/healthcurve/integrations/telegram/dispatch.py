@@ -132,6 +132,7 @@ def process_update(
         session,
         owner,
         text=text,
+        chat_id=chat_id,
         message_id=str(message.get("message_id")),
         client=model_client,
         limiter=limiter,

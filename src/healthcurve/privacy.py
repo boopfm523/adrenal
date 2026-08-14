@@ -11,7 +11,7 @@ from sqlalchemy import delete, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from healthcurve.ai.models import AIAnalysis, ExtractionDraft
+from healthcurve.ai.models import AIAnalysis, ExtractionDraft, TelegramConversationContext
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.base import EventMixin
@@ -289,6 +289,16 @@ def delete_integration(
         if connection is not None and connection.state is not GarminConnectionState.DISCONNECTED:
             connection.state = GarminConnectionState.DISCONNECT_PENDING
             disconnect_requested = True
+    if provider == "telegram":
+        # Conversation context is short-lived integration working data, not a health
+        # record. It has no purpose after disconnect and is removed even when the
+        # owner elects to retain confirmed Telegram-origin facts.
+        data_rows += _delete_count(
+            session,
+            delete(TelegramConversationContext).where(
+                TelegramConversationContext.owner_id == owner_id
+            ),
+        )
     if delete_data and provider == "telegram":
         data_rows += _delete_count(
             session,
@@ -378,7 +388,14 @@ def delete_account(
 
     # Children and records that restrict owner deletion first. Database cascades remove
     # lab results, regimen children, and Garmin facts from their owning parent rows.
-    for model in (AIAnalysis, ExtractionDraft, LabPanel, LabDocument, ReportSnapshot):
+    for model in (
+        AIAnalysis,
+        ExtractionDraft,
+        TelegramConversationContext,
+        LabPanel,
+        LabDocument,
+        ReportSnapshot,
+    ):
         session.execute(delete(model).where(model.owner_id == owner_id))
     for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent):
         _delete_event_chains(session, model, owner_id)
