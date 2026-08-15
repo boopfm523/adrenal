@@ -314,6 +314,8 @@ circle.chart-series { fill: white; }
 .healthcurve-chart--zoom-2 { min-width: 104rem; }
 .healthcurve-mobile-controls, .healthcurve-touch-readout { display: none; }
 .healthcurve-time-grid { stroke: #dce2dd; stroke-width: 1; }
+.healthcurve-hour-mark { stroke: #7d8a84; stroke-width: 1; }
+.healthcurve-hour-tick .healthcurve-hour-mark { stroke: #aab4af; }
 .healthcurve-time-label { fill: #47554f; font-size: 10px; }
 .healthcurve-scale-label { fill: #47554f; font-size: 12px; }
 .healthcurve-overlay-bg { fill: #fbfcfb; }

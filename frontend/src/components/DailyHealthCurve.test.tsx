@@ -120,8 +120,12 @@ describe("Daily HealthCurve", () => {
     expect(screen.queryByText("View exact values and provenance")).not.toBeInTheDocument();
     expect(screen.getByRole("img").querySelector(":scope > title")).toBeNull();
     const tickLabels = [...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent);
+    expect(tickLabels).toEqual(["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "00:00"]);
     expect(tickLabels.every((label) => /^\d{2}:\d{2}$/.test(label))).toBe(true);
     expect(tickLabels.join(" ")).not.toMatch(/AM|PM|GMT/);
+    expect(document.querySelectorAll(".healthcurve-hour-mark")).toHaveLength(24);
+    expect(document.querySelectorAll(".healthcurve-hour-tick")).toHaveLength(17);
+    expect(document.querySelectorAll(".healthcurve-hour-tick .healthcurve-time-label")).toHaveLength(0);
     fireEvent.pointerMove(pointerTarget, { clientX: 690 });
     expect(tooltip).toHaveTextContent("No exact observation at this time");
     fireEvent.pointerLeave(pointerTarget);
@@ -522,6 +526,10 @@ describe("Daily HealthCurve", () => {
     renderWithTheme(<DailyHealthCurve data={data()} />);
 
     expect(screen.getByText("23 hours")).toBeVisible();
+    expect(document.querySelectorAll(".healthcurve-hour-mark")).toHaveLength(24);
+    expect([...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent)).toEqual([
+      "00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "00:00",
+    ]);
     const summaries = screen.getByLabelText("Series sample counts");
     expect(within(summaries).getByRole("heading", { name: /Garmin stress/ }).parentElement).toHaveTextContent("No values recorded");
     fireEvent.focus(screen.getByRole("button", { name: "About Garmin stress data" }));
@@ -535,6 +543,24 @@ describe("Daily HealthCurve", () => {
     expect(info).not.toHaveAttribute("aria-describedby");
     fireEvent.click(screen.getByText("HealthCurve context and limits"));
     expect(screen.getByText(/expected missing counts are not invented/)).toBeVisible();
+  });
+
+  it("keeps hourly marks aligned through a 25-hour fall-back day", () => {
+    const base = data();
+    renderWithTheme(<DailyHealthCurve data={data({ exposure: {
+      ...base.exposure,
+      date: "2026-11-01",
+      day_start: "2026-11-01T04:00:00Z",
+      day_end: "2026-11-02T05:00:00Z",
+      elapsed_hours: "25",
+      samples: [],
+    } })} />);
+
+    expect(screen.getByText("25 hours")).toBeVisible();
+    expect(document.querySelectorAll(".healthcurve-hour-mark")).toHaveLength(26);
+    expect([...document.querySelectorAll(".healthcurve-time-label")].map((element) => element.textContent)).toEqual([
+      "00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "00:00",
+    ]);
   });
 
   it("keeps a large sampled day available in the chart", () => {

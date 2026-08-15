@@ -192,17 +192,29 @@ function awakeIntervalValue(interval: AwakeInterval, timezone: string): string {
   return `${durationParts.join(" ")} · ${localRange}`;
 }
 
-function timeTicks(start: number, end: number, timezone: string): { time: number; label: string }[] {
+interface TimeTick {
+  time: number;
+  label: string | null;
+}
+
+function timeTicks(start: number, end: number, timezone: string): TimeTick[] {
   const formatter = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   });
-  return Array.from({ length: 7 }, (_, index) => {
-    const time = start + index / 6 * (end - start);
-    return { time, label: formatter.format(new Date(time)) };
-  });
+  const ticks: TimeTick[] = [];
+  for (let time = start; time <= end; time += 60 * 60 * 1_000) {
+    const label = formatter.format(new Date(time));
+    const hour = Number(label.slice(0, 2));
+    ticks.push({ time, label: hour % 4 === 0 ? label : null });
+  }
+  if (ticks.at(-1)?.time !== end) {
+    const label = formatter.format(new Date(end));
+    ticks.push({ time: end, label });
+  }
+  return ticks;
 }
 
 function scale(values: number[]): { minimum: number; maximum: number } {
@@ -760,9 +772,13 @@ export function DailyHealthCurve({
           const y = TOP + PLOT_HEIGHT - relative / 100 * PLOT_HEIGHT;
           return <g key={relative}><line className="healthcurve-relative-grid" x1={LEFT} y1={y} x2={LEFT + PLOT_WIDTH} y2={y} /><text className="healthcurve-scale-label" x={LEFT - 10} y={y} dy="0.35em" textAnchor="end">{relative.toString()}</text></g>;
         })}
-        {ticks.map((tick, index) => {
-          const x = LEFT + index / Math.max(ticks.length - 1, 1) * PLOT_WIDTH;
-          return <g key={tick.time}><line className="healthcurve-time-grid" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT} /><text className="healthcurve-time-label" x={x} y={HEIGHT - 34} textAnchor={index === 0 ? "start" : index === ticks.length - 1 ? "end" : "middle"}>{tick.label}</text></g>;
+        {ticks.map((tick) => {
+          const x = LEFT + (tick.time - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          return <g key={tick.time} className={tick.label === null ? "healthcurve-hour-tick" : "healthcurve-major-time-tick"}>
+            {tick.label === null ? null : <line className="healthcurve-time-grid" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT} />}
+            <line className="healthcurve-hour-mark" x1={x} y1={TOP + PLOT_HEIGHT} x2={x} y2={TOP + PLOT_HEIGHT + (tick.label === null ? 5 : 8)} />
+            {tick.label === null ? null : <text className="healthcurve-time-label" x={x} y={HEIGHT - 34} textAnchor={tick.time === start ? "start" : tick.time === end ? "end" : "middle"}>{tick.label}</text>}
+          </g>;
         })}
         {visible.episodes ? <g data-series="episodes">{data.episodes.map((episode) => {
             const x = Math.max(LEFT, Math.min(LEFT + PLOT_WIDTH, xPosition(episode.started_at, start, end)));
