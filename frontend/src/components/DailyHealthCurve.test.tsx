@@ -169,6 +169,46 @@ describe("Daily HealthCurve", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("shows observed hourly Garmin steps as an optional trend with exact values", () => {
+    const steps: GarminRecord[] = [
+      {
+        id: "10000000-0000-4000-8000-000000000001",
+        kind: "sample",
+        summary: "Steps: 125 steps",
+        time: { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", timezone: "America/New_York", utc_offset_minutes: -300 },
+        provenance,
+        metric_type: "steps",
+        value: "125",
+        unit: "steps",
+        aggregation: "provider_sample",
+        sample_interval_seconds: 3600,
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000002",
+        kind: "sample",
+        summary: "Steps: 375 steps",
+        time: { occurred_at: "2026-03-08T07:00:00Z", local_time: "2026-03-08T02:00:00", timezone: "America/New_York", utc_offset_minutes: -300 },
+        provenance,
+        metric_type: "steps",
+        value: "375",
+        unit: "steps",
+        aggregation: "provider_sample",
+        sample_interval_seconds: 3600,
+      },
+    ];
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: steps })} />);
+
+    expect(document.querySelector("[data-series='steps']")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Steps" }));
+    expect(document.querySelector("[data-series='steps']")).not.toBeNull();
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Hourly steps · steps");
+    expect(hoverAt(60).tooltip).toHaveTextContent("Hourly steps: 125 steps");
+    const summary = within(screen.getByLabelText("Series sample counts")).getByRole("heading", { name: /Hourly steps/ }).parentElement;
+    if (summary === null) throw new Error("hourly steps summary missing");
+    expect(summary).toHaveTextContent("Observed total: 500 steps");
+    expect(summary).toHaveTextContent("Hourly range: 125–375 steps");
+  });
+
   it("renders the v2 context band as an independent default-hidden accessible ribbon", () => {
     const { rerender } = renderWithTheme(<DailyHealthCurve data={physiologicalData()} />);
 

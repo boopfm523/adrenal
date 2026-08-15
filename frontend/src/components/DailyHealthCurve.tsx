@@ -25,7 +25,7 @@ export interface DailyHealthCurveData {
   episodes: Episode[];
 }
 
-export type HealthCurveLaneKey = "exposure" | "stress" | "heart_rate" | "hrv" | "respiration_rate" | "blood_pressure" | "temperature" | "symptoms" | "episodes";
+export type HealthCurveLaneKey = "exposure" | "stress" | "heart_rate" | "hrv" | "respiration_rate" | "steps" | "blood_pressure" | "temperature" | "symptoms" | "episodes";
 export type HealthCurveVisibility = Record<HealthCurveLaneKey, boolean>;
 
 type LaneKey = HealthCurveLaneKey;
@@ -85,6 +85,7 @@ const DEFAULT_VISIBLE: HealthCurveVisibility = {
   heart_rate: false,
   hrv: false,
   respiration_rate: false,
+  steps: false,
   blood_pressure: false,
   temperature: false,
   symptoms: false,
@@ -96,6 +97,7 @@ const FOCUS_PRESETS: readonly { label: string; keys: readonly LaneKey[] }[] = [
   { label: "Heart rate", keys: ["exposure", "heart_rate"] },
   { label: "HRV", keys: ["exposure", "hrv"] },
   { label: "Respiration", keys: ["exposure", "respiration_rate"] },
+  { label: "Steps", keys: ["exposure", "steps"] },
   { label: "Blood pressure", keys: ["exposure", "blood_pressure"] },
   { label: "Temperature", keys: ["exposure", "temperature"] },
   { label: "Recorded events", keys: ["exposure", "symptoms", "episodes"] },
@@ -160,6 +162,7 @@ const METRIC_LANES: readonly { key: LaneKey; metric: string; label: string; unit
   { key: "heart_rate", metric: "heart_rate", label: "Heart rate", unit: "bpm" },
   { key: "hrv", metric: "hrv", label: "HRV", unit: "ms" },
   { key: "respiration_rate", metric: "respiration_rate", label: "Respiration", unit: "breaths/min" },
+  { key: "steps", metric: "steps", label: "Hourly steps", unit: "steps" },
 ];
 
 function numeric(value: string | null | undefined): number | null {
@@ -809,6 +812,7 @@ export function DailyHealthCurve({
         heart_rate: "Heart rate",
         hrv: "HRV",
         respiration_rate: "Respiration",
+        steps: "Steps",
         blood_pressure: "Blood pressure",
         temperature: "Temperature",
         symptoms: "Symptoms",
@@ -926,6 +930,7 @@ export function DailyHealthCurve({
           {aggregates.map((record) => <p key={record.id}><strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)}</p>)}
           {lane.key === "exposure" ? <p><strong>Peak:</strong> {summaryNumber(Math.max(...values, 0), 3)} {data.exposure.series_unit}</p> : null}
           {["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) && average !== null ? <><p><strong>Observed average:</strong> {summaryNumber(average)} {lane.unit}</p><p><strong>Observed range:</strong> {summaryNumber(Math.min(...values))}–{summaryNumber(Math.max(...values))} {lane.unit}</p></> : null}
+          {lane.key === "steps" && values.length > 0 ? <><p><strong>Observed total:</strong> {summaryNumber(values.reduce((total, value) => total + value, 0), 0)} steps</p><p><strong>Hourly range:</strong> {summaryNumber(Math.min(...values), 0)}–{summaryNumber(Math.max(...values), 0)} steps</p></> : null}
           {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => <p key={record.id}><strong>{record.systolic_mmhg.toString()}/{record.diastolic_mmhg.toString()} mmHg</strong>{record.pulse_bpm == null ? null : ` · pulse ${record.pulse_bpm.toString()} bpm`}</p>) : null}
           {lane.key === "temperature" ? data.temperature.map((record) => <p key={record.id}><strong>{record.display_f} °F</strong> ({record.display_c} °C)</p>) : null}
           {lane.key === "symptoms" ? data.symptoms.map((record) => <p key={record.id}><strong>{record.name}</strong>{record.severity == null ? " · severity not recorded" : ` · ${record.severity.toString()}/10`}</p>) : null}

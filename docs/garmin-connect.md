@@ -8,9 +8,10 @@ Health API. Garmin can change or block it without notice. Reviewed FIT/CSV/ZIP i
 remains the durable fallback described in [garmin-import.md](garmin-import.md).
 
 The integration is read-only. HealthCurve's adapter exposes only daily statistics,
-sleep, activity-list, heart-rate, stress, respiration, and HRV reads; it cannot create,
-update, or delete anything in the Garmin account. HealthCurve is not interpreting
-these observations as diagnoses, causes, adrenal conclusions, or medication advice.
+sleep, activity-list, heart-rate, stress, respiration, HRV, and step reads; it cannot
+create, update, or delete anything in the Garmin account. HealthCurve is not
+interpreting these observations as diagnoses, causes, adrenal conclusions, or
+medication advice.
 
 ## Data included in the first release
 
@@ -22,6 +23,7 @@ HealthCurve stores only these fields when Garmin supplies them:
 - provider-defined aggregate facts for nightly-average HRV; waking- and sleeping-
   period average respiration; and daily low/high respiration;
 - timestamped heart rate, stress, respiration, and nightly HRV samples when available;
+- hourly step totals produced by summing only Garmin's observed intraday step buckets;
 - sleep start, wake time, duration, duration source, number of awakenings, sleep
   score, and explicitly bounded awake-stage intervals when Garmin supplies them.
 
@@ -38,12 +40,20 @@ the graph says that intermediate timing is unavailable. See
 
 ## Verified intraday and aggregate contract
 
-The isolated client can read timestamped heart rate, stress, respiration, and nightly
-HRV. A privacy-safe configured-account probe verified predominant sample spacing of 2,
-3, 2, and 5 minutes respectively; gaps are expected and cadence is not guaranteed.
+The isolated client can read timestamped heart rate, stress, respiration, nightly HRV,
+and bounded intraday step intervals. Privacy-safe configured-account probes verified
+predominant sample spacing of 2, 3, 2, and 5 minutes for the first four series and
+15-minute step buckets in the observed day; gaps are expected and cadence is not
+guaranteed.
 Heart rate is bpm, respiration is breaths/min, HRV is ms, and stress is Garmin's 0–100
 score. Negative stress/respiration sentinels and null values mean missing; stress zero
 is a valid reading.
+
+HealthCurve deterministically sums valid step buckets into local-clock hours for the
+selected day. An observed zero remains zero, while an absent or malformed bucket stays
+missing. The resulting hourly series is optional on the daily HealthCurve and its
+tooltip retains the exact step total; the daily step aggregate remains a separate
+untimed fact.
 
 The same responses expose a provider `lastNightAvg` HRV value and separate waking and
 sleeping respiration averages plus daily respiration low/high. HealthCurve records

@@ -130,6 +130,7 @@ def fetch_window(
             stress=call(lambda day_text=day_text: client.get_stress_data(day_text)),
             respiration=call(lambda day_text=day_text: client.get_respiration_data(day_text)),
             hrv=call(lambda day_text=day_text: client.get_hrv_data(day_text)),
+            steps=call(lambda day_text=day_text: client.get_steps_data(day_text)),
             timezone=timezone,
         )
         intraday_metrics.extend(intraday.observations)

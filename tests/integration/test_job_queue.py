@@ -32,6 +32,8 @@ from healthcurve.integrations.garmin.connect_jobs import (
 from healthcurve.integrations.garmin.models import (
     GarminConnection,
     GarminConnectionState,
+    GarminMetricEvent,
+    GarminMetricType,
     GarminSyncOrigin,
     GarminSyncRun,
 )
@@ -91,12 +93,32 @@ class _SyntheticGarminClient:
         del day
         return {}
 
+    def get_steps_data(self, day: str) -> list[dict[str, Any]]:
+        del day
+        return []
+
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
         del start, end
         return []
 
     def logout(self) -> None:
         return None
+
+
+class _SyntheticStepGarminClient(_SyntheticGarminClient):
+    def get_steps_data(self, day: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "startGMT": f"{day}T12:00:00Z",
+                "endGMT": f"{day}T12:15:00Z",
+                "steps": 125,
+            },
+            {
+                "startGMT": f"{day}T12:15:00Z",
+                "endGMT": f"{day}T12:30:00Z",
+                "steps": 75,
+            },
+        ]
 
 
 @pytest.fixture(scope="module")
@@ -514,6 +536,46 @@ def test_garmin_worker_persists_explicit_sync_origin(
     with factory() as session:
         run = session.scalar(select(GarminSyncRun).where(GarminSyncRun.owner_id == owner_id))
         assert run is not None and run.origin is expected
+
+
+def test_garmin_worker_persists_observed_hourly_steps(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email="garmin-hourly-steps@example.test")
+    settings = Settings.model_validate({"garmin_enabled": True})
+    with factory() as session, session.begin():
+        enqueue_sync(
+            session,
+            owner_id=owner_id,
+            start_date=NOW.date(),
+            end_date=NOW.date(),
+            timezone="UTC",
+            idempotency_key=f"hourly-steps:{owner_id}",
+            now=NOW,
+        )
+
+    claimed = run_once(
+        factory,
+        {
+            GARMIN_SYNC_TASK: make_garmin_handler(
+                settings, client_factory=_SyntheticStepGarminClient
+            )
+        },
+        worker_id="garmin-hourly-steps",
+    )
+    assert claimed is not None
+    with factory() as session:
+        step = session.scalar(
+            select(GarminMetricEvent).where(
+                GarminMetricEvent.owner_id == owner_id,
+                GarminMetricEvent.metric_type == GarminMetricType.STEPS,
+                GarminMetricEvent.garmin_field_name == "hourlySteps",
+            )
+        )
+        assert step is not None
+        assert step.value == 200
+        assert step.unit == "steps"
+        assert step.sample_interval_seconds == 3_600
 
 
 def test_garmin_worker_accepts_legacy_payload_and_marks_run_origin(

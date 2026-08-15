@@ -1,7 +1,7 @@
 """Bounded mapping for timestamped Garmin observations.
 
 Raw private-API payloads are untrusted and ephemeral. This module selects only the
-four series approved by ADR-0014 and deliberately treats null, sentinel, malformed,
+approved series and deliberately treats null, sentinel, malformed,
 and out-of-range values as missing rather than as zero-valued observations.
 """
 
@@ -49,6 +49,7 @@ def map_intraday_day(
     stress: dict[str, Any],
     respiration: dict[str, Any],
     hrv: dict[str, Any],
+    steps: list[Any],
     timezone: str,
 ) -> MappedIntraday:
     """Map one provider day without retaining the four raw response bodies."""
@@ -109,6 +110,9 @@ def map_intraday_day(
     mapped_hrv = _map_hrv(hrv, zone=zone, warnings=warnings)
     observations.extend(mapped_hrv)
     capabilities["intraday_hrv"] = "available" if mapped_hrv else "unavailable"
+    mapped_steps = _map_hourly_steps(day=day, payload=steps, zone=zone, warnings=warnings)
+    observations.extend(mapped_steps)
+    capabilities["intraday_steps"] = "available" if mapped_steps else "unavailable"
     aggregates = _map_aggregates(
         day=day,
         respiration=respiration,
@@ -308,6 +312,55 @@ def _map_hrv(
     return output
 
 
+def _map_hourly_steps(
+    *, day: date, payload: list[Any], zone: ZoneInfo, warnings: list[str]
+) -> list[IntradayObservation]:
+    """Sum provider step buckets into observed local-clock hours.
+
+    Garmin currently returns bounded sub-hour intervals with explicit GMT bounds.
+    Only valid intervals whose local start belongs to the requested provider day are
+    included. Missing buckets stay missing; an observed zero remains a real zero.
+    """
+
+    if len(payload) > MAX_SAMPLES_PER_SERIES:
+        warnings.append("intraday_steps_truncated")
+    hourly: dict[datetime, Decimal] = {}
+    missing = False
+    for row in payload[:MAX_SAMPLES_PER_SERIES]:
+        if not isinstance(row, dict):
+            missing = True
+            continue
+        started_at = _parse_gmt(row.get("startGMT"))
+        ended_at = _parse_gmt(row.get("endGMT"))
+        value = _bounded_decimal(row.get("steps"), Decimal(0), Decimal(1_000_000))
+        if started_at is None or ended_at is None or ended_at <= started_at or value is None:
+            missing = True
+            continue
+        local = started_at.astimezone(zone)
+        if local.date() != day:
+            missing = True
+            continue
+        local_hour = local.replace(minute=0, second=0, microsecond=0)
+        hour = local_hour.astimezone(UTC)
+        hourly[hour] = hourly.get(hour, Decimal(0)) + value
+    if missing:
+        warnings.append("intraday_steps_missing_or_invalid")
+    return [
+        replace(
+            _observation(
+                occurred_at,
+                GarminMetricType.STEPS,
+                value,
+                "steps",
+                "hourlySteps",
+                zone,
+            ),
+            sample_interval_seconds=3_600,
+        )
+        for occurred_at, value in sorted(hourly.items())
+    ]
+
+
 def _descriptor_indexes(value: Any) -> dict[str, int]:
     if not isinstance(value, list) or len(value) > 32:
         return {}
@@ -370,7 +423,7 @@ def _with_observed_intervals(
         observations, key=lambda value: (value.metric_type.value, value.event_time.occurred_at)
     ):
         previous = prior.get(observation.metric_type)
-        interval = None
+        interval = observation.sample_interval_seconds
         if previous is not None:
             elapsed = int((observation.event_time.occurred_at - previous).total_seconds())
             interval = elapsed if elapsed > 0 else None

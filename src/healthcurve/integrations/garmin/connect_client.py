@@ -41,6 +41,8 @@ class GarminIntradayReadClient(GarminReadClient, Protocol):
 
     def get_hrv_data(self, day: str) -> dict[str, Any]: ...
 
+    def get_steps_data(self, day: str) -> list[dict[str, Any]]: ...
+
 
 class GarminProviderError(RuntimeError):
     """A stable privacy-safe failure code; provider text is intentionally discarded."""
@@ -115,6 +117,9 @@ class PythonGarminReadClient:
         if not isinstance(value, dict):
             raise GarminProviderError("garmin_response_shape_changed", retryable=False)
         return value
+
+    def get_steps_data(self, day: str) -> list[dict[str, Any]]:
+        return self._read(lambda: self._client.get_steps_data(day), list)
 
     def logout(self) -> None:
         try:

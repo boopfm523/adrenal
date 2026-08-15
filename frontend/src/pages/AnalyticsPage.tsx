@@ -151,6 +151,7 @@ export function AnalyticsPage(): React.JSX.Element {
     heart_rate: false,
     hrv: false,
     respiration_rate: false,
+    steps: false,
     blood_pressure: false,
     temperature: false,
     symptoms: false,

@@ -336,6 +336,7 @@ circle.chart-series { fill: white; }
 .healthcurve-key--heart_rate { border-color: #a32038; }
 .healthcurve-key--hrv { border-color: #6b3f82; border-top-style: dashed; }
 .healthcurve-key--respiration_rate { border-color: #25677a; }
+.healthcurve-key--steps { border-color: #6a6f18; }
 .healthcurve-key--blood_pressure { border-color: #1c5a34; border-top-style: dotted; }
 .healthcurve-key--temperature { border-color: #8b4a67; border-top-style: dotted; }
 .healthcurve-key--symptoms { border-color: #bd2f6b; border-top-style: dotted; }
@@ -347,6 +348,7 @@ circle.chart-series { fill: white; }
 .healthcurve-series--heart_rate { stroke: #a32038; }
 .healthcurve-series--hrv { stroke: #6b3f82; stroke-dasharray: 4 3; }
 .healthcurve-series--respiration_rate { stroke: #25677a; }
+.healthcurve-series--steps { stroke: #6a6f18; }
 .healthcurve-series--blood_pressure { stroke: #1c5a34; stroke-dasharray: 2 3; }
 .healthcurve-series--temperature { stroke: #8b4a67; stroke-dasharray: 2 3; }
 .healthcurve-lane-bg { fill: rgb(238 243 239 / 55%); stroke: #dce2dd; }
@@ -366,6 +368,7 @@ circle.chart-series { fill: white; }
 .healthcurve-point--heart_rate { fill: #a32038; }
 .healthcurve-point--hrv { fill: #6b3f82; }
 .healthcurve-point--respiration_rate { fill: #25677a; }
+.healthcurve-point--steps { fill: #6a6f18; }
 .healthcurve-point--blood_pressure { fill: #1c5a34; }
 .healthcurve-point--temperature { fill: #8b4a67; }
 .healthcurve-blood-pressure-link { stroke: #1c5a34; stroke-width: 2; }

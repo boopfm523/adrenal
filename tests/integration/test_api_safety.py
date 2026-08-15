@@ -2041,6 +2041,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
                     {"readingTimeGMT": "2026-01-10T08:05:00Z", "hrvValue": 42},
                 ],
             },
+            steps=[],
             timezone="UTC",
         )
         return FetchedWindow(
@@ -2335,6 +2336,9 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             raise AssertionError("disconnect must not read data")
 
         def get_hrv_data(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_steps_data(self, day: str) -> list[dict[str, Any]]:
             raise AssertionError("disconnect must not read data")
 
         def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:

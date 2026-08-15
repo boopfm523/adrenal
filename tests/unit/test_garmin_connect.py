@@ -219,6 +219,9 @@ class _SyntheticClient:
     def get_hrv_data(self, day: str) -> dict[str, Any]:
         return {}
 
+    def get_steps_data(self, day: str) -> list[dict[str, Any]]:
+        return []
+
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
         return []
 
@@ -249,7 +252,7 @@ def test_fetch_window_rate_limits_every_provider_read() -> None:
     )
 
     assert client.logged_in
-    assert pauses == [0.5] * 6
+    assert pauses == [0.5] * 7
     assert fetched.capabilities["activities"] == "unavailable"
 
 
@@ -326,6 +329,9 @@ def test_read_only_adapter_exposes_approved_intraday_methods(
         def get_hrv_data(self, day: str) -> None:
             return None
 
+        def get_steps_data(self, day: str) -> list[dict[str, Any]]:
+            return [{"method": "steps", "day": day}]
+
     monkeypatch.setattr("healthcurve.integrations.garmin.connect_client.Garmin", FakeGarmin)
     client = PythonGarminReadClient(email=None, password=None, token_store=token_store)
     client.login()
@@ -334,6 +340,7 @@ def test_read_only_adapter_exposes_approved_intraday_methods(
     assert client.get_stress_data("2026-01-09")["method"] == "stress"
     assert client.get_respiration_data("2026-01-09")["method"] == "respiration"
     assert client.get_hrv_data("2026-01-09") == {}
+    assert client.get_steps_data("2026-01-09")[0]["method"] == "steps"
 
 
 def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -> None:
@@ -377,6 +384,12 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
                 {"readingTimeGMT": "2026-01-09T05:05:00Z", "hrvValue": 42},
             ],
         },
+        steps=[
+            {"startGMT": "2026-01-09T05:00:00Z", "endGMT": "2026-01-09T05:15:00Z", "steps": 10},
+            {"startGMT": "2026-01-09T05:15:00Z", "endGMT": "2026-01-09T05:30:00Z", "steps": 20},
+            {"startGMT": "2026-01-09T05:30:00Z", "endGMT": "2026-01-09T05:45:00Z", "steps": 0},
+            {"startGMT": "2026-01-09T05:45:00Z", "endGMT": "2026-01-09T06:00:00Z", "steps": 5},
+        ],
         timezone="America/New_York",
     )
 
@@ -384,6 +397,7 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
     assert values == [
         (GarminMetricType.HEART_RATE, 72),
         (GarminMetricType.HRV, 40),
+        (GarminMetricType.STEPS, Decimal("35")),
         (GarminMetricType.RESPIRATION_RATE, Decimal("14.5")),
         (GarminMetricType.STRESS, 0),
         (GarminMetricType.HRV, 42),
@@ -402,6 +416,7 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
     assert [item.sample_interval_seconds for item in mapped.observations] == [
         None,
         None,
+        3600,
         None,
         None,
         300,
@@ -412,6 +427,7 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
         "intraday_stress": "available",
         "intraday_respiration_rate": "available",
         "intraday_hrv": "available",
+        "intraday_steps": "available",
         "hrv_daily_average": "unsupported",
         "hrv_nightly_average": "available",
         "respiration_waking_average": "available",
@@ -439,6 +455,7 @@ def test_intraday_contract_is_deterministic_and_rejects_ambiguous_duplicates() -
         stress={},
         respiration={},
         hrv={"hrvSummary": {"lastNightAvg": 44}},
+        steps=[],
         timezone="America/New_York",
     )
     second = map_intraday_day(
@@ -447,6 +464,7 @@ def test_intraday_contract_is_deterministic_and_rejects_ambiguous_duplicates() -
         stress={},
         respiration={},
         hrv={"hrvSummary": {"lastNightAvg": 44}},
+        steps=[],
         timezone="America/New_York",
     )
 
@@ -470,6 +488,7 @@ def test_intraday_contract_requires_provider_descriptors() -> None:
             "highestRespirationValue": 18,
         },
         hrv={"hrvReadings": "not-a-list", "hrvSummary": ["invalid"]},
+        steps=[],
         timezone="UTC",
     )
 
