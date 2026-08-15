@@ -31,6 +31,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0021](0021-versioned-wearable-daily-summaries.md) | Versioned wearable daily summaries for bounded longitudinal reads | Accepted |
 | [0022](0022-durable-streamed-private-exports.md) | Durable streamed private exports | Accepted |
 | [0023](0023-indefinite-hot-wearable-retention.md) | Indefinite exact wearable retention | Accepted |
+| [0024](0024-selectable-physiological-cortisol-scenario-model.md) | Selectable physiological cortisol scenario model without dosing-adequacy claims | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.
