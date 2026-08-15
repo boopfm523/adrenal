@@ -56,7 +56,7 @@ function physiologicalData(): DailyHealthCurveData {
       series_unit: "nmol/L",
       safety_label: "Population-parameter modeled scenario—not a measurement or dosing guide.",
       definition: "Synthetic physiological scenario.",
-      model: { id: "hc-physiology-v2", revision: "hc-physiology-v2.0.0", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "1.4", oral_bioavailability: "0.96", clearance_liters_per_hour: "235.78", distribution_volume_liters: "474.38", cortisol_molecular_weight: "362.46", elimination_half_life_hours: "1.39", elimination_rate_per_hour: "0.497", peak_time_hours: "1.147", contribution_horizon_hours: 48, sample_interval_minutes: 5, references: [] },
+      model: { id: "hc-physiology-v2", revision: "hc-physiology-v2.0.0", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "1.4", oral_bioavailability: "0.96", clearance_liters_per_hour: "235.78", distribution_volume_liters: "474.38", cortisol_molecular_weight: "362.46", elimination_half_life_hours: "1.39", elimination_rate_per_hour: "0.497", peak_time_hours: "1.147", contribution_horizon_hours: 48, sample_interval_minutes: 5, references: ["https://doi.org/10.1016/j.metabol.2017.02.005", "https://doi.org/10.2165/11531290-000000000-00000"] },
       source_revision_sha256: "a".repeat(64),
       dose_markers: [],
       samples: [
@@ -193,6 +193,21 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelector("[data-series='context-band']")).toBeNull();
     rerender(<DailyHealthCurve data={data()} />);
     expect(screen.queryByRole("checkbox", { name: /Illustrative circadian context band/ })).not.toBeInTheDocument();
+  });
+
+  it("publishes versioned v2 formulas, primary sources, comparison, and clinical limits", () => {
+    renderWithTheme(<DailyHealthCurve data={physiologicalData()} />);
+
+    const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
+    if (methodology === null) throw new Error("model methodology disclosure missing");
+    expect(methodology).toHaveTextContent("hc-physiology-v2.0.0");
+    expect(methodology).toHaveTextContent("C(t) = (F × dose / V)");
+    expect(methodology).toHaveTextContent("lower(t) = 0.8 × center(t)");
+    expect(methodology).toHaveTextContent("Age, sex, height, and body weight do not create a clinically validated personal range");
+    expect(methodology).toHaveTextContent("Model output never overrides recorded symptoms, physician-approved plans, or physician-authored emergency instructions");
+    expect(within(methodology).getByRole("region", { name: "HealthCurve exposure model comparison" })).toHaveTextContent("hc-exposure-v1");
+    expect(within(methodology).getByRole("link", { name: "Werumeus Buning et al. (2017)" })).toHaveAttribute("href", "https://doi.org/10.1016/j.metabol.2017.02.005");
+    expect(methodology).not.toHaveTextContent(/recommended dose|increase your dose|safe range|adequate coverage/i);
   });
 
   it("shows touch-selected values in the chart tooltip and stable phone readout", () => {

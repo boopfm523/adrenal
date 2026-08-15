@@ -465,10 +465,19 @@ judgment. See
 
 ### Exact HealthCurve formulas and evidence
 
-The Analytics page publishes the executable `hc-exposure-v1` formula, its live
-parameter values, model version, evidence links, and limitations under **How this model
-works: formulas, sources, and limits**. For elapsed hours `t` after a supported actual
-dose, the implementation is exactly:
+The Analytics page lets the owner switch between two preserved, versioned models and
+publishes the selected model's executable formula, live parameter values, evidence
+links, and limitations under **How this model works: formulas, sources, and limits**.
+The URL keeps `model=hc-exposure-v1` or `model=hc-physiology-v2` across day navigation.
+An absent selector uses v1; an unknown selector fails validation rather than silently
+falling back.
+
+| Model | Output | Unit | Boundary |
+|---|---|---|---|
+| `hc-exposure-v1` | normalized oral-dose exposure shape | REU | relative visualization, not cortisol concentration |
+| `hc-physiology-v2` | population-parameter plasma-free-cortisol scenario | nmol/L | modeled scenario, not measured or personalized cortisol |
+
+For elapsed hours `t` after a supported actual dose, the v1 implementation is exactly:
 
 ```text
 ka = 2 per hour
@@ -499,6 +508,56 @@ parameters are explained and sourced to [Derendorf et al.](https://doi.org/10.10
 gold cases, unsupported formulations/routes, and uncertainty are in
 [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
 
+For v2, let `tau = t - t_i` be elapsed real hours after a supported immediate-release
+oral hydrocortisone dose `D_i` in mg. The implementation is exactly:
+
+```text
+ka = 1.4 per hour
+F = 0.96
+CL = 235.78 L/hour
+V = 474.38 L
+MW = 362.46 g/mol
+ke = CL / V
+Q_i = F * D_i / V * (1,000,000 / MW)
+C_i(t) = 0                                                when tau < 0
+C_i(t) = Q_i * ka/(ka-ke) * (exp(-ke*tau)-exp(-ka*tau))  otherwise
+C_free(t) = sum_i C_i(t)
+```
+
+Absorption and elimination occur concurrently; elimination does not wait for the drug
+to reach the bloodstream. These parameters give an isolated-dose modeled peak around
+1.147 elapsed hours. Every supported dose, including closely spaced and simultaneous
+doses, contributes independently; regular and explicitly categorized stress-dose
+components are exposed separately and sum to the plotted total. The 48-hour lookback
+preserves prior-day carryover. Exact five-minute samples plus administration and peak
+knots use UTC elapsed time, so 23- and 25-hour local days remain physically ordered.
+
+The parameter basis is [Werumeus Buning et al.](https://doi.org/10.1016/j.metabol.2017.02.005),
+with supporting one-compartment oral pharmacokinetics from
+[Simon et al.](https://doi.org/10.2165/11531290-000000000-00000) and oral disposition
+from [Derendorf et al.](https://doi.org/10.1002/j.1552-4604.1991.tb01906.x). V2 is a
+population-parameter forward scenario, not the owner's measured cortisol, a personal
+target, medication coverage, or dosing guide. Unsupported routes, formulations,
+medications, and units remain visible as excluded markers rather than being coerced.
+
+The optional `hc-circadian-context-v1` ribbon uses versioned synthetic local-clock
+anchors with shape-preserving PCHIP interpolation:
+
+```text
+center(t) = PCHIP(versioned local-clock anchors)
+lower(t) = 0.8 * center(t)
+upper(t) = 1.2 * center(t)
+```
+
+It is default-off and is an illustrative population-shape context only. Healthy-rhythm
+evidence informs general shape and phase; the numeric anchors are owner-supplied
+synthetic scenario values, not a demographic reference interval. Age, sex, height,
+and weight do not create a clinically validated personal range. Garmin stress,
+symptoms, and recorded episodes do not modify the band or either drug model. No
+time-in-range, deficit, excess, adequacy, or dose calculation is produced. Full model
+selection, parameter provenance, uncertainty, and rejected alternatives are in
+[ADR-0024](adr/0024-selectable-physiological-cortisol-scenario-model.md).
+
 For display only, each non-stress, non-symptom numeric lane uses
 `display = 100 * (value - display_min) / max(display_max - display_min, 1)`, where
 the bounds are the observed selected-day minimum and maximum. An empty lane uses 0 and
@@ -519,6 +578,11 @@ subjective symptom severity into an individual minute-by-minute cortisol require
 Any future experimental demand line therefore requires a new versioned model and ADR,
 explicit uncertainty, validation data, and language that cannot be read as dosing
 advice. See [ADR-0015](adr/0015-recorded-context-not-cortisol-demand.md).
+
+Neither model nor the illustrative ribbon overrides recorded symptoms,
+physician-approved plans, or physician-authored emergency instructions. Follow those
+instructions and seek appropriate clinical or emergency care regardless of how a
+modeled curve appears.
 
 `GET /api/v1/analytics/daily-patterns?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&timezone=Area%2FCity`
 derives up to 366 comparable local-day rows from current facts. Each row states

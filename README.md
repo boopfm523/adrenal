@@ -26,12 +26,15 @@ value; the adjacent table remains authoritative. Daily and nightly Garmin summar
 without an observation time are shown as context rather than invented as intraday
 points.
 
-The exposure line is in relative exposure units (REU). It is not a cortisol
-measurement, a conclusion about adequate coverage, or dosing advice. Recorded stress
-and symptoms currently remain overlays: HealthCurve does **not** convert them into a
-personal cortisol “needed” or medication-demand curve. The formulas, parameters,
-evidence, limitations, and this deliberate boundary are published in the Analytics
-page and [the user guide](docs/using-healthcurve.md#exact-healthcurve-formulas-and-evidence).
+The default exposure line is `hc-exposure-v1` in relative exposure units (REU). The
+owner may instead select the separately versioned `hc-physiology-v2` population-
+parameter plasma-free-cortisol scenario in nmol/L and optionally show its default-off
+illustrative circadian context ribbon. Neither is a cortisol measurement, conclusion
+about adequate coverage, personal target, or dosing advice. Recorded stress and
+symptoms remain context: HealthCurve does **not** convert them into a personal cortisol
+“needed” or medication-demand curve. The formulas, parameters, primary evidence,
+limitations, and model comparison are published in the Analytics page and
+[the user guide](docs/using-healthcurve.md#exact-healthcurve-formulas-and-evidence).
 
 For longer review, HealthCurve compares deterministic day-level features across up
 to 366 days, keeps missing data explicit, and can optionally ask the private local
