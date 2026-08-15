@@ -120,7 +120,10 @@ _BEADS_STATUS_PHRASE: Final = re.compile(
     re.IGNORECASE,
 )
 _BEADS_ADD_PHRASE: Final = re.compile(
-    r"^(?:please\s+)?add\s+(?:a\s+)?(?:bd|bead)\s+(?:that|to|for)\s+(?P<request>.+)$",
+    r"^(?:(?:can|could|would|will)\s+you\s+|please\s+)?"
+    r"(?:add|create|file|report)\s+(?:(?:a|an|the)\s+)?(?:new\s+)?"
+    r"(?:bd|bead|feature(?:\s+request)?|bug(?:\s+report)?)"
+    r"(?:\s+(?:that|to|for)\b|\s*[:.\-])?\s*(?P<request>.+)$",
     re.IGNORECASE,
 )
 

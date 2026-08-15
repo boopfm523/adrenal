@@ -35,6 +35,8 @@ BEADS_OPERATION_SCHEMA_VERSION: Final = 1
 
 _LIKELY_BEADS_REQUEST: Final = re.compile(
     r"(?i)(\b(?:bd|beads?|backlog|issues?|project|tasks?)\b|"
+    r"\b(?:add|create|file|report)\b.{0,32}\b(?:feature|bug|bead)\b|"
+    r"\b(?:feature request|bug report)\b|"
     r"\bwhat (?:are you|is codex) working on\b)"
 )
 

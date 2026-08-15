@@ -574,6 +574,66 @@ def test_natural_language_add_uses_intent_then_existing_safe_proposal_boundary(
     assert len(client.calls) == 1
 
 
+@pytest.mark.parametrize(
+    ("owner_message", "message_id"),
+    [
+        (
+            "can you add a feature. right now the app does not keep track of synthetic "
+            "step totals throughout the day for the HealthCurve visualization",
+            "2202",
+        ),
+        ("Please report a bug: the synthetic timeline filter is blank", "2204"),
+        (
+            "Could you create a feature request for a synthetic hydration review?",
+            "2205",
+        ),
+    ],
+)
+def test_plain_feature_language_routes_before_health_extraction_and_sanitizes_outbox(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    owner_message: str,
+    message_id: str,
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+    client = StubOllamaClient(model_client().result)
+
+    reply = handlers.handle_message(
+        cast(Session, object()),
+        cast(Owner, object()),
+        text=owner_message,
+        message_id=message_id,
+        client=client,
+        now=NOW,  # type: ignore[arg-type]
+    )
+
+    assert 'I\'m adding "Track daily hydration entries"' in reply.text
+    pending = next((tmp_path / "pending").glob("tg-*.json"))
+    envelope = load_envelope(pending)
+    assert envelope.proposal.title == "Track daily hydration entries"
+    assert owner_message not in pending.read_text(encoding="utf-8")
+    assert len(client.calls) == 1
+
+
+def test_plain_feature_language_model_outage_does_not_fall_through_to_health_extraction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: settings(tmp_path))
+
+    reply = handlers.handle_message(
+        cast(Session, object()),
+        cast(Owner, object()),
+        text="Can you add a feature that tracks synthetic daily steps?",
+        message_id="2203",
+        client=StubOllamaClient(ModelResult(outcome=ModelOutcome.UNAVAILABLE)),
+        now=NOW,  # type: ignore[arg-type]
+    )
+
+    assert "couldn't safely evaluate that feature request" in reply.text
+    assert "Nothing was created" in reply.text
+    assert not (tmp_path / "pending").exists()
+
+
 def test_natural_language_beads_model_outage_has_visible_command_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
