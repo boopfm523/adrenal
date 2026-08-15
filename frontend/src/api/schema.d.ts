@@ -118,7 +118,7 @@ export interface paths {
         };
         /**
          * Steroid Exposure Curve
-         * @description Return a theoretical relative exposure curve from current recorded doses.
+         * @description Return the selected deterministic model from current owner-scoped dose facts.
          */
         get: operations["steroid_exposure_curve_api_v1_analytics_steroid_exposure_get"];
         put?: never;
@@ -1585,6 +1585,133 @@ export interface components {
         Body_upload_lab_document_api_v1_labs_documents_post: {
             /** File */
             file: string;
+        };
+        /** CircadianAnchorOut */
+        CircadianAnchorOut: {
+            /** Center Nmol L */
+            center_nmol_l: string;
+            /** Local Hour */
+            local_hour: string;
+        };
+        /** CircadianContextBandOut */
+        CircadianContextBandOut: {
+            band: components["schemas"]["CircadianContextModelOut"];
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Day End
+             * Format: date-time
+             */
+            day_end: string;
+            /**
+             * Day Start
+             * Format: date-time
+             */
+            day_start: string;
+            /**
+             * Default Visible
+             * @constant
+             */
+            default_visible: false;
+            /** Elapsed Hours */
+            elapsed_hours: string;
+            recorded_stress_context: components["schemas"]["RecordedStressContextOut"];
+            /** Safety Label */
+            safety_label: string;
+            /** Samples */
+            samples: components["schemas"]["CircadianContextSampleOut"][];
+            /**
+             * Series Kind
+             * @constant
+             */
+            series_kind: "illustrative_circadian_context_band";
+            /**
+             * Series Name
+             * @constant
+             */
+            series_name: "Illustrative circadian context band";
+            /**
+             * Series Unit
+             * @constant
+             */
+            series_unit: "nmol/L";
+            /** Timezone */
+            timezone: string;
+        };
+        /** CircadianContextModelOut */
+        CircadianContextModelOut: {
+            /**
+             * Anchor Origin
+             * @constant
+             */
+            anchor_origin: "owner_supplied_synthetic_scenario";
+            /** Anchors */
+            anchors: components["schemas"]["CircadianAnchorOut"][];
+            /**
+             * Body Context Used
+             * @constant
+             */
+            body_context_used: false;
+            /**
+             * Demographic Reference Interval
+             * @constant
+             */
+            demographic_reference_interval: false;
+            /**
+             * Healthy Rhythm Evidence Scope
+             * @constant
+             */
+            healthy_rhythm_evidence_scope: "shape_and_phase_context_only";
+            /**
+             * Id
+             * @constant
+             */
+            id: "hc-circadian-context-v1";
+            /**
+             * Interpolation
+             * @constant
+             */
+            interpolation: "pchip-no-overshoot";
+            /** Lower Multiplier */
+            lower_multiplier: string;
+            /**
+             * Personalized
+             * @constant
+             */
+            personalized: false;
+            /** References */
+            references: string[];
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "hc-circadian-context-v1.0.0";
+            /** Upper Multiplier */
+            upper_multiplier: string;
+        };
+        /** CircadianContextSampleOut */
+        CircadianContextSampleOut: {
+            /** Center Nmol L */
+            center_nmol_l: string;
+            /**
+             * Local Time
+             * Format: date-time
+             */
+            local_time: string;
+            /** Lower Nmol L */
+            lower_nmol_l: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Upper Nmol L */
+            upper_nmol_l: string;
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
         };
         /**
          * ConfirmationState
@@ -3164,6 +3291,121 @@ export interface components {
             /** Specimen Type */
             specimen_type?: string | null;
         };
+        /** PhysiologicalCortisolCurveOut */
+        PhysiologicalCortisolCurveOut: {
+            context_band: components["schemas"]["CircadianContextBandOut"];
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Day End
+             * Format: date-time
+             */
+            day_end: string;
+            /**
+             * Day Start
+             * Format: date-time
+             */
+            day_start: string;
+            /** Definition */
+            definition: string;
+            /** Dose Markers */
+            dose_markers: components["schemas"]["SteroidExposureDoseMarker"][];
+            /** Elapsed Hours */
+            elapsed_hours: string;
+            /** Excluded Dose Count */
+            excluded_dose_count: number;
+            model: components["schemas"]["PhysiologicalCortisolModelOut"];
+            /** Safety Label */
+            safety_label: string;
+            /** Samples */
+            samples: components["schemas"]["PhysiologicalCortisolSampleOut"][];
+            /**
+             * Series Kind
+             * @constant
+             */
+            series_kind: "modeled_plasma_free_cortisol_scenario";
+            /**
+             * Series Name
+             * @constant
+             */
+            series_name: "Modeled plasma-free-cortisol scenario";
+            /**
+             * Series Unit
+             * @constant
+             */
+            series_unit: "nmol/L";
+            /** Source Revision Sha256 */
+            source_revision_sha256: string;
+            /** Supported Dose Count */
+            supported_dose_count: number;
+            /** Timezone */
+            timezone: string;
+        };
+        /** PhysiologicalCortisolModelOut */
+        PhysiologicalCortisolModelOut: {
+            /** Absorption Rate Per Hour */
+            absorption_rate_per_hour: string;
+            amount_unit: components["schemas"]["DoseUnit"];
+            /** Clearance Liters Per Hour */
+            clearance_liters_per_hour: string;
+            /** Contribution Horizon Hours */
+            contribution_horizon_hours: number;
+            /** Cortisol Molecular Weight */
+            cortisol_molecular_weight: string;
+            /** Distribution Volume Liters */
+            distribution_volume_liters: string;
+            /** Elimination Half Life Hours */
+            elimination_half_life_hours: string;
+            /** Elimination Rate Per Hour */
+            elimination_rate_per_hour: string;
+            /**
+             * Id
+             * @constant
+             */
+            id: "hc-physiology-v2";
+            /** Oral Bioavailability */
+            oral_bioavailability: string;
+            /** Peak Time Hours */
+            peak_time_hours: string;
+            /** References */
+            references: string[];
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "hc-physiology-v2.0.0";
+            /** Sample Interval Minutes */
+            sample_interval_minutes: number;
+            /** Supported Formulation */
+            supported_formulation: string;
+            /** Supported Medication */
+            supported_medication: string;
+            supported_route: components["schemas"]["Route"];
+        };
+        /** PhysiologicalCortisolSampleOut */
+        PhysiologicalCortisolSampleOut: {
+            /**
+             * Local Time
+             * Format: date-time
+             */
+            local_time: string;
+            /** Modeled Free Cortisol Nmol L */
+            modeled_free_cortisol_nmol_l: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Regular Modeled Free Cortisol Nmol L */
+            regular_modeled_free_cortisol_nmol_l: string;
+            /** Stress Modeled Free Cortisol Nmol L */
+            stress_modeled_free_cortisol_nmol_l: string;
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
+        };
         /**
          * PlanComparisonDay
          * @description A day compared against the historical plan intervals in force on that day.
@@ -3366,6 +3608,27 @@ export interface components {
         ReauthenticatedRequest: {
             /** Password */
             password: string;
+        };
+        /** RecordedStressContextOut */
+        RecordedStressContextOut: {
+            /**
+             * Applied To Band
+             * @constant
+             */
+            applied_to_band: false;
+            /**
+             * Applied To Drug Model
+             * @constant
+             */
+            applied_to_drug_model: false;
+            /** Episode Count */
+            episode_count: number;
+            /** Missing Severity Count */
+            missing_severity_count: number;
+            /** Multiplier */
+            multiplier: string;
+            /** Reason */
+            reason: string;
         };
         /**
          * RegimenApprovalIn
@@ -4350,6 +4613,7 @@ export interface operations {
             query: {
                 day: string;
                 timezone?: string | null;
+                model?: "hc-exposure-v1" | "hc-physiology-v2";
             };
             header?: never;
             path?: never;
@@ -4365,7 +4629,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SteroidExposureCurveOut"];
+                    "application/json": components["schemas"]["SteroidExposureCurveOut"] | components["schemas"]["PhysiologicalCortisolCurveOut"];
                 };
             };
             /** @description Validation Error */

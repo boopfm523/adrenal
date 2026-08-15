@@ -6,7 +6,7 @@ import csv
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from io import StringIO
-from typing import cast
+from typing import Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -14,7 +14,14 @@ from sqlalchemy import select
 
 from healthcurve.ai import analysis as analysis_service
 from healthcurve.ai.models import AIAnalysis, AnalysisType
-from healthcurve.analytics import day_analysis, exposure, patterns, service
+from healthcurve.analytics import (
+    circadian_context,
+    day_analysis,
+    exposure,
+    patterns,
+    physiology,
+    service,
+)
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
     AnalyticsSummaryOut,
@@ -23,6 +30,7 @@ from healthcurve.api.schemas import (
     DayAnalysisOut,
     PatternAnalysisGenerationOut,
     PatternAnalysisOut,
+    PhysiologicalCortisolCurveOut,
     SteroidExposureCurveOut,
 )
 from healthcurve.operations import audit
@@ -46,20 +54,36 @@ def _validated_range(
     return zone_name
 
 
-@router.get("/analytics/steroid-exposure", response_model=SteroidExposureCurveOut)
+@router.get(
+    "/analytics/steroid-exposure",
+    response_model=SteroidExposureCurveOut | PhysiologicalCortisolCurveOut,
+)
 def steroid_exposure_curve(
     session: DbSession,
     owner: CurrentOwner,
     day: date,
     timezone: str | None = None,
+    model: Literal["hc-exposure-v1", "hc-physiology-v2"] = "hc-exposure-v1",
 ):
-    """Return a theoretical relative exposure curve from current recorded doses."""
+    """Return the selected deterministic model from current owner-scoped dose facts."""
     zone_name = timezone or owner.default_timezone
     try:
         ZoneInfo(zone_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=422, detail="invalid timezone") from exc
-    return exposure.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
+    if model == "hc-exposure-v1":
+        return exposure.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
+    curve = physiology.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
+    sample_instants = [
+        cast(datetime, sample["occurred_at"])
+        for sample in cast(list[dict[str, object]], curve["samples"])
+    ]
+    curve["context_band"] = circadian_context.build_band(
+        day=day,
+        timezone=zone_name,
+        sample_instants=sample_instants,
+    )
+    return curve
 
 
 @router.get("/analytics/summary", response_model=AnalyticsSummaryOut)

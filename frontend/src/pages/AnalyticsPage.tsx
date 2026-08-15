@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Paper, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Group, NativeSelect, Paper, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type PropsWithChildren } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -13,6 +13,7 @@ import {
   getDailyTemperature,
   getSteroidExposure,
   type AnalyticsSummary,
+  type HealthCurveModel,
 } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
@@ -95,9 +96,10 @@ function recentDayShortcuts(timezone: string, fallbackTimezone: string): readonl
 function selectedHealthCurveDay(
   searchParams: URLSearchParams,
   profileTimezone: string,
-): { day: string; timezone: string } {
+): { day: string; timezone: string; model: HealthCurveModel } {
   const requestedDay = searchParams.get("day");
   const requestedTimezone = searchParams.get("timezone")?.trim();
+  const requestedModel = searchParams.get("model");
   return {
     day: requestedDay !== null && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay)
       ? requestedDay
@@ -105,6 +107,7 @@ function selectedHealthCurveDay(
     timezone: requestedTimezone === undefined || requestedTimezone === ""
       ? profileTimezone
       : requestedTimezone,
+    model: requestedModel === "hc-physiology-v2" ? requestedModel : "hc-exposure-v1",
   };
 }
 
@@ -113,19 +116,20 @@ function HealthCurveDateFilter({
   profileTimezone,
   onReview,
 }: {
-  selected: { day: string; timezone: string };
+  selected: { day: string; timezone: string; model: HealthCurveModel };
   profileTimezone: string;
-  onReview: (next: { day: string; timezone: string }) => void;
+  onReview: (next: { day: string; timezone: string; model: HealthCurveModel }) => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState(selected);
   const shortcuts = recentDayShortcuts(draft.timezone, profileTimezone);
   return <Paper component="form" className="healthcurve-date-filter" withBorder radius="lg" p="lg" onSubmit={(event) => { event.preventDefault(); onReview(draft); }}>
-    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+    <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
       <TextInput label="HealthCurve date" aria-label="HealthCurve date" required type="date" value={draft.day} onChange={(event) => { setDraft({ ...draft, day: event.target.value }); }} />
       <TextInput label="IANA timezone" aria-label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} />
+      <NativeSelect label="Exposure model" aria-label="Exposure model" required value={draft.model} data={[{ value: "hc-exposure-v1", label: "Simple relative exposure (v1)" }, { value: "hc-physiology-v2", label: "Physiological free-cortisol scenario (v2)" }]} onChange={(event) => { const value = event.currentTarget.value; if (value === "hc-exposure-v1" || value === "hc-physiology-v2") setDraft({ ...draft, model: value }); }} />
     </SimpleGrid>
     <Group mt="md" justify="space-between" align="center">
-      <Group gap="xs" role="group" aria-label="Quick HealthCurve dates"><Text fw={750}>Quick dates:</Text>{shortcuts.map((shortcut) => <Button key={shortcut.label} type="button" variant={selected.day === shortcut.day && selected.timezone === draft.timezone ? "filled" : "outline"} aria-pressed={selected.day === shortcut.day && selected.timezone === draft.timezone} onClick={() => { onReview({ day: shortcut.day, timezone: draft.timezone }); }}>{shortcut.label}</Button>)}</Group>
+      <Group gap="xs" role="group" aria-label="Quick HealthCurve dates"><Text fw={750}>Quick dates:</Text>{shortcuts.map((shortcut) => <Button key={shortcut.label} type="button" variant={selected.day === shortcut.day && selected.timezone === draft.timezone && selected.model === draft.model ? "filled" : "outline"} aria-pressed={selected.day === shortcut.day && selected.timezone === draft.timezone && selected.model === draft.model} onClick={() => { onReview({ day: shortcut.day, timezone: draft.timezone, model: draft.model }); }}>{shortcut.label}</Button>)}</Group>
       <Button type="submit">Review this day</Button>
     </Group>
   </Paper>;
@@ -158,7 +162,7 @@ export function AnalyticsPage(): React.JSX.Element {
     queryKey: ["daily-healthcurve", dayFilter],
     queryFn: async () => {
       const [exposure, garmin, symptoms, bloodPressure, temperature, episodes] = await Promise.all([
-        getSteroidExposure(dayFilter.day, dayFilter.timezone),
+        getSteroidExposure(dayFilter.day, dayFilter.timezone, dayFilter.model),
         getDailyGarminContext(dayFilter.day, dayFilter.timezone),
         getDailySymptoms(dayFilter.day, dayFilter.timezone),
         getDailyBloodPressure(dayFilter.day, dayFilter.timezone),
@@ -172,23 +176,24 @@ export function AnalyticsPage(): React.JSX.Element {
   const summary = useQuery({ queryKey: ["analytics", filters], queryFn: () => getAnalyticsSummary(filters.dateFrom, filters.dateTo, filters.timezone) });
   const patterns = useQuery({ queryKey: ["daily-patterns", filters], queryFn: () => getDailyPatterns(filters.dateFrom, filters.dateTo, filters.timezone) });
 
-  function reviewDay(next: { day: string; timezone: string }): void {
+  function reviewDay(next: { day: string; timezone: string; model: HealthCurveModel }): void {
     const search = new URLSearchParams(searchParams);
     search.set("day", next.day);
     search.set("timezone", next.timezone);
+    search.set("model", next.model);
     setSearchParams(search);
   }
 
   function reviewAdjacentDay(offset: -1 | 1): void {
     const nextDay = shiftIsoDate(dayFilter.day, offset);
     if (offset === 1 && nextDay > todayForSelectedTimezone) return;
-    reviewDay({ day: nextDay, timezone: dayFilter.timezone });
+    reviewDay({ day: nextDay, timezone: dayFilter.timezone, model: dayFilter.model });
   }
 
   return <Page title="Daily review" documentTitle="HealthCurve.ai" description="Review one day from actual recorded doses and health context, then inspect longer-range deterministic summaries.">
-    <HealthCurveDateFilter key={`${dayFilter.day}-${dayFilter.timezone}`} selected={dayFilter} profileTimezone={profileTimezone} onReview={reviewDay} />
+    <HealthCurveDateFilter key={`${dayFilter.day}-${dayFilter.timezone}-${dayFilter.model}`} selected={dayFilter} profileTimezone={profileTimezone} onReview={reviewDay} />
     {dailyCurve.isPending ? <Text role="status" mt="md">Building your daily HealthCurve…</Text> : null}
-    {dailyCurve.isError ? <Alert color="red" mt="md" role="alert">The daily HealthCurve could not be loaded. Check the selected date and IANA timezone.</Alert> : null}
+    {dailyCurve.isError ? <Alert color="red" mt="md" role="alert">The daily HealthCurve could not be loaded. Check the selected date, IANA timezone, and exposure model.</Alert> : null}
     {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} visible={curveVisibility} onVisibleChange={setCurveVisibility} onPreviousDay={() => { reviewAdjacentDay(-1); }} onNextDay={() => { reviewAdjacentDay(1); }} nextDayDisabled={dayFilter.day >= todayForSelectedTimezone} />}
     {dailyCurve.data === undefined ? null : <DayAnalysisCard day={dayFilter.day} timezone={dayFilter.timezone} />}
     <Stack className="analytics-history" gap="xs"><Title order={2} id="analytics-history-title">Longer-range analytics</Title><Text>Use these deterministic totals to compare days across a longer period. Daily pattern analysis builds on the selected-day HealthCurve.</Text></Stack>

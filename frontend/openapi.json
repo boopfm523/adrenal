@@ -518,6 +518,231 @@
         "title": "Body_upload_lab_document_api_v1_labs_documents_post",
         "type": "object"
       },
+      "CircadianAnchorOut": {
+        "additionalProperties": false,
+        "properties": {
+          "center_nmol_l": {
+            "title": "Center Nmol L",
+            "type": "string"
+          },
+          "local_hour": {
+            "title": "Local Hour",
+            "type": "string"
+          }
+        },
+        "required": [
+          "local_hour",
+          "center_nmol_l"
+        ],
+        "title": "CircadianAnchorOut",
+        "type": "object"
+      },
+      "CircadianContextBandOut": {
+        "additionalProperties": false,
+        "properties": {
+          "band": {
+            "$ref": "#/components/schemas/CircadianContextModelOut"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "day_end": {
+            "format": "date-time",
+            "title": "Day End",
+            "type": "string"
+          },
+          "day_start": {
+            "format": "date-time",
+            "title": "Day Start",
+            "type": "string"
+          },
+          "default_visible": {
+            "const": false,
+            "title": "Default Visible",
+            "type": "boolean"
+          },
+          "elapsed_hours": {
+            "title": "Elapsed Hours",
+            "type": "string"
+          },
+          "recorded_stress_context": {
+            "$ref": "#/components/schemas/RecordedStressContextOut"
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/CircadianContextSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "series_kind": {
+            "const": "illustrative_circadian_context_band",
+            "title": "Series Kind",
+            "type": "string"
+          },
+          "series_name": {
+            "const": "Illustrative circadian context band",
+            "title": "Series Name",
+            "type": "string"
+          },
+          "series_unit": {
+            "const": "nmol/L",
+            "title": "Series Unit",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "day_start",
+          "day_end",
+          "elapsed_hours",
+          "series_kind",
+          "series_name",
+          "series_unit",
+          "default_visible",
+          "safety_label",
+          "band",
+          "recorded_stress_context",
+          "samples"
+        ],
+        "title": "CircadianContextBandOut",
+        "type": "object"
+      },
+      "CircadianContextModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_origin": {
+            "const": "owner_supplied_synthetic_scenario",
+            "title": "Anchor Origin",
+            "type": "string"
+          },
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/CircadianAnchorOut"
+            },
+            "title": "Anchors",
+            "type": "array"
+          },
+          "body_context_used": {
+            "const": false,
+            "title": "Body Context Used",
+            "type": "boolean"
+          },
+          "demographic_reference_interval": {
+            "const": false,
+            "title": "Demographic Reference Interval",
+            "type": "boolean"
+          },
+          "healthy_rhythm_evidence_scope": {
+            "const": "shape_and_phase_context_only",
+            "title": "Healthy Rhythm Evidence Scope",
+            "type": "string"
+          },
+          "id": {
+            "const": "hc-circadian-context-v1",
+            "title": "Id",
+            "type": "string"
+          },
+          "interpolation": {
+            "const": "pchip-no-overshoot",
+            "title": "Interpolation",
+            "type": "string"
+          },
+          "lower_multiplier": {
+            "title": "Lower Multiplier",
+            "type": "string"
+          },
+          "personalized": {
+            "const": false,
+            "title": "Personalized",
+            "type": "boolean"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "revision": {
+            "const": "hc-circadian-context-v1.0.0",
+            "title": "Revision",
+            "type": "string"
+          },
+          "upper_multiplier": {
+            "title": "Upper Multiplier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "interpolation",
+          "lower_multiplier",
+          "upper_multiplier",
+          "anchor_origin",
+          "healthy_rhythm_evidence_scope",
+          "personalized",
+          "body_context_used",
+          "demographic_reference_interval",
+          "references",
+          "anchors"
+        ],
+        "title": "CircadianContextModelOut",
+        "type": "object"
+      },
+      "CircadianContextSampleOut": {
+        "additionalProperties": false,
+        "properties": {
+          "center_nmol_l": {
+            "title": "Center Nmol L",
+            "type": "string"
+          },
+          "local_time": {
+            "format": "date-time",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "lower_nmol_l": {
+            "title": "Lower Nmol L",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "upper_nmol_l": {
+            "title": "Upper Nmol L",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "local_time",
+          "utc_offset_minutes",
+          "center_nmol_l",
+          "lower_nmol_l",
+          "upper_nmol_l"
+        ],
+        "title": "CircadianContextSampleOut",
+        "type": "object"
+      },
       "ConfirmationState": {
         "description": "Why this record is trusted. Immutable except through a correction (SAFE-14).",
         "enum": [
@@ -5499,6 +5724,253 @@
         "title": "PdfLabConfirmIn",
         "type": "object"
       },
+      "PhysiologicalCortisolCurveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "context_band": {
+            "$ref": "#/components/schemas/CircadianContextBandOut"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "day_end": {
+            "format": "date-time",
+            "title": "Day End",
+            "type": "string"
+          },
+          "day_start": {
+            "format": "date-time",
+            "title": "Day Start",
+            "type": "string"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "dose_markers": {
+            "items": {
+              "$ref": "#/components/schemas/SteroidExposureDoseMarker"
+            },
+            "title": "Dose Markers",
+            "type": "array"
+          },
+          "elapsed_hours": {
+            "title": "Elapsed Hours",
+            "type": "string"
+          },
+          "excluded_dose_count": {
+            "minimum": 0.0,
+            "title": "Excluded Dose Count",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/PhysiologicalCortisolModelOut"
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/PhysiologicalCortisolSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "series_kind": {
+            "const": "modeled_plasma_free_cortisol_scenario",
+            "title": "Series Kind",
+            "type": "string"
+          },
+          "series_name": {
+            "const": "Modeled plasma-free-cortisol scenario",
+            "title": "Series Name",
+            "type": "string"
+          },
+          "series_unit": {
+            "const": "nmol/L",
+            "title": "Series Unit",
+            "type": "string"
+          },
+          "source_revision_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision Sha256",
+            "type": "string"
+          },
+          "supported_dose_count": {
+            "minimum": 0.0,
+            "title": "Supported Dose Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "day_start",
+          "day_end",
+          "elapsed_hours",
+          "series_kind",
+          "series_name",
+          "series_unit",
+          "safety_label",
+          "definition",
+          "model",
+          "source_revision_sha256",
+          "dose_markers",
+          "samples",
+          "supported_dose_count",
+          "excluded_dose_count",
+          "context_band"
+        ],
+        "title": "PhysiologicalCortisolCurveOut",
+        "type": "object"
+      },
+      "PhysiologicalCortisolModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "absorption_rate_per_hour": {
+            "title": "Absorption Rate Per Hour",
+            "type": "string"
+          },
+          "amount_unit": {
+            "$ref": "#/components/schemas/DoseUnit"
+          },
+          "clearance_liters_per_hour": {
+            "title": "Clearance Liters Per Hour",
+            "type": "string"
+          },
+          "contribution_horizon_hours": {
+            "exclusiveMinimum": 0.0,
+            "title": "Contribution Horizon Hours",
+            "type": "integer"
+          },
+          "cortisol_molecular_weight": {
+            "title": "Cortisol Molecular Weight",
+            "type": "string"
+          },
+          "distribution_volume_liters": {
+            "title": "Distribution Volume Liters",
+            "type": "string"
+          },
+          "elimination_half_life_hours": {
+            "title": "Elimination Half Life Hours",
+            "type": "string"
+          },
+          "elimination_rate_per_hour": {
+            "title": "Elimination Rate Per Hour",
+            "type": "string"
+          },
+          "id": {
+            "const": "hc-physiology-v2",
+            "title": "Id",
+            "type": "string"
+          },
+          "oral_bioavailability": {
+            "title": "Oral Bioavailability",
+            "type": "string"
+          },
+          "peak_time_hours": {
+            "title": "Peak Time Hours",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "revision": {
+            "const": "hc-physiology-v2.0.0",
+            "title": "Revision",
+            "type": "string"
+          },
+          "sample_interval_minutes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sample Interval Minutes",
+            "type": "integer"
+          },
+          "supported_formulation": {
+            "title": "Supported Formulation",
+            "type": "string"
+          },
+          "supported_medication": {
+            "title": "Supported Medication",
+            "type": "string"
+          },
+          "supported_route": {
+            "$ref": "#/components/schemas/Route"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "supported_medication",
+          "supported_formulation",
+          "supported_route",
+          "amount_unit",
+          "absorption_rate_per_hour",
+          "oral_bioavailability",
+          "clearance_liters_per_hour",
+          "distribution_volume_liters",
+          "cortisol_molecular_weight",
+          "elimination_half_life_hours",
+          "elimination_rate_per_hour",
+          "peak_time_hours",
+          "contribution_horizon_hours",
+          "sample_interval_minutes",
+          "references"
+        ],
+        "title": "PhysiologicalCortisolModelOut",
+        "type": "object"
+      },
+      "PhysiologicalCortisolSampleOut": {
+        "additionalProperties": false,
+        "properties": {
+          "local_time": {
+            "format": "date-time",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "modeled_free_cortisol_nmol_l": {
+            "title": "Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "regular_modeled_free_cortisol_nmol_l": {
+            "title": "Regular Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "stress_modeled_free_cortisol_nmol_l": {
+            "title": "Stress Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "local_time",
+          "utc_offset_minutes",
+          "modeled_free_cortisol_nmol_l",
+          "regular_modeled_free_cortisol_nmol_l",
+          "stress_modeled_free_cortisol_nmol_l"
+        ],
+        "title": "PhysiologicalCortisolSampleOut",
+        "type": "object"
+      },
       "PlanComparisonDay": {
         "additionalProperties": false,
         "description": "A day compared against the historical plan intervals in force on that day.\n\n``missing`` slots are *derived*, not stored: no zero-dose row is ever written\n(SAFE-10).",
@@ -6129,6 +6601,49 @@
           "password"
         ],
         "title": "ReauthenticatedRequest",
+        "type": "object"
+      },
+      "RecordedStressContextOut": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_to_band": {
+            "const": false,
+            "title": "Applied To Band",
+            "type": "boolean"
+          },
+          "applied_to_drug_model": {
+            "const": false,
+            "title": "Applied To Drug Model",
+            "type": "boolean"
+          },
+          "episode_count": {
+            "minimum": 0.0,
+            "title": "Episode Count",
+            "type": "integer"
+          },
+          "missing_severity_count": {
+            "minimum": 0.0,
+            "title": "Missing Severity Count",
+            "type": "integer"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_count",
+          "missing_severity_count",
+          "multiplier",
+          "applied_to_band",
+          "applied_to_drug_model",
+          "reason"
+        ],
+        "title": "RecordedStressContextOut",
         "type": "object"
       },
       "RegimenApprovalIn": {
@@ -8982,7 +9497,7 @@
     },
     "/api/v1/analytics/steroid-exposure": {
       "get": {
-        "description": "Return a theoretical relative exposure curve from current recorded doses.",
+        "description": "Return the selected deterministic model from current owner-scoped dose facts.",
         "operationId": "steroid_exposure_curve_api_v1_analytics_steroid_exposure_get",
         "parameters": [
           {
@@ -9012,6 +9527,20 @@
             }
           },
           {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "default": "hc-exposure-v1",
+              "enum": [
+                "hc-exposure-v1",
+                "hc-physiology-v2"
+              ],
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          {
             "in": "cookie",
             "name": "hc_session",
             "required": false,
@@ -9033,7 +9562,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SteroidExposureCurveOut"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SteroidExposureCurveOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PhysiologicalCortisolCurveOut"
+                    }
+                  ],
+                  "title": "Response Steroid Exposure Curve Api V1 Analytics Steroid Exposure Get"
                 }
               }
             },

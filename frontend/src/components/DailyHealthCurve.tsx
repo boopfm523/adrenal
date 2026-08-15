@@ -116,6 +116,32 @@ const REQUIREMENT_EVIDENCE = [
   { href: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3813945/", label: "Lewis and Elder (2013)", use: "cortisol-binding globulin materially affects total and free cortisol interpretation" },
 ] as const;
 
+function isPhysiologicalCurve(exposure: SteroidExposureCurve): exposure is Extract<SteroidExposureCurve, { series_unit: "nmol/L" }> {
+  return exposure.series_unit === "nmol/L";
+}
+
+function exposureModelVersion(exposure: SteroidExposureCurve): string {
+  return isPhysiologicalCurve(exposure) ? exposure.model.revision : exposure.model.version;
+}
+
+function exposureValue(sample: SteroidExposureCurve["samples"][number]): string {
+  return "modeled_free_cortisol_nmol_l" in sample
+    ? sample.modeled_free_cortisol_nmol_l
+    : sample.theoretical_exposure_reu;
+}
+
+function regularExposureValue(sample: SteroidExposureCurve["samples"][number]): string {
+  return "regular_modeled_free_cortisol_nmol_l" in sample
+    ? sample.regular_modeled_free_cortisol_nmol_l
+    : sample.regular_exposure_reu;
+}
+
+function stressExposureValue(sample: SteroidExposureCurve["samples"][number]): string {
+  return "stress_modeled_free_cortisol_nmol_l" in sample
+    ? sample.stress_modeled_free_cortisol_nmol_l
+    : sample.stress_exposure_reu;
+}
+
 function presetVisibility(keys: readonly LaneKey[]): Record<LaneKey, boolean> {
   const included = new Set(keys);
   return Object.fromEntries(
@@ -364,13 +390,13 @@ function SummaryInfo({ id, label, children }: { id: string; label: string; child
 function lanes(data: DailyHealthCurveData): Lane[] {
   const exposure: Lane = {
     key: "exposure",
-    label: "Theoretical exposure",
-    unit: "REU",
+    label: isPhysiologicalCurve(data.exposure) ? data.exposure.series_name : "Theoretical exposure",
+    unit: data.exposure.series_unit,
     points: data.exposure.samples.map((sample) => ({
       time: sample.occurred_at,
-      value: Number(sample.theoretical_exposure_reu),
-      label: formatMeasurement(sample.theoretical_exposure_reu, "REU"),
-      source: data.exposure.model.version,
+      value: Number(exposureValue(sample)),
+      label: formatMeasurement(exposureValue(sample), data.exposure.series_unit),
+      source: exposureModelVersion(data.exposure),
       cadenceSeconds: data.exposure.model.sample_interval_minutes * 60,
     })),
   };
@@ -651,19 +677,19 @@ export function DailyHealthCurve({
       return [{
         key: `${lane.key}-${point.time}-${point.label}`,
         series: lane.label,
-        value: lane.key === "exposure" ? `${point.value.toFixed(3)} REU` : point.label,
+        value: lane.key === "exposure" ? `${point.value.toFixed(3)} ${data.exposure.series_unit}` : point.label,
       }];
     }),
     ...(cursorExposureSample === undefined ? [] : [
-      ...(Number(cursorExposureSample.regular_exposure_reu) > 0 ? [{
+      ...(Number(regularExposureValue(cursorExposureSample)) > 0 ? [{
         key: `regular-exposure-${cursorExposureSample.occurred_at}`,
         series: "Regular-dose contribution",
-        value: `${Number(cursorExposureSample.regular_exposure_reu).toFixed(3)} REU`,
+        value: `${Number(regularExposureValue(cursorExposureSample)).toFixed(3)} ${data.exposure.series_unit}`,
       }] : []),
-      ...(Number(cursorExposureSample.stress_exposure_reu) > 0 ? [{
+      ...(Number(stressExposureValue(cursorExposureSample)) > 0 ? [{
         key: `stress-exposure-${cursorExposureSample.occurred_at}`,
         series: "Stress-dose contribution",
-        value: `${Number(cursorExposureSample.stress_exposure_reu).toFixed(3)} REU`,
+        value: `${Number(stressExposureValue(cursorExposureSample)).toFixed(3)} ${data.exposure.series_unit}`,
       }] : []),
     ]),
     ...cursorUnscoredSymptoms.map((symptom) => ({
@@ -719,7 +745,7 @@ export function DailyHealthCurve({
     <details className="metric-definition healthcurve-context">
       <summary>HealthCurve context and limits</summary>
       <div className="healthcurve-context-content">
-        <dl className="metric-metadata healthcurve-context-model"><div><dt>Exposure model</dt><dd>{data.exposure.model.version}</dd></div></dl>
+        <dl className="metric-metadata healthcurve-context-model"><div><dt>Exposure model</dt><dd>{exposureModelVersion(data.exposure)}</dd></div></dl>
         <aside className="association-caution"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
         <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
         <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
@@ -727,7 +753,7 @@ export function DailyHealthCurve({
     </details>
     <Stack className="healthcurve-controls" gap="sm" aria-label="HealthCurve chart controls"><Group className="healthcurve-focus" gap="xs" role="group" aria-label="Choose a focused HealthCurve comparison"><Text fw={750}>Quick focus:</Text>{FOCUS_PRESETS.map((preset) => <Button key={preset.label} type="button" size="sm" variant={isPresetVisible(visible, preset.keys) ? "filled" : "outline"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</Button>)}</Group>
       <Paper component="fieldset" className="curve-toggles" withBorder radius="md" p="md"><legend>Show or hide chart series</legend><SimpleGrid cols={{ base: 1, xs: 2, md: 3 }}>{Object.entries({
-        exposure: "Theoretical exposure and actual doses",
+        exposure: isPhysiologicalCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
         stress: "Garmin stress",
         heart_rate: "Heart rate",
         hrv: "HRV",
@@ -844,7 +870,7 @@ export function DailyHealthCurve({
         <h3 id={`curve-summary-title-${lane.key}`}>{lane.label}<SummaryInfo id={metadataId} label={lane.label}>{laneMetadata(lane, data, unscoredSymptoms.length)}</SummaryInfo></h3>
         <div className="curve-summary-values">
           {aggregates.map((record) => <p key={record.id}><strong>{record.measurement_label ?? garminMetricLabel(record.metric_type)}:</strong> {dailyAggregateValue(record)}</p>)}
-          {lane.key === "exposure" ? <p><strong>Peak:</strong> {summaryNumber(Math.max(...values, 0), 3)} REU</p> : null}
+          {lane.key === "exposure" ? <p><strong>Peak:</strong> {summaryNumber(Math.max(...values, 0), 3)} {data.exposure.series_unit}</p> : null}
           {["stress", "heart_rate", "hrv", "respiration_rate"].includes(lane.key) && average !== null ? <><p><strong>Observed average:</strong> {summaryNumber(average)} {lane.unit}</p><p><strong>Observed range:</strong> {summaryNumber(Math.min(...values))}–{summaryNumber(Math.max(...values))} {lane.unit}</p></> : null}
           {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => <p key={record.id}><strong>{record.systolic_mmhg.toString()}/{record.diastolic_mmhg.toString()} mmHg</strong>{record.pulse_bpm == null ? null : ` · pulse ${record.pulse_bpm.toString()} bpm`}</p>) : null}
           {lane.key === "temperature" ? data.temperature.map((record) => <p key={record.id}><strong>{record.display_f} °F</strong> ({record.display_c} °C)</p>) : null}
@@ -858,13 +884,18 @@ export function DailyHealthCurve({
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
       <h3>Exact implemented exposure formula</h3>
-      <p><strong>{data.exposure.model.version}</strong> supports only {data.exposure.model.supported_formulation} {data.exposure.model.supported_route} {data.exposure.model.supported_medication} recorded in {data.exposure.model.amount_unit}. For elapsed hours <code>t</code> after each actual dose:</p>
-      <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = ln(2) / ${formatDecimal(data.exposure.model.elimination_half_life_hours)} hours = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nraw(t) = exp(-ke × t) - exp(-ka × t)\nshape(t) = raw(t) / raw(t_peak)\ndose_contribution(t) = recorded_amount_mg × shape(t) REU\nstress_exposure(t) = sum of explicitly categorized stress-dose contributions\nregular_exposure(t) = sum of all other supported dose contributions\ntotal_exposure(t) = regular_exposure(t) + stress_exposure(t)`}</code></pre>
-      <p>Each contribution is zero before its recorded administration and after {data.exposure.model.contribution_horizon_hours.toString()} hours. It rises from zero, reaches a normalized peak of 1 REU per recorded mg at <code>t_peak</code>, then declines. Contributions from close or simultaneous doses are summed; none resets another. Output is sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots. REU is a relative visualization unit, not nmol/L, µg/dL, biological effect, or medication adequacy.</p>
+      <p><strong>{exposureModelVersion(data.exposure)}</strong> supports only {data.exposure.model.supported_formulation} {data.exposure.model.supported_route} {data.exposure.model.supported_medication} recorded in {data.exposure.model.amount_unit}.</p>
+      {isPhysiologicalCurve(data.exposure) ? <>
+        <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = clearance / distribution volume = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nC(t) = (F × dose / V) × (1,000,000 / molecular weight) × ka/(ka-ke) × (exp(-ke×t) - exp(-ka×t)) nmol/L`}</code></pre>
+        <p>This is a population-parameter plasma-free-cortisol scenario. It is not a measured value, personal target, medication-adequacy test, or dosing guide. Contributions from close or simultaneous doses are summed and sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots.</p>
+      </> : <>
+        <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = ln(2) / ${formatDecimal(data.exposure.model.elimination_half_life_hours)} hours = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nraw(t) = exp(-ke × t) - exp(-ka × t)\nshape(t) = raw(t) / raw(t_peak)\ndose_contribution(t) = recorded_amount_mg × shape(t) REU\nstress_exposure(t) = sum of explicitly categorized stress-dose contributions\nregular_exposure(t) = sum of all other supported dose contributions\ntotal_exposure(t) = regular_exposure(t) + stress_exposure(t)`}</code></pre>
+        <p>Each contribution is zero before its recorded administration and after {data.exposure.model.contribution_horizon_hours.toString()} hours. It rises from zero, reaches a normalized peak of 1 REU per recorded mg at <code>t_peak</code>, then declines. Contributions from close or simultaneous doses are summed; none resets another. Output is sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots. REU is a relative visualization unit, not nmol/L, µg/dL, biological effect, or medication adequacy.</p>
+      </>}
       <h3>Why these parameters are used</h3>
       <ul>{data.exposure.model.references.map((href) => { const detail = EXPOSURE_REFERENCE_DETAILS[href]; return <li key={href}><a href={href} target="_blank" rel="noreferrer">{detail?.label ?? "Model source"}</a>{detail === undefined ? null : ` — ${detail.use}.`}</li>; })}</ul>
       <h3>No “needed cortisol” formula is active</h3>
-      <p>HealthCurve currently calculates no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value. The supplied exploratory scenario used <code>Req(t) = Base(t) × S(t)</code>, but its population baseline anchors and stress multipliers are not part of {data.exposure.model.version}. Garmin stress remains a provider score on its own scale. Symptoms retain their recorded 0–10 severity and use <code>severity × 10</code> only for display position. Missing values remain missing. None of these inputs changes the exposure curve or becomes a dose multiplier, coverage ratio, or physiological requirement.</p>
+      <p>{isPhysiologicalCurve(data.exposure) ? "HealthCurve calculates no Garmin-stress-derived or symptom-derived cortisol “needed” value." : "HealthCurve currently calculates no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value. The supplied exploratory scenario used Req(t) = Base(t) × S(t), but its population baseline anchors and stress multipliers are not part of hc-exposure-v1."} Garmin stress remains a provider score on its own scale. Symptoms retain their recorded 0–10 severity and use <code>severity × 10</code> only for display position. Missing values remain missing. None of these inputs changes the exposure curve or becomes a dose multiplier, coverage ratio, or physiological requirement.</p>
       <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>
       <ul>{REQUIREMENT_EVIDENCE.map((source) => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>{` — ${source.use}.`}</li>)}</ul>
       <h3>Overlay display formula</h3>

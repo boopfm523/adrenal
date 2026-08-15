@@ -6082,6 +6082,35 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     )
     assert invalid.status_code == 422
 
+    physiological = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={
+            "day": selected_day,
+            "timezone": "UTC",
+            "model": "hc-physiology-v2",
+        },
+    )
+    assert physiological.status_code == 200, physiological.text
+    physiological_body = physiological.json()
+    assert physiological_body["model"]["id"] == "hc-physiology-v2"
+    assert physiological_body["model"]["revision"] == "hc-physiology-v2.0.0"
+    assert physiological_body["series_unit"] == "nmol/L"
+    assert physiological_body["source_revision_sha256"]
+    assert physiological_body["context_band"]["default_visible"] is False
+    assert physiological_body["context_band"]["band"]["personalized"] is False
+    assert len(physiological_body["samples"]) == len(physiological_body["context_band"]["samples"])
+    assert {row["occurred_at"] for row in physiological_body["samples"]} == {
+        row["occurred_at"] for row in physiological_body["context_band"]["samples"]
+    }
+    assert other_dose_id not in {row["dose_event_id"] for row in physiological_body["dose_markers"]}
+    assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in physiological.text
+
+    unsupported_model = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "UTC", "model": "unknown-model"},
+    )
+    assert unsupported_model.status_code == 422
+
 
 def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
     client: TestClient, engine: Engine

@@ -1004,6 +1004,154 @@ class SteroidExposureCurveOut(ApiModel):
         return str(value)
 
 
+class PhysiologicalCortisolModelOut(ApiModel):
+    id: Literal["hc-physiology-v2"]
+    revision: Literal["hc-physiology-v2.0.0"]
+    supported_medication: str
+    supported_formulation: str
+    supported_route: Route
+    amount_unit: DoseUnit
+    absorption_rate_per_hour: Decimal
+    oral_bioavailability: Decimal
+    clearance_liters_per_hour: Decimal
+    distribution_volume_liters: Decimal
+    cortisol_molecular_weight: Decimal
+    elimination_half_life_hours: Decimal
+    elimination_rate_per_hour: Decimal
+    peak_time_hours: Decimal
+    contribution_horizon_hours: int = Field(gt=0)
+    sample_interval_minutes: int = Field(gt=0)
+    references: list[str]
+
+    @field_serializer(
+        "absorption_rate_per_hour",
+        "oral_bioavailability",
+        "clearance_liters_per_hour",
+        "distribution_volume_liters",
+        "cortisol_molecular_weight",
+        "elimination_half_life_hours",
+        "elimination_rate_per_hour",
+        "peak_time_hours",
+    )
+    def _parameters(self, value: Decimal) -> str:
+        return str(value)
+
+
+class PhysiologicalCortisolSampleOut(ApiModel):
+    occurred_at: datetime
+    local_time: datetime
+    utc_offset_minutes: int
+    modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    regular_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    stress_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "modeled_free_cortisol_nmol_l",
+        "regular_modeled_free_cortisol_nmol_l",
+        "stress_modeled_free_cortisol_nmol_l",
+    )
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class CircadianContextSampleOut(ApiModel):
+    occurred_at: datetime
+    local_time: datetime
+    utc_offset_minutes: int
+    center_nmol_l: Decimal = Field(ge=0)
+    lower_nmol_l: Decimal = Field(ge=0)
+    upper_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer("center_nmol_l", "lower_nmol_l", "upper_nmol_l")
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class CircadianAnchorOut(ApiModel):
+    local_hour: Decimal = Field(ge=0, le=24)
+    center_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer("local_hour", "center_nmol_l")
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class CircadianContextModelOut(ApiModel):
+    id: Literal["hc-circadian-context-v1"]
+    revision: Literal["hc-circadian-context-v1.0.0"]
+    interpolation: Literal["pchip-no-overshoot"]
+    lower_multiplier: Decimal
+    upper_multiplier: Decimal
+    anchor_origin: Literal["owner_supplied_synthetic_scenario"]
+    healthy_rhythm_evidence_scope: Literal["shape_and_phase_context_only"]
+    personalized: Literal[False]
+    body_context_used: Literal[False]
+    demographic_reference_interval: Literal[False]
+    references: list[str]
+    anchors: list[CircadianAnchorOut]
+
+    @field_serializer("lower_multiplier", "upper_multiplier")
+    def _multipliers(self, value: Decimal) -> str:
+        return str(value)
+
+
+class RecordedStressContextOut(ApiModel):
+    episode_count: int = Field(ge=0)
+    missing_severity_count: int = Field(ge=0)
+    multiplier: Decimal
+    applied_to_band: Literal[False]
+    applied_to_drug_model: Literal[False]
+    reason: str
+
+    @field_serializer("multiplier")
+    def _multiplier(self, value: Decimal) -> str:
+        return str(value)
+
+
+class CircadianContextBandOut(ApiModel):
+    date: date
+    timezone: str
+    day_start: datetime
+    day_end: datetime
+    elapsed_hours: Decimal
+    series_kind: Literal["illustrative_circadian_context_band"]
+    series_name: Literal["Illustrative circadian context band"]
+    series_unit: Literal["nmol/L"]
+    default_visible: Literal[False]
+    safety_label: str
+    band: CircadianContextModelOut
+    recorded_stress_context: RecordedStressContextOut
+    samples: list[CircadianContextSampleOut]
+
+    @field_serializer("elapsed_hours")
+    def _elapsed(self, value: Decimal) -> str:
+        return str(value)
+
+
+class PhysiologicalCortisolCurveOut(ApiModel):
+    date: date
+    timezone: str
+    day_start: datetime
+    day_end: datetime
+    elapsed_hours: Decimal
+    series_kind: Literal["modeled_plasma_free_cortisol_scenario"]
+    series_name: Literal["Modeled plasma-free-cortisol scenario"]
+    series_unit: Literal["nmol/L"]
+    safety_label: str
+    definition: str
+    model: PhysiologicalCortisolModelOut
+    source_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dose_markers: list[SteroidExposureDoseMarker]
+    samples: list[PhysiologicalCortisolSampleOut]
+    supported_dose_count: int = Field(ge=0)
+    excluded_dose_count: int = Field(ge=0)
+    context_band: CircadianContextBandOut
+
+    @field_serializer("elapsed_hours")
+    def _elapsed(self, value: Decimal) -> str:
+        return str(value)
+
+
 class DecimalRangeOut(ApiModel):
     minimum: Decimal | None
     average: Decimal | None

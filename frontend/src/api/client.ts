@@ -31,7 +31,10 @@ export type RegimenApprovalInput = components["schemas"]["RegimenApprovalIn"];
 export type Medication = components["schemas"]["MedicationOut"];
 export type MedicationInput = components["schemas"]["MedicationIn"];
 export type AnalyticsSummary = components["schemas"]["AnalyticsSummaryOut"];
-export type SteroidExposureCurve = components["schemas"]["SteroidExposureCurveOut"];
+export type SimpleExposureCurve = components["schemas"]["SteroidExposureCurveOut"];
+export type PhysiologicalCortisolCurve = components["schemas"]["PhysiologicalCortisolCurveOut"];
+export type SteroidExposureCurve = SimpleExposureCurve | PhysiologicalCortisolCurve;
+export type HealthCurveModel = "hc-exposure-v1" | "hc-physiology-v2";
 export type DailyPatterns = components["schemas"]["DailyPatternsOut"];
 export type PatternAnalysis = components["schemas"]["PatternAnalysisOut"];
 export type PatternAnalysisGeneration = components["schemas"]["PatternAnalysisGenerationOut"];
@@ -565,8 +568,8 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
 }
 
-export function getSteroidExposure(day: string, timezone: string): Promise<SteroidExposureCurve> {
-  const params = new URLSearchParams({ day, timezone });
+export function getSteroidExposure(day: string, timezone: string, model: HealthCurveModel = "hc-exposure-v1"): Promise<SteroidExposureCurve> {
+  const params = new URLSearchParams({ day, timezone, model });
   return apiRequest<SteroidExposureCurve>(`/analytics/steroid-exposure?${params.toString()}`);
 }
 
