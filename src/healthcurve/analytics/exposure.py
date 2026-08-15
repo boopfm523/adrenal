@@ -64,6 +64,8 @@ class ExposureDose:
     source_type: str
     confirmation_state: str
     supersedes_id: uuid.UUID | None
+    recorded_at: datetime | None = None
+    source_revision: str | None = None
 
 
 def _normalized_formulation(value: str | None) -> str | None:
@@ -289,6 +291,8 @@ def curve_for_owner(
                 source_type=row.source_type.value,
                 confirmation_state=row.confirmation_state.value,
                 supersedes_id=row.supersedes_id,
+                recorded_at=row.recorded_at,
+                source_revision=row.source_revision,
             )
             for row in current
         ],
