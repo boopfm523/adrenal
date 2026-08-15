@@ -255,18 +255,22 @@ function xPosition(time: string, start: number, end: number): number {
   return LEFT + (Date.parse(time) - start) / Math.max(end - start, 1) * PLOT_WIDTH;
 }
 
-function relativeValue(lane: Lane, value: number): number {
-  const bounds = lane.key === "stress" ? { minimum: 0, maximum: 100 }
+function relativeValue(
+  lane: Lane,
+  value: number,
+  overrideBounds?: { minimum: number; maximum: number },
+): number {
+  const bounds = overrideBounds ?? (lane.key === "stress" ? { minimum: 0, maximum: 100 }
     : lane.key === "symptoms" ? { minimum: 0, maximum: 10 }
       : lane.key === "respiration_rate" ? { minimum: RESPIRATION_DISPLAY_MIN, maximum: RESPIRATION_DISPLAY_MAX }
         : lane.key === "temperature" ? { minimum: TEMPERATURE_DISPLAY_MIN, maximum: TEMPERATURE_DISPLAY_MAX }
-      : scale(lane.points.map((point) => point.value));
+      : scale(lane.points.map((point) => point.value)));
   const relative = (value - bounds.minimum) / Math.max(bounds.maximum - bounds.minimum, 1) * 100;
   return ["respiration_rate", "temperature"].includes(lane.key) ? Math.max(0, Math.min(100, relative)) : relative;
 }
 
-function yPosition(lane: Lane, value: number): number {
-  return TOP + PLOT_HEIGHT - relativeValue(lane, value) / 100 * PLOT_HEIGHT;
+function yPosition(lane: Lane, value: number, overrideBounds?: { minimum: number; maximum: number }): number {
+  return TOP + PLOT_HEIGHT - relativeValue(lane, value, overrideBounds) / 100 * PLOT_HEIGHT;
 }
 
 function connectedSegments(lane: Lane): Point[][] {
@@ -294,8 +298,27 @@ function connectedSegments(lane: Lane): Point[][] {
   return segments;
 }
 
-function path(lane: Lane, points: Point[], start: number, end: number): string {
-  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${xPosition(point.time, start, end).toFixed(2)} ${yPosition(lane, point.value).toFixed(2)}`).join(" ");
+function path(
+  lane: Lane,
+  points: Point[],
+  start: number,
+  end: number,
+  overrideBounds?: { minimum: number; maximum: number },
+): string {
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${xPosition(point.time, start, end).toFixed(2)} ${yPosition(lane, point.value, overrideBounds).toFixed(2)}`).join(" ");
+}
+
+function contextBandPath(
+  lane: Lane,
+  samples: Extract<SteroidExposureCurve, { series_unit: "nmol/L" }>["context_band"]["samples"],
+  start: number,
+  end: number,
+  bounds: { minimum: number; maximum: number },
+): string {
+  if (samples.length < 2) return "";
+  const upper = samples.map((sample, index) => `${index === 0 ? "M" : "L"} ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.upper_nmol_l), bounds).toFixed(2)}`);
+  const lower = [...samples].reverse().map((sample) => `L ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.lower_nmol_l), bounds).toFixed(2)}`);
+  return [...upper, ...lower, "Z"].join(" ");
 }
 
 function medianSmoothed(points: Point[], radius: number): Point[] {
@@ -633,10 +656,20 @@ export function DailyHealthCurve({
   const [hoveringChart, setHoveringChart] = useState(false);
   const [touchSelected, setTouchSelected] = useState(false);
   const [chartZoom, setChartZoom] = useState<1 | 1.5 | 2>(1);
+  const [showContextBand, setShowContextBand] = useState(false);
   const activeTouchPointer = useRef<number | null>(null);
   const cursorTime = Math.min(end, start + cursorMinute * 60_000);
   const allLanes = useMemo(() => lanes(data), [data]);
   const shownLanes = allLanes.filter((lane) => visible[lane.key]);
+  const exposureLane = allLanes.find((lane) => lane.key === "exposure");
+  const contextBand = isPhysiologicalCurve(data.exposure) ? data.exposure.context_band : null;
+  const visibleContextBand = showContextBand && contextBand !== null;
+  const contextBandBounds = exposureLane === undefined || !visibleContextBand
+    ? undefined
+    : scale([
+      ...exposureLane.points.map((point) => point.value),
+      ...contextBand.samples.flatMap((sample) => [Number(sample.lower_nmol_l), Number(sample.upper_nmol_l)]),
+    ]);
   const ticks = timeTicks(start, end, data.exposure.timezone);
   const sleepRecords = data.garmin.filter((record) => record.kind === "sleep" && record.ended_at != null);
   const missingWakeTiming = sleepRecords.some(
@@ -657,6 +690,18 @@ export function DailyHealthCurve({
   const cursorExposureSample = cursorExposurePoint === undefined
     ? undefined
     : data.exposure.samples.find((sample) => sample.occurred_at === cursorExposurePoint.time);
+  const nearestContextBandSample = !visibleContextBand
+    ? undefined
+    : contextBand.samples.reduce<typeof contextBand.samples[number] | undefined>((nearest, sample) => {
+      if (nearest === undefined) return sample;
+      return Math.abs(Date.parse(sample.occurred_at) - cursorTime) < Math.abs(Date.parse(nearest.occurred_at) - cursorTime)
+        ? sample
+        : nearest;
+    }, undefined);
+  const cursorContextBandSample = nearestContextBandSample === undefined
+    || Math.abs(Date.parse(nearestContextBandSample.occurred_at) - cursorTime) > data.exposure.model.sample_interval_minutes * 30_000
+    ? undefined
+    : nearestContextBandSample;
   const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
   const cursorUnscoredSymptoms = visible.symptoms
     ? nearbySymptomObservations(unscoredSymptoms, cursorTime)
@@ -692,6 +737,11 @@ export function DailyHealthCurve({
         value: `${Number(stressExposureValue(cursorExposureSample)).toFixed(3)} ${data.exposure.series_unit}`,
       }] : []),
     ]),
+    ...(cursorContextBandSample === undefined ? [] : [{
+      key: `context-band-${cursorContextBandSample.occurred_at}`,
+      series: "Illustrative circadian context",
+      value: `${Number(cursorContextBandSample.lower_nmol_l).toFixed(1)}–${Number(cursorContextBandSample.upper_nmol_l).toFixed(1)} nmol/L (center ${Number(cursorContextBandSample.center_nmol_l).toFixed(1)})`,
+    }]),
     ...cursorUnscoredSymptoms.map((symptom) => ({
       key: `unscored-symptom-${symptom.id}`,
       series: "Symptoms",
@@ -762,8 +812,8 @@ export function DailyHealthCurve({
         temperature: "Temperature",
         symptoms: "Symptoms",
         episodes: "Stress episodes",
-      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}</SimpleGrid></Paper></Stack>
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
+      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}{contextBand === null ? null : <Checkbox label="Illustrative circadian context band" description="Population-shape context only; not a personal target or adequacy range." checked={showContextBand} onChange={(event) => { setShowContextBand(event.target.checked); }} />}</SimpleGrid></Paper></Stack>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
       <button type="button" className="button-secondary" aria-label="Zoom chart out" disabled={chartZoom === 1} onClick={() => { setChartZoom(chartZoom === 2 ? 1.5 : 1); }}>−</button>
@@ -806,13 +856,16 @@ export function DailyHealthCurve({
             {tick.label === null ? null : <text className="healthcurve-time-label" x={x} y={HEIGHT - 34} textAnchor={tick.time === start ? "start" : tick.time === end ? "end" : "middle"}>{tick.label}</text>}
           </g>;
         })}
+        {!visibleContextBand || exposureLane === undefined || contextBandBounds === undefined ? null : <g data-series="context-band" aria-label={contextBand.safety_label}>
+          <path className="healthcurve-context-band" d={contextBandPath(exposureLane, contextBand.samples, start, end, contextBandBounds)} />
+        </g>}
         {visible.episodes ? <g data-series="episodes">{data.episodes.map((episode) => {
             const x = Math.max(LEFT, Math.min(LEFT + PLOT_WIDTH, xPosition(episode.started_at, start, end)));
             const xEnd = Math.max(LEFT, Math.min(LEFT + PLOT_WIDTH, xPosition(episode.ended_at ?? data.exposure.day_end, start, end)));
             return <rect key={episode.id} className="healthcurve-episode" x={x} y={TOP} width={Math.max(4, xEnd - x)} height={PLOT_HEIGHT}><title>{experiencedTime(episode.started_at, data.exposure.timezone)}: {episode.trigger}; {episode.severity ?? "severity missing"}; {episode.status}</title></rect>;
           })}</g> : null}
         {shownLanes.map((lane) => <g key={lane.key} data-series={lane.key}>
-          {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, displaySegment(lane, segment), start, end)} />)}
+          {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, displaySegment(lane, segment), start, end, lane.key === "exposure" ? contextBandBounds : undefined)} />)}
           {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => {
             const x = xPosition(record.time.occurred_at, start, end);
             const systolicY = yPosition(lane, record.systolic_mmhg);
@@ -880,6 +933,11 @@ export function DailyHealthCurve({
         </div>
       </section>;
     })}</div>
+    {contextBand === null ? null : <details className="metric-definition context-band-values">
+      <summary>Illustrative circadian context band values</summary>
+      <p><strong>{contextBand.safety_label}</strong> This population-shape context is not a personal target, measured cortisol range, medication-adequacy assessment, or dosing guide. Recorded stress and symptoms do not change this band.</p>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Illustrative circadian context band exact values"><table><caption>Exact values supplied by {contextBand.band.revision}; missing samples remain missing.</caption><thead><tr><th scope="col">Local time</th><th scope="col">Lower context</th><th scope="col">Center context</th><th scope="col">Upper context</th></tr></thead><tbody>{contextBand.samples.map((sample) => <tr key={sample.occurred_at}><td>{experiencedTime(sample.occurred_at, data.exposure.timezone)}</td><td>{formatMeasurement(sample.lower_nmol_l, contextBand.series_unit)}</td><td>{formatMeasurement(sample.center_nmol_l, contextBand.series_unit)}</td><td>{formatMeasurement(sample.upper_nmol_l, contextBand.series_unit)}</td></tr>)}</tbody></table></div>
+    </details>}
     {data.temperature.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Selected-day temperature exact values"><table className="vital-table"><caption>Exact selected-day body-temperature facts. Missing intervals remain blank.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Temperature</th></tr></thead><tbody>{data.temperature.map((record) => <tr key={record.id}><td>{experiencedTime(record.time.occurred_at, data.exposure.timezone)}</td><td>{record.display_f} °F ({record.display_c} °C)</td></tr>)}</tbody></table></div>}
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>

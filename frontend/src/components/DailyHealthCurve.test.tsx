@@ -43,6 +43,43 @@ function data(overrides: Partial<DailyHealthCurveData> = {}): DailyHealthCurveDa
   };
 }
 
+function physiologicalData(): DailyHealthCurveData {
+  return data({
+    exposure: {
+      date: "2026-03-08",
+      timezone: "America/New_York",
+      day_start: "2026-03-08T05:00:00Z",
+      day_end: "2026-03-09T04:00:00Z",
+      elapsed_hours: "23",
+      series_kind: "modeled_plasma_free_cortisol_scenario",
+      series_name: "Modeled plasma-free-cortisol scenario",
+      series_unit: "nmol/L",
+      safety_label: "Population-parameter modeled scenario—not a measurement or dosing guide.",
+      definition: "Synthetic physiological scenario.",
+      model: { id: "hc-physiology-v2", revision: "hc-physiology-v2.0.0", supported_medication: "hydrocortisone", supported_formulation: "conventional immediate-release tablet", supported_route: "oral", amount_unit: "mg", absorption_rate_per_hour: "1.4", oral_bioavailability: "0.96", clearance_liters_per_hour: "235.78", distribution_volume_liters: "474.38", cortisol_molecular_weight: "362.46", elimination_half_life_hours: "1.39", elimination_rate_per_hour: "0.497", peak_time_hours: "1.147", contribution_horizon_hours: 48, sample_interval_minutes: 5, references: [] },
+      source_revision_sha256: "a".repeat(64),
+      dose_markers: [],
+      samples: [
+        { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, modeled_free_cortisol_nmol_l: "0", regular_modeled_free_cortisol_nmol_l: "0", stress_modeled_free_cortisol_nmol_l: "0" },
+        { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, modeled_free_cortisol_nmol_l: "40", regular_modeled_free_cortisol_nmol_l: "40", stress_modeled_free_cortisol_nmol_l: "0" },
+        { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, modeled_free_cortisol_nmol_l: "1", regular_modeled_free_cortisol_nmol_l: "1", stress_modeled_free_cortisol_nmol_l: "0" },
+      ],
+      supported_dose_count: 0,
+      excluded_dose_count: 0,
+      context_band: {
+        date: "2026-03-08", timezone: "America/New_York", day_start: "2026-03-08T05:00:00Z", day_end: "2026-03-09T04:00:00Z", elapsed_hours: "23", series_kind: "illustrative_circadian_context_band", series_name: "Illustrative circadian context band", series_unit: "nmol/L", default_visible: false, safety_label: "Illustrative population-shape context only—not a personal target or adequacy range.",
+        band: { id: "hc-circadian-context-v1", revision: "hc-circadian-context-v1.0.0", interpolation: "pchip-no-overshoot", lower_multiplier: "0.8", upper_multiplier: "1.2", anchor_origin: "owner_supplied_synthetic_scenario", healthy_rhythm_evidence_scope: "shape_and_phase_context_only", personalized: false, body_context_used: false, demographic_reference_interval: false, references: [], anchors: [] },
+        recorded_stress_context: { episode_count: 1, missing_severity_count: 0, multiplier: "1", applied_to_band: false, applied_to_drug_model: false, reason: "No validated mapping." },
+        samples: [
+          { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, center_nmol_l: "20", lower_nmol_l: "16", upper_nmol_l: "24" },
+          { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, center_nmol_l: "25", lower_nmol_l: "20", upper_nmol_l: "30" },
+          { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, center_nmol_l: "18", lower_nmol_l: "14.4", upper_nmol_l: "21.6" },
+        ],
+      },
+    },
+  });
+}
+
 function sample(index: number): GarminRecord {
   const occurredAt = new Date(Date.parse("2026-03-08T05:00:00Z") + index * 60_000).toISOString();
   return {
@@ -130,6 +167,32 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("No exact observation at this time");
     fireEvent.pointerLeave(pointerTarget);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("renders the v2 context band as an independent default-hidden accessible ribbon", () => {
+    const { rerender } = renderWithTheme(<DailyHealthCurve data={physiologicalData()} />);
+
+    const toggle = screen.getByRole("checkbox", { name: /Illustrative circadian context band/ });
+    expect(toggle).not.toBeChecked();
+    expect(document.querySelector("[data-series='context-band']")).toBeNull();
+    expect(screen.getByLabelText("Overlay series legend")).not.toHaveTextContent("Illustrative circadian context");
+
+    fireEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(document.querySelector("[data-series='context-band'] .healthcurve-context-band")).toHaveAttribute("d", expect.stringContaining("Z"));
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Illustrative circadian context · nmol/L");
+    expect(hoverAt(60).tooltip).toHaveTextContent("Illustrative circadian context: 20.0–30.0 nmol/L (center 25.0)");
+
+    const exactValues = screen.getByText("Illustrative circadian context band values").parentElement;
+    if (exactValues === null) throw new Error("context-band exact-value disclosure missing");
+    expect(exactValues).not.toHaveAttribute("open");
+    expect(exactValues).toHaveTextContent("not a personal target");
+    expect(within(exactValues).getByRole("region", { name: "Illustrative circadian context band exact values" })).toHaveTextContent("20 nmol/L");
+
+    fireEvent.click(toggle);
+    expect(document.querySelector("[data-series='context-band']")).toBeNull();
+    rerender(<DailyHealthCurve data={data()} />);
+    expect(screen.queryByRole("checkbox", { name: /Illustrative circadian context band/ })).not.toBeInTheDocument();
   });
 
   it("shows touch-selected values in the chart tooltip and stable phone readout", () => {
