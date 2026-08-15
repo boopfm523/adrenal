@@ -41,6 +41,7 @@ class AuditAction(StrEnum):
     REGIMEN_DRAFT_DELETED = "regimen_draft_deleted"
     REGIMEN_DELETED = "regimen_deleted"
     SYNTHETIC_MEDICATION_BOOTSTRAP_PURGED = "synthetic_medication_bootstrap_purged"
+    SELECTIVE_TEST_DATA_RESET = "selective_test_data_reset"
     REGIMEN_APPROVED = "regimen_approved"
     REGIMEN_HANDOFF = "regimen_handoff"
     REGIMEN_RETIRED = "regimen_retired"

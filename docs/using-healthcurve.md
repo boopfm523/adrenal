@@ -743,17 +743,49 @@ backups may retain deleted sample rows until their configured expiry. The comman
 not remove test facts that reference the sample plan—delete those through their safe
 record-specific workflow first.
 
-The following emergency testing shortcut is intentionally unsafe and is not the normal
-deletion workflow:
+For the owner's current mixed-real/test installation, use the separate selective reset
+workflow. The owner has declared **all medication plans, recorded doses, stress
+episodes, and symptoms** to be test data. Blood pressure, weight, temperature, Garmin,
+labs, diary/life events, emergency injections, medications, account, and integration
+state are outside the deletion allow-list.
 
-```sql
-TRUNCATE fact.dose_event, fact.symptom_event, fact.diary_event, fact.life_event,
-         fact.emergency_injection_event, fact.stress_episode,
-         ai.extraction_draft CASCADE;
+Preview the current target and preserved counts first:
+
+```bash
+docker compose run --rm api \
+  python -m healthcurve.cli reset-declared-test-data
 ```
 
-This deletes real data with no confirmation and no undo. Check which database you are
-connected to first; never use it against an installation containing real records.
+Preview mode is the default and never deletes anything. It reports rows that would be
+cleared, rows in explicitly preserved domains, and any blocking emergency-injection
+relationship. Do not execute from that preview alone: the owner must separately and
+explicitly request the reset.
+
+After that later request, preview again, confirm the counts, and run interactively:
+
+```bash
+docker compose run --rm api \
+  python -m healthcurve.cli reset-declared-test-data --execute
+```
+
+Type the newly printed preview-bound phrase exactly. The phrase cannot be passed as a
+command-line option. HealthCurve rechecks the complete target immediately before a
+single transactional deletion, removes complete dose and symptom correction chains,
+and records only structural row counts in the audit trail. If the target changed, an
+unexpected retained reference exists, or a preserved emergency injection links to an
+episode, the transaction fails closed. Medication vocabulary remains so future real
+plans can reuse it. Encrypted backups retain old test records until normal expiry.
+
+Immutable report snapshots and saved AI analyses are derived artifacts, not source
+facts, so this command does not silently rewrite or delete them. Before the real-data
+start, review and remove any test-era reports or analyses through their existing
+artifact controls, then regenerate only from retained real records. This keeps the
+selective reset from accidentally deleting a report that also contains preserved
+Garmin or vital data.
+
+Never use raw SQL, `TRUNCATE`, account deletion, or integration deletion for this
+mixed-data reset: those paths can destroy the real vital or Garmin records that must
+remain.
 
 ---
 

@@ -392,6 +392,93 @@ def purge_synthetic_medication_bootstrap(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# owner-declared mixed-real/synthetic data cleanup
+# ---------------------------------------------------------------------------
+
+
+def reset_declared_test_data(args: argparse.Namespace) -> int:
+    """Preview, then optionally clear only the owner's declared test domains."""
+    from healthcurve.selective_test_data_cleanup import (
+        SelectiveTestDataCleanupError,
+        execute_selective_test_data_reset,
+        preview_selective_test_data_reset,
+    )
+
+    factory = get_session_factory()
+    try:
+        with factory() as session, session.begin():
+            owner = _owner(session)
+            preview = preview_selective_test_data_reset(session, owner_id=owner.id)
+            print("Owner-declared test-data reset preview")
+            print("  WILL CLEAR:")
+            print(f"    plan.regimen_version={preview.counts.regimen_versions}")
+            print(f"    plan.regimen_dose_slot={preview.counts.regimen_dose_slots}")
+            print(f"    plan.approved_instruction={preview.counts.approved_instructions}")
+            print(f"    ops.telegram_dose_reminder={preview.counts.dose_reminders}")
+            print(f"    fact.dose_event={preview.counts.dose_events}")
+            print(f"    fact.stress_episode={preview.counts.stress_episodes}")
+            print(f"    fact.symptom_event={preview.counts.symptom_events}")
+            print("  WILL PRESERVE:")
+            print(f"    plan.medication={preview.preserved.medications}")
+            print(f"    fact.emergency_injection_event={preview.preserved.emergency_injections}")
+            print(f"    fact.diary_event={preview.preserved.diary_events}")
+            print(f"    fact.life_event={preview.preserved.life_events}")
+            print(f"    fact.blood_pressure_event={preview.preserved.blood_pressure_events}")
+            print(f"    fact.weight_event={preview.preserved.weight_events}")
+            print(f"    fact.temperature_event={preview.preserved.temperature_events}")
+            print(f"    fact.garmin_metric_event={preview.preserved.garmin_metric_events}")
+            print(f"    fact.garmin_sleep_event={preview.preserved.garmin_sleep_events}")
+            print(f"    fact.garmin_activity_event={preview.preserved.garmin_activity_events}")
+            print(f"    ops.wearable_daily_summary={preview.preserved.garmin_daily_summaries}")
+            print(f"    fact.lab_document={preview.preserved.lab_documents}")
+            print(f"    fact.lab_panel={preview.preserved.lab_panels}")
+            print(f"    fact.lab_result={preview.preserved.lab_results}")
+            print("  BLOCKERS:")
+            print(
+                "    emergency injections linked to target episodes="
+                f"{preview.blockers.emergency_injections_linked_to_episodes}"
+            )
+            print(f"  required confirmation: {preview.confirmation_phrase}")
+            if preview.blockers.total:
+                message = (
+                    "Reset is blocked because a preserved emergency injection is linked to a "
+                    "target episode; nothing changed. Review that relationship first."
+                )
+                if args.execute:
+                    raise SelectiveTestDataCleanupError(message)
+                print(message)
+                return 0
+            if not args.execute:
+                print("Preview only; nothing changed.")
+                print(
+                    "When the owner explicitly requests the reset, rerun with --execute and "
+                    "type the preview-bound phrase locally."
+                )
+                return 0
+
+            print(
+                "This permanently clears every owner-scoped plan, recorded dose, stress "
+                "episode, and symptom. It does not clear vitals or Garmin data."
+            )
+            confirmation = input("Type the required confirmation phrase exactly: ")
+            result = execute_selective_test_data_reset(
+                session,
+                owner_id=owner.id,
+                preview=preview,
+                confirmation=confirmation,
+            )
+    except SelectiveTestDataCleanupError as exc:
+        sys.exit(str(exc))
+
+    print(
+        "Cleared declared test data: "
+        f"{result.regimen_versions} plan(s), {result.dose_events} dose fact(s), "
+        f"{result.stress_episodes} episode(s), and {result.symptom_events} symptom fact(s)."
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # encrypted integration credentials
 # ---------------------------------------------------------------------------
 
@@ -679,6 +766,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Prompt for the preview-bound phrase and perform the cleanup",
     )
     p.set_defaults(func=purge_synthetic_medication_bootstrap)
+
+    p = sub.add_parser(
+        "reset-declared-test-data",
+        help="Preview selective plans/doses/episodes/symptoms reset",
+    )
+    p.add_argument(
+        "--execute",
+        action="store_true",
+        help="Prompt locally for the preview-bound phrase and perform the reset",
+    )
+    p.set_defaults(func=reset_declared_test_data)
 
     p = sub.add_parser("credential-key-init", help="Create an external credential key ring")
     p.add_argument("path")
