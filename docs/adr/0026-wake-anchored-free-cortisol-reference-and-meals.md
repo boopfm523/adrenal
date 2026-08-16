@@ -96,9 +96,9 @@ tables while sharing the same pharmacokinetic equation.
 
 The initial half-life, absorption duration or `tmax`, distribution volume, clearance,
 and bioavailability values are versioned population defaults based on the supplied
-`HC_PK_REFERENCE`. Owner edits create a new parameter revision rather than mutating an
-old calculation. The model does not infer parameters from symptoms, Garmin metrics,
-meal size, age, height, weight, or isolated laboratory values.
+hydrocortisone PK reference constants. Owner edits create a new parameter revision
+rather than mutating an old calculation. The model does not infer parameters from
+symptoms, Garmin metrics, meal size, age, height, weight, or isolated laboratory values.
 
 The nonlinear `total_from_free` and `free_from_total` conversion is versioned with the
 model and tested as an invertible transformation over the supported range. Free
@@ -208,4 +208,3 @@ the supplied reference does not validate an amplitude mapping for those labels.
 **Model caffeine or detailed macronutrients.** Rejected for this scope by owner choice.
 They would add capture burden and a new physiological contract unrelated to the
 minimal meal-time requirement.
-
