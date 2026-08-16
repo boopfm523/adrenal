@@ -110,6 +110,15 @@ describe("Analytics page", () => {
     expect(within(periods).getByRole("rowheader", { name: "Synthetic plan" })).toBeVisible();
     expect(within(periods).getByText(/2026-08-01T00:00:00 through ongoing/)).toBeVisible();
 
+    const initialSummaryRequests = urls.filter((url) => url.includes("/analytics/summary")).length;
+    const initialPatternRequests = urls.filter((url) => url.includes("/analytics/daily-patterns?")).length;
+    fireEvent.click(screen.getByRole("button", { name: "Calculate metrics" }));
+    expect(await screen.findByText(/Longer-range metrics updated for/)).toBeVisible();
+    await waitFor(() => {
+      expect(urls.filter((url) => url.includes("/analytics/summary")).length).toBe(initialSummaryRequests + 1);
+      expect(urls.filter((url) => url.includes("/analytics/daily-patterns?")).length).toBe(initialPatternRequests + 1);
+    });
+
     fireEvent.click(screen.getByLabelText("Garmin stress"));
     expect(within(seriesSummary).getByRole("heading", { name: /Garmin stress/ })).toBeVisible();
     expect(document.querySelectorAll("[data-series='stress']")).toHaveLength(0);
@@ -117,6 +126,27 @@ describe("Analytics page", () => {
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-07-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Calculate metrics" }));
     await waitFor(() => { expect(urls.some((url) => url.includes("date_from=2026-07-01") && url.includes("timezone=Europe%2FLondon"))).toBe(true); });
+  });
+
+  it("shows an actionable error when a requested longer-range calculation fails", async () => {
+    let failLongRange = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (failLongRange && (url.includes("/analytics/summary") || url.includes("/analytics/daily-patterns?"))) {
+        return Promise.resolve(new Response(JSON.stringify({ detail: "Synthetic analytics failure" }), { status: 500, headers: { "Content-Type": "application/json" } }));
+      }
+      return Promise.resolve(response(url, init?.method));
+    });
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
+
+    await screen.findByRole("heading", { name: "Compare daily patterns" });
+    failLongRange = true;
+    fireEvent.click(screen.getByRole("button", { name: "Calculate metrics" }));
+
+    const alertText = await screen.findByText(/Longer-range metrics could not be calculated/);
+    const alert = alertText.closest("[role='alert']");
+    expect(alert).toBeVisible();
+    expect(alert?.parentElement).toHaveFocus();
   });
 
   it("loads recent local days immediately from accessible quick buttons", async () => {

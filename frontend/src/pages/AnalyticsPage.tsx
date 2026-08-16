@@ -1,6 +1,6 @@
 import { Alert, Button, Group, NativeSelect, Paper, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
-import { useState, type PropsWithChildren } from "react";
+import { useEffect, useRef, useState, type PropsWithChildren } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
@@ -144,6 +144,8 @@ export function AnalyticsPage(): React.JSX.Element {
     return { dateFrom: localDate(new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000), profileTimezone), dateTo: localDate(now, profileTimezone), timezone: profileTimezone };
   });
   const [filters, setFilters] = useState(draft);
+  const [calculationRequest, setCalculationRequest] = useState(0);
+  const calculationStatusRef = useRef<HTMLDivElement>(null);
   const dayFilter = selectedHealthCurveDay(searchParams, profileTimezone);
   const [curveVisibility, setCurveVisibility] = useState<HealthCurveVisibility>({
     exposure: true,
@@ -174,8 +176,14 @@ export function AnalyticsPage(): React.JSX.Element {
     },
     refetchInterval: 60_000,
   });
-  const summary = useQuery({ queryKey: ["analytics", filters], queryFn: () => getAnalyticsSummary(filters.dateFrom, filters.dateTo, filters.timezone) });
-  const patterns = useQuery({ queryKey: ["daily-patterns", filters], queryFn: () => getDailyPatterns(filters.dateFrom, filters.dateTo, filters.timezone) });
+  const summary = useQuery({ queryKey: ["analytics", filters, calculationRequest], queryFn: () => getAnalyticsSummary(filters.dateFrom, filters.dateTo, filters.timezone) });
+  const patterns = useQuery({ queryKey: ["daily-patterns", filters, calculationRequest], queryFn: () => getDailyPatterns(filters.dateFrom, filters.dateTo, filters.timezone) });
+  const calculationPending = summary.isFetching || patterns.isFetching;
+  const calculationFailed = summary.isError || patterns.isError;
+
+  useEffect(() => {
+    if (calculationRequest > 0 && !calculationPending) calculationStatusRef.current?.focus();
+  }, [calculationPending, calculationRequest]);
 
   function reviewDay(next: { day: string; timezone: string; model: HealthCurveModel }): void {
     const search = new URLSearchParams(searchParams);
@@ -198,7 +206,9 @@ export function AnalyticsPage(): React.JSX.Element {
     {dailyCurve.data === undefined ? null : <DailyHealthCurve data={dailyCurve.data} visible={curveVisibility} onVisibleChange={setCurveVisibility} onPreviousDay={() => { reviewAdjacentDay(-1); }} onNextDay={() => { reviewAdjacentDay(1); }} nextDayDisabled={dayFilter.day >= todayForSelectedTimezone} />}
     {dailyCurve.data === undefined ? null : <DayAnalysisCard day={dayFilter.day} timezone={dayFilter.timezone} />}
     <Stack className="analytics-history" gap="xs"><Title order={2} id="analytics-history-title">Longer-range analytics</Title><Text>Use these deterministic totals to compare days across a longer period. Daily pattern analysis builds on the selected-day HealthCurve.</Text></Stack>
-    <Paper component="form" withBorder radius="lg" p="lg" mt="md" onSubmit={(event) => { event.preventDefault(); setFilters(draft); }}><SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" aria-label="From date" required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" aria-label="Through date" required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="IANA timezone" aria-label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid><Button type="submit" mt="md">Calculate metrics</Button></Paper>
+    <Paper component="form" withBorder radius="lg" p="lg" mt="md" onSubmit={(event) => { event.preventDefault(); setFilters({ ...draft }); setCalculationRequest((request) => request + 1); }}><SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" aria-label="From date" required type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" aria-label="Through date" required type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="IANA timezone" aria-label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid><Button type="submit" mt="md" loading={calculationRequest > 0 && calculationPending}>Calculate metrics</Button>
+      {calculationRequest === 0 ? null : <div ref={calculationStatusRef} tabIndex={-1}>{calculationPending ? <Text role="status" mt="md">Calculating longer-range metrics…</Text> : calculationFailed ? <Alert color="red" mt="md" role="alert">Longer-range metrics could not be calculated. Check that the From date is on or before the Through date and that the IANA timezone is valid, then try again.</Alert> : <Alert color="teal" mt="md" role="status">Longer-range metrics updated for {filters.dateFrom} through {filters.dateTo}. Results appear below.</Alert>}</div>}
+    </Paper>
     {patterns.isPending ? <p role="status">Deriving comparable daily features…</p> : null}{patterns.isError ? <p className="error-summary" role="alert">Daily pattern features could not be calculated. Check the date range and IANA timezone.</p> : null}
     {patterns.data === undefined ? null : <DailyPatternsTable data={patterns.data} />}
     {summary.isPending ? <p role="status">Calculating deterministic metrics…</p> : null}{summary.isError ? <p className="error-summary" role="alert">Metrics could not be calculated. Check the date range and IANA timezone.</p> : null}
