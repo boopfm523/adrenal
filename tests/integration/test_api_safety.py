@@ -6664,6 +6664,12 @@ def test_pattern_analysis_completion_is_reloadable_by_exact_range_and_timeout_is
     csrf = login.json()["csrf_token"]
 
     def generated(session: Session, **kwargs: object) -> analysis_service.AnalysisGenerationResult:
+        assert kwargs["system_prompt"] == analysis_service.PATTERN_SYSTEM_PROMPT
+        assert kwargs["prompt_version"] == analysis_service.PATTERN_PROMPT_VERSION
+        assert kwargs["max_output_tokens"] == analysis_service.PATTERN_MAX_OUTPUT_TOKENS
+        assert kwargs["context_window"] == analysis_service.PATTERN_CONTEXT_WINDOW
+        assert kwargs["read_timeout_s"] == analysis_service.PATTERN_READ_TIMEOUT_SECONDS
+        assert kwargs["deterministic_safety_fields"] is True
         row = AIAnalysis(
             owner_id=cast(uuid.UUID, kwargs["owner_id"]),
             analysis_type=AnalysisType.PATTERN_OBSERVATION,
@@ -6672,7 +6678,7 @@ def test_pattern_analysis_completion_is_reloadable_by_exact_range_and_timeout_is
             computed_inputs=cast(dict[str, object], kwargs["computed_inputs"]),
             model_name="synthetic-local-model",
             model_digest="sha256:synthetic",
-            prompt_version="analysis-v3",
+            prompt_version=cast(str, kwargs["prompt_version"]),
             schema_version="analysis-v1",
         )
         session.add(row)

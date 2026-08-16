@@ -26,6 +26,10 @@ SCHEMA_VERSION: Final = "analysis-v1"
 DAY_PROMPT_VERSION: Final = "healthcurve-day-analysis-v3"
 DAY_MAX_OUTPUT_TOKENS: Final = 1024
 DAY_CONTEXT_WINDOW: Final = 16_384
+PATTERN_PROMPT_VERSION: Final = "healthcurve-pattern-analysis-v2"
+PATTERN_MAX_OUTPUT_TOKENS: Final = 768
+PATTERN_CONTEXT_WINDOW: Final = 8_192
+PATTERN_READ_TIMEOUT_SECONDS: Final = 120.0
 
 SYSTEM_PROMPT: Final = """\
 You summarize deterministic HealthCurve figures. You are not a clinician or adviser.
@@ -58,6 +62,20 @@ For an object encoded as columnar_rows_v1, interpret each row position using the
 corresponding columns entry; this is a compact representation of deterministic buckets.
 Return 3 to 6 claims. Keep each claim under 300 characters so the complete JSON object
 fits within the response limit. Prefer fewer complete claims over a longer response.
+"""
+)
+
+PATTERN_SYSTEM_PROMPT: Final = (
+    SYSTEM_PROMPT
+    + """\
+Review the deterministic summary for the selected date range. Identify only concise,
+descriptive patterns across the supplied daily metric distributions, coverage, and
+model-version periods. Prefer observations that connect two or more supplied metrics
+or identify a useful question for later review. Do not infer an unrecorded event,
+diagnosis, cortisol sufficiency, physiological need, or medication effect. Return 3
+to 5 claims, each under 300 characters. Prefer fewer complete claims over a longer
+response. The application will deterministically supply missingness and correlation
+caution text, so keep those schema fields brief.
 """
 )
 
@@ -331,6 +349,7 @@ def generate_analysis(
     persisted_inputs: dict[str, object] | None = None,
     max_output_tokens: int | None = None,
     context_window: int | None = None,
+    read_timeout_s: float | None = None,
     deterministic_safety_fields: bool = False,
 ) -> AnalysisGenerationResult:
     """Generate and persist only output that passes every deterministic safety gate."""
@@ -348,6 +367,7 @@ def generate_analysis(
         temperature=0.0,
         max_output_tokens=max_output_tokens,
         context_window=context_window,
+        read_timeout_s=read_timeout_s,
     )
     if not result.ok:
         if result.outcome is ModelOutcome.TIMEOUT:

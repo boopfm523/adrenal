@@ -417,6 +417,10 @@ circle.chart-series { fill: white; }
 .section-heading-row { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .section-heading-row h2 { margin-top: 0; }
 .analysis-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+.pattern-analysis-card { display: grid; gap: 1rem; padding: clamp(1rem, 2vw, 1.25rem); }
+.pattern-analysis-card > * { margin-block: 0; }
+.pattern-analysis-card > div:not(.analysis-actions) { display: grid; gap: 1rem; }
+.pattern-analysis-card > div:not(.analysis-actions) > * { margin-block: 0; }
 .daily-patterns { margin-top: 1.5rem; }
 .daily-pattern-table { min-width: 108rem; }
 .daily-pattern-table th, .daily-pattern-table td { max-width: 18rem; vertical-align: top; }

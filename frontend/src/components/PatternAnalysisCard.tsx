@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
-  ANALYSIS_REQUEST_TIMEOUT_SECONDS,
   AnalysisRequestCancelledError,
   AnalysisRequestTimeoutError,
+  PATTERN_ANALYSIS_REQUEST_TIMEOUT_SECONDS,
   deletePatternAnalysis,
   generatePatternAnalysis,
   getPatternAnalysis,
@@ -77,11 +77,11 @@ export function PatternAnalysisCard({ dateFrom, dateTo, timezone }: { dateFrom: 
       {generate.isPending ? <button type="button" className="button-secondary" onClick={() => { controllerRef.current?.abort(); }}>Stop waiting</button> : null}
       {(cancelled || timedOut) ? <button type="button" className="button-secondary" onClick={() => { void saved.refetch(); }}>Check for a completed draft</button> : null}
     </div>
-    {generate.isPending ? <p role="status" aria-live="polite">Private host Ollama request in progress: {elapsedSeconds.toString()} seconds elapsed. This browser will stop waiting after {ANALYSIS_REQUEST_TIMEOUT_SECONDS.toString()} seconds.</p> : null}
+    {generate.isPending ? <p role="status" aria-live="polite">Private host Ollama request in progress: {elapsedSeconds.toString()} seconds elapsed. This browser will stop waiting after {PATTERN_ANALYSIS_REQUEST_TIMEOUT_SECONDS.toString()} seconds.</p> : null}
     {saved.isPending && analysis === null ? <p role="status">Checking for a saved private-model draft…</p> : null}
     {saved.isError ? <p className="error-summary" role="alert">The saved draft could not be checked. The deterministic range table remains available, and you can still try a new private analysis.</p> : null}
     {cancelled ? <p role="status">This browser stopped waiting. Ollama may still finish locally; use “Check for a completed draft” in a moment or refresh this page. Recorded facts, plans, and deterministic analytics are unchanged.</p> : null}
-    {timedOut ? <p className="error-summary" role="alert">The browser stopped waiting after {ANALYSIS_REQUEST_TIMEOUT_SECONDS.toString()} seconds. Ollama may still be loading or may finish locally. Check for a completed draft, or try again; deterministic analytics remain available.</p> : null}
+    {timedOut ? <p className="error-summary" role="alert">The browser stopped waiting after {PATTERN_ANALYSIS_REQUEST_TIMEOUT_SECONDS.toString()} seconds. Ollama may still be loading or may finish locally. Check for a completed draft, or try again; deterministic analytics remain available.</p> : null}
     {generate.isError && !cancelled && !timedOut ? <p className="error-summary" role="alert">The private host request could not be completed. Confirm that Ollama is running and the configured model is installed, then try again. Deterministic analytics remain available.</p> : null}
     {notice === null ? null : <p role="status">{notice}</p>}
     {analysis === null ? <p>No completed private-model draft is saved for this date range and timezone.</p> : <div>

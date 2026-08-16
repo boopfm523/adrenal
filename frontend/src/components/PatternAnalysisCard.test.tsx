@@ -87,7 +87,7 @@ describe("private Ollama pattern explanation", () => {
     expect(screen.getByRole("button", { name: "Check for a completed draft" })).toBeEnabled();
   });
 
-  it("times out after 75 seconds and successfully retries", async () => {
+  it("allows the slower local pattern model 135 seconds and successfully retries", async () => {
     vi.useFakeTimers();
     let posts = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
@@ -102,8 +102,8 @@ describe("private Ollama pattern explanation", () => {
 
     await vi.waitFor(() => { expect(screen.getByText(/No completed private-model draft/)).toBeVisible(); });
     fireEvent.click(screen.getByRole("button", { name: "Ask Ollama to explain these patterns" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(75_000); });
-    await vi.waitFor(() => { expect(screen.getByRole("alert")).toHaveTextContent(/stopped waiting after 75 seconds/); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(135_000); });
+    await vi.waitFor(() => { expect(screen.getByRole("alert")).toHaveTextContent(/stopped waiting after 135 seconds/); });
     vi.useRealTimers();
     fireEvent.click(screen.getByRole("button", { name: "Try private analysis again" }));
     expect(await screen.findByText(/one cited pattern/)).toBeVisible();

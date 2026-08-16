@@ -380,6 +380,12 @@ def generate_pattern_analysis(
         analysis_type=AnalysisType.PATTERN_OBSERVATION,
         source_record_ids=source_ids,
         computed_inputs=computed_inputs,
+        system_prompt=analysis_service.PATTERN_SYSTEM_PROMPT,
+        prompt_version=analysis_service.PATTERN_PROMPT_VERSION,
+        max_output_tokens=analysis_service.PATTERN_MAX_OUTPUT_TOKENS,
+        context_window=analysis_service.PATTERN_CONTEXT_WINDOW,
+        read_timeout_s=analysis_service.PATTERN_READ_TIMEOUT_SECONDS,
+        deterministic_safety_fields=True,
     )
     if generated.analysis is not None:
         zone = ZoneInfo(zone_name)

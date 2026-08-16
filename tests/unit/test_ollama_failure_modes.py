@@ -193,6 +193,32 @@ def test_generation_limits_are_forwarded_as_ollama_options(
     assert seen["options"]["num_ctx"] == 8192
 
 
+def test_request_can_use_a_longer_read_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, float] = {}
+    original = httpx.Client.__init__
+
+    def fake_init(self: httpx.Client, **kwargs: Any) -> None:
+        timeout = kwargs["timeout"]
+        seen["read"] = timeout.read
+        original(
+            self,
+            transport=httpx.MockTransport(_responder(200, json={"message": {"content": "{}"}})),
+            **kwargs,
+        )
+
+    monkeypatch.setattr(httpx.Client, "__init__", fake_init)
+    _client().generate_json(
+        system_prompt="s",
+        user_content="u",
+        json_schema=SCHEMA,
+        read_timeout_s=120,
+    )
+
+    assert seen["read"] == 120
+
+
 def test_vision_image_is_data_on_the_selected_private_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

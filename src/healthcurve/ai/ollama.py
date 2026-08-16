@@ -135,6 +135,7 @@ class OllamaClient:
         images: list[bytes] | None = None,
         max_output_tokens: int | None = None,
         context_window: int | None = None,
+        read_timeout_s: float | None = None,
     ) -> ModelResult:
         """Ask for a JSON object matching ``json_schema``.
 
@@ -158,6 +159,8 @@ class OllamaClient:
             raise ValueError("max_output_tokens must be positive")
         if context_window is not None and context_window <= 0:
             raise ValueError("context_window must be positive")
+        if read_timeout_s is not None and read_timeout_s <= 0:
+            raise ValueError("read_timeout_s must be positive")
         options: dict[str, Any] = {"temperature": temperature}
         if max_output_tokens is not None:
             options["num_predict"] = max_output_tokens
@@ -189,7 +192,11 @@ class OllamaClient:
                 base_url=self._settings.ollama_base_url,
                 timeout=httpx.Timeout(
                     connect=self._settings.ollama_connect_timeout_s,
-                    read=self._settings.ollama_read_timeout_s,
+                    read=(
+                        self._settings.ollama_read_timeout_s
+                        if read_timeout_s is None
+                        else read_timeout_s
+                    ),
                     write=self._settings.ollama_connect_timeout_s,
                     pool=self._settings.ollama_connect_timeout_s,
                 ),

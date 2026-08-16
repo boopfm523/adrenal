@@ -181,8 +181,8 @@ export class ApiError extends Error {
 }
 
 export class AnalysisRequestTimeoutError extends Error {
-  constructor() {
-    super("The analysis request did not finish within 75 seconds.");
+  constructor(timeoutSeconds = ANALYSIS_REQUEST_TIMEOUT_SECONDS) {
+    super(`The analysis request did not finish within ${timeoutSeconds.toString()} seconds.`);
     this.name = "AnalysisRequestTimeoutError";
   }
 }
@@ -195,6 +195,7 @@ export class AnalysisRequestCancelledError extends Error {
 }
 
 export const ANALYSIS_REQUEST_TIMEOUT_SECONDS = 75;
+export const PATTERN_ANALYSIS_REQUEST_TIMEOUT_SECONDS = 135;
 
 function isWriteMethod(method: string): boolean {
   return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
@@ -578,14 +579,18 @@ export function getDailyPatterns(dateFrom: string, dateTo: string, timezone: str
   return apiRequest<DailyPatterns>(`/analytics/daily-patterns?${params.toString()}`);
 }
 
-async function analysisRequest<T>(path: string, externalSignal?: AbortSignal): Promise<T> {
+async function analysisRequest<T>(
+  path: string,
+  externalSignal?: AbortSignal,
+  timeoutSeconds = ANALYSIS_REQUEST_TIMEOUT_SECONDS,
+): Promise<T> {
   const controller = new AbortController();
   const cancel = (): void => { controller.abort(new AnalysisRequestCancelledError()); };
   if (externalSignal?.aborted === true) cancel();
   else externalSignal?.addEventListener("abort", cancel, { once: true });
   const deadline = window.setTimeout(() => {
-    controller.abort(new AnalysisRequestTimeoutError());
-  }, ANALYSIS_REQUEST_TIMEOUT_SECONDS * 1000);
+    controller.abort(new AnalysisRequestTimeoutError(timeoutSeconds));
+  }, timeoutSeconds * 1000);
   try {
     return await apiRequest<T>(path, { method: "POST", signal: controller.signal });
   } catch (error: unknown) {
@@ -606,7 +611,11 @@ export async function getPatternAnalysis(dateFrom: string, dateTo: string, timez
 
 export function generatePatternAnalysis(dateFrom: string, dateTo: string, timezone: string, signal?: AbortSignal): Promise<PatternAnalysisGeneration> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, timezone });
-  return analysisRequest<PatternAnalysisGeneration>(`/analytics/pattern-analysis?${params.toString()}`, signal);
+  return analysisRequest<PatternAnalysisGeneration>(
+    `/analytics/pattern-analysis?${params.toString()}`,
+    signal,
+    PATTERN_ANALYSIS_REQUEST_TIMEOUT_SECONDS,
+  );
 }
 
 export async function deletePatternAnalysis(analysisId: string): Promise<void> {

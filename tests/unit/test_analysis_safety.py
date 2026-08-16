@@ -270,10 +270,12 @@ def test_analysis_forwards_bounded_generation_options() -> None:
         client=model,
         max_output_tokens=1024,
         context_window=16_384,
+        read_timeout_s=120.0,
     )
 
     assert model.generate_json.call_args.kwargs["max_output_tokens"] == 1024
     assert model.generate_json.call_args.kwargs["context_window"] == 16_384
+    assert model.generate_json.call_args.kwargs["read_timeout_s"] == 120.0
 
 
 def test_analysis_resolves_missing_chat_digest_from_local_inventory() -> None:
