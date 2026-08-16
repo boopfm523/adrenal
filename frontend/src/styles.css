@@ -108,9 +108,11 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .metric-definition summary { cursor: pointer; font-weight: 700; }
 .healthcurve-day-analysis { margin-block: 1rem; }
 .healthcurve-day-analysis > summary { font-size: 1.1rem; }
-.healthcurve-day-analysis-content { margin-block: 0.5rem 0; padding: clamp(0.9rem, 2vw, 1.25rem); }
-.healthcurve-day-analysis-content > :first-child { margin-top: 0; }
-.healthcurve-day-analysis-content > :last-child { margin-bottom: 0; }
+.healthcurve-day-analysis-content { display: grid; gap: 1rem; margin-block: 0.75rem 0; padding: clamp(0.9rem, 2vw, 1.25rem); }
+.healthcurve-day-analysis-content > * { margin-block: 0; }
+.healthcurve-day-analysis-content > button { justify-self: start; }
+.healthcurve-day-analysis-result { display: grid; gap: 0.75rem; }
+.healthcurve-day-analysis-result > * { margin-block: 0; }
 .analysis-generation-notice { margin-block: 0.75rem 0; padding: 0.7rem 0.8rem; border-radius: 0.4rem; background: #f3eef7; }
 .filter-panel { display: grid; gap: 1rem; margin-block: 1.5rem; padding: 1rem; border: 1px solid #ccd4ce; border-radius: 0.75rem; background: white; }
 .filter-panel label:not(.checkbox-label):not(.mantine-InputWrapper-label) { display: grid; gap: 0.35rem; font-weight: 700; }

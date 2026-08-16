@@ -231,6 +231,28 @@ def test_analysis_timeout_is_a_distinct_safe_result_without_a_write() -> None:
     session.add.assert_not_called()
 
 
+def test_analysis_malformed_model_response_is_distinct_without_a_write() -> None:
+    session = Mock()
+    model = Mock(spec=OllamaClient)
+    model.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.INVALID_JSON,
+        detail="synthetic malformed response detail",
+    )
+
+    result = generate_analysis(
+        session,
+        owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[SOURCE],
+        computed_inputs={"missing_domains": ["labs"]},
+        client=model,
+    )
+
+    assert result.outcome is AnalysisOutcome.MODEL_INVALID_RESPONSE
+    assert result.analysis is None
+    session.add.assert_not_called()
+
+
 def test_analysis_forwards_bounded_generation_options() -> None:
     session = Mock()
     model = Mock(spec=OllamaClient)
@@ -246,11 +268,11 @@ def test_analysis_forwards_bounded_generation_options() -> None:
         source_record_ids=[SOURCE],
         computed_inputs={"missing_domains": ["labs"]},
         client=model,
-        max_output_tokens=768,
+        max_output_tokens=1024,
         context_window=16_384,
     )
 
-    assert model.generate_json.call_args.kwargs["max_output_tokens"] == 768
+    assert model.generate_json.call_args.kwargs["max_output_tokens"] == 1024
     assert model.generate_json.call_args.kwargs["context_window"] == 16_384
 
 

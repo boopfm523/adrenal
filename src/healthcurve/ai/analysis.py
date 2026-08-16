@@ -23,8 +23,8 @@ from healthcurve.operations import audit
 
 PROMPT_VERSION: Final = "analysis-v3"
 SCHEMA_VERSION: Final = "analysis-v1"
-DAY_PROMPT_VERSION: Final = "healthcurve-day-analysis-v2"
-DAY_MAX_OUTPUT_TOKENS: Final = 768
+DAY_PROMPT_VERSION: Final = "healthcurve-day-analysis-v3"
+DAY_MAX_OUTPUT_TOKENS: Final = 1024
 DAY_CONTEXT_WINDOW: Final = 16_384
 
 SYSTEM_PROMPT: Final = """\
@@ -56,6 +56,8 @@ of causation. Do not call theoretical exposure measured cortisol or determine wh
 the owner needed more or less medication. Never recommend or imply a dose change.
 For an object encoded as columnar_rows_v1, interpret each row position using the
 corresponding columns entry; this is a compact representation of deterministic buckets.
+Return 3 to 6 claims. Keep each claim under 300 characters so the complete JSON object
+fits within the response limit. Prefer fewer complete claims over a longer response.
 """
 )
 
@@ -110,6 +112,7 @@ class AnalysisOutcome(StrEnum):
     REFUSED = "refused"
     MODEL_UNAVAILABLE = "model_unavailable"
     MODEL_TIMEOUT = "model_timeout"
+    MODEL_INVALID_RESPONSE = "model_invalid_response"
     INVALID = "invalid"
 
 
@@ -351,6 +354,8 @@ def generate_analysis(
             outcome = AnalysisOutcome.MODEL_TIMEOUT
         elif result.outcome is ModelOutcome.UNAVAILABLE:
             outcome = AnalysisOutcome.MODEL_UNAVAILABLE
+        elif result.outcome is ModelOutcome.INVALID_JSON:
+            outcome = AnalysisOutcome.MODEL_INVALID_RESPONSE
         else:
             outcome = AnalysisOutcome.INVALID
         return AnalysisGenerationResult(outcome=outcome, detail=result.detail)

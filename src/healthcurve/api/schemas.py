@@ -1311,7 +1311,14 @@ class PatternAnalysisOut(AiResource):
 
 
 class PatternAnalysisGenerationOut(ApiModel):
-    outcome: Literal["created", "refused", "model_unavailable", "model_timeout", "invalid"]
+    outcome: Literal[
+        "created",
+        "refused",
+        "model_unavailable",
+        "model_timeout",
+        "model_invalid_response",
+        "invalid",
+    ]
     detail: str | None = None
     analysis: PatternAnalysisOut | None = None
 
@@ -1330,7 +1337,14 @@ class DayAnalysisOut(AiResource):
 
 
 class DayAnalysisGenerationOut(ApiModel):
-    outcome: Literal["created", "refused", "model_unavailable", "model_timeout", "invalid"]
+    outcome: Literal[
+        "created",
+        "refused",
+        "model_unavailable",
+        "model_timeout",
+        "model_invalid_response",
+        "invalid",
+    ]
     detail: str | None = None
     analysis: DayAnalysisOut | None = None
 

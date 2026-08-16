@@ -203,9 +203,14 @@ def _safe_generation_detail(outcome: analysis_service.AnalysisOutcome) -> str | 
             "It may still be loading; wait a moment and try again. Recorded facts and the "
             "HealthCurve remain available."
         ),
+        analysis_service.AnalysisOutcome.MODEL_INVALID_RESPONSE: (
+            "The private model returned incomplete or malformed structured output, so it "
+            "was not saved. This was a response-formatting failure, not a medication-safety "
+            "rejection. Try again; recorded facts and the HealthCurve are unchanged."
+        ),
         analysis_service.AnalysisOutcome.INVALID: (
-            "The generated analysis failed HealthCurve's citation or safety checks and was "
-            "not saved."
+            "The structured analysis contained unsupported values, source references, or "
+            "medication guidance and was not saved."
         ),
     }.get(outcome)
 
@@ -394,8 +399,13 @@ def generate_pattern_analysis(
             "The configured private model did not finish within HealthCurve's time limit. "
             "Deterministic results remain available."
         ),
+        analysis_service.AnalysisOutcome.MODEL_INVALID_RESPONSE: (
+            "The private model returned incomplete or malformed structured output, so the "
+            "draft was not saved. Deterministic results remain available."
+        ),
         analysis_service.AnalysisOutcome.INVALID: (
-            "The generated draft failed HealthCurve's citation or safety checks and was not saved."
+            "The generated draft contained unsupported values, source references, or medication "
+            "guidance and was not saved."
         ),
     }.get(generated.outcome)
     return PatternAnalysisGenerationOut.model_validate(

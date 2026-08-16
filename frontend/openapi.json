@@ -2014,6 +2014,7 @@
               "refused",
               "model_unavailable",
               "model_timeout",
+              "model_invalid_response",
               "invalid"
             ],
             "title": "Outcome",
@@ -5489,6 +5490,7 @@
               "refused",
               "model_unavailable",
               "model_timeout",
+              "model_invalid_response",
               "invalid"
             ],
             "title": "Outcome",

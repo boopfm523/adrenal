@@ -6821,7 +6821,7 @@ def test_day_analysis_persists_provenance_and_detects_late_data(
     assert body["analysis"]["analysis_type"] == "daily_summary"
     assert body["analysis"]["source_revision_sha256"] == revision
     assert body["analysis"]["source_record_count"] == 2
-    assert body["analysis"]["prompt_version"] == "healthcurve-day-analysis-v2"
+    assert body["analysis"]["prompt_version"] == "healthcurve-day-analysis-v3"
     assert body["analysis"]["stale"] is False
     with Session(engine) as session:
         retained = session.scalar(
@@ -6847,7 +6847,8 @@ def test_day_analysis_persists_provenance_and_detects_late_data(
     [
         (analysis_service.AnalysisOutcome.MODEL_UNAVAILABLE, "could not reach"),
         (analysis_service.AnalysisOutcome.MODEL_TIMEOUT, "did not finish"),
-        (analysis_service.AnalysisOutcome.INVALID, "citation or safety checks"),
+        (analysis_service.AnalysisOutcome.MODEL_INVALID_RESPONSE, "malformed structured output"),
+        (analysis_service.AnalysisOutcome.INVALID, "unsupported values"),
     ],
 )
 def test_day_analysis_failure_paths_do_not_leak_model_details(
