@@ -85,6 +85,41 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .category-card--context .category-label::after { content: " · optional context"; text-transform: none; font-weight: 500; }
 .category-disclaimer { font-size: 0.9rem; font-weight: 650; }
 
+.chat-layout { display: grid; grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr); gap: 1rem; min-height: min(45rem, calc(100dvh - 15rem)); margin-top: 1.25rem; }
+.chat-conversations, .chat-panel { min-width: 0; border: 1px solid var(--hc-color-border); border-radius: var(--mantine-radius-lg); background: var(--hc-color-surface); }
+.chat-conversations { padding: 0.85rem; }
+.chat-conversation-list { display: grid; gap: 0.5rem; margin-top: 0.75rem; }
+.chat-conversation { position: relative; overflow: hidden; border: 1px solid transparent; border-radius: var(--mantine-radius-md); background: var(--hc-color-surface-muted); }
+.chat-conversation--active { border-color: var(--mantine-color-horizonTeal-6); box-shadow: inset 0.25rem 0 var(--mantine-color-horizonTeal-7); }
+.chat-conversation__select { display: grid; width: 100%; min-height: 4.25rem; border: 0; padding: 0.7rem 4rem 0.7rem 0.85rem; background: transparent; color: var(--hc-color-text); text-align: left; }
+.chat-conversation__select span { overflow: hidden; font-family: "Rubik-SemiBold", sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.chat-conversation__select small { color: var(--hc-color-text-muted); }
+.chat-conversation__delete { position: absolute; top: 0.65rem; right: 0.45rem; min-height: 2rem; border: 0; padding: 0.25rem 0.4rem; background: transparent; color: var(--hc-color-error); font-size: 0.75rem; }
+.chat-conversation__confirm { display: flex; align-items: center; gap: 0.35rem; padding: 0.5rem; }
+.chat-conversation__confirm button { min-height: 2rem; padding: 0.25rem 0.5rem; }
+.chat-empty-copy { color: var(--hc-color-text-muted); }
+.chat-panel { display: grid; grid-template-rows: auto minmax(18rem, 1fr) auto; overflow: hidden; }
+.chat-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--hc-color-border); }
+.chat-panel__header h2 { margin: 0 0 0.25rem; }
+.chat-messages { display: flex; flex-direction: column; gap: 0.85rem; overflow-y: auto; padding: 1rem; scroll-behavior: smooth; }
+.chat-message { width: fit-content; max-width: min(48rem, 88%); border-radius: 0.85rem; padding: 0.85rem 1rem; }
+.chat-message--user { align-self: flex-end; background: var(--mantine-color-horizonTeal-1); }
+.chat-message--assistant { align-self: flex-start; border: 1px dashed #684a76; background: #fff; }
+.chat-message__label { margin-bottom: 0.35rem; font-family: "Rubik-SemiBold", sans-serif; font-size: 0.8rem; }
+.chat-message__body { margin: 0; white-space: pre-wrap; }
+.chat-message__working { display: flex; align-items: center; gap: 0.5rem; color: var(--hc-color-text-muted); }
+.chat-message > button, .chat-message > .mantine-Alert-root, .chat-stale-note, .chat-provenance { margin-top: 0.7rem; }
+.chat-error-code { display: block; margin-top: 0.25rem; font-size: 0.78rem; }
+.chat-stale-note { border-left: 0.25rem solid var(--mantine-color-horizonOrange-6); padding: 0.5rem 0.7rem; background: var(--mantine-color-horizonOrange-0); }
+.chat-provenance summary { cursor: pointer; font-family: "Rubik-SemiBold", sans-serif; }
+.chat-provenance > div { margin-top: 0.6rem; border-top: 1px solid var(--hc-color-border); padding-top: 0.6rem; font-size: 0.88rem; }
+.chat-provenance p { margin: 0.35rem 0; }
+.chat-provenance__boundary { color: var(--hc-color-text-muted); }
+.chat-composer { display: grid; gap: 0.65rem; padding: 1rem; border-top: 1px solid var(--hc-color-border); background: var(--hc-color-surface-muted); }
+.chat-composer__hint { color: var(--hc-color-text-muted); font-size: 0.8rem; }
+.chat-welcome { align-self: center; max-width: 36rem; margin: auto; padding: 2rem; text-align: center; }
+.chat-welcome h2, .chat-welcome h3 { margin-top: 0; }
+
 .login-page { display: grid; min-height: 100dvh; place-items: center; padding: clamp(1rem, 4vw, 3rem); background: radial-gradient(circle at 15% 15%, var(--mantine-color-horizonTeal-0), transparent 35%), var(--hc-color-canvas); }
 .login-panel { width: min(31rem, 100%); padding: clamp(1.5rem, 5vw, 2.75rem); border-color: var(--hc-color-border); background: color-mix(in srgb, var(--hc-color-surface) 96%, transparent); }
 .login-panel h1 { font-size: clamp(2rem, 8vw, 2.65rem); line-height: 1.05; }
@@ -573,6 +608,13 @@ circle.chart-series { fill: white; }
 @media (max-width: 720px) {
   html, body { overflow-x: clip; }
   .healthcurve-mobile-controls { display: flex; align-items: center; gap: 0.55rem; margin-block: 0.75rem; }
+  .chat-layout { grid-template-columns: 1fr; min-height: 0; }
+  .chat-conversations { overflow-x: auto; }
+  .chat-conversation-list { display: flex; }
+  .chat-conversation { flex: 0 0 14rem; }
+  .chat-panel { min-height: 38rem; }
+  .chat-panel__header { align-items: stretch; flex-direction: column; }
+  .chat-message { max-width: 94%; }
   .healthcurve-mobile-controls span { font-family: "Rubik-SemiBold", sans-serif; font-weight: 600; }
   .healthcurve-mobile-controls button { width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: 1.25rem; }
   .healthcurve-mobile-controls output { min-width: 2.25rem; text-align: center; }

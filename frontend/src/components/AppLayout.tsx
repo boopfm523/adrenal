@@ -8,6 +8,7 @@ import { useAuth } from "../auth/context";
 
 const navigation = [
   ["Daily review", "/healthcurve"],
+  ["Chat", "/chat"],
   ["Today", "/today"],
   ["Timeline", "/timeline"],
   ["Doses", "/doses"],

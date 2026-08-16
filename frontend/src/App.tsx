@@ -21,6 +21,7 @@ const ReportsPage = lazy(() => import("./pages/ReportsPage").then((module) => ({
 const HelpPage = lazy(() => import("./pages/HelpPage").then((module) => ({ default: module.HelpPage })));
 const HealthDataPage = lazy(() => import("./pages/HealthDataPage").then((module) => ({ default: module.HealthDataPage })));
 const LabsPage = lazy(() => import("./pages/LabsPage").then((module) => ({ default: module.LabsPage })));
+const ChatPage = lazy(() => import("./pages/ChatPage").then((module) => ({ default: module.ChatPage })));
 
 function route(element: React.JSX.Element): React.JSX.Element {
   return (
@@ -54,6 +55,7 @@ export function App(): React.JSX.Element {
             <Route path="/help" element={route(<HelpPage />)} />
             <Route path="/health-data" element={route(<HealthDataPage />)} />
             <Route path="/labs" element={route(<LabsPage />)} />
+            <Route path="/chat" element={route(<ChatPage />)} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

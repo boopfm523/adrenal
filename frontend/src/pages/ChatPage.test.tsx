@@ -1,0 +1,108 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+
+import * as api from "../api/client";
+import { HealthCurveProvider } from "../components/HealthCurveProvider";
+import { ChatPage } from "./ChatPage";
+
+vi.mock("../api/client", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../api/client")>();
+  return {
+    ...original,
+    getChatConversations: vi.fn(),
+    getChatMessages: vi.fn(),
+    getChatMessageStaleness: vi.fn(),
+    createChatConversation: vi.fn(),
+    updateChatConversation: vi.fn(),
+    deleteChatConversation: vi.fn(),
+    sendChatMessage: vi.fn(),
+    cancelChatMessage: vi.fn(),
+  };
+});
+
+const conversation: api.ChatConversation = {
+  category: "ai",
+  id: "00000000-0000-4000-8000-000000000001",
+  title: "Review yesterday",
+  include_sensitive_text: false,
+  created_at: "2026-08-16T12:00:00Z",
+  updated_at: "2026-08-16T12:01:00Z",
+  last_message_at: "2026-08-16T12:01:00Z",
+  retention_expires_at: null,
+};
+
+function message(overrides: Partial<api.ChatMessage>): api.ChatMessage {
+  return {
+    category: "ai",
+    content_category: "ai_generated",
+    id: "00000000-0000-4000-8000-000000000003",
+    conversation_id: conversation.id,
+    role: "assistant",
+    state: "completed",
+    body: "Stress rose after noon in the available observations. This is an association, not a cause.",
+    sequence: 2,
+    generated_at: "2026-08-16T12:01:00Z",
+    model_name: "synthetic-local-model",
+    model_digest: "synthetic-digest",
+    prompt_version: "chat-v1",
+    schema_version: "chat-answer-v1",
+    tool_versions: { daily: "v1" },
+    source_manifest: [{ tool_name: "daily_healthcurve", local_date: "2026-08-15" }],
+    source_scope: { local_date: "2026-08-15" },
+    source_fingerprint: "synthetic-fingerprint",
+    error_code: null,
+    created_at: "2026-08-16T12:00:30Z",
+    updated_at: "2026-08-16T12:01:00Z",
+    ...overrides,
+  };
+}
+
+function renderChat(messages: api.ChatMessage[]): void {
+  vi.mocked(api.getChatConversations).mockResolvedValue({ items: [conversation], page: { page: 1, page_size: 50, total_items: 1, total_pages: 1 } });
+  vi.mocked(api.getChatMessages).mockResolvedValue({ items: messages, page: { page: 1, page_size: 100, total_items: messages.length, total_pages: 1 } });
+  vi.mocked(api.getChatMessageStaleness).mockResolvedValue({ status: "fresh", stale: false, checked_at: "2026-08-16T12:02:00Z" });
+  render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/chat"]}><ChatPage /></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
+}
+
+describe("HealthCurve Chat page", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("shows persisted owner and AI messages with expandable data provenance", async () => {
+    renderChat([
+      message({ id: "00000000-0000-4000-8000-000000000002", role: "user", content_category: "owner_authored", state: "accepted", body: "What happened yesterday?", sequence: 1, generated_at: null, model_name: null, model_digest: null, prompt_version: null, schema_version: null, tool_versions: null, source_manifest: null, source_scope: null, source_fingerprint: null }),
+      message({}),
+    ]);
+    expect(await screen.findByRole("heading", { name: "Chat", level: 1 })).toBeVisible();
+    expect(await screen.findByText("What happened yesterday?")).toBeVisible();
+    expect(screen.getByText(/Stress rose after noon/)).toBeVisible();
+    const details = screen.getByText("Data used and AI details");
+    await userEvent.click(details);
+    expect(screen.getByText("synthetic-local-model")).toBeVisible();
+    expect(screen.getByText("daily healthcurve")).toBeVisible();
+    expect(screen.getByText(/kept separate from recorded facts/)).toBeVisible();
+  });
+
+  it("sends a natural-language question and preserves the sensitive-text opt-in", async () => {
+    renderChat([]);
+    vi.mocked(api.sendChatMessage).mockResolvedValue(message({ role: "user", content_category: "owner_authored", state: "accepted", body: "Compare stress and symptoms yesterday", sequence: 1 }));
+    vi.mocked(api.updateChatConversation).mockResolvedValue({ ...conversation, include_sensitive_text: true });
+    const user = userEvent.setup();
+    const composer = await screen.findByLabelText("Message HealthCurve AI");
+    await user.type(composer, "Compare stress and symptoms yesterday");
+    await user.keyboard("[Enter]");
+    await waitFor(() => { expect(api.sendChatMessage).toHaveBeenCalledWith(conversation.id, "Compare stress and symptoms yesterday", expect.any(String)); });
+    await user.click(screen.getByLabelText("Include sensitive diary and life-event text"));
+    await waitFor(() => { expect(api.updateChatConversation).toHaveBeenCalledWith(conversation.id, { include_sensitive_text: true }); });
+  });
+
+  it("makes durable failures visible and offers retry", async () => {
+    const userMessage = message({ id: "00000000-0000-4000-8000-000000000004", role: "user", content_category: "owner_authored", state: "accepted", body: "Summarize my day", sequence: 1, generated_at: null });
+    renderChat([userMessage, message({ id: "00000000-0000-4000-8000-000000000005", state: "unavailable", body: null, error_code: "model_unavailable" })]);
+    vi.mocked(api.sendChatMessage).mockResolvedValue(userMessage);
+    expect(await screen.findByText(/private model is unavailable/i)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => { expect(api.sendChatMessage).toHaveBeenCalledWith(conversation.id, "Summarize my day", expect.any(String)); });
+  });
+});

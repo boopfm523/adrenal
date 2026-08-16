@@ -97,7 +97,7 @@ describe("automated accessibility audit", () => {
   it("activates every primary route by keyboard", async () => {
     render(<HealthCurveProvider><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/today"]}><Routes><Route element={<AppLayout />}><Route path="*" element={<LocationProbe />} /></Route></Routes></MemoryRouter></AuthContext.Provider></HealthCurveProvider>);
     const routes = [
-      ["Daily review", "/healthcurve"], ["Today", "/today"], ["Timeline", "/timeline"], ["Doses", "/doses"], ["Plan", "/plan"], ["Episodes", "/episodes"],
+      ["Daily review", "/healthcurve"], ["Chat", "/chat"], ["Today", "/today"], ["Timeline", "/timeline"], ["Doses", "/doses"], ["Plan", "/plan"], ["Episodes", "/episodes"],
       ["Symptoms & diary", "/symptoms-diary"], ["Health data", "/health-data"], ["Labs", "/labs"],
       ["Reports", "/reports"], ["Data quality", "/data-quality"], ["Settings & privacy", "/settings"], ["Help", "/help"],
     ] as const;

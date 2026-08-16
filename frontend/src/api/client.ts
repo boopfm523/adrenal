@@ -67,6 +67,11 @@ export type GarminStatus = components["schemas"]["GarminStatusOut"];
 export type GarminRecord = components["schemas"]["GarminRecordOut"];
 export type GarminRecords = components["schemas"]["GarminRecordsOut"];
 export type GarminDisconnectPreview = components["schemas"]["GarminDisconnectPreviewOut"];
+export type ChatConversation = components["schemas"]["ChatConversationOut"];
+export type ChatConversationPage = components["schemas"]["ChatConversationPage"];
+export type ChatMessage = components["schemas"]["ChatMessageOut"];
+export type ChatMessagePage = components["schemas"]["ChatMessagePage"];
+export type ChatMessageStaleness = components["schemas"]["ChatMessageStalenessOut"];
 
 export interface LabDocument {
   document_id: string;
@@ -833,4 +838,49 @@ export function requestPrivateExport(password: string, includeAi: boolean, inclu
 
 export function getPrivateExports(): Promise<PrivateExportPage> {
   return apiRequest<PrivateExportPage>("/privacy/exports?page=1&page_size=10");
+}
+
+export function getChatConversations(page = 1): Promise<ChatConversationPage> {
+  return apiRequest<ChatConversationPage>(`/chat/conversations?page=${page.toString()}&page_size=50`);
+}
+
+export function createChatConversation(includeSensitiveText = false): Promise<ChatConversation> {
+  return apiRequest<ChatConversation>("/chat/conversations", {
+    method: "POST",
+    body: JSON.stringify({ title: "New conversation", include_sensitive_text: includeSensitiveText }),
+  });
+}
+
+export function updateChatConversation(id: string, payload: { title?: string; include_sensitive_text?: boolean }): Promise<ChatConversation> {
+  return apiRequest<ChatConversation>(`/chat/conversations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteChatConversation(id: string): Promise<void> {
+  await apiRequest<unknown>(`/chat/conversations/${id}`, { method: "DELETE" });
+}
+
+export async function deleteAllChatConversations(): Promise<void> {
+  await apiRequest<unknown>("/chat/conversations", { method: "DELETE" });
+}
+
+export function getChatMessages(conversationId: string): Promise<ChatMessagePage> {
+  return apiRequest<ChatMessagePage>(`/chat/conversations/${conversationId}/messages?page=1&page_size=100`);
+}
+
+export function sendChatMessage(conversationId: string, body: string, clientMessageId: string): Promise<ChatMessage> {
+  return apiRequest<ChatMessage>(`/chat/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body, client_message_id: clientMessageId }),
+  });
+}
+
+export function cancelChatMessage(messageId: string): Promise<ChatMessage> {
+  return apiRequest<ChatMessage>(`/chat/messages/${messageId}/cancel`, { method: "POST" });
+}
+
+export function getChatMessageStaleness(messageId: string): Promise<ChatMessageStaleness> {
+  return apiRequest<ChatMessageStaleness>(`/chat/messages/${messageId}/staleness`);
 }

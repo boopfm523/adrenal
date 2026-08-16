@@ -43,6 +43,7 @@ describe("primary HealthCurve route", () => {
 
   it.each([
     ["/healthcurve", "Daily review"],
+    ["/chat", "Chat"],
     ["/today", "Today"],
     ["/timeline", "Timeline"],
     ["/doses", "Doses"],
