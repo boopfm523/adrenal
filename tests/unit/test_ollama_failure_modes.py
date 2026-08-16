@@ -121,6 +121,33 @@ def test_constrained_json_in_thinking_channel_is_validated(
     assert result.data == payload
 
 
+def test_incomplete_think_disabled_response_retries_without_control(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        requests.append(payload)
+        if "think" in payload:
+            return httpx.Response(
+                200,
+                json={"done": False, "message": {"content": '{"partial"'}},
+            )
+        return httpx.Response(
+            200,
+            json={"done": True, "message": {"content": '{"complete": true}'}},
+        )
+
+    _patch_transport(monkeypatch, handler)
+    result = _call(_client())
+    assert result.ok
+    assert result.data == {"complete": True}
+    assert len(requests) == 2
+    assert requests[0]["think"] is False
+    assert "think" not in requests[1]
+
+
 def test_successful_call_returns_parsed_data(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"candidates": []}
     _patch_transport(
@@ -131,6 +158,20 @@ def test_successful_call_returns_parsed_data(monkeypatch: pytest.MonkeyPatch) ->
     assert result.ok
     assert result.data == payload
     assert result.latency_ms is not None
+
+
+def test_fenced_schema_constrained_object_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {"candidates": []}
+    _patch_transport(
+        monkeypatch,
+        _responder(
+            200,
+            json={"message": {"content": f"```json\n{json.dumps(payload)}\n```"}},
+        ),
+    )
+    result = _call(_client())
+    assert result.ok
+    assert result.data == payload
 
 
 @pytest.mark.safety("SAFE-19")

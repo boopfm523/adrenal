@@ -110,7 +110,11 @@ def configure_logging(*, json_output: bool = True, level: int = logging.INFO) ->
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(level),
-        cache_logger_on_first_use=True,
+        # Keep logger proxies reconfigurable.  The API, workers, CLI, and tests can
+        # install the same privacy pipeline at different process entry points; a
+        # proxy cached by the first entry point would otherwise retain a stale
+        # processor chain and could bypass a later capture or renderer.
+        cache_logger_on_first_use=False,
     )
 
 

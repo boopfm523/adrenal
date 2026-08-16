@@ -203,9 +203,7 @@ def make_chat_response_handler(
                         outcome=ChatToolOutcome.COMPLETED,
                         duration_ms=execution.duration_ms,
                         result_fingerprint=execution.result.result_sha256,
-                        source_manifest=[
-                            {"sources": execution.result.source_manifest}
-                        ],
+                        source_manifest=[{"sources": execution.result.source_manifest}],
                     )
                 )
 

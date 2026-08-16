@@ -62,6 +62,30 @@ class ModelIdentity:
     digest: str
 
 
+def _parse_model_json(content: str) -> object:
+    """Parse a single model JSON object, tolerating presentation-only fences.
+
+    Some local models wrap otherwise schema-constrained JSON in a Markdown fence or
+    add a short preamble. The result remains untrusted and caller-owned schema
+    validation is still mandatory. Only one complete object with whitespace or a
+    closing fence after it is accepted; arbitrary trailing model text is rejected.
+    """
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as original_error:
+        start = content.find("{")
+        if start < 0:
+            raise original_error
+        try:
+            value, end = json.JSONDecoder().raw_decode(content[start:])
+        except json.JSONDecodeError:
+            raise original_error from None
+        trailing = content[start + end :].strip()
+        if trailing not in ("", "```"):
+            raise original_error
+        return value
+
+
 class CircuitBreaker:
     """Stops hammering a model that is down.
 
@@ -214,6 +238,21 @@ class OllamaClient:
                     response = client.post("/api/chat", json=payload)
                 response.raise_for_status()
                 body = response.json()
+                if body.get("done") is False and "think" in payload:
+                    # Some Ollama/qwen combinations accept ``think: false`` but
+                    # return only an initial, truncated chunk despite stream=false.
+                    # Retry once without the optional control rather than treating a
+                    # transport-level partial object as model-authored invalid JSON.
+                    log.info(
+                        "model returned an incomplete non-streaming response; "
+                        "retrying without the think field",
+                        model_name=selected_model,
+                        reason_code="think_incomplete_response",
+                    )
+                    payload.pop("think")
+                    response = client.post("/api/chat", json=payload)
+                    response.raise_for_status()
+                    body = response.json()
         except httpx.TimeoutException:
             self._breaker.record_failure()
             return self._failed(ModelOutcome.TIMEOUT, started, "model timed out", selected_model)
@@ -247,7 +286,7 @@ class OllamaClient:
             )
 
         try:
-            data = json.loads(content)
+            data = _parse_model_json(content)
         except json.JSONDecodeError:
             self._breaker.record_failure()
             return self._failed(

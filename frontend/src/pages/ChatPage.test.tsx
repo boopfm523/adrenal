@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { MemoryRouter } from "react-router-dom";
 
 import * as api from "../api/client";
@@ -82,6 +83,16 @@ describe("HealthCurve Chat page", () => {
     expect(screen.getByText("synthetic-local-model")).toBeVisible();
     expect(screen.getByText("daily healthcurve")).toBeVisible();
     expect(screen.getByText(/kept separate from recorded facts/)).toBeVisible();
+    document.documentElement.lang = "en";
+    const audit = await axe.run(document, {
+      resultTypes: ["violations"],
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(
+      audit.violations
+        .filter((violation) => violation.impact === "critical" || violation.impact === "serious")
+        .map((violation) => violation.id),
+    ).toEqual([]);
   });
 
   it("sends a natural-language question and preserves the sensitive-text opt-in", async () => {

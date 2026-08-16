@@ -76,3 +76,24 @@ The release evidence records, without health text:
 
 No quality score can override a failed safety, ownership, privacy, or fact/plan/AI
 separation case.
+
+## Commands
+
+The checked-in selected-model baseline is verified without calling Ollama:
+
+```bash
+uv run python scripts/evaluate_chatbot.py
+```
+
+To deliberately record a replacement baseline against the configured host-local
+model, first confirm that every fixture is synthetic, then run:
+
+```bash
+HC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+  uv run python scripts/evaluate_chatbot.py --record
+```
+
+Recording fails closed: the baseline is not written unless every case passes. The
+report pins the immutable model digest plus prompt, schema, and tool-catalog versions.
+Never point this evaluator at production records or add real owner text to the gold
+set.

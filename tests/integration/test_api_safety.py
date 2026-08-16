@@ -791,6 +791,50 @@ def test_report_limit_returns_observable_429(client: TestClient, logged_in: dict
     assert response.headers["retry-after"] == "120"
 
 
+def test_chat_model_limit_returns_observable_429(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    created = client.post(
+        "/api/v1/chat/conversations",
+        headers=logged_in,
+        json={"title": "Synthetic rate-limit check"},
+    )
+    assert created.status_code == 201
+    conversation_id = created.json()["id"]
+    app = cast(Any, client.app)
+    original = app.state.rate_limiter
+    limiter = mock.MagicMock(spec=RateLimiter)
+    limiter.check.side_effect = RateLimitExceeded(RateLimitResult(30, 0, 45))
+    app.state.rate_limiter = limiter
+    try:
+        response = client.post(
+            f"/api/v1/chat/conversations/{conversation_id}/messages",
+            headers=logged_in,
+            json={"body": "Summarize the synthetic day.", "client_message_id": "limited-1"},
+        )
+    finally:
+        app.state.rate_limiter = original
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "rate_limit_exceeded"
+    assert response.headers["retry-after"] == "45"
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ChatMessage)
+                .where(ChatMessage.conversation_id == uuid.UUID(conversation_id))
+            )
+            == 0
+        )
+    assert (
+        client.delete(
+            f"/api/v1/chat/conversations/{conversation_id}", headers=logged_in
+        ).status_code
+        == 204
+    )
+
+
 def test_state_changing_requests_require_csrf(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:
@@ -1731,6 +1775,12 @@ def test_account_deletion_service_removes_data_but_retains_structural_audit(
                 expires_at=datetime.now(UTC) + timedelta(hours=1),
             )
         )
+        session.add(
+            ChatConversation(
+                owner_id=owner_id,
+                title="Synthetic account-deletion conversation",
+            )
+        )
         session.flush()
         privacy.delete_account(
             session,
@@ -1748,6 +1798,10 @@ def test_account_deletion_service_removes_data_but_retains_structural_audit(
                     TelegramConversationContext.owner_id == owner_id
                 )
             )
+            is None
+        )
+        assert (
+            session.scalar(select(ChatConversation).where(ChatConversation.owner_id == owner_id))
             is None
         )
         entry = session.scalar(

@@ -75,9 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
-    app.state.ai_session_factory = sessionmaker(
-        ai_engine, expire_on_commit=False
-    )
+    app.state.ai_session_factory = sessionmaker(ai_engine, expire_on_commit=False)
     app.state.rate_limiter = RateLimiter(settings.redis_url)
     app.state.telemetry = OperationalTelemetry(settings.redis_url)
 
