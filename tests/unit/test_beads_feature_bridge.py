@@ -101,6 +101,7 @@ class StubOllamaClient(OllamaClient):
         images: list[bytes] | None = None,
         max_output_tokens: int | None = None,
         context_window: int | None = None,
+        read_timeout_s: float | None = None,
     ) -> ModelResult:
         self.calls.append(
             {
@@ -112,6 +113,7 @@ class StubOllamaClient(OllamaClient):
                 "images": images,
                 "max_output_tokens": max_output_tokens,
                 "context_window": context_window,
+                "read_timeout_s": read_timeout_s,
             }
         )
         return self.result
@@ -134,6 +136,7 @@ class SequencedOllamaClient(StubOllamaClient):
         images: list[bytes] | None = None,
         max_output_tokens: int | None = None,
         context_window: int | None = None,
+        read_timeout_s: float | None = None,
     ) -> ModelResult:
         self.calls.append(
             {
@@ -143,6 +146,7 @@ class SequencedOllamaClient(StubOllamaClient):
                 "temperature": temperature,
                 "model_name": model_name,
                 "images": images,
+                "read_timeout_s": read_timeout_s,
                 "max_output_tokens": max_output_tokens,
                 "context_window": context_window,
             }

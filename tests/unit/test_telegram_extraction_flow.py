@@ -49,6 +49,7 @@ class StubOllamaClient(OllamaClient):
         images: list[bytes] | None = None,
         max_output_tokens: int | None = None,
         context_window: int | None = None,
+        read_timeout_s: float | None = None,
     ) -> ModelResult:
         del (
             system_prompt,
@@ -59,6 +60,7 @@ class StubOllamaClient(OllamaClient):
             images,
             max_output_tokens,
             context_window,
+            read_timeout_s,
         )
         return self.result
 
