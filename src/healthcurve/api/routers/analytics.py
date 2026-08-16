@@ -72,7 +72,17 @@ def steroid_exposure_curve(
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=422, detail="invalid timezone") from exc
     if model == "hc-exposure-v1":
-        return exposure.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
+        curve = exposure.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
+        sample_instants = [
+            cast(datetime, sample["occurred_at"])
+            for sample in cast(list[dict[str, object]], curve["samples"])
+        ]
+        curve["context_band"] = circadian_context.build_band(
+            day=day,
+            timezone=zone_name,
+            sample_instants=sample_instants,
+        )
+        return curve
     curve = physiology.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
     sample_instants = [
         cast(datetime, sample["occurred_at"])

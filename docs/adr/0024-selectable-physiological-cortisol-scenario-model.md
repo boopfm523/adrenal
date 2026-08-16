@@ -173,8 +173,12 @@ or sex difference in that sample, but that does not establish an individual rang
 CIRCORT salivary percentiles remain incompatible under ADR-0018.
 
 The band is default-off until its limitations are visible in the same view. Users may
-show or hide it independently. No time-in-range, deficit, excess, coverage ratio,
-traffic-light color, or "you need" calculation is produced.
+show or hide it independently with either v1 or v2 selected. With v2, the band and
+modeled line share their nmol/L display domain. With v1, the REU line and nmol/L band
+retain independent relative display domains; their vertical positions are illustrative
+only and do not imply unit equivalence or medication adequacy. No time-in-range,
+deficit, excess, coverage ratio, traffic-light color, or "you need" calculation is
+produced.
 
 ### 5. Recorded stress remains context, not inferred physiology
 

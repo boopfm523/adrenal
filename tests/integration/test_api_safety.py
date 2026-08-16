@@ -6078,6 +6078,12 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert Decimal(peak_sample["theoretical_exposure_reu"]) == (
         Decimal(peak_sample["regular_exposure_reu"]) + Decimal(peak_sample["stress_exposure_reu"])
     )
+    assert body["context_band"]["default_visible"] is False
+    assert body["context_band"]["band"]["personalized"] is False
+    assert len(body["samples"]) == len(body["context_band"]["samples"])
+    assert {row["occurred_at"] for row in body["samples"]} == {
+        row["occurred_at"] for row in body["context_band"]["samples"]
+    }
     assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in response.text
 
     invalid = client.get(

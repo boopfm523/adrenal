@@ -665,15 +665,22 @@ export function DailyHealthCurve({
   const cursorTime = Math.min(end, start + cursorMinute * 60_000);
   const allLanes = useMemo(() => lanes(data), [data]);
   const shownLanes = allLanes.filter((lane) => visible[lane.key]);
+  const stepsUnavailable = visible.steps
+    && allLanes.find((lane) => lane.key === "steps")?.points.length === 0;
   const exposureLane = allLanes.find((lane) => lane.key === "exposure");
-  const contextBand = isPhysiologicalCurve(data.exposure) ? data.exposure.context_band : null;
-  const visibleContextBand = showContextBand && contextBand !== null;
+  const contextBand = data.exposure.context_band;
+  const visibleContextBand = showContextBand;
   const contextBandBounds = exposureLane === undefined || !visibleContextBand
     ? undefined
     : scale([
-      ...exposureLane.points.map((point) => point.value),
+      ...(isPhysiologicalCurve(data.exposure)
+        ? exposureLane.points.map((point) => point.value)
+        : []),
       ...contextBand.samples.flatMap((sample) => [Number(sample.lower_nmol_l), Number(sample.upper_nmol_l)]),
     ]);
+  const exposureContextBounds = isPhysiologicalCurve(data.exposure)
+    ? contextBandBounds
+    : undefined;
   const ticks = timeTicks(start, end, data.exposure.timezone);
   const sleepRecords = data.garmin.filter((record) => record.kind === "sleep" && record.ended_at != null);
   const missingWakeTiming = sleepRecords.some(
@@ -817,7 +824,9 @@ export function DailyHealthCurve({
         temperature: "Temperature",
         symptoms: "Symptoms",
         episodes: "Stress episodes",
-      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}{contextBand === null ? null : <Checkbox label="Illustrative circadian context band" description="Population-shape context only; not a personal target or adequacy range." checked={showContextBand} onChange={(event) => { setShowContextBand(event.target.checked); }} />}</SimpleGrid></Paper></Stack>
+      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}<Checkbox label="Illustrative circadian context band" description="Population-shape context only; not a personal target or adequacy range." checked={showContextBand} onChange={(event) => { setShowContextBand(event.target.checked); }} /></SimpleGrid>
+      {stepsUnavailable ? <Text role="status" c="dimmed">Hourly Steps are unavailable for this day because Garmin supplied no observed intraday step samples. The untimed daily step total is not drawn at an invented time.</Text> : null}
+    </Paper></Stack>
     <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
@@ -870,7 +879,7 @@ export function DailyHealthCurve({
             return <rect key={episode.id} className="healthcurve-episode" x={x} y={TOP} width={Math.max(4, xEnd - x)} height={PLOT_HEIGHT}><title>{experiencedTime(episode.started_at, data.exposure.timezone)}: {episode.trigger}; {episode.severity ?? "severity missing"}; {episode.status}</title></rect>;
           })}</g> : null}
         {shownLanes.map((lane) => <g key={lane.key} data-series={lane.key}>
-          {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, displaySegment(lane, segment), start, end, lane.key === "exposure" ? contextBandBounds : undefined)} />)}
+          {connectedSegments(lane).map((segment, index) => <path key={`${lane.key}-${index.toString()}`} className={`healthcurve-series healthcurve-series--${lane.key}${lane.key === "exposure" ? " healthcurve-exposure-line" : ""}`} d={path(lane, displaySegment(lane, segment), start, end, lane.key === "exposure" ? exposureContextBounds : undefined)} />)}
           {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => {
             const x = xPosition(record.time.occurred_at, start, end);
             const systolicY = yPosition(lane, record.systolic_mmhg);
@@ -939,11 +948,11 @@ export function DailyHealthCurve({
         </div>
       </section>;
     })}</div>
-    {contextBand === null ? null : <details className="metric-definition context-band-values">
+    <details className="metric-definition context-band-values">
       <summary>Illustrative circadian context band values</summary>
       <p><strong>{contextBand.safety_label}</strong> This population-shape context is not a personal target, measured cortisol range, medication-adequacy assessment, or dosing guide. Recorded stress and symptoms do not change this band.</p>
       <div className="table-scroll" tabIndex={0} role="region" aria-label="Illustrative circadian context band exact values"><table><caption>Exact values supplied by {contextBand.band.revision}; missing samples remain missing.</caption><thead><tr><th scope="col">Local time</th><th scope="col">Lower context</th><th scope="col">Center context</th><th scope="col">Upper context</th></tr></thead><tbody>{contextBand.samples.map((sample) => <tr key={sample.occurred_at}><td>{experiencedTime(sample.occurred_at, data.exposure.timezone)}</td><td>{formatMeasurement(sample.lower_nmol_l, contextBand.series_unit)}</td><td>{formatMeasurement(sample.center_nmol_l, contextBand.series_unit)}</td><td>{formatMeasurement(sample.upper_nmol_l, contextBand.series_unit)}</td></tr>)}</tbody></table></div>
-    </details>}
+    </details>
     {data.temperature.length === 0 ? null : <div className="table-scroll" tabIndex={0} role="region" aria-label="Selected-day temperature exact values"><table className="vital-table"><caption>Exact selected-day body-temperature facts. Missing intervals remain blank.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Temperature</th></tr></thead><tbody>{data.temperature.map((record) => <tr key={record.id}><td>{experiencedTime(record.time.occurred_at, data.exposure.timezone)}</td><td>{record.display_f} °F ({record.display_c} °C)</td></tr>)}</tbody></table></div>}
     <details className="metric-definition model-methodology"><summary>How this model works: formulas, sources, and limits</summary>
       <p>{data.exposure.definition}</p>
@@ -960,11 +969,11 @@ export function DailyHealthCurve({
       <ul>{data.exposure.model.references.map((href) => { const detail = EXPOSURE_REFERENCE_DETAILS[href]; return <li key={href}><a href={href} target="_blank" rel="noreferrer">{detail?.label ?? "Model source"}</a>{detail === undefined ? null : ` — ${detail.use}.`}</li>; })}</ul>
       <h3>Model comparison</h3>
       <div className="table-scroll" tabIndex={0} role="region" aria-label="HealthCurve exposure model comparison"><table><caption>The two selectable models remain separate and versioned.</caption><thead><tr><th scope="col">Model</th><th scope="col">Output</th><th scope="col">Unit</th><th scope="col">Interpretation boundary</th></tr></thead><tbody><tr><th scope="row">hc-exposure-v1</th><td>Normalized oral-dose exposure shape</td><td>REU</td><td>Relative visualization; not cortisol concentration</td></tr><tr><th scope="row">hc-physiology-v2</th><td>Population-parameter plasma-free-cortisol scenario</td><td>nmol/L</td><td>Modeled scenario; not measured or personalized cortisol</td></tr></tbody></table></div>
-      {contextBand === null ? null : <>
+      <>
         <h3>Illustrative circadian context band</h3>
         <pre><code>{`center(t) = shape-preserving PCHIP interpolation of versioned local-clock anchors\nlower(t) = 0.8 × center(t)\nupper(t) = 1.2 × center(t)`}</code></pre>
         <p>The band is an optional, default-hidden population-shape illustration in nmol/L. Its anchors come from the owner-supplied synthetic modeling scenario; published healthy-rhythm evidence informs only general shape and phase. It is not a demographic reference interval, normal range, personal target, or medication-adequacy range. Age, sex, height, and body weight do not create a clinically validated personal range, and recorded stress or symptoms do not modify it.</p>
-      </>}
+      </>
       <h3>No “needed cortisol” formula is active</h3>
       <p>{isPhysiologicalCurve(data.exposure) ? "HealthCurve calculates no Garmin-stress-derived or symptom-derived cortisol “needed” value." : "HealthCurve currently calculates no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value. The supplied exploratory scenario used Req(t) = Base(t) × S(t), but its population baseline anchors and stress multipliers are not part of hc-exposure-v1."} Garmin stress remains a provider score on its own scale. Symptoms retain their recorded 0–10 severity and use <code>severity × 10</code> only for display position. Missing values remain missing. None of these inputs changes the exposure curve or becomes a dose multiplier, coverage ratio, or physiological requirement.</p>
       <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>

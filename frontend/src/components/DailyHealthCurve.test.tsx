@@ -33,6 +33,16 @@ function data(overrides: Partial<DailyHealthCurveData> = {}): DailyHealthCurveDa
       ],
       supported_dose_count: 0,
       excluded_dose_count: 0,
+      context_band: {
+        date: "2026-03-08", timezone: "America/New_York", day_start: "2026-03-08T05:00:00Z", day_end: "2026-03-09T04:00:00Z", elapsed_hours: "23", series_kind: "illustrative_circadian_context_band", series_name: "Illustrative circadian context band", series_unit: "nmol/L", default_visible: false, safety_label: "Illustrative population-shape context only—not a personal target or adequacy range.",
+        band: { id: "hc-circadian-context-v1", revision: "hc-circadian-context-v1.0.0", interpolation: "pchip-no-overshoot", lower_multiplier: "0.8", upper_multiplier: "1.2", anchor_origin: "owner_supplied_synthetic_scenario", healthy_rhythm_evidence_scope: "shape_and_phase_context_only", personalized: false, body_context_used: false, demographic_reference_interval: false, references: [], anchors: [] },
+        recorded_stress_context: { episode_count: 0, missing_severity_count: 0, multiplier: "1", applied_to_band: false, applied_to_drug_model: false, reason: "No validated mapping." },
+        samples: [
+          { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, center_nmol_l: "20", lower_nmol_l: "16", upper_nmol_l: "24" },
+          { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, center_nmol_l: "25", lower_nmol_l: "20", upper_nmol_l: "30" },
+          { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, center_nmol_l: "18", lower_nmol_l: "14.4", upper_nmol_l: "21.6" },
+        ],
+      },
     },
     garmin: [],
     symptoms: [],
@@ -209,7 +219,17 @@ describe("Daily HealthCurve", () => {
     expect(summary).toHaveTextContent("Hourly range: 125–375 steps");
   });
 
-  it("renders the v2 context band as an independent default-hidden accessible ribbon", () => {
+  it("explains when selected hourly Steps have no observed samples", () => {
+    renderWithTheme(<DailyHealthCurve data={data()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Steps" }));
+    expect(screen.getByText(/Garmin supplied no observed intraday step samples/)).toBeVisible();
+    const emptyStepsGroup = document.querySelector("[data-series='steps']");
+    expect(emptyStepsGroup).not.toBeNull();
+    expect(emptyStepsGroup?.querySelector("path")).toBeNull();
+  });
+
+  it("renders the context band with both models as an independent default-hidden accessible ribbon", () => {
     const { rerender } = renderWithTheme(<DailyHealthCurve data={physiologicalData()} />);
 
     const toggle = screen.getByRole("checkbox", { name: /Illustrative circadian context band/ });
@@ -232,7 +252,13 @@ describe("Daily HealthCurve", () => {
     fireEvent.click(toggle);
     expect(document.querySelector("[data-series='context-band']")).toBeNull();
     rerender(<DailyHealthCurve data={data()} />);
-    expect(screen.queryByRole("checkbox", { name: /Illustrative circadian context band/ })).not.toBeInTheDocument();
+    const v1Toggle = screen.getByRole("checkbox", { name: /Illustrative circadian context band/ });
+    expect(v1Toggle).not.toBeChecked();
+    const v1ExposurePath = document.querySelector("[data-series='exposure'] .healthcurve-exposure-line");
+    const v1ExposureBeforeBand = v1ExposurePath?.getAttribute("d");
+    fireEvent.click(v1Toggle);
+    expect(document.querySelector("[data-series='context-band'] .healthcurve-context-band")).toHaveAttribute("d", expect.stringContaining("Z"));
+    expect(v1ExposurePath).toHaveAttribute("d", v1ExposureBeforeBand);
   });
 
   it("publishes versioned v2 formulas, primary sources, comparison, and clinical limits", () => {

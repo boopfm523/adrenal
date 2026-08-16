@@ -3887,6 +3887,7 @@ export interface components {
         SourceType: "web" | "telegram" | "csv_import" | "file_import" | "provider" | "migration";
         /** SteroidExposureCurveOut */
         SteroidExposureCurveOut: {
+            context_band: components["schemas"]["CircadianContextBandOut"];
             /**
              * Date
              * Format: date

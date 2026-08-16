@@ -7374,6 +7374,9 @@
       "SteroidExposureCurveOut": {
         "additionalProperties": false,
         "properties": {
+          "context_band": {
+            "$ref": "#/components/schemas/CircadianContextBandOut"
+          },
           "date": {
             "format": "date",
             "title": "Date",
@@ -7457,7 +7460,8 @@
           "dose_markers",
           "samples",
           "supported_dose_count",
-          "excluded_dose_count"
+          "excluded_dose_count",
+          "context_band"
         ],
         "title": "SteroidExposureCurveOut",
         "type": "object"

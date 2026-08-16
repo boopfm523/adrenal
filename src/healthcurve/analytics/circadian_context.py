@@ -1,4 +1,4 @@
-"""Versioned illustrative circadian context band for ``hc-physiology-v2``.
+"""Versioned illustrative circadian context band for HealthCurve exposure models.
 
 The band is an owner-specified educational scenario, not a demographic reference
 interval, personal target, medication requirement, or adequacy test. ADR-0024 defines

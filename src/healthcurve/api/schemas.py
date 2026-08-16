@@ -998,6 +998,7 @@ class SteroidExposureCurveOut(ApiModel):
     samples: list[SteroidExposureSample]
     supported_dose_count: int = Field(ge=0)
     excluded_dose_count: int = Field(ge=0)
+    context_band: CircadianContextBandOut
 
     @field_serializer("elapsed_hours")
     def _elapsed(self, value: Decimal) -> str:
