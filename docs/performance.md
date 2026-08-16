@@ -35,6 +35,53 @@ uv run pytest tests/integration/test_api_safety.py::test_common_views_meet_laten
 The targets are regression budgets, not production telemetry or medical guarantees.
 Synthetic benchmark rows are created inside a transaction and rolled back.
 
+## Dense selected-day cortisol-model benchmark
+
+Selectable cortisol models run only for the requested local day, but a day may
+contain many actual, stress, or corrected doses. A pure in-memory benchmark protects
+that deterministic work independently from database and browser latency. Its fixture
+contains 24 synthetic oral hydrocortisone doses, distributed across one UTC day, and
+measures all selectable models plus the wake-anchored reference band.
+
+Run the regression gate with:
+
+```bash
+uv run python scripts/benchmark_cortisol_models.py --runs 7 --check
+```
+
+The gate requires every model to stay below 16 MiB peak traced memory. Latency budgets
+are 100 ms for `hc-exposure-v1`, 150 ms each for `hc-physiology-v2` and
+`hc-wake-free-v3`, and 250 ms for `hc-wake-free-v3` plus its reference band. These are
+generous CI regression ceilings rather than clinical or production claims.
+
+### Cortisol computation baseline — 2026-08-16
+
+| Path | Median | Peak traced memory | Budget |
+| --- | ---: | ---: | ---: |
+| `hc-exposure-v1` | 4.065 ms | 0.256 MiB | 100 ms / 16 MiB |
+| `hc-physiology-v2` | 7.513 ms | 0.283 MiB | 150 ms / 16 MiB |
+| `hc-wake-free-v3` | 10.432 ms | 0.323 MiB | 150 ms / 16 MiB |
+| `hc-wake-free-v3` with reference band | 16.769 ms | 1.143 MiB | 250 ms / 16 MiB |
+
+Profiling found that the v3 model solved its immutable Bateman absorption-rate
+relationship once per dose contribution and sample. Caching that pure timing-parameter
+solution reduced a representative six-dose v3 build from about 65 ms and 572,154
+Python calls to about 11 ms and 82,111 calls. The serialized model output remained
+byte-for-byte equivalent (SHA-256
+`f5769011fe0eb3f1d48284c082a755783ba52c53836c9a00ba7915e333fc746f`).
+
+The cache contains only immutable PK timing constants; it never contains owners,
+recorded facts, selected dates, or chart results. Selected-day reads therefore rebuild
+from current facts immediately when a late record or correction arrives. The AI
+selected-day projection also passes its already-built v1 curve into daily feature
+derivation instead of calculating the same curve twice.
+
+Exact chart data remains bounded to one selected local day. The frontend regression
+suite renders and changes focus on a synthetic 1,000-sample day without drawing dense
+point markers. Multi-year Garmin storage and longitudinal reads are covered separately
+below and use versioned daily summaries rather than placing raw multi-year samples in
+the chart payload.
+
 ## Dense wearable scale benchmark
 
 The common-view CI gate above intentionally contains ordinary human-entered facts; it

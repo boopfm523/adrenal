@@ -43,8 +43,8 @@ from healthcurve.ai.models import (
 )
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import day_analysis as day_analysis_service
+from healthcurve.analytics import exposure, wake_pharmacokinetics, wake_reference_inputs
 from healthcurve.analytics import service as analytics_service
-from healthcurve.analytics import wake_pharmacokinetics, wake_reference_inputs
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
 from healthcurve.chat import service as chat_service
@@ -6632,7 +6632,7 @@ def test_wake_free_parameters_are_versioned_owner_scoped_and_audited(
 
 
 def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
-    client: TestClient, engine: Engine
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     owner_email = f"dp-{uuid.uuid4().hex[:12]}@example.com"
     day = date(2026, 3, 8)
@@ -6867,6 +6867,15 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
         expected_plan_ids = {str(first_plan.id), str(second_plan.id)}
         owner_id = owner.id
 
+    original_build_curve = exposure.build_curve
+    build_curve_calls = 0
+
+    def counted_build_curve(**kwargs: Any) -> dict[str, object]:
+        nonlocal build_curve_calls
+        build_curve_calls += 1
+        return original_build_curve(**kwargs)
+
+    monkeypatch.setattr(exposure, "build_curve", counted_build_curve)
     with Session(engine) as session:
         projection = day_analysis_service.build_projection(
             session,
@@ -6874,6 +6883,7 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
             day=day,
             timezone="America/New_York",
         )
+    assert build_curve_calls == 1
     assert projection["projection_version"] == "hc-day-analysis-v1"
     revision_value = projection["source_revision_sha256"]
     assert isinstance(revision_value, str) and len(revision_value) == 64

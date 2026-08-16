@@ -237,14 +237,15 @@ def build_projection(
     start = local_start.astimezone(UTC)
     end = local_end.astimezone(UTC)
 
+    curve = exposure.curve_for_owner(session, owner_id=owner_id, day=day, timezone=timezone)
     daily_features = patterns.daily_patterns_for_owner(
         session,
         owner_id=owner_id,
         date_from=day,
         date_to=day,
         timezone=timezone,
+        precomputed_exposure_curves={day: curve},
     )["days"][0]  # type: ignore[index]
-    curve = exposure.curve_for_owner(session, owner_id=owner_id, day=day, timezone=timezone)
 
     doses = _current_events(session, DoseEvent, owner_id=owner_id, start=start, end=end)
     symptoms = _current_events(session, SymptomEvent, owner_id=owner_id, start=start, end=end)

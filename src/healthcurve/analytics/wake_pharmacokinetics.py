@@ -15,6 +15,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from functools import lru_cache
 from typing import Final
 from zoneinfo import ZoneInfo
 
@@ -88,26 +89,10 @@ class WakeFreeParameters:
     def absorption_rate_per_hour(self) -> float:
         """Solve the Bateman tmax relationship for a positive absorption rate."""
         self.validate()
-        ke = self.elimination_rate_per_hour
-        target = self.peak_time_hours
-
-        def peak_time(ka: float) -> float:
-            if abs(ka - ke) <= 1e-10:
-                return 1.0 / ke
-            return math.log(ka / ke) / (ka - ke)
-
-        lower = 1e-8
-        upper = max(1000.0, ke * 1000.0)
-        for _ in range(160):
-            midpoint = math.sqrt(lower * upper)
-            if peak_time(midpoint) > target:
-                lower = midpoint
-            else:
-                upper = midpoint
-        result = math.sqrt(lower * upper)
-        if not math.isfinite(result) or result <= 0.0:
-            raise ValueError("tmax does not yield a valid absorption rate")
-        return result
+        return _absorption_rate_for_timing(
+            self.elimination_half_life_hours,
+            self.peak_time_hours,
+        )
 
     @property
     def derived_clearance_liters_per_hour(self) -> float:
@@ -123,6 +108,38 @@ class WakeFreeParameters:
 
 
 DEFAULT_PARAMETERS: Final = WakeFreeParameters()
+
+
+@lru_cache(maxsize=128)
+def _absorption_rate_for_timing(
+    elimination_half_life_hours: float,
+    peak_time_hours: float,
+) -> float:
+    """Return a bounded, reusable solution for immutable PK timing inputs.
+
+    This cache contains only pure model constants. It never contains owner IDs,
+    recorded facts, chart results, or database state, so a late or corrected fact
+    still rebuilds its curve immediately.
+    """
+    ke = math.log(2.0) / elimination_half_life_hours
+
+    def peak_time(ka: float) -> float:
+        if abs(ka - ke) <= 1e-10:
+            return 1.0 / ke
+        return math.log(ka / ke) / (ka - ke)
+
+    lower = 1e-8
+    upper = max(1000.0, ke * 1000.0)
+    for _ in range(160):
+        midpoint = math.sqrt(lower * upper)
+        if peak_time(midpoint) > peak_time_hours:
+            lower = midpoint
+        else:
+            upper = midpoint
+    result = math.sqrt(lower * upper)
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError("tmax does not yield a valid absorption rate")
+    return result
 
 
 def parameters_from_revision(row: CortisolPkParameterRevision) -> WakeFreeParameters:

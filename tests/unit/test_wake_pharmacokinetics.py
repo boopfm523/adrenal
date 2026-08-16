@@ -60,6 +60,30 @@ def test_reviewed_population_defaults_and_calibration_are_explicit() -> None:
     ) == pytest.approx(1.3, abs=0.04)
 
 
+def test_absorption_solver_reuses_only_pure_timing_constants() -> None:
+    solver: Any = vars(wake_pharmacokinetics)["_absorption_rate_for_timing"]
+    solver.cache_clear()
+    first = wake_pharmacokinetics.WakeFreeParameters(
+        distribution_volume_liters=38.7,
+        oral_bioavailability=0.95,
+    )
+    same_timing_different_amplitude = wake_pharmacokinetics.WakeFreeParameters(
+        distribution_volume_liters=45,
+        oral_bioavailability=0.8,
+    )
+    changed_timing = wake_pharmacokinetics.WakeFreeParameters(peak_time_hours=1.4)
+
+    assert (
+        first.absorption_rate_per_hour == same_timing_different_amplitude.absorption_rate_per_hour
+    )
+    after_reuse = solver.cache_info()
+    assert after_reuse.misses == 1
+    assert after_reuse.hits == 1
+
+    assert changed_timing.absorption_rate_per_hour != first.absorption_rate_per_hour
+    assert solver.cache_info().misses == 2
+
+
 def test_oral_absorption_delays_peak_until_configured_tmax() -> None:
     parameters = wake_pharmacokinetics.DEFAULT_PARAMETERS
     at_dose = wake_pharmacokinetics.concentration_nmol_per_liter(

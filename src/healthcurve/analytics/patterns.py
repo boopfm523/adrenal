@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from itertools import pairwise
@@ -289,6 +289,7 @@ def _day_feature(
     wearable_features: Sequence[dict[str, object]],
     blood_pressure: Sequence[BloodPressureEvent],
     episodes: Sequence[StressEpisode],
+    precomputed_exposure_curve: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     zone = ZoneInfo(timezone)
     local_start = datetime.combine(day, time.min, tzinfo=zone)
@@ -302,7 +303,11 @@ def _day_feature(
     ]
     exposure_doses = [_exposure_dose(row) for row in relevant_doses]
     supported = [dose for dose in exposure_doses if exposure.exclusion_reason(dose) is None]
-    curve = exposure.build_curve(day=day, timezone=timezone, doses=exposure_doses)
+    curve = (
+        dict(precomputed_exposure_curve)
+        if precomputed_exposure_curve is not None
+        else exposure.build_curve(day=day, timezone=timezone, doses=exposure_doses)
+    )
     samples_value = curve["samples"]
     if not isinstance(samples_value, list):  # pragma: no cover - internal invariant
         raise TypeError("exposure samples must be a list")
@@ -314,6 +319,9 @@ def _day_feature(
         key=lambda sample: (sample["theoretical_exposure_reu"], -sample["occurred_at"].timestamp()),
     )
     day_doses = _facts_in_window(relevant_doses, start=start, end=end)
+    day_exposure_doses = [
+        dose for dose in exposure_doses if start <= dose.occurred_at.astimezone(UTC) < end
+    ]
     day_symptoms = _facts_in_window(symptoms, start=start, end=end)
     day_blood_pressure = _facts_in_window(blood_pressure, start=start, end=end)
 
@@ -439,10 +447,10 @@ def _day_feature(
         ),
         "source_revision_watermark_sha256": _watermark(tokens),
         "supported_dose_count": sum(
-            exposure.exclusion_reason(_exposure_dose(row)) is None for row in day_doses
+            exposure.exclusion_reason(dose) is None for dose in day_exposure_doses
         ),
         "excluded_dose_count": sum(
-            exposure.exclusion_reason(_exposure_dose(row)) is not None for row in day_doses
+            exposure.exclusion_reason(dose) is not None for dose in day_exposure_doses
         ),
         "exposure_peak_reu": peak_sample["theoretical_exposure_reu"],
         "exposure_peak_at": peak_sample["occurred_at"],
@@ -476,8 +484,14 @@ def daily_patterns_for_owner(
     date_from: date,
     date_to: date,
     timezone: str,
+    precomputed_exposure_curves: Mapping[date, Mapping[str, object]] | None = None,
 ) -> dict[str, object]:
-    """Calculate bounded, comparable features from the latest fact revisions."""
+    """Calculate bounded, comparable features from the latest fact revisions.
+
+    A caller that already built an exact selected-day exposure curve may supply it
+    to avoid repeating deterministic model work. Longitudinal callers omit this
+    argument and retain the existing on-demand behavior.
+    """
     zone = ZoneInfo(timezone)
     start = datetime.combine(date_from, time.min, tzinfo=zone).astimezone(UTC)
     end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=zone).astimezone(UTC)
@@ -546,6 +560,11 @@ def daily_patterns_for_owner(
                 wearable_features=wearable_by_day[cursor],
                 blood_pressure=blood_pressure_rows,
                 episodes=episode_rows,
+                precomputed_exposure_curve=(
+                    precomputed_exposure_curves.get(cursor)
+                    if precomputed_exposure_curves is not None
+                    else None
+                ),
             )
         )
         cursor += timedelta(days=1)
