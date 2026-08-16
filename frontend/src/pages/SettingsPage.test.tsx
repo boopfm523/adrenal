@@ -115,6 +115,42 @@ describe("Settings and privacy page", () => {
     expect(statusReads).toBeGreaterThanOrEqual(3);
   });
 
+  it("explains safe local recovery when Garmin requires reauthentication", async () => {
+    let statusReads = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/integrations/garmin/status")) {
+        statusReads += 1;
+        return Promise.resolve(new Response(JSON.stringify({
+          configured: true,
+          state: "reauthentication_required",
+          automatic_sync_hour_local: 9,
+          last_success_at: "2026-08-12T13:00:00Z",
+          checkpoint_date: "2026-08-12",
+          capabilities: {},
+          last_error_code: "garmin_authentication_required",
+          client_version: "synthetic",
+          latest_sync_status: "failed",
+          latest_sync_origin: "manual_refresh",
+          latest_sync_warning_codes: [],
+        }), { headers: { "Content-Type": "application/json" } }));
+      }
+      if (url.endsWith("/integrations/garmin/disconnect-preview")) return Promise.resolve(new Response(JSON.stringify({ state: "reauthentication_required", automatic_fact_rows: 19_609, reviewed_import_fact_rows: 0, sync_run_rows: 17, delete_data_confirmation: "DISCONNECT GARMIN AND DELETE DATA", retain_data_confirmation: "DISCONNECT GARMIN" }), { headers: { "Content-Type": "application/json" } }));
+      if (url.includes("/privacy/exports?")) return Promise.resolve(new Response(JSON.stringify({ items: [], page: { page: 1, page_size: 10, total_items: 0, total_pages: 0 } }), { headers: { "Content-Type": "application/json" } }));
+      if (url.includes("/context-events?")) return Promise.resolve(new Response(JSON.stringify({ items: [], revisions: [], page: { page: 1, page_size: 25, total_items: 0, total_pages: 0 } }), { headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter><SettingsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
+
+    expect(await screen.findByRole("alert", { name: "Garmin sign-in required" })).toHaveTextContent("existing Garmin-derived facts remain unchanged");
+    expect(screen.getByText(/docker compose -f docker-compose.yml/)).toBeVisible();
+    expect(screen.getByText(/Do not use Disconnect Garmin/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sync Garmin now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh recent Garmin window" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Check Garmin connection again" }));
+    await waitFor(() => { expect(statusReads).toBeGreaterThanOrEqual(2); });
+  });
+
   it("gates exact coordinates and supports manual context review and deletion", async () => {
     const requests: { url: string; method: string; body: unknown }[] = [];
     const recordId = "33333333-3333-4333-8333-333333333333";

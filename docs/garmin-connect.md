@@ -205,8 +205,20 @@ Safe status codes such as `garmin_authentication_required`, `garmin_mfa_required
 `garmin_provider_unavailable` may appear in status or operational logs. They contain no
 provider exception text.
 
-If reauthentication is required, repeat the one-time connection steps, then remove the
-email/password values again. If the unofficial client stops working, disable
+If reauthentication is required, Settings deliberately disables sync and refresh until
+the private session is restored. Existing Garmin-derived facts remain unchanged. On the
+HealthCurve host, temporarily restore `HC_GARMIN_EMAIL` and `HC_GARMIN_PASSWORD` in the
+ignored `.env`, then run:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/garmin.compose.yml \
+  --profile garmin-connect run --rm garmin-connect
+```
+
+Complete MFA at the hidden prompt if requested, remove the email/password values again,
+and use **Check Garmin connection again** in Settings. Do not use the disconnect control
+to repair authentication because disconnect is a separate destructive workflow. If the
+unofficial client stops working, disable
 `HC_GARMIN_ENABLED`, stop `garmin-worker`, and use reviewed export import. Existing
 recorded facts remain available unless explicitly deleted.
 

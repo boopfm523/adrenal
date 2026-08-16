@@ -140,6 +140,7 @@ function GarminControl(): React.JSX.Element {
   const capabilities = Object.entries(status.data?.capabilities ?? {});
   const warningCodes = status.data?.latest_sync_warning_codes ?? [];
   const canSync = status.data?.configured === true && status.data.state === "connected";
+  const needsReauthentication = status.data?.state === "reauthentication_required";
   const automaticHour = (status.data?.automatic_sync_hour_local ?? 9).toString().padStart(2, "0");
 
   return <Paper component="article" className="settings-card" id="garmin-connection" withBorder radius="md" p="lg">
@@ -156,6 +157,15 @@ function GarminControl(): React.JSX.Element {
     </dl>}
     {capabilities.length === 0 ? null : <details><summary>Latest metric availability</summary><ul>{capabilities.map(([name, value]) => <li key={name}>{name.replaceAll("_", " ")}: {value}</li>)}</ul></details>}
     {warningCodes.length === 0 ? null : <p className="privacy-note">Latest safe warning codes: {warningCodes.join(", ")}. Missing values remain unavailable, never zero.</p>}
+    {needsReauthentication ? <Alert color="orange" title="Garmin sign-in required" role="alert" mt="md">
+      <Stack gap="sm">
+        <Text>The saved Garmin session is unavailable, so synchronization is paused. Your existing Garmin-derived facts remain unchanged.</Text>
+        <Text>On the computer hosting HealthCurve, temporarily add your Garmin email and password to the ignored <code>.env</code> file, run this private reconnect command, and complete MFA if requested:</Text>
+        <Text component="code">docker compose -f docker-compose.yml -f deploy/garmin.compose.yml --profile garmin-connect run --rm garmin-connect</Text>
+        <Text>Remove <code>HC_GARMIN_EMAIL</code> and <code>HC_GARMIN_PASSWORD</code> from <code>.env</code> afterward. Do not use Disconnect Garmin; that is a separate data-removal action.</Text>
+        <Button type="button" variant="outline" loading={status.isFetching} onClick={() => { void status.refetch(); }}>Check Garmin connection again</Button>
+      </Stack>
+    </Alert> : null}
     <p>Automatic sync runs once per local day at or after {automaticHour}:00 in your local timezone, giving your watch time to sync with Garmin Connect first. Manual sync remains available anytime. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
     <Group mt="md">
       <Button type="button" loading={sync.isPending} disabled={!canSync} onClick={() => { sync.mutate(false); }}>Sync Garmin now</Button>
