@@ -205,6 +205,11 @@ release; a poisoned container base image; a compromised CI action exfiltrating s
 - CI actions pinned to commit SHAs; CI holds no production secrets.
 - Runtime version asserted in CI so the deployed interpreter matches what was tested.
 
+Action updates are reviewed maintenance changes, not automatic floating upgrades. Resolve
+the intended upstream version tag through the GitHub API, review its release notes and
+repository ownership, replace the full 40-character SHA while retaining the readable
+version comment, and let the complete CI workflow validate the new pin before merging.
+
 **Residual risk:** a compromised pinned version that scanners do not yet flag. Mitigated
 by minimizing the dependency surface and by egress being limited to known provider hosts.
 
