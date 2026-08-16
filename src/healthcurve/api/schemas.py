@@ -1153,6 +1153,130 @@ class PhysiologicalCortisolCurveOut(ApiModel):
         return str(value)
 
 
+class WakeFreePkParametersIn(ApiModel):
+    elimination_half_life_hours: Decimal = Field(ge=Decimal("0.25"), le=Decimal("12"))
+    peak_time_hours: Decimal = Field(ge=Decimal("0.1"), le=Decimal("8"))
+    distribution_volume_liters: Decimal = Field(ge=Decimal("1"), le=Decimal("500"))
+    oral_bioavailability: Decimal = Field(gt=0, le=1)
+
+
+class WakeFreePkParametersOut(ApiModel):
+    revision_id: uuid.UUID | None
+    revision_number: int = Field(ge=0)
+    population_default: bool
+    created_at: datetime | None
+    source_revision: str
+    elimination_half_life_hours: Decimal
+    peak_time_hours: Decimal
+    distribution_volume_liters: Decimal
+    oral_bioavailability: Decimal
+    absorption_rate_per_hour: Decimal
+    elimination_rate_per_hour: Decimal
+    derived_clearance_liters_per_hour: Decimal
+
+    @field_serializer(
+        "elimination_half_life_hours",
+        "peak_time_hours",
+        "distribution_volume_liters",
+        "oral_bioavailability",
+        "absorption_rate_per_hour",
+        "elimination_rate_per_hour",
+        "derived_clearance_liters_per_hour",
+    )
+    def _parameters(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeFreePkReferenceDefaultsOut(ApiModel):
+    absorption_duration_hours: Decimal
+    clearance_liters_per_hour: Decimal
+    free_peak_10_mg_nmol_l: Decimal
+    calibration_revision: str
+
+    @field_serializer(
+        "absorption_duration_hours",
+        "clearance_liters_per_hour",
+        "free_peak_10_mg_nmol_l",
+    )
+    def _parameters(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeFreePkSettingsOut(ApiModel):
+    model_id: Literal["hc-wake-free-v3"]
+    model_revision: Literal["hc-wake-free-v3.0.0"]
+    parameters: WakeFreePkParametersOut
+    reference_defaults: WakeFreePkReferenceDefaultsOut
+
+
+class WakeFreeCortisolModelOut(ApiModel):
+    id: Literal["hc-wake-free-v3"]
+    revision: Literal["hc-wake-free-v3.0.0"]
+    supported_medication: str
+    supported_formulation: str
+    supported_route: Route
+    amount_unit: DoseUnit
+    binding_revision: Literal["one-site-cbg-linear-albumin-v1"]
+    calibration_revision: str
+    parameters: WakeFreePkParametersOut
+    reference_absorption_duration_hours: Decimal
+    reference_clearance_liters_per_hour: Decimal
+    free_peak_10_mg_nmol_l: Decimal
+    contribution_horizon_hours: int = Field(gt=0)
+    sample_interval_minutes: int = Field(gt=0)
+    references: list[str]
+
+    @field_serializer(
+        "reference_absorption_duration_hours",
+        "reference_clearance_liters_per_hour",
+        "free_peak_10_mg_nmol_l",
+    )
+    def _parameters(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeFreeCortisolSampleOut(ApiModel):
+    occurred_at: datetime
+    local_time: datetime
+    utc_offset_minutes: int
+    modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    regular_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    stress_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    derived_total_cortisol_nmol_l_display: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "modeled_free_cortisol_nmol_l",
+        "regular_modeled_free_cortisol_nmol_l",
+        "stress_modeled_free_cortisol_nmol_l",
+        "derived_total_cortisol_nmol_l_display",
+    )
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeFreeCortisolCurveOut(ApiModel):
+    date: date
+    timezone: str
+    day_start: datetime
+    day_end: datetime
+    elapsed_hours: Decimal
+    series_kind: Literal["modeled_serum_free_cortisol_scenario"]
+    series_name: Literal["Modeled serum-free-cortisol scenario"]
+    series_unit: Literal["nmol/L"]
+    safety_label: str
+    definition: str
+    model: WakeFreeCortisolModelOut
+    source_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dose_markers: list[SteroidExposureDoseMarker]
+    samples: list[WakeFreeCortisolSampleOut]
+    supported_dose_count: int = Field(ge=0)
+    excluded_dose_count: int = Field(ge=0)
+
+    @field_serializer("elapsed_hours")
+    def _elapsed(self, value: Decimal) -> str:
+        return str(value)
+
+
 class DecimalRangeOut(ApiModel):
     minimum: Decimal | None
     average: Decimal | None

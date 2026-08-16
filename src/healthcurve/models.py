@@ -16,6 +16,7 @@ whole. Migrations and tests import it rather than each maintaining their own lis
 from __future__ import annotations
 
 from healthcurve.ai.models import AIAnalysis, ExtractionDraft, TelegramConversationContext
+from healthcurve.analytics.models import CortisolPkParameterRevision
 from healthcurve.chat.models import ChatConversation, ChatMessage, ChatToolExecution
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.db import Base
@@ -64,6 +65,7 @@ __all__ = [
     "ChatMessage",
     "ChatToolExecution",
     "ContextEvent",
+    "CortisolPkParameterRevision",
     "DiaryEvent",
     "DoseEvent",
     "EmergencyInjectionEvent",
@@ -104,4 +106,4 @@ __all__ = [
 
 #: Every table the application owns. Asserted in tests so a new model that is not
 #: imported here fails the build rather than silently vanishing from migrations.
-EXPECTED_TABLE_COUNT = 45
+EXPECTED_TABLE_COUNT = 46

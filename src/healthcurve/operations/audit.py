@@ -74,6 +74,8 @@ class AuditAction(StrEnum):
     CHAT_RESPONSE_GENERATED = "chat_response_generated"
     CHAT_RESPONSE_CANCELLED = "chat_response_cancelled"
 
+    CORTISOL_PK_PARAMETERS_REVISED = "cortisol_pk_parameters_revised"
+
     DATA_DELETED = "data_deleted"
 
 

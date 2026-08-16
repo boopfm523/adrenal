@@ -44,6 +44,7 @@ from healthcurve.ai.models import (
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import day_analysis as day_analysis_service
 from healthcurve.analytics import service as analytics_service
+from healthcurve.analytics import wake_pharmacokinetics
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
 from healthcurve.chat import service as chat_service
@@ -503,6 +504,36 @@ def test_garmin_aggregate_index_migration_downgrades_and_reinstalls(
     assert "owner_id, occurred_at DESC, id" in index_definition
     assert "aggregation" in index_definition
     assert "<> 'provider_sample'" in index_definition
+
+
+def test_cortisol_pk_parameter_migration_downgrades_and_reinstalls(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "a7c3e9d1f620",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT to_regclass('ops.cortisol_pk_parameter_revision')"))
+                is None
+            )
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.connect() as connection:
+        assert connection.scalar(
+            text("SELECT to_regclass('ops.cortisol_pk_parameter_revision')")
+        ) == ("ops.cortisol_pk_parameter_revision")
 
 
 def test_wearable_summary_migration_downgrades_and_reinstalls(
@@ -6172,11 +6203,150 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert other_dose_id not in {row["dose_event_id"] for row in physiological_body["dose_markers"]}
     assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in physiological.text
 
+    wake_free = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={
+            "day": selected_day,
+            "timezone": "UTC",
+            "model": "hc-wake-free-v3",
+        },
+    )
+    assert wake_free.status_code == 200, wake_free.text
+    wake_free_body = wake_free.json()
+    assert wake_free_body["model"]["id"] == "hc-wake-free-v3"
+    assert wake_free_body["model"]["revision"] == "hc-wake-free-v3.0.0"
+    assert wake_free_body["model"]["parameters"]["population_default"] is True
+    assert wake_free_body["series_kind"] == "modeled_serum_free_cortisol_scenario"
+    assert wake_free_body["series_unit"] == "nmol/L"
+    assert "context_band" not in wake_free_body
+    assert wake_free_body["supported_dose_count"] == 3
+    assert wake_free_body["excluded_dose_count"] == 1
+    assert other_dose_id not in {row["dose_event_id"] for row in wake_free_body["dose_markers"]}
+    wake_peak_at = next(
+        row for row in wake_free_body["dose_markers"] if row["dose_event_id"] == corrected_id
+    )["modeled_peak_at"]
+    wake_peak = next(row for row in wake_free_body["samples"] if row["occurred_at"] == wake_peak_at)
+    assert Decimal(wake_peak["modeled_free_cortisol_nmol_l"]) == (
+        Decimal(wake_peak["regular_modeled_free_cortisol_nmol_l"])
+        + Decimal(wake_peak["stress_modeled_free_cortisol_nmol_l"])
+    )
+    assert Decimal(wake_peak["derived_total_cortisol_nmol_l_display"]) > Decimal(
+        wake_peak["modeled_free_cortisol_nmol_l"]
+    )
+    assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in wake_free.text
+
     unsupported_model = client.get(
         "/api/v1/analytics/steroid-exposure",
         params={"day": selected_day, "timezone": "UTC", "model": "unknown-model"},
     )
     assert unsupported_model.status_code == 422
+
+
+def test_wake_free_parameters_are_versioned_owner_scoped_and_audited(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+) -> None:
+    defaults = client.get("/api/v1/analytics/wake-free-parameters")
+    assert defaults.status_code == 200, defaults.text
+    assert defaults.json()["parameters"]["population_default"] is True
+    assert defaults.json()["parameters"]["revision_number"] == 0
+    assert defaults.json()["parameters"]["elimination_half_life_hours"] == "1.6"
+    assert defaults.json()["parameters"]["peak_time_hours"] == "1.1"
+    assert defaults.json()["parameters"]["distribution_volume_liters"] == "38.7"
+    assert defaults.json()["parameters"]["oral_bioavailability"] == "0.95"
+
+    first_payload = {
+        "elimination_half_life_hours": "1.8",
+        "peak_time_hours": "1.2",
+        "distribution_volume_liters": "40",
+        "oral_bioavailability": "0.9",
+    }
+    without_csrf = client.post(
+        "/api/v1/analytics/wake-free-parameters/revisions",
+        json=first_payload,
+    )
+    assert without_csrf.status_code == 403
+
+    first = client.post(
+        "/api/v1/analytics/wake-free-parameters/revisions",
+        json=first_payload,
+        headers=logged_in,
+    )
+    assert first.status_code == 201, first.text
+    assert first.json()["parameters"]["revision_number"] == 1
+    assert first.json()["parameters"]["population_default"] is False
+
+    second_payload = {
+        "elimination_half_life_hours": "2.1",
+        "peak_time_hours": "1.5",
+        "distribution_volume_liters": "45",
+        "oral_bioavailability": "0.8",
+    }
+    second = client.post(
+        "/api/v1/analytics/wake-free-parameters/revisions",
+        json=second_payload,
+        headers=logged_in,
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["parameters"]["revision_number"] == 2
+    assert second.json()["parameters"]["peak_time_hours"] == "1.5"
+
+    invalid = client.post(
+        "/api/v1/analytics/wake-free-parameters/revisions",
+        json={**second_payload, "oral_bioavailability": "1.1"},
+        headers=logged_in,
+    )
+    assert invalid.status_code == 422
+
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        revisions = list(
+            session.scalars(
+                select(all_models.CortisolPkParameterRevision)
+                .where(all_models.CortisolPkParameterRevision.owner_id == owner_id)
+                .order_by(all_models.CortisolPkParameterRevision.revision_number)
+            )
+        )
+        assert len(revisions) == 2
+        assert revisions[0].supersedes_id is None
+        assert revisions[1].supersedes_id == revisions[0].id
+        audit_entry = session.scalar(
+            select(AuditEntry)
+            .where(
+                AuditEntry.action == AuditAction.CORTISOL_PK_PARAMETERS_REVISED,
+                AuditEntry.target_id == revisions[1].id,
+            )
+            .order_by(AuditEntry.occurred_at.desc())
+        )
+        assert audit_entry is not None
+        assert audit_entry.change_summary == (
+            "fields=elimination_half_life_hours,peak_time_hours,"
+            "distribution_volume_liters,oral_bioavailability"
+        )
+        assert "2.1" not in audit_entry.change_summary
+
+        other = Owner(
+            email=f"pk-other-{uuid.uuid4()}@example.test",
+            password_hash="synthetic-non-login-hash",
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        wake_pharmacokinetics.create_parameter_revision(
+            session,
+            owner_id=other.id,
+            elimination_half_life_hours=Decimal("3"),
+            peak_time_hours=Decimal("2"),
+            distribution_volume_liters=Decimal("60"),
+            oral_bioavailability=Decimal("0.7"),
+        )
+
+    active = client.get("/api/v1/analytics/wake-free-parameters")
+    assert active.status_code == 200, active.text
+    assert active.json()["parameters"]["revision_number"] == 2
+    assert active.json()["parameters"]["elimination_half_life_hours"] == "2.1"
 
 
 def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(

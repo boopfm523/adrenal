@@ -21,6 +21,7 @@ from healthcurve.analytics import (
     patterns,
     physiology,
     service,
+    wake_pharmacokinetics,
 )
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
@@ -32,6 +33,9 @@ from healthcurve.api.schemas import (
     PatternAnalysisOut,
     PhysiologicalCortisolCurveOut,
     SteroidExposureCurveOut,
+    WakeFreeCortisolCurveOut,
+    WakeFreePkParametersIn,
+    WakeFreePkSettingsOut,
 )
 from healthcurve.operations import audit
 
@@ -56,14 +60,16 @@ def _validated_range(
 
 @router.get(
     "/analytics/steroid-exposure",
-    response_model=SteroidExposureCurveOut | PhysiologicalCortisolCurveOut,
+    response_model=(
+        SteroidExposureCurveOut | PhysiologicalCortisolCurveOut | WakeFreeCortisolCurveOut
+    ),
 )
 def steroid_exposure_curve(
     session: DbSession,
     owner: CurrentOwner,
     day: date,
     timezone: str | None = None,
-    model: Literal["hc-exposure-v1", "hc-physiology-v2"] = "hc-exposure-v1",
+    model: Literal["hc-exposure-v1", "hc-physiology-v2", "hc-wake-free-v3"] = ("hc-exposure-v1"),
 ):
     """Return the selected deterministic model from current owner-scoped dose facts."""
     zone_name = timezone or owner.default_timezone
@@ -83,6 +89,13 @@ def steroid_exposure_curve(
             sample_instants=sample_instants,
         )
         return curve
+    if model == "hc-wake-free-v3":
+        return wake_pharmacokinetics.curve_for_owner(
+            session,
+            owner_id=owner.id,
+            day=day,
+            timezone=zone_name,
+        )
     curve = physiology.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
     sample_instants = [
         cast(datetime, sample["occurred_at"])
@@ -94,6 +107,55 @@ def steroid_exposure_curve(
         sample_instants=sample_instants,
     )
     return curve
+
+
+@router.get(
+    "/analytics/wake-free-parameters",
+    response_model=WakeFreePkSettingsOut,
+)
+def get_wake_free_parameters(
+    session: DbSession,
+    owner: CurrentOwner,
+) -> dict[str, object]:
+    """Return the owner's active immutable assumptions, or reviewed defaults."""
+    parameters = wake_pharmacokinetics.active_parameters(session, owner_id=owner.id)
+    return wake_pharmacokinetics.parameter_payload(parameters)
+
+
+@router.post(
+    "/analytics/wake-free-parameters/revisions",
+    response_model=WakeFreePkSettingsOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def create_wake_free_parameter_revision(
+    payload: WakeFreePkParametersIn,
+    session: DbSession,
+    owner: CurrentOwner,
+) -> dict[str, object]:
+    """Append a versioned owner assumption without changing facts or plans."""
+    revision = wake_pharmacokinetics.create_parameter_revision(
+        session,
+        owner_id=owner.id,
+        elimination_half_life_hours=payload.elimination_half_life_hours,
+        peak_time_hours=payload.peak_time_hours,
+        distribution_volume_liters=payload.distribution_volume_liters,
+        oral_bioavailability=payload.oral_bioavailability,
+    )
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=audit.AuditAction.CORTISOL_PK_PARAMETERS_REVISED,
+        target_type="cortisol_pk_parameter_revision",
+        target_id=revision.id,
+        change_summary=(
+            "fields=elimination_half_life_hours,peak_time_hours,"
+            "distribution_volume_liters,oral_bioavailability"
+        ),
+    )
+    return wake_pharmacokinetics.parameter_payload(
+        wake_pharmacokinetics.parameters_from_revision(revision)
+    )
 
 
 @router.get("/analytics/summary", response_model=AnalyticsSummaryOut)

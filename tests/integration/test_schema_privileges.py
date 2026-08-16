@@ -323,6 +323,41 @@ def test_wearable_summary_projection_is_read_only_to_ai_and_backup(
 
 
 @pytest.mark.safety("SAFE-15")
+def test_cortisol_pk_assumptions_are_not_writable_by_ai_or_backup(
+    owner_engine: Engine,
+    ai_engine: Engine,
+    backup_engine: Engine,
+) -> None:
+    table = "ops.cortisol_pk_parameter_revision"
+    with owner_engine.connect() as conn:
+        assert not conn.scalar(
+            text("SELECT has_table_privilege(:role, :table, 'INSERT')"),
+            {"role": "healthcurve_ai", "table": table},
+        )
+        assert conn.scalar(
+            text("SELECT has_table_privilege(:role, :table, 'SELECT')"),
+            {"role": "healthcurve_backup", "table": table},
+        )
+        assert not conn.scalar(
+            text("SELECT has_table_privilege(:role, :table, 'INSERT')"),
+            {"role": "healthcurve_backup", "table": table},
+        )
+
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        with ai_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ops.cortisol_pk_parameter_revision "
+                    "(id, owner_id, revision_number, elimination_half_life_hours, "
+                    "peak_time_hours, distribution_volume_liters, oral_bioavailability, "
+                    "source_revision) VALUES "
+                    "(:id, :owner_id, 1, 1.6, 1.1, 38.7, 0.95, 'synthetic')"
+                ),
+                {"id": uuid.uuid4(), "owner_id": uuid.uuid4()},
+            )
+
+
+@pytest.mark.safety("SAFE-15")
 @pytest.mark.parametrize("schema", SAFETY_SCHEMAS)
 def test_ai_role_cannot_create_tables_in_safety_schemas(ai_engine: Engine, schema: str) -> None:
     """Creating a table in `fact` would let AI own -- and therefore write -- it."""
