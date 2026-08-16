@@ -36,6 +36,18 @@ function nowLocal(): string {
 
 function words(value: string): string { return value.replaceAll("_", " "); }
 
+const symptomCategoryOptions = [
+  { value: "", label: "Not categorized" },
+  { value: "glucocorticoid", label: "Glucocorticoid context" },
+  { value: "mineralocorticoid", label: "Mineralocorticoid context" },
+  { value: "postural", label: "Postural context" },
+  { value: "other", label: "Other owner-defined context" },
+];
+
+function symptomCategory(value: Symptom["tracking_category"] | undefined): string {
+  return value == null ? "Not categorized" : `${words(value)} context`;
+}
+
 interface ViewState extends SymptomsDiaryFilters, HistoryDateRange { symptomPage: number; mealPage: number; diaryPage: number; lifePage: number }
 
 function pageNumber(params: URLSearchParams, name: string): number {
@@ -73,6 +85,7 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
   const [name, setName] = useState(symptom.name);
   const [severity, setSeverity] = useState(symptom.severity?.toString() ?? "");
   const [bodyArea, setBodyArea] = useState(symptom.body_area ?? "");
+  const [trackingCategory, setTrackingCategory] = useState(symptom.tracking_category ?? "");
   const [notes, setNotes] = useState(symptom.notes ?? "");
   const [local, setLocal] = useState(symptom.time.local_time.slice(0, 19));
   const [timezone, setTimezone] = useState(symptom.time.timezone);
@@ -86,6 +99,7 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
     if (name !== symptom.name) changes.name = name;
     if (severity !== (symptom.severity?.toString() ?? "")) changes.severity = severity === "" ? null : Number(severity);
     if (bodyArea !== (symptom.body_area ?? "")) changes.body_area = bodyArea === "" ? null : bodyArea;
+    if (trackingCategory !== (symptom.tracking_category ?? "")) changes.tracking_category = trackingCategory === "" ? null : trackingCategory as NonNullable<Symptom["tracking_category"]>;
     if (notes !== (symptom.notes ?? "")) changes.notes = notes === "" ? null : notes;
     if (local !== symptom.time.local_time.slice(0, 19) || timezone !== symptom.time.timezone) changes.time = { local_time: local, timezone };
     if (reason.trim() === "") { setValidation("Explain why this recorded fact needs correction."); return; }
@@ -99,6 +113,7 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
     <TextInput label="Name" required aria-label="Name" value={name} onChange={(event) => { setName(event.target.value); }} />
     <TextInput label="Severity (0–10)" type="number" min="0" max="10" value={severity} onChange={(event) => { setSeverity(event.target.value); }} />
     <TextInput label="Body area" value={bodyArea} onChange={(event) => { setBodyArea(event.target.value); }} />
+    <NativeSelect label="Tracking category" value={trackingCategory} onChange={(event) => { setTrackingCategory(event.target.value); }} data={symptomCategoryOptions} description="Optional context you choose for later comparison. HealthCurve never diagnoses or infers this category." />
     <TextInput label="Experienced local time" required aria-label="Experienced local time" type="datetime-local" step="1" value={local} onChange={(event) => { setLocal(event.target.value); }} />
     <TextInput label="Timezone" required aria-label="Timezone" value={timezone} onChange={(event) => { setTimezone(event.target.value); }} />
     <Textarea className="form-wide" label="Notes" value={notes} onChange={(event) => { setNotes(event.target.value); }} />
@@ -111,7 +126,7 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
 
 function SymptomCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const initial = { name: "", severity: "", bodyArea: "", localTime: nowLocal(), timezone, notes: "" };
+  const initial = { name: "", severity: "", bodyArea: "", trackingCategory: "", localTime: nowLocal(), timezone, notes: "" };
   const [form, setForm] = useState(initial);
   const [validation, setValidation] = useState<string | null>(null);
   const mutation = useMutation({
@@ -138,6 +153,7 @@ function SymptomCreateForm({ timezone }: { timezone: string }): React.JSX.Elemen
       name,
       severity: form.severity === "" ? null : Number(form.severity),
       body_area: bodyArea === "" ? null : bodyArea,
+      tracking_category: form.trackingCategory === "" ? null : form.trackingCategory as NonNullable<SymptomInput["tracking_category"]>,
       time: { local_time: form.localTime, timezone: form.timezone, fold: null },
       ended_at: null,
       episode_id: null,
@@ -150,6 +166,7 @@ function SymptomCreateForm({ timezone }: { timezone: string }): React.JSX.Elemen
     <TextInput id="new-symptom-name" label="Symptom" required aria-label="Symptom" maxLength={120} value={form.name} onChange={(event) => { setForm({ ...form, name: event.target.value }); }} placeholder="For example: fatigue, dizziness, or nausea" description="Use a short description of what you felt. Record each distinct symptom separately." />
     <TextInput id="new-symptom-severity" label="Severity (0–10)" type="number" min="0" max="10" inputMode="numeric" value={form.severity} onChange={(event) => { setForm({ ...form, severity: event.target.value }); }} description="Optional personal rating, where 0 is no noticeable impact and 10 is your most severe. Missing is kept as unknown, not zero." />
     <TextInput id="new-symptom-area" label="Body area" maxLength={120} value={form.bodyArea} onChange={(event) => { setForm({ ...form, bodyArea: event.target.value }); }} placeholder="Optional, such as head or abdomen" description="Where you noticed it, if a location is useful." />
+    <NativeSelect id="new-symptom-category" label="Tracking category" value={form.trackingCategory} onChange={(event) => { setForm({ ...form, trackingCategory: event.target.value }); }} data={symptomCategoryOptions} description="Optional context selected by you for later correlation. It is not a diagnosis, and HealthCurve will not guess it from the symptom name." />
     <TextInput id="new-symptom-time" label="Experienced local time" required aria-label="Experienced local time" type="datetime-local" step="1" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} description="When you experienced the symptom, using your best known local date and time." />
     <TextInput id="new-symptom-timezone" label="Symptom IANA timezone" required aria-label="Symptom IANA timezone" value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} description="Usually leave your profile timezone. Change it only if this local time occurred in another region." />
     <Textarea id="new-symptom-notes" className="form-wide" label="Notes" maxLength={2000} value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} description="Optional observations you want preserved with this symptom fact." />
@@ -299,7 +316,7 @@ export function SymptomsDiaryPage(): React.JSX.Element {
       <SymptomCreateForm timezone={profileTimezone} />
       <h3>Recorded symptoms</h3>
       {symptoms.data?.page.total_items === 0 ? <p>No symptoms recorded.</p> : null}
-      {currentSymptoms.length === 0 ? null : <div className="table-scroll symptom-table-region" tabIndex={0} role="region" aria-label="Symptom records table"><table className="symptom-records-table"><caption>Current symptom facts, latest experienced time first, with correction history.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Symptom</th><th scope="col">Severity and area</th><th scope="col">Source and status</th><th scope="col">Notes and actions</th></tr></thead><tbody>{currentSymptoms.flatMap((item) => { const history = historyFor(item); const row = <tr key={item.id}><td data-label="Experienced time" className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th data-label="Symptom" scope="row">{item.name}</th><td data-label="Severity and area">{item.severity === null ? "Not recorded" : `${item.severity.toString()}/10`}{item.body_area === null ? null : <span>{item.body_area}</span>}</td><td data-label="Source and status" className="symptom-records-table__provenance"><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span><span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span></td><td data-label="Notes and actions" className="symptom-records-table__actions"><span>{item.notes ?? <span className="missing-value">None</span>}</span><Button mt="sm" type="button" onClick={() => { setEditing(editing === item.id ? null : item.id); }}>{editing === item.id ? "Close correction form" : "Correct recorded symptom"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><p>{prior.name}{prior.severity === null ? "" : ` · severity ${prior.severity.toString()}/10`} · {localTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p>{prior.body_area === null ? null : <p>Body area: {prior.body_area}</p>}{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</article>)}</details>}</td></tr>; return editing === item.id ? [row, <tr className="correction-table-row" key={`${item.id}-correction`}><td colSpan={5}><SymptomCorrectionForm symptom={item} close={() => { setEditing(null); }} /></td></tr>] : [row]; })}</tbody></table></div>}
+      {currentSymptoms.length === 0 ? null : <div className="table-scroll symptom-table-region" tabIndex={0} role="region" aria-label="Symptom records table"><table className="symptom-records-table"><caption>Current symptom facts, latest experienced time first, with correction history. Categories are optional owner-selected context, never inferred diagnoses.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Symptom</th><th scope="col">Severity, area, and category</th><th scope="col">Source and status</th><th scope="col">Notes and actions</th></tr></thead><tbody>{currentSymptoms.flatMap((item) => { const history = historyFor(item); const row = <tr key={item.id}><td data-label="Experienced time" className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th data-label="Symptom" scope="row">{item.name}</th><td data-label="Severity, area, and category">{item.severity === null ? "Severity not recorded" : `${item.severity.toString()}/10`}{item.body_area === null ? null : <span>{item.body_area}</span>}<span>{symptomCategory(item.tracking_category)}</span></td><td data-label="Source and status" className="symptom-records-table__provenance"><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span><span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span></td><td data-label="Notes and actions" className="symptom-records-table__actions"><span>{item.notes ?? <span className="missing-value">None</span>}</span><Button mt="sm" type="button" onClick={() => { setEditing(editing === item.id ? null : item.id); }}>{editing === item.id ? "Close correction form" : "Correct recorded symptom"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><p>{prior.name}{prior.severity === null ? "" : ` · severity ${prior.severity.toString()}/10`} · {symptomCategory(prior.tracking_category)} · {localTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p>{prior.body_area === null ? null : <p>Body area: {prior.body_area}</p>}{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</article>)}</details>}</td></tr>; return editing === item.id ? [row, <tr className="correction-table-row" key={`${item.id}-correction`}><td colSpan={5}><SymptomCorrectionForm symptom={item} close={() => { setEditing(null); }} /></td></tr>] : [row]; })}</tbody></table></div>}
       {symptoms.data === undefined ? null : <PaginationControls label="Symptom records" metadata={symptoms.data.page} onPageChange={(symptomPage) => { setEditing(null); setSearchParams(searchFromState({ ...view, symptomPage })); }} />}
     </section>
 

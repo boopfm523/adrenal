@@ -25,7 +25,7 @@ from healthcurve.events.models import SymptomEvent
 from healthcurve.medications.models import DoseCategory
 
 FEATURE_ID: Final = "hc-wake-coverage-v1"
-FEATURE_REVISION: Final = "hc-wake-coverage-v1.0.0"
+FEATURE_REVISION: Final = "hc-wake-coverage-v1.1.0"
 DISPLAY_QUANTUM: Final = Decimal("0.0001")
 SAFETY_LABEL: Final = (
     "Descriptive comparison of a modeled serum-free-cortisol scenario with a broad "
@@ -56,7 +56,9 @@ DEFINITIONS: Final = {
     ),
     "symptom_context": (
         "Time since the latest supported recorded dose and interpolated modeled/reference "
-        "values at each current symptom fact. Temporal proximity does not establish cause."
+        "values at each current symptom fact. Optional tracking categories are owner-selected "
+        "context, never diagnoses; missing categories remain explicit. Temporal proximity does "
+        "not establish cause."
     ),
     "p95_overshoot": (
         "Piecewise-linear elapsed time and maximum magnitude above the healthy-reference P95. "
@@ -90,6 +92,8 @@ class FeatureSymptom:
     occurred_at: datetime
     name: str
     severity: int | None
+    tracking_category: str | None = None
+    tracking_category_revision: str | None = None
     source_revision: str | None = None
 
 
@@ -326,6 +330,8 @@ def _fingerprint(
                 _utc(symptom.occurred_at).isoformat(),
                 symptom.name,
                 symptom.severity,
+                symptom.tracking_category,
+                symptom.tracking_category_revision,
                 symptom.source_revision,
             )
             for symptom in symptoms
@@ -427,6 +433,8 @@ def _symptom_contexts(
                 "occurred_at": at,
                 "name": symptom.name,
                 "severity": symptom.severity,
+                "tracking_category": symptom.tracking_category,
+                "tracking_category_revision": symptom.tracking_category_revision,
                 "previous_supported_dose_event_ids": sorted(
                     (dose.dose_event_id for dose in latest), key=str
                 ),
@@ -481,6 +489,9 @@ def derive_daily_features(
         "safety_label": SAFETY_LABEL,
         "definitions": DEFINITIONS,
         "missing_inputs": [] if len(clipped) >= 2 else ["elapsed_comparison_window"],
+        "uncategorized_symptom_count": sum(
+            symptom.tracking_category is None for symptom in symptoms
+        ),
     }
     if len(clipped) < 2:
         return {
@@ -644,6 +655,10 @@ def _symptoms_for_owner(
             occurred_at=row.occurred_at,
             name=row.name,
             severity=row.severity,
+            tracking_category=(
+                row.tracking_category.value if row.tracking_category is not None else None
+            ),
+            tracking_category_revision=row.tracking_category_revision,
             source_revision=row.source_revision,
         )
         for row in rows

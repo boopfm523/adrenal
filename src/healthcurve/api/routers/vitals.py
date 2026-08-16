@@ -67,6 +67,7 @@ def create_blood_pressure(payload: BloodPressureIn, session: DbSession, owner: C
         diastolic_mmhg=payload.diastolic_mmhg,
         pulse_bpm=payload.pulse_bpm,
         measurement_setting=payload.measurement_setting,
+        body_position=payload.body_position,
         notes=payload.notes,
     )
     return _blood_pressure_out(row)
@@ -365,6 +366,7 @@ def _blood_pressure_out(row: BloodPressureEvent) -> BloodPressureOut:
         diastolic_mmhg=row.diastolic_mmhg,
         pulse_bpm=row.pulse_bpm,
         measurement_setting=row.measurement_setting,
+        body_position=row.body_position,
         time=time_out(row),
         provenance=provenance_out(row),
         notes=row.notes,

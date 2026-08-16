@@ -26,6 +26,7 @@ from healthcurve.ai.extraction import (
     CandidateType,
     FlagCode,
     ValidatedCandidate,
+    explicit_body_position,
     explicit_measurement_setting,
     extract,
     find_explicit_weight,
@@ -38,7 +39,14 @@ from healthcurve.db import get_ai_session_factory
 from healthcurve.episodes.models import EmergencyInjectionEvent, EpisodeStatus, StressEpisode
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
-from healthcurve.events.models import DiaryEvent, MealEvent, MealSize, SymptomEvent
+from healthcurve.events.models import (
+    SYMPTOM_TRACKING_CATEGORY_REVISION,
+    DiaryEvent,
+    MealEvent,
+    MealSize,
+    SymptomEvent,
+    SymptomTrackingCategory,
+)
 from healthcurve.events.timekeeping import (
     AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
@@ -77,6 +85,7 @@ from healthcurve.operations.rate_limit import (
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import (
     BloodPressureEvent,
+    BodyPosition,
     MeasurementSetting,
     TemperatureEvent,
     TemperatureUnit,
@@ -185,11 +194,11 @@ Nothing is recorded until you confirm it.
 
 Recording commands (these work even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
-/bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
+/bp <systolic>/<diastolic> [pulse] [lying|sitting|standing] [HH:MM] - record blood pressure
 /weight <value> <lb|lbs|kg|kgs> [HH:MM] - record body weight
 /temperature <value> <F|C> [HH:MM] - record body temperature
 /meal [XS|S|M|L|XL|XXL] [HH:MM] - record a meal (size is optional)
-/symptom <name> [0-10] - record a symptom
+/symptom <name> [0-10] [category=<category>] - record a symptom
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
 /episode end - close the open episode
@@ -779,7 +788,23 @@ def _cmd_dose(session: Session, owner: Owner, args: list[str], *, now: datetime)
 
 def _cmd_symptom(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
     if not args:
-        return Reply("Usage: /symptom <name> [severity 0-10]\nExample: /symptom nausea 4")
+        return Reply(
+            "Usage: /symptom <name> [severity 0-10] [category=<category>]\n"
+            "Categories: glucocorticoid, mineralocorticoid, postural, other.\n"
+            "Example: /symptom dizziness 4 category=postural"
+        )
+
+    category: SymptomTrackingCategory | None = None
+    category_args = [token for token in args if token.lower().startswith("category=")]
+    if len(category_args) > 1:
+        return Reply("Include at most one category=<category> value.")
+    if category_args:
+        category_token = category_args[0]
+        try:
+            category = SymptomTrackingCategory(category_token.split("=", maxsplit=1)[1].lower())
+        except ValueError:
+            return Reply("Category must be glucocorticoid, mineralocorticoid, postural, or other.")
+        args = [token for token in args if not token.lower().startswith("category=")]
 
     severity: int | None = None
     if args[-1].isdigit() and 0 <= int(args[-1]) <= 10:
@@ -794,6 +819,7 @@ def _cmd_symptom(session: Session, owner: Owner, args: list[str], *, now: dateti
         type=CandidateType.SYMPTOM,
         symptom_name=name,
         severity=severity,
+        symptom_tracking_category=category,
         local_time=_local_now(owner, now),
         timezone=owner.default_timezone,
         confidence=1.0,
@@ -843,7 +869,10 @@ def _meal_size(value: str) -> MealSize | None:
 
 
 def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
-    usage = "Usage: /bp <systolic>/<diastolic> [pulse] [HH:MM]\nExample: /bp 120/80 62 08:15"
+    usage = (
+        "Usage: /bp <systolic>/<diastolic> [pulse] [lying|sitting|standing] [HH:MM]\n"
+        "Example: /bp 120/80 62 standing 08:15"
+    )
     if not args:
         return Reply(usage)
     values = args[0].split("/", maxsplit=1)
@@ -856,6 +885,21 @@ def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now:
     if not 1 <= systolic <= 500 or not 1 <= diastolic <= 500:
         return Reply("Blood-pressure values must be positive whole numbers at most 500 mmHg.")
 
+    position_tokens = {"lying", "supine", "sitting", "seated", "standing"}
+    position_values = {
+        BodyPosition.LYING
+        if token.lower() in {"lying", "supine"}
+        else BodyPosition.SITTING
+        if token.lower() in {"sitting", "seated"}
+        else BodyPosition.STANDING
+        for token in remaining
+        if token.lower() in position_tokens
+    }
+    if len(position_values) > 1:
+        return Reply("Include at most one body position: lying, sitting, or standing.")
+    position_text = " ".join(remaining)
+    body_position = explicit_body_position(position_text)
+    remaining = [token for token in remaining if token.lower() not in position_tokens]
     time_token = remaining[-1] if remaining and _looks_like_time(remaining[-1]) else None
     pulse_parts = remaining[:-1] if time_token else remaining
     if len(pulse_parts) > 1 or (pulse_parts and not pulse_parts[0].isdigit()):
@@ -876,6 +920,7 @@ def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now:
         diastolic_mmhg=diastolic,
         pulse_bpm=pulse,
         measurement_setting=MeasurementSetting.HOME,
+        body_position=body_position,
         local_time=local,
         timezone=owner.default_timezone,
         confidence=1.0,
@@ -1147,6 +1192,15 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
             owner,
             now,
         )
+    if candidate.type is CandidateType.SYMPTOM:
+        return _edit_symptom_candidate(
+            draft,
+            candidates,
+            index,
+            candidate,
+            args[1].lower(),
+            " ".join(args[2:]).strip(),
+        )
     if candidate.type is CandidateType.MEAL:
         return _edit_meal_candidate(
             draft,
@@ -1260,9 +1314,24 @@ def _edit_vital_candidate(
             return Reply("That time resolves into the future; choose the time the event happened.")
         changes["local_time"] = local
     elif candidate.type is CandidateType.BLOOD_PRESSURE:
-        if field not in {"systolic", "diastolic", "pulse"}:
-            return Reply("For blood pressure, edit systolic, diastolic, pulse, or time.")
-        if field == "pulse" and value.lower() in {"none", "clear"}:
+        if field not in {"systolic", "diastolic", "pulse", "position", "posture"}:
+            return Reply("For blood pressure, edit systolic, diastolic, pulse, position, or time.")
+        if field in {"position", "posture"}:
+            normalized = value.lower().strip()
+            aliases = {
+                "lying": BodyPosition.LYING,
+                "supine": BodyPosition.LYING,
+                "sitting": BodyPosition.SITTING,
+                "seated": BodyPosition.SITTING,
+                "standing": BodyPosition.STANDING,
+            }
+            if normalized in {"none", "clear", "unknown"}:
+                changes["body_position"] = None
+            elif normalized in aliases:
+                changes["body_position"] = aliases[normalized]
+            else:
+                return Reply("Position must be lying, sitting, standing, or none.")
+        elif field == "pulse" and value.lower() in {"none", "clear"}:
             changes["pulse_bpm"] = None
         elif not value.isdigit() or not 1 <= int(value) <= 500:
             return Reply("Blood-pressure and pulse values must be whole numbers from 1 to 500.")
@@ -1350,6 +1419,35 @@ def _edit_vital_candidate(
             "is_actionable": not bool(BLOCKING_FLAGS & set(flags)),
         }
     )
+    if draft.original_candidates is None:
+        draft.original_candidates = [dict(item) for item in draft.candidates]
+    candidates[index] = edited
+    draft.candidates = [item.model_dump(mode="json") for item in candidates]
+    draft.state = DraftState.EDITED
+    return _draft_reply(draft, candidates, edited=True)
+
+
+def _edit_symptom_candidate(
+    draft: ExtractionDraft,
+    candidates: list[ValidatedCandidate],
+    index: int,
+    candidate: ValidatedCandidate,
+    field: str,
+    value: str,
+) -> Reply:
+    if field not in {"category", "tracking-category"}:
+        return Reply("For a symptom, edit category only.")
+    normalized = value.lower().replace("_", "-").strip()
+    if normalized in {"none", "clear", "unknown", "not-recorded"}:
+        category = None
+    else:
+        try:
+            category = SymptomTrackingCategory(normalized)
+        except ValueError:
+            return Reply(
+                "Category must be glucocorticoid, mineralocorticoid, postural, other, or none."
+            )
+    edited = candidate.model_copy(update={"symptom_tracking_category": category})
     if draft.original_candidates is None:
         draft.original_candidates = [dict(item) for item in draft.candidates]
     candidates[index] = edited
@@ -1713,7 +1811,8 @@ def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Repl
         "\n\nCorrect one field with:\n"
         "/edit <number> <field> <value>\n"
         "Dose fields: amount, unit, time, medication, category (regular or stress).\n"
-        "Blood pressure: systolic, diastolic, pulse, time.\n"
+        "Blood pressure: systolic, diastolic, pulse, position, time.\n"
+        "Symptom: category (glucocorticoid, mineralocorticoid, postural, other, none).\n"
         "Weight: amount, unit, time."
         "\nTemperature: value, unit, time."
     )
@@ -1733,7 +1832,12 @@ def _describe(candidate: ValidatedCandidate) -> str:
             severity = (
                 f" (severity {candidate.severity}/10)" if candidate.severity is not None else ""
             )
-            return f"Symptom: {candidate.symptom_name}{severity} at {when}"
+            category = (
+                f" · category {candidate.symptom_tracking_category.value}"
+                if candidate.symptom_tracking_category is not None
+                else " · category not recorded"
+            )
+            return f"Symptom: {candidate.symptom_name}{severity}{category} at {when}"
         case CandidateType.DIARY:
             return f"Note: {(candidate.text or '')[:100]}"
         case CandidateType.LIFE_EVENT:
@@ -1742,7 +1846,10 @@ def _describe(candidate: ValidatedCandidate) -> str:
             reading = f"{candidate.systolic_mmhg or '?'}/{candidate.diastolic_mmhg or '?'} mmHg"
             pulse = f", pulse {candidate.pulse_bpm} bpm" if candidate.pulse_bpm is not None else ""
             setting = candidate.measurement_setting.value
-            return f"Blood pressure: {reading}{pulse} · {setting} at {when}"
+            position = (
+                f" · {candidate.body_position.value}" if candidate.body_position is not None else ""
+            )
+            return f"Blood pressure: {reading}{pulse} · {setting}{position} at {when}"
         case CandidateType.WEIGHT:
             if candidate.weight_value is None or candidate.weight_unit is None:
                 return f"Weight: value or unit missing at {when}"
@@ -1875,6 +1982,12 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
                 name=candidate.symptom_name or "unspecified",
                 severity=candidate.severity,
+                tracking_category=candidate.symptom_tracking_category,
+                tracking_category_revision=(
+                    SYMPTOM_TRACKING_CATEGORY_REVISION
+                    if candidate.symptom_tracking_category is not None
+                    else None
+                ),
                 episode_id=open_episode.id if open_episode else None,
             )
         case CandidateType.DIARY | CandidateType.LIFE_EVENT:
@@ -1901,6 +2014,7 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 diastolic_mmhg=candidate.diastolic_mmhg,
                 pulse_bpm=candidate.pulse_bpm,
                 measurement_setting=candidate.measurement_setting,
+                body_position=candidate.body_position,
             )
         case CandidateType.WEIGHT:
             if candidate.weight_value is None or candidate.weight_unit is None:

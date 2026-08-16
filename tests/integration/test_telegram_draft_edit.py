@@ -20,7 +20,7 @@ from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.db import SCHEMAS, Base
 from healthcurve.episodes.models import EpisodeStatus, StressEpisode
-from healthcurve.events.models import MealEvent, MealSize
+from healthcurve.events.models import MealEvent, MealSize, SymptomEvent, SymptomTrackingCategory
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
 from healthcurve.integrations.telegram.handlers import (
@@ -31,6 +31,7 @@ from healthcurve.integrations.telegram.models import TelegramLocationRequest
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 from healthcurve.vitals.models import (
     BloodPressureEvent,
+    BodyPosition,
     MeasurementSetting,
     TemperatureEvent,
     WeightEvent,
@@ -167,11 +168,13 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         session.add(owner)
         session.flush()
 
-        bp_reply = handle_message(session, owner, text="/bp 40/250 1 08:15", now=NOW)
+        bp_reply = handle_message(session, owner, text="/bp 40/250 1 standing 08:15", now=NOW)
         assert bp_reply.draft_id is not None
         assert "Blood pressure: 40/250 mmHg, pulse 1 bpm" in bp_reply.text
         assert "Nothing is recorded yet" in bp_reply.text
         assert session.scalar(select(BloodPressureEvent)) is None
+        bp_edited = handle_message(session, owner, text="/edit 1 position sitting", now=NOW)
+        assert bp_edited.text.startswith("Edited draft:")
 
         bp_confirmed = confirm_draft(session, owner, bp_reply.draft_id)
         session.flush()
@@ -186,6 +189,7 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         )
         assert pressure.confirmation_state.value == "confirmed_from_draft"
         assert pressure.measurement_setting.value == "home"
+        assert pressure.body_position is BodyPosition.SITTING
         assert bp_confirmed.text.startswith("Recorded:")
 
         weight_reply = handle_message(session, owner, text="/weight 180 lb 08:20", now=NOW)
@@ -254,6 +258,43 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         assert temperature.normalized_c == Decimal("38.00")
         assert temperature.confirmation_state.value == "confirmed_from_draft"
         assert temperature_confirmed.text.startswith("Recorded:")
+
+
+def test_explicit_symptom_category_is_confirmed_and_editable(engine: Engine) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"symptom-category-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        reply = handle_message(
+            session,
+            owner,
+            text="/symptom dizziness 4 category=postural",
+            now=NOW,
+        )
+        assert reply.draft_id is not None
+        assert "category postural" in reply.text
+        assert session.scalar(select(SymptomEvent)) is None
+
+        edited = handle_message(
+            session,
+            owner,
+            text="/edit 1 category mineralocorticoid",
+            now=NOW,
+        )
+        assert edited.text.startswith("Edited draft:")
+        confirm_draft(session, owner, reply.draft_id)
+        session.flush()
+
+        symptom = session.scalar(select(SymptomEvent).where(SymptomEvent.owner_id == owner.id))
+        assert symptom is not None
+        assert symptom.tracking_category is SymptomTrackingCategory.MINERALOCORTICOID
+        assert symptom.tracking_category_revision == "symptom-tracking-category-v1"
 
 
 @pytest.mark.parametrize(

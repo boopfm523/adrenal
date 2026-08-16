@@ -17,6 +17,18 @@ from healthcurve.db import FactBase, StrEnumType
 from healthcurve.events.base import EventMixin, event_table_args
 
 
+class SymptomTrackingCategory(StrEnum):
+    """Owner-selected correlation context, never a diagnosis or model inference."""
+
+    GLUCOCORTICOID = "glucocorticoid"
+    MINERALOCORTICOID = "mineralocorticoid"
+    POSTURAL = "postural"
+    OTHER = "other"
+
+
+SYMPTOM_TRACKING_CATEGORY_REVISION = "symptom-tracking-category-v1"
+
+
 class SymptomEvent(EventMixin, FactBase):
     """A reported symptom.
 
@@ -30,6 +42,10 @@ class SymptomEvent(EventMixin, FactBase):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     severity: Mapped[int | None] = mapped_column(SmallInteger)
     body_area: Mapped[str | None] = mapped_column(String(120))
+    tracking_category: Mapped[SymptomTrackingCategory | None] = mapped_column(
+        StrEnumType(SymptomTrackingCategory, 32)
+    )
+    tracking_category_revision: Mapped[str | None] = mapped_column(String(48))
     #: For symptoms that persist rather than occur at an instant.
     ended_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
 
@@ -39,6 +55,12 @@ class SymptomEvent(EventMixin, FactBase):
 
     __table_args__ = (
         CheckConstraint("severity IS NULL OR severity BETWEEN 0 AND 10", name="severity_scale"),
+        CheckConstraint(
+            "(tracking_category IS NULL AND tracking_category_revision IS NULL) OR "
+            "(tracking_category IN ('glucocorticoid', 'mineralocorticoid', 'postural', "
+            "'other') AND tracking_category_revision = 'symptom-tracking-category-v1')",
+            name="tracking_category_versioned",
+        ),
         CheckConstraint("ended_at IS NULL OR ended_at >= occurred_at", name="interval_ordered"),
         *event_table_args("symptom_event"),
     )

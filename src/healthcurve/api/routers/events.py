@@ -39,7 +39,13 @@ from healthcurve.context.models import ContextEvent, LocationPrecision
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
-from healthcurve.events.models import DiaryEvent, LifeEvent, MealEvent, SymptomEvent
+from healthcurve.events.models import (
+    SYMPTOM_TRACKING_CATEGORY_REVISION,
+    DiaryEvent,
+    LifeEvent,
+    MealEvent,
+    SymptomEvent,
+)
 from healthcurve.events.timekeeping import timezone_abbreviation
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -101,6 +107,10 @@ def create_symptom(payload: SymptomIn, session: DbSession, owner: CurrentOwner):
         name=payload.name,
         severity=payload.severity,
         body_area=payload.body_area,
+        tracking_category=payload.tracking_category,
+        tracking_category_revision=(
+            SYMPTOM_TRACKING_CATEGORY_REVISION if payload.tracking_category is not None else None
+        ),
         ended_at=payload.ended_at,
         episode_id=payload.episode_id,
         notes=payload.notes,
@@ -157,6 +167,12 @@ def correct_symptom(
 ):
     original = _owned_symptom(session, owner.id, event_id)
     changes = payload.changes.model_dump(exclude_unset=True, exclude={"time"})
+    if "tracking_category" in payload.changes.model_fields_set:
+        changes["tracking_category_revision"] = (
+            SYMPTOM_TRACKING_CATEGORY_REVISION
+            if payload.changes.tracking_category is not None
+            else None
+        )
     submitted_time = payload.changes.time if "time" in payload.changes.model_fields_set else None
     event_time = resolve_time(submitted_time) if submitted_time is not None else None
     if not changes and event_time is None:
@@ -181,6 +197,8 @@ def _symptom_out(e: SymptomEvent) -> SymptomOut:
         name=e.name,
         severity=e.severity,
         body_area=e.body_area,
+        tracking_category=e.tracking_category,
+        tracking_category_revision=e.tracking_category_revision,
         time=time_out(e),
         provenance=provenance_out(e),
         episode_id=e.episode_id,

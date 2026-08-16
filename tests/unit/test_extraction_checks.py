@@ -17,8 +17,10 @@ from healthcurve.ai.extraction import (
     MAX_PLAUSIBLE_MG,
     SYSTEM_PROMPT,
     ExtractionResponse,
+    explicit_body_position,
     explicit_dose_category,
     explicit_measurement_setting,
+    explicit_symptom_tracking_category,
     find_explicit_weight,
     find_time_expression,
     has_negation,
@@ -28,9 +30,44 @@ from healthcurve.ai.extraction import (
     normalise_local_time,
     normalise_weight_unit,
 )
-from healthcurve.events.models import MealSize
+from healthcurve.events.models import MealSize, SymptomTrackingCategory
 from healthcurve.medications.models import DoseCategory
-from healthcurve.vitals.models import MeasurementSetting, WeightUnit
+from healthcurve.vitals.models import BodyPosition, MeasurementSetting, WeightUnit
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("blood pressure 120/80 while standing", BodyPosition.STANDING),
+        ("BP 118/76 seated", BodyPosition.SITTING),
+        ("BP 110/70 supine", BodyPosition.LYING),
+        ("BP 120/80", None),
+        ("BP changed from lying to standing", None),
+    ],
+)
+def test_body_position_requires_one_explicit_unambiguous_position(
+    text: str, expected: BodyPosition | None
+) -> None:
+    assert explicit_body_position(text) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("symptom dizziness category postural", SymptomTrackingCategory.POSTURAL),
+        (
+            "track fatigue as mineralocorticoid",
+            SymptomTrackingCategory.MINERALOCORTICOID,
+        ),
+        ("symptom nausea category other", SymptomTrackingCategory.OTHER),
+        ("dizzy after standing up", None),
+        ("salt craving", None),
+    ],
+)
+def test_symptom_category_is_never_inferred_from_the_symptom(
+    text: str, expected: SymptomTrackingCategory | None
+) -> None:
+    assert explicit_symptom_tracking_category(text) is expected
 
 
 def test_prompt_requires_bounded_local_time_format() -> None:

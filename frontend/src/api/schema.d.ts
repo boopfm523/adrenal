@@ -1594,6 +1594,7 @@ export interface components {
         };
         /** BloodPressureCorrectionChanges */
         BloodPressureCorrectionChanges: {
+            body_position?: components["schemas"]["BodyPosition"] | null;
             /** Diastolic Mmhg */
             diastolic_mmhg?: number | null;
             measurement_setting?: components["schemas"]["MeasurementSetting"] | null;
@@ -1613,6 +1614,7 @@ export interface components {
         };
         /** BloodPressureIn */
         BloodPressureIn: {
+            body_position?: components["schemas"]["BodyPosition"] | null;
             /** Diastolic Mmhg */
             diastolic_mmhg: number;
             /** @default home */
@@ -1627,6 +1629,7 @@ export interface components {
         };
         /** BloodPressureOut */
         BloodPressureOut: {
+            body_position: components["schemas"]["BodyPosition"] | null;
             /**
              * Category
              * @default fact
@@ -1658,6 +1661,12 @@ export interface components {
             /** Revisions */
             revisions: components["schemas"]["BloodPressureOut"][];
         };
+        /**
+         * BodyPosition
+         * @description Explicit position at a blood-pressure reading; omitted remains unknown.
+         * @enum {string}
+         */
+        BodyPosition: "lying" | "sitting" | "standing";
         /** Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post */
         Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post: {
             /**
@@ -4411,6 +4420,7 @@ export interface components {
             /** Severity */
             severity?: number | null;
             time?: components["schemas"]["EventTimeIn"] | null;
+            tracking_category?: components["schemas"]["SymptomTrackingCategory"] | null;
         };
         /** SymptomCorrectionIn */
         SymptomCorrectionIn: {
@@ -4433,6 +4443,8 @@ export interface components {
             /** Severity */
             severity?: number | null;
             time: components["schemas"]["EventTimeIn"];
+            /** @description Optional owner-selected correlation context; not a diagnosis */
+            tracking_category?: components["schemas"]["SymptomTrackingCategory"] | null;
         };
         /** SymptomMetric */
         SymptomMetric: {
@@ -4478,6 +4490,9 @@ export interface components {
             /** Severity */
             severity: number | null;
             time: components["schemas"]["EventTimeOut"];
+            tracking_category: components["schemas"]["SymptomTrackingCategory"] | null;
+            /** Tracking Category Revision */
+            tracking_category_revision: string | null;
         };
         /** SymptomPage */
         SymptomPage: {
@@ -4487,6 +4502,12 @@ export interface components {
             /** Revisions */
             revisions: components["schemas"]["SymptomOut"][];
         };
+        /**
+         * SymptomTrackingCategory
+         * @description Owner-selected correlation context, never a diagnosis or model inference.
+         * @enum {string}
+         */
+        SymptomTrackingCategory: "glucocorticoid" | "mineralocorticoid" | "postural" | "other";
         /** TemperatureCorrectionChanges */
         TemperatureCorrectionChanges: {
             /** Notes */
@@ -4717,7 +4738,7 @@ export interface components {
              * Feature Revision
              * @constant
              */
-            feature_revision: "hc-wake-coverage-v1.0.0";
+            feature_revision: "hc-wake-coverage-v1.1.0";
             /** Inter Dose Troughs */
             inter_dose_troughs: components["schemas"]["WakeCoverageTroughOut"][];
             maximum_fall: components["schemas"]["WakeCoverageMaximumFallOut"] | null;
@@ -4736,6 +4757,8 @@ export interface components {
             time_below_p5_minutes?: string | null;
             /** Timezone */
             timezone: string;
+            /** Uncategorized Symptom Count */
+            uncategorized_symptom_count: number;
         };
         /** WakeCoverageMaximumFallOut */
         WakeCoverageMaximumFallOut: {
@@ -4799,6 +4822,9 @@ export interface components {
              * Format: uuid
              */
             symptom_event_id: string;
+            tracking_category: components["schemas"]["SymptomTrackingCategory"] | null;
+            /** Tracking Category Revision */
+            tracking_category_revision: string | null;
         };
         /** WakeCoverageTroughOut */
         WakeCoverageTroughOut: {

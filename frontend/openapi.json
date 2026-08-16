@@ -66,6 +66,16 @@
       "BloodPressureCorrectionChanges": {
         "additionalProperties": false,
         "properties": {
+          "body_position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BodyPosition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "diastolic_mmhg": {
             "anyOf": [
               {
@@ -164,6 +174,16 @@
       "BloodPressureIn": {
         "additionalProperties": false,
         "properties": {
+          "body_position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BodyPosition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "diastolic_mmhg": {
             "maximum": 500.0,
             "minimum": 1.0,
@@ -220,6 +240,16 @@
       "BloodPressureOut": {
         "additionalProperties": false,
         "properties": {
+          "body_position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BodyPosition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "category": {
             "const": "fact",
             "default": "fact",
@@ -277,6 +307,7 @@
           "diastolic_mmhg",
           "pulse_bpm",
           "measurement_setting",
+          "body_position",
           "time",
           "provenance",
           "notes"
@@ -312,6 +343,16 @@
         ],
         "title": "BloodPressurePage",
         "type": "object"
+      },
+      "BodyPosition": {
+        "description": "Explicit position at a blood-pressure reading; omitted remains unknown.",
+        "enum": [
+          "lying",
+          "sitting",
+          "standing"
+        ],
+        "title": "BodyPosition",
+        "type": "string"
       },
       "Body_confirm_csv_route_api_v1_labs_imports_csv_confirm_post": {
         "properties": {
@@ -8413,6 +8454,16 @@
                 "type": "null"
               }
             ]
+          },
+          "tracking_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymptomTrackingCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "SymptomCorrectionChanges",
@@ -8510,6 +8561,17 @@
           },
           "time": {
             "$ref": "#/components/schemas/EventTimeIn"
+          },
+          "tracking_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymptomTrackingCategory"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional owner-selected correlation context; not a diagnosis"
           }
         },
         "required": [
@@ -8644,6 +8706,27 @@
           },
           "time": {
             "$ref": "#/components/schemas/EventTimeOut"
+          },
+          "tracking_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymptomTrackingCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tracking_category_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Category Revision"
           }
         },
         "required": [
@@ -8651,6 +8734,8 @@
           "name",
           "severity",
           "body_area",
+          "tracking_category",
+          "tracking_category_revision",
           "time",
           "provenance",
           "episode_id",
@@ -8687,6 +8772,17 @@
         ],
         "title": "SymptomPage",
         "type": "object"
+      },
+      "SymptomTrackingCategory": {
+        "description": "Owner-selected correlation context, never a diagnosis or model inference.",
+        "enum": [
+          "glucocorticoid",
+          "mineralocorticoid",
+          "postural",
+          "other"
+        ],
+        "title": "SymptomTrackingCategory",
+        "type": "string"
       },
       "TemperatureCorrectionChanges": {
         "additionalProperties": false,
@@ -9413,7 +9509,7 @@
             "type": "string"
           },
           "feature_revision": {
-            "const": "hc-wake-coverage-v1.0.0",
+            "const": "hc-wake-coverage-v1.1.0",
             "title": "Feature Revision",
             "type": "string"
           },
@@ -9492,6 +9588,11 @@
           "timezone": {
             "title": "Timezone",
             "type": "string"
+          },
+          "uncategorized_symptom_count": {
+            "minimum": 0.0,
+            "title": "Uncategorized Symptom Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -9507,6 +9608,7 @@
           "safety_label",
           "definitions",
           "missing_inputs",
+          "uncategorized_symptom_count",
           "source_revision_sha256",
           "auc",
           "inter_dose_troughs",
@@ -9706,12 +9808,35 @@
             "format": "uuid",
             "title": "Symptom Event Id",
             "type": "string"
+          },
+          "tracking_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymptomTrackingCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tracking_category_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Category Revision"
           }
         },
         "required": [
           "symptom_event_id",
           "occurred_at",
           "name",
+          "tracking_category",
+          "tracking_category_revision",
           "previous_supported_dose_event_ids",
           "previous_dose_categories",
           "modeled_free_cortisol_nmol_l",

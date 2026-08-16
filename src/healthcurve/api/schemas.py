@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_valid
 
 from healthcurve.episodes.models import EpisodeSeverity, EpisodeStatus
 from healthcurve.events.base import ConfirmationState, SourceType
-from healthcurve.events.models import LifeEventCategory, MealSize
+from healthcurve.events.models import LifeEventCategory, MealSize, SymptomTrackingCategory
 from healthcurve.integrations.garmin.models import GarminMetricType
 from healthcurve.medications.models import (
     DoseCategory,
@@ -28,7 +28,7 @@ from healthcurve.medications.models import (
     RegimenStatus,
     Route,
 )
-from healthcurve.vitals.models import MeasurementSetting, TemperatureUnit, WeightUnit
+from healthcurve.vitals.models import BodyPosition, MeasurementSetting, TemperatureUnit, WeightUnit
 
 #: A positive clinical quantity. Bounded above so a typo cannot record 15000 mg.
 Amount = Annotated[Decimal, Field(gt=0, le=10000, max_digits=10, decimal_places=4)]
@@ -329,6 +329,7 @@ class BloodPressureIn(ApiModel):
     diastolic_mmhg: int = Field(ge=1, le=500)
     pulse_bpm: int | None = Field(default=None, ge=1, le=500)
     measurement_setting: MeasurementSetting = MeasurementSetting.HOME
+    body_position: BodyPosition | None = None
     time: EventTimeIn
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -339,6 +340,7 @@ class BloodPressureOut(FactResource):
     diastolic_mmhg: int
     pulse_bpm: int | None
     measurement_setting: MeasurementSetting
+    body_position: BodyPosition | None
     time: EventTimeOut
     provenance: ProvenanceOut
     notes: str | None
@@ -349,12 +351,13 @@ class BloodPressureCorrectionChanges(ApiModel):
     diastolic_mmhg: int | None = Field(default=None, ge=1, le=500)
     pulse_bpm: int | None = Field(default=None, ge=1, le=500)
     measurement_setting: MeasurementSetting | None = None
+    body_position: BodyPosition | None = None
     time: EventTimeIn | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _required_values_cannot_be_null(self) -> BloodPressureCorrectionChanges:
-        nullable = {"pulse_bpm", "notes"}
+        nullable = {"pulse_bpm", "body_position", "notes"}
         null_fields = {
             name for name in self.model_fields_set - nullable if getattr(self, name) is None
         }
@@ -520,6 +523,10 @@ class SymptomIn(ApiModel):
     name: str = Field(min_length=1, max_length=120)
     severity: int | None = Field(default=None, ge=0, le=10)
     body_area: str | None = Field(default=None, max_length=120)
+    tracking_category: SymptomTrackingCategory | None = Field(
+        default=None,
+        description="Optional owner-selected correlation context; not a diagnosis",
+    )
     time: EventTimeIn
     ended_at: datetime | None = None
     episode_id: uuid.UUID | None = None
@@ -531,6 +538,8 @@ class SymptomOut(FactResource):
     name: str
     severity: int | None
     body_area: str | None
+    tracking_category: SymptomTrackingCategory | None
+    tracking_category_revision: str | None
     time: EventTimeOut
     provenance: ProvenanceOut
     episode_id: uuid.UUID | None
@@ -571,12 +580,13 @@ class SymptomCorrectionChanges(ApiModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     severity: int | None = Field(default=None, ge=0, le=10)
     body_area: str | None = Field(default=None, max_length=120)
+    tracking_category: SymptomTrackingCategory | None = None
     time: EventTimeIn | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _required_values_cannot_be_null(self) -> SymptomCorrectionChanges:
-        nullable_fields = {"severity", "body_area", "notes"}
+        nullable_fields = {"severity", "body_area", "tracking_category", "notes"}
         null_fields = {
             name for name in self.model_fields_set - nullable_fields if getattr(self, name) is None
         }
@@ -1444,6 +1454,8 @@ class WakeCoverageSymptomContextOut(ApiModel):
     occurred_at: datetime
     name: str
     severity: int | None = Field(default=None, ge=0, le=10)
+    tracking_category: SymptomTrackingCategory | None
+    tracking_category_revision: str | None
     previous_supported_dose_event_ids: list[uuid.UUID]
     previous_dose_categories: list[str]
     minutes_since_previous_supported_dose: Decimal | None = Field(default=None, ge=0)
@@ -1470,7 +1482,7 @@ class WakeCoverageSymptomContextOut(ApiModel):
 class WakeCoverageFeaturesOut(ApiModel):
     available: bool
     feature_id: Literal["hc-wake-coverage-v1"]
-    feature_revision: Literal["hc-wake-coverage-v1.0.0"]
+    feature_revision: Literal["hc-wake-coverage-v1.1.0"]
     date: date
     timezone: str
     analyzed_from: datetime
@@ -1480,6 +1492,7 @@ class WakeCoverageFeaturesOut(ApiModel):
     safety_label: str
     definitions: dict[str, str]
     missing_inputs: list[str]
+    uncategorized_symptom_count: int = Field(ge=0)
     source_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     comparison_minutes: Decimal | None = Field(default=None, ge=0)
     expected_pre_wake_excluded_minutes: Decimal | None = Field(default=None, ge=0)

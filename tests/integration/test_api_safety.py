@@ -603,6 +603,44 @@ def test_meal_event_migration_downgrades_and_reinstalls(engine: Engine, settings
         assert connection.scalar(table_query) == "fact.meal_event"
 
 
+def test_symptom_category_and_posture_migration_preserves_unknown_as_nullable(
+    engine: Engine, settings: Settings
+) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    columns_query = text(
+        "SELECT table_name, column_name, is_nullable "
+        "FROM information_schema.columns "
+        "WHERE table_schema = 'fact' AND ("
+        "(table_name = 'symptom_event' AND column_name IN "
+        "('tracking_category', 'tracking_category_revision')) OR "
+        "(table_name = 'blood_pressure_event' AND column_name = 'body_position')) "
+        "ORDER BY table_name, column_name"
+    )
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "f9b2c4d6e810",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert list(connection.execute(columns_query)) == []
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.connect() as connection:
+        assert [tuple(row) for row in connection.execute(columns_query)] == [
+            ("blood_pressure_event", "body_position", "YES"),
+            ("symptom_event", "tracking_category", "YES"),
+            ("symptom_event", "tracking_category_revision", "YES"),
+        ]
+
+
 def test_health_data_requires_authentication(client: TestClient) -> None:
     client.cookies.clear()
     for path in (
@@ -1036,6 +1074,17 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
         },
     )
     assert invalid_setting.status_code == 422
+    invalid_position = client.post(
+        "/api/v1/blood-pressure",
+        headers=logged_in,
+        json={
+            "systolic_mmhg": 120,
+            "diastolic_mmhg": 80,
+            "body_position": "walking",
+            "time": event_time_payload,
+        },
+    )
+    assert invalid_position.status_code == 422
 
     bp_response = client.post(
         "/api/v1/blood-pressure",
@@ -1044,6 +1093,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
             "systolic_mmhg": 120,
             "diastolic_mmhg": 80,
             "pulse_bpm": 62,
+            "body_position": "standing",
             "time": event_time_payload,
             "notes": "Synthetic cuff reading",
         },
@@ -1052,6 +1102,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     bp = bp_response.json()
     assert bp["category"] == "fact"
     assert bp["measurement_setting"] == "home"
+    assert bp["body_position"] == "standing"
     assert bp["time"]["occurred_at"] == "2026-08-09T07:15:00Z"
     assert bp["provenance"]["source_type"] == "web"
 
@@ -1109,6 +1160,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
                 "systolic_mmhg": 118,
                 "pulse_bpm": None,
                 "measurement_setting": "provider",
+                "body_position": "sitting",
             },
         },
     )
@@ -1117,6 +1169,7 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
     assert corrected_bp["systolic_mmhg"] == 118
     assert corrected_bp["pulse_bpm"] is None
     assert corrected_bp["measurement_setting"] == "provider"
+    assert corrected_bp["body_position"] == "sitting"
     assert corrected_bp["provenance"]["supersedes_id"] == bp["id"]
 
     weight_correction = client.post(
@@ -3401,6 +3454,7 @@ def test_symptom_correction_preserves_typed_history(
         json={
             "name": "Synthetic fatigue",
             "severity": 4,
+            "tracking_category": "postural",
             "time": {"local_time": "2021-05-03T09:00:00", "timezone": "Europe/London"},
         },
         headers=logged_in,
@@ -3409,13 +3463,15 @@ def test_symptom_correction_preserves_typed_history(
         f"/api/v1/symptoms/{original['id']}/correct",
         json={
             "reason": "Synthetic severity correction",
-            "changes": {"severity": 6},
+            "changes": {"severity": 6, "tracking_category": "mineralocorticoid"},
         },
         headers=logged_in,
     )
     assert response.status_code == 201, response.text
     corrected = response.json()
     assert corrected["severity"] == 6
+    assert corrected["tracking_category"] == "mineralocorticoid"
+    assert corrected["tracking_category_revision"] == "symptom-tracking-category-v1"
     assert corrected["provenance"]["supersedes_id"] == original["id"]
     symptom_page = client.get("/api/v1/symptoms").json()
     current_ids = {row["id"] for row in symptom_page["items"]}
@@ -6428,7 +6484,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     coverage = wake_free_body["coverage_features"]
     assert coverage["available"] is True
     assert coverage["feature_id"] == "hc-wake-coverage-v1"
-    assert coverage["feature_revision"] == "hc-wake-coverage-v1.0.0"
+    assert coverage["feature_revision"] == "hc-wake-coverage-v1.1.0"
     assert coverage["day_state"] == "complete"
     assert coverage["missing_inputs"] == []
     assert len(coverage["source_revision_sha256"]) == 64

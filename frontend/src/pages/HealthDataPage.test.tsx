@@ -11,7 +11,7 @@ import { HealthDataPage } from "./HealthDataPage";
 const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
 const time = { occurred_at: "2026-08-09T12:15:00Z", local_time: "2026-08-09T08:15:00", timezone: "America/New_York", utc_offset_minutes: -240 };
 const provenance = { recorded_at: "2026-08-09T12:16:00Z", source_type: "telegram", confirmation_state: "confirmed_from_draft", supersedes_id: null, correction_reason: null, is_correction: false };
-const pressure = { id: "11111111-1111-4111-8111-111111111111", category: "fact", systolic_mmhg: 118, diastolic_mmhg: 76, pulse_bpm: 62, measurement_setting: "home", time, provenance, notes: null };
+const pressure = { id: "11111111-1111-4111-8111-111111111111", category: "fact", systolic_mmhg: 118, diastolic_mmhg: 76, pulse_bpm: 62, measurement_setting: "home", body_position: null, time, provenance, notes: null };
 const weight = { id: "22222222-2222-4222-8222-222222222222", category: "fact", value: "180.0000", unit: "lb", normalized_kg: "81.6466", display_lb: "180.0", measurement_setting: "home", time, provenance, notes: null };
 const kgWeight = { ...weight, id: "44444444-4444-4444-8444-444444444444", value: "83.1000", unit: "kg", normalized_kg: "83.1000", display_lb: "183.2", measurement_setting: "provider", time: { ...time, occurred_at: "2026-08-10T12:15:00Z", local_time: "2026-08-10T08:15:00" } };
 const temperature = { id: "12121212-1212-4212-8212-121212121212", category: "fact", value: "38.00", unit: "c", normalized_c: "38.00", display_f: "100.4", display_c: "38.0", time, provenance, notes: null };
@@ -73,6 +73,7 @@ describe("Health data page", () => {
     expect(within(bpForm).getByLabelText("Time")).toHaveAttribute("type", "time");
     await userEvent.type(within(bpForm).getByLabelText("Systolic (mmHg)"), "120");
     await userEvent.type(within(bpForm).getByLabelText("Diastolic (mmHg)"), "80");
+    await userEvent.selectOptions(within(bpForm).getByLabelText("Body position"), "standing");
     await userEvent.click(within(bpForm).getByRole("button", { name: "Record blood pressure" }));
     const weightForm = screen.getByRole("form", { name: "Record weight" });
     expect(within(weightForm).getByRole("group", { name: "Experienced local time" })).toBeVisible();
@@ -88,7 +89,7 @@ describe("Health data page", () => {
     await userEvent.click(within(temperatureForm).getByRole("button", { name: "Record temperature" }));
 
     await waitFor(() => { expect(writes).toHaveLength(3); });
-    expect(writes[0]).toEqual(expect.objectContaining({ url: "/api/v1/blood-pressure", csrf: "synthetic-csrf", body: expect.objectContaining({ systolic_mmhg: 120, diastolic_mmhg: 80, measurement_setting: "home", time: expect.objectContaining({ timezone: "America/New_York" }) }) }));
+    expect(writes[0]).toEqual(expect.objectContaining({ url: "/api/v1/blood-pressure", csrf: "synthetic-csrf", body: expect.objectContaining({ systolic_mmhg: 120, diastolic_mmhg: 80, measurement_setting: "home", body_position: "standing", time: expect.objectContaining({ timezone: "America/New_York" }) }) }));
     expect(writes[1]).toEqual(expect.objectContaining({ url: "/api/v1/weight", csrf: "synthetic-csrf", body: expect.objectContaining({ value: "181", unit: "lb", measurement_setting: "home" }) }));
     expect(writes[2]).toEqual(expect.objectContaining({ url: "/api/v1/temperature", csrf: "synthetic-csrf", body: expect.objectContaining({ value: "98.6", unit: "f" }) }));
   });
@@ -126,7 +127,7 @@ describe("Health data page", () => {
     expect(temperatureTable).toHaveTextContent("38 °C");
     expect(pressureTable).toHaveAttribute("tabindex", "0");
     expect(within(pressureTable).getByText(/Current recorded blood-pressure facts in latest-experienced-time order/)).toBeVisible();
-    expect(within(pressureTable).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Experienced time", "Systolic / diastolic", "Pulse", "Setting", "Source and confirmation", "Notes", "Action"]);
+    expect(within(pressureTable).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Experienced time", "Systolic / diastolic", "Pulse", "Setting and position", "Source and confirmation", "Notes", "Action"]);
     expect(within(pressureTable).getAllByText("Home").length).toBeGreaterThan(0);
     expect(within(weightTable).getByText("Provider / clinic")).toBeVisible();
     const pressureRows = within(pressureTable).getAllByRole("row");

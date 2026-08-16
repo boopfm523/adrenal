@@ -22,7 +22,7 @@ describe("Symptoms and diary page", () => {
   it("preserves symptom history and reveals sensitive text only after explicit action", async () => {
     const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
     sessionStore.set(session);
-    const prior = { id: "11111111-1111-4111-8111-111111111111", category: "fact", name: "Synthetic fatigue", severity: 4, body_area: null, time, provenance, episode_id: null, notes: null };
+    const prior = { id: "11111111-1111-4111-8111-111111111111", category: "fact", name: "Synthetic fatigue", severity: 4, body_area: null, tracking_category: null, tracking_category_revision: null, time, provenance, episode_id: null, notes: null };
     const current = { ...prior, id: "22222222-2222-4222-8222-222222222222", severity: 6, provenance: { ...provenance, supersedes_id: prior.id, correction_reason: "Synthetic correction", is_correction: true } };
     const publicDiary = { id: "33333333-3333-4333-8333-333333333333", category: "fact", text: "Synthetic public note", is_sensitive: false, tags: null, time, provenance };
     const privateDiary = { ...publicDiary, id: "44444444-4444-4444-8444-444444444444", text: "Synthetic private note", is_sensitive: true };
@@ -62,13 +62,14 @@ describe("Symptoms and diary page", () => {
     const createForm = screen.getByRole("form", { name: "Record a symptom" });
     await userEvent.type(within(createForm).getByLabelText("Symptom"), "Synthetic nausea");
     await userEvent.type(within(createForm).getByLabelText("Severity (0–10)"), "3");
+    await userEvent.selectOptions(within(createForm).getByLabelText("Tracking category"), "postural");
     await userEvent.clear(within(createForm).getByLabelText("Experienced local time"));
     await userEvent.type(within(createForm).getByLabelText("Experienced local time"), "2026-08-10T14:05");
     await userEvent.type(within(createForm).getByLabelText("Notes"), "Synthetic web form test");
     await userEvent.click(within(createForm).getByRole("button", { name: "Record symptom" }));
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input, init]) => requestUrl(input).endsWith("/symptoms") && init?.method === "POST")).toBe(true); });
     const createWrite = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).endsWith("/symptoms") && init?.method === "POST");
-    expect(JSON.parse(typeof createWrite?.[1]?.body === "string" ? createWrite[1].body : "{}") as unknown).toEqual({ name: "Synthetic nausea", severity: 3, body_area: null, time: { local_time: "2026-08-10T14:05", timezone: "America/New_York", fold: null }, ended_at: null, episode_id: null, notes: "Synthetic web form test" });
+    expect(JSON.parse(typeof createWrite?.[1]?.body === "string" ? createWrite[1].body : "{}") as unknown).toEqual({ name: "Synthetic nausea", severity: 3, body_area: null, tracking_category: "postural", time: { local_time: "2026-08-10T14:05", timezone: "America/New_York", fold: null }, ended_at: null, episode_id: null, notes: "Synthetic web form test" });
     expect(await screen.findByText("Symptom recorded.")).toBeVisible();
     expect(within(createForm).getByLabelText("Symptom")).toHaveValue("");
 
@@ -101,12 +102,13 @@ describe("Symptoms and diary page", () => {
     const severity = within(form).getByLabelText("Severity (0–10)");
     await userEvent.clear(severity);
     await userEvent.type(severity, "7");
+    await userEvent.selectOptions(within(form).getByLabelText("Tracking category"), "mineralocorticoid");
     await userEvent.type(within(form).getByLabelText("Correction reason"), "Synthetic second correction");
     await userEvent.click(within(form).getByRole("button", { name: "Save corrected fact" }));
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input, init]) => requestUrl(input).includes(`/symptoms/${current.id}/correct`) && init?.method === "POST")).toBe(true); });
     const write = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).includes(`/symptoms/${current.id}/correct`) && init?.method === "POST");
     const body = write?.[1]?.body;
-    expect(JSON.parse(typeof body === "string" ? body : "{}") as unknown).toEqual({ reason: "Synthetic second correction", changes: { severity: 7 } });
+    expect(JSON.parse(typeof body === "string" ? body : "{}") as unknown).toEqual({ reason: "Synthetic second correction", changes: { severity: 7, tracking_category: "mineralocorticoid" } });
 
     await userEvent.click(within(screen.getByRole("navigation", { name: "Symptom records pagination" })).getByRole("button", { name: "Next" }));
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("/symptoms?") && requestUrl(input).includes("page=2") && requestUrl(input).includes("local_date_from=2026-08-09"))).toBe(true); });

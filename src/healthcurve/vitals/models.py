@@ -29,6 +29,14 @@ class MeasurementSetting(StrEnum):
     PROVIDER = "provider"
 
 
+class BodyPosition(StrEnum):
+    """Explicit position at a blood-pressure reading; omitted remains unknown."""
+
+    LYING = "lying"
+    SITTING = "sitting"
+    STANDING = "standing"
+
+
 class BloodPressureEvent(EventMixin, FactBase):
     """A paired blood-pressure reading, with optional measured pulse."""
 
@@ -40,12 +48,17 @@ class BloodPressureEvent(EventMixin, FactBase):
     measurement_setting: Mapped[MeasurementSetting] = mapped_column(
         StrEnumType(MeasurementSetting, 16), nullable=False, default=MeasurementSetting.HOME
     )
+    body_position: Mapped[BodyPosition | None] = mapped_column(StrEnumType(BodyPosition, 16))
 
     __table_args__ = (
         CheckConstraint("systolic_mmhg BETWEEN 1 AND 500", name="systolic_structural_range"),
         CheckConstraint("diastolic_mmhg BETWEEN 1 AND 500", name="diastolic_structural_range"),
         CheckConstraint(
             "pulse_bpm IS NULL OR pulse_bpm BETWEEN 1 AND 500", name="pulse_structural_range"
+        ),
+        CheckConstraint(
+            "body_position IS NULL OR body_position IN ('lying', 'sitting', 'standing')",
+            name="body_position_supported",
         ),
         *event_table_args("blood_pressure_event"),
     )

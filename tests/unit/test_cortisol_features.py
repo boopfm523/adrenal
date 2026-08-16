@@ -175,6 +175,8 @@ def test_inter_dose_troughs_and_symptom_context_keep_regular_stress_attribution(
             "occurred_at": start + timedelta(hours=2, minutes=30),
             "name": "synthetic symptom",
             "severity": 4,
+            "tracking_category": None,
+            "tracking_category_revision": None,
             "previous_supported_dose_event_ids": [uuid.UUID(int=2)],
             "previous_dose_categories": ["stress"],
             "minutes_since_previous_supported_dose": Decimal("30.0000"),

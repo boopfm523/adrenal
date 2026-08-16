@@ -30,7 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
-from healthcurve.events.models import MealSize
+from healthcurve.events.models import MealSize, SymptomTrackingCategory
 from healthcurve.events.timekeeping import (
     AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
@@ -40,7 +40,7 @@ from healthcurve.events.timekeeping import (
 )
 from healthcurve.medications.models import DoseCategory, DoseEvent, Medication
 from healthcurve.vitals import service as vitals
-from healthcurve.vitals.models import MeasurementSetting, TemperatureUnit, WeightUnit
+from healthcurve.vitals.models import BodyPosition, MeasurementSetting, TemperatureUnit, WeightUnit
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
@@ -112,6 +112,16 @@ _PROVIDER_MEASUREMENT_PATTERN: Final = re.compile(
     re.IGNORECASE,
 )
 _HOME_MEASUREMENT_PATTERN: Final = re.compile(r"\b(?:at|from)\s+home\b", re.IGNORECASE)
+_BODY_POSITION_PATTERNS: Final = {
+    BodyPosition.LYING: re.compile(r"\b(?:lying|supine)\b", re.IGNORECASE),
+    BodyPosition.SITTING: re.compile(r"\b(?:sitting|seated)\b", re.IGNORECASE),
+    BodyPosition.STANDING: re.compile(r"\bstanding\b", re.IGNORECASE),
+}
+_SYMPTOM_CATEGORY_PATTERN: Final = re.compile(
+    r"\b(?:category|track(?:ed)?(?:\s+\w+){0,4}\s+as)\s*[:=-]?\s*"
+    r"(?P<category>glucocorticoid|mineralocorticoid|postural|other)\b",
+    re.IGNORECASE,
+)
 
 SYSTEM_PROMPT: Final = """\
 You extract structured candidate health events from a person's own message.
@@ -334,11 +344,13 @@ class ValidatedCandidate(BaseModel):
     dose_category: DoseCategory | None = None
     symptom_name: str | None = None
     severity: int | None = None
+    symptom_tracking_category: SymptomTrackingCategory | None = None
     text: str | None = None
     systolic_mmhg: int | None = None
     diastolic_mmhg: int | None = None
     pulse_bpm: int | None = None
     measurement_setting: MeasurementSetting = MeasurementSetting.HOME
+    body_position: BodyPosition | None = None
     weight_value: Decimal | None = None
     weight_unit: WeightUnit | None = None
     temperature_value: Decimal | None = None
@@ -426,6 +438,22 @@ def explicit_measurement_setting(message: str) -> MeasurementSetting:
         if _PROVIDER_MEASUREMENT_PATTERN.search(message)
         else MeasurementSetting.HOME
     )
+
+
+def explicit_body_position(message: str) -> BodyPosition | None:
+    """Return posture only when the message explicitly states one unambiguous position."""
+
+    matches = [
+        position for position, pattern in _BODY_POSITION_PATTERNS.items() if pattern.search(message)
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def explicit_symptom_tracking_category(message: str) -> SymptomTrackingCategory | None:
+    """Capture only an explicitly labelled owner tracking category; never classify symptoms."""
+
+    match = _SYMPTOM_CATEGORY_PATTERN.search(message)
+    return None if match is None else SymptomTrackingCategory(match.group("category").lower())
 
 
 def extract(
@@ -629,6 +657,11 @@ def _validate_candidate(
         ),
         symptom_name=candidate.symptom_name,
         severity=candidate.severity,
+        symptom_tracking_category=(
+            explicit_symptom_tracking_category(message)
+            if candidate.type is CandidateType.SYMPTOM
+            else None
+        ),
         text=candidate.text,
         systolic_mmhg=candidate.systolic_mmhg,
         diastolic_mmhg=candidate.diastolic_mmhg,
@@ -637,6 +670,11 @@ def _validate_candidate(
             explicit_measurement_setting(message)
             if candidate.type in {CandidateType.BLOOD_PRESSURE, CandidateType.WEIGHT}
             else MeasurementSetting.HOME
+        ),
+        body_position=(
+            explicit_body_position(message)
+            if candidate.type is CandidateType.BLOOD_PRESSURE
+            else None
         ),
         weight_value=weight_value,
         weight_unit=weight_unit,

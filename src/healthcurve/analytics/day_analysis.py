@@ -320,6 +320,8 @@ def build_projection(
                 "name": row.name,
                 "severity_0_to_10": row.severity,
                 "body_area": row.body_area,
+                "tracking_category": row.tracking_category,
+                "tracking_category_revision": row.tracking_category_revision,
                 "ended_at": row.ended_at,
                 "notes": row.notes,
             }
@@ -369,6 +371,7 @@ def build_projection(
                 "diastolic_mmhg": row.diastolic_mmhg,
                 "pulse_bpm": row.pulse_bpm,
                 "measurement_setting": row.measurement_setting,
+                "body_position": row.body_position,
             }
             for row in blood_pressure
         ],
