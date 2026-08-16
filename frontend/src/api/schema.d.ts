@@ -4660,6 +4660,7 @@ export interface components {
         };
         /** WakeFreeCortisolCurveOut */
         WakeFreeCortisolCurveOut: {
+            context_band: components["schemas"]["CircadianContextBandOut"];
             /**
              * Date
              * Format: date
@@ -4709,6 +4710,7 @@ export interface components {
             supported_dose_count: number;
             /** Timezone */
             timezone: string;
+            wake_reference: components["schemas"]["WakeReferenceOut"];
         };
         /** WakeFreeCortisolModelOut */
         WakeFreeCortisolModelOut: {
@@ -4835,6 +4837,158 @@ export interface components {
             model_revision: "hc-wake-free-v3.0.0";
             parameters: components["schemas"]["WakeFreePkParametersOut"];
             reference_defaults: components["schemas"]["WakeFreePkReferenceDefaultsOut"];
+        };
+        /** WakeReferenceAssumptionsOut */
+        WakeReferenceAssumptionsOut: {
+            /** Age Years */
+            age_years: string;
+            /**
+             * Healthy Adult Population Context Only
+             * @constant
+             */
+            healthy_adult_population_context_only: true;
+            /** Observed Meals */
+            observed_meals: {
+                [key: string]: string;
+            };
+            /**
+             * Pre Wake Gap Expected
+             * @constant
+             */
+            pre_wake_gap_expected: true;
+            /** Sex */
+            sex: string;
+            /**
+             * Sleep Onset At
+             * Format: date-time
+             */
+            sleep_onset_at: string;
+            /**
+             * Unobserved Meals Invented
+             * @constant
+             */
+            unobserved_meals_invented: false;
+            /** Wake Amplitude Association Applied */
+            wake_amplitude_association_applied: boolean;
+            /**
+             * Wake At
+             * Format: date-time
+             */
+            wake_at: string;
+        };
+        /** WakeReferenceCitationOut */
+        WakeReferenceCitationOut: {
+            /** Citation */
+            citation: string;
+            /** Pmid */
+            pmid?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** WakeReferenceIdentityOut */
+        WakeReferenceIdentityOut: {
+            /**
+             * Binding Revision
+             * @constant
+             */
+            binding_revision: "one-site-cbg-linear-albumin-v1";
+            /** Default Band */
+            default_band?: ("p5" | "p95")[];
+            /**
+             * Id
+             * @constant
+             */
+            id: "hc-wake-reference-v1";
+            /** Percentiles */
+            percentiles?: ("p5" | "p25" | "p50" | "p75" | "p95")[];
+            /** References */
+            references?: components["schemas"]["WakeReferenceCitationOut"][];
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "hc-wake-reference-v1.0.0";
+            /** Sample Interval Minutes */
+            sample_interval_minutes?: number | null;
+            /** Source Module */
+            source_module?: string | null;
+        };
+        /** WakeReferenceOut */
+        WakeReferenceOut: {
+            assumptions?: components["schemas"]["WakeReferenceAssumptionsOut"] | null;
+            /** Available */
+            available: boolean;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Day End */
+            day_end?: string | null;
+            /** Day Start */
+            day_start?: string | null;
+            /** Elapsed Hours */
+            elapsed_hours?: string | null;
+            /** Missing Inputs */
+            missing_inputs: ("wake_at" | "sleep_onset_at")[];
+            reference: components["schemas"]["WakeReferenceIdentityOut"];
+            /** Safety Label */
+            safety_label: string;
+            /** Samples */
+            samples: components["schemas"]["WakeReferenceSampleOut"][];
+            /**
+             * Series Kind
+             * @constant
+             */
+            series_kind: "wake_anchored_cortisol_reference";
+            /**
+             * Series Unit
+             * @constant
+             */
+            series_unit: "nmol/L";
+            /** Timezone */
+            timezone: string;
+        };
+        /** WakeReferenceSampleOut */
+        WakeReferenceSampleOut: {
+            /** Hour Local */
+            hour_local: string;
+            /** Hours Since Wake */
+            hours_since_wake: string;
+            /**
+             * Local Time
+             * Format: date-time
+             */
+            local_time: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Serum Free P25 Nmol L */
+            serum_free_p25_nmol_l: string;
+            /** Serum Free P50 Nmol L */
+            serum_free_p50_nmol_l: string;
+            /** Serum Free P5 Nmol L */
+            serum_free_p5_nmol_l: string;
+            /** Serum Free P75 Nmol L */
+            serum_free_p75_nmol_l: string;
+            /** Serum Free P95 Nmol L */
+            serum_free_p95_nmol_l: string;
+            /** Serum Total P25 Nmol L */
+            serum_total_p25_nmol_l: string;
+            /** Serum Total P50 Nmol L */
+            serum_total_p50_nmol_l: string;
+            /** Serum Total P5 Nmol L */
+            serum_total_p5_nmol_l: string;
+            /** Serum Total P75 Nmol L */
+            serum_total_p75_nmol_l: string;
+            /** Serum Total P95 Nmol L */
+            serum_total_p95_nmol_l: string;
+            /** Sigma Log */
+            sigma_log: string;
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
         };
         /** WeightCorrectionChanges */
         WeightCorrectionChanges: {

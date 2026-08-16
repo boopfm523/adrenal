@@ -972,6 +972,8 @@ def test_vitals_are_owner_scoped_correctable_and_exported(
 ) -> None:
     other_owner_id: uuid.UUID
     with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
         other = Owner(
             email="vitals-owner@example.test",
             password_hash=auth.hash_password(PASSWORD),
@@ -6230,6 +6232,8 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert corrected.status_code == 201, corrected.text
 
     with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
         other = Owner(
             email=f"curve-other-{uuid.uuid4()}@example.test",
             password_hash="synthetic-non-login-hash",
@@ -6266,6 +6270,61 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
             category=DoseCategory.SCHEDULED,
         )
         other_dose_id = str(other_dose.id)
+
+        sync_run = GarminSyncRun(
+            owner_id=owner_id,
+            requested_start_date=date(2024, 1, 31),
+            requested_end_date=date(2024, 2, 2),
+            timezone="UTC",
+            origin=GarminSyncOrigin.MANUAL,
+            status=GarminSyncStatus.COMPLETED,
+            started_at=datetime(2024, 2, 3, 8, 0, tzinfo=UTC),
+            finished_at=datetime(2024, 2, 3, 8, 1, tzinfo=UTC),
+            counts={"sleep": 2},
+            warning_codes=[],
+            client_version="synthetic-test",
+        )
+        session.add(sync_run)
+        session.flush()
+
+        for provider_id, started_at, ended_at in (
+            (
+                "synthetic-morning-sleep",
+                datetime(2024, 1, 31, 23, 0, tzinfo=UTC),
+                datetime(2024, 2, 1, 6, 30, tzinfo=UTC),
+            ),
+            (
+                "synthetic-evening-sleep",
+                datetime(2024, 2, 1, 22, 30, tzinfo=UTC),
+                datetime(2024, 2, 2, 6, 30, tzinfo=UTC),
+            ),
+        ):
+            sleep = GarminSleepEvent(
+                owner_id=owner_id,
+                recorded_at=datetime(2024, 2, 3, 8, 1, tzinfo=UTC),
+                source_type=SourceType.PROVIDER,
+                provider_id=provider_id,
+                source_revision="synthetic-v1",
+                import_batch_id=None,
+                confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+                supersedes_id=None,
+                correction_reason=None,
+                notes=None,
+                garmin_import_batch_id=None,
+                garmin_sync_run_id=sync_run.id,
+                garmin_source_member=provider_id,
+                garmin_manufacturer="Garmin",
+                garmin_product_name="Synthetic Test Device",
+                garmin_device_serial_hash=None,
+                ended_at=ended_at,
+                overall_sleep_score=80,
+                stage_count=0,
+                duration_seconds=int((ended_at - started_at).total_seconds()),
+                garmin_duration_source="provider",
+                awakenings=0,
+            )
+            sleep.apply_event_time(from_instant(started_at, "UTC"))
+            session.add(sleep)
 
     response = client.get(
         "/api/v1/analytics/steroid-exposure",
@@ -6358,7 +6417,17 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert wake_free_body["model"]["parameters"]["population_default"] is True
     assert wake_free_body["series_kind"] == "modeled_serum_free_cortisol_scenario"
     assert wake_free_body["series_unit"] == "nmol/L"
-    assert "context_band" not in wake_free_body
+    assert wake_free_body["context_band"]["default_visible"] is False
+    assert wake_free_body["wake_reference"]["available"] is True
+    assert wake_free_body["wake_reference"]["missing_inputs"] == []
+    assert wake_free_body["wake_reference"]["assumptions"]["wake_at"] == ("2024-02-01T06:30:00Z")
+    assert wake_free_body["wake_reference"]["assumptions"]["sleep_onset_at"] == (
+        "2024-02-01T22:30:00Z"
+    )
+    assert wake_free_body["wake_reference"]["assumptions"]["observed_meals"] == {}
+    assert {row["occurred_at"] for row in wake_free_body["samples"]} == {
+        row["occurred_at"] for row in wake_free_body["wake_reference"]["samples"]
+    }
     assert wake_free_body["supported_dose_count"] == 3
     assert wake_free_body["excluded_dose_count"] == 1
     assert other_dose_id not in {row["dose_event_id"] for row in wake_free_body["dose_markers"]}

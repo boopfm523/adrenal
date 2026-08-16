@@ -5,9 +5,11 @@ import type {
   BloodPressure,
   Episode,
   GarminRecord,
+  PhysiologicalCortisolCurve,
   SteroidExposureCurve,
   Symptom,
   Temperature,
+  WakeFreeCortisolCurve,
 } from "../api/client";
 import {
   formatDecimal,
@@ -119,12 +121,22 @@ const REQUIREMENT_EVIDENCE = [
   { href: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3813945/", label: "Lewis and Elder (2013)", use: "cortisol-binding globulin materially affects total and free cortisol interpretation" },
 ] as const;
 
-function isPhysiologicalCurve(exposure: SteroidExposureCurve): exposure is Extract<SteroidExposureCurve, { series_unit: "nmol/L" }> {
+function isAbsoluteCortisolCurve(exposure: SteroidExposureCurve): exposure is Extract<SteroidExposureCurve, { series_unit: "nmol/L" }> {
   return exposure.series_unit === "nmol/L";
 }
 
+function isWakeFreeCurve(exposure: SteroidExposureCurve): exposure is WakeFreeCortisolCurve {
+  return "series_kind" in exposure
+    && exposure.series_kind === "modeled_serum_free_cortisol_scenario";
+}
+
+function isPhysiologicalCurve(exposure: SteroidExposureCurve): exposure is PhysiologicalCortisolCurve {
+  return "series_kind" in exposure
+    && exposure.series_kind === "modeled_plasma_free_cortisol_scenario";
+}
+
 function exposureModelVersion(exposure: SteroidExposureCurve): string {
-  return isPhysiologicalCurve(exposure) ? exposure.model.revision : exposure.model.version;
+  return isAbsoluteCortisolCurve(exposure) ? exposure.model.revision : exposure.model.version;
 }
 
 function exposureValue(sample: SteroidExposureCurve["samples"][number]): string {
@@ -314,7 +326,7 @@ function path(
 
 function contextBandPath(
   lane: Lane,
-  samples: Extract<SteroidExposureCurve, { series_unit: "nmol/L" }>["context_band"]["samples"],
+  samples: SteroidExposureCurve["context_band"]["samples"],
   start: number,
   end: number,
   bounds: { minimum: number; maximum: number },
@@ -323,6 +335,29 @@ function contextBandPath(
   const upper = samples.map((sample, index) => `${index === 0 ? "M" : "L"} ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.upper_nmol_l), bounds).toFixed(2)}`);
   const lower = [...samples].reverse().map((sample) => `L ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.lower_nmol_l), bounds).toFixed(2)}`);
   return [...upper, ...lower, "Z"].join(" ");
+}
+
+function wakeReferenceBandPath(
+  lane: Lane,
+  samples: WakeFreeCortisolCurve["wake_reference"]["samples"],
+  start: number,
+  end: number,
+  bounds: { minimum: number; maximum: number },
+): string {
+  if (samples.length < 2) return "";
+  const upper = samples.map((sample, index) => `${index === 0 ? "M" : "L"} ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.serum_free_p95_nmol_l), bounds).toFixed(2)}`);
+  const lower = [...samples].reverse().map((sample) => `L ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.serum_free_p5_nmol_l), bounds).toFixed(2)}`);
+  return [...upper, ...lower, "Z"].join(" ");
+}
+
+function wakeReferenceMedianPath(
+  lane: Lane,
+  samples: WakeFreeCortisolCurve["wake_reference"]["samples"],
+  start: number,
+  end: number,
+  bounds: { minimum: number; maximum: number },
+): string {
+  return samples.map((sample, index) => `${index === 0 ? "M" : "L"} ${xPosition(sample.occurred_at, start, end).toFixed(2)} ${yPosition(lane, Number(sample.serum_free_p50_nmol_l), bounds).toFixed(2)}`).join(" ");
 }
 
 function medianSmoothed(points: Point[], radius: number): Point[] {
@@ -417,7 +452,7 @@ function SummaryInfo({ id, label, children }: { id: string; label: string; child
 function lanes(data: DailyHealthCurveData): Lane[] {
   const exposure: Lane = {
     key: "exposure",
-    label: isPhysiologicalCurve(data.exposure) ? data.exposure.series_name : "Theoretical exposure",
+    label: isAbsoluteCortisolCurve(data.exposure) ? data.exposure.series_name : "Theoretical exposure",
     unit: data.exposure.series_unit,
     points: data.exposure.samples.map((sample) => ({
       time: sample.occurred_at,
@@ -661,6 +696,7 @@ export function DailyHealthCurve({
   const [touchSelected, setTouchSelected] = useState(false);
   const [chartZoom, setChartZoom] = useState<1 | 1.5 | 2>(1);
   const [showContextBand, setShowContextBand] = useState(false);
+  const [showWakeReferenceBand, setShowWakeReferenceBand] = useState(true);
   const activeTouchPointer = useRef<number | null>(null);
   const cursorTime = Math.min(end, start + cursorMinute * 60_000);
   const allLanes = useMemo(() => lanes(data), [data]);
@@ -670,18 +706,37 @@ export function DailyHealthCurve({
   const exposureLane = allLanes.find((lane) => lane.key === "exposure");
   const contextBand = data.exposure.context_band;
   const visibleContextBand = showContextBand;
+  const wakeReference = isWakeFreeCurve(data.exposure) ? data.exposure.wake_reference : undefined;
+  const visibleWakeReferenceBand = wakeReference?.available === true && showWakeReferenceBand;
+  const wakeAbsoluteBounds = !isWakeFreeCurve(data.exposure) || exposureLane === undefined
+    ? undefined
+    : {
+      minimum: 0,
+      maximum: Math.max(
+        1,
+        ...exposureLane.points.map((point) => point.value),
+        ...data.exposure.wake_reference.samples.map((sample) => Number(sample.serum_free_p95_nmol_l)),
+        ...(visibleContextBand
+          ? contextBand.samples.map((sample) => Number(sample.upper_nmol_l))
+          : []),
+      ),
+    };
   const contextBandBounds = exposureLane === undefined || !visibleContextBand
     ? undefined
-    : scale([
-      ...(isPhysiologicalCurve(data.exposure)
+    : wakeAbsoluteBounds ?? scale([
+      ...(isAbsoluteCortisolCurve(data.exposure)
         ? exposureLane.points.map((point) => point.value)
         : []),
       ...contextBand.samples.flatMap((sample) => [Number(sample.lower_nmol_l), Number(sample.upper_nmol_l)]),
     ]);
-  const exposureContextBounds = isPhysiologicalCurve(data.exposure)
-    ? contextBandBounds
-    : undefined;
+  const exposureContextBounds = wakeAbsoluteBounds
+    ?? (isAbsoluteCortisolCurve(data.exposure) ? contextBandBounds : undefined);
   const ticks = timeTicks(start, end, data.exposure.timezone);
+  const expectedPreWakeEnd = isWakeFreeCurve(data.exposure)
+    && data.exposure.wake_reference.available
+    && data.exposure.wake_reference.assumptions != null
+    ? Date.parse(data.exposure.wake_reference.assumptions.wake_at)
+    : undefined;
   const sleepRecords = data.garmin.filter((record) => record.kind === "sleep" && record.ended_at != null);
   const missingWakeTiming = sleepRecords.some(
     (record) => (record.awakenings ?? 0) > 0 && (record.sleep_intervals ?? []).length === 0,
@@ -713,6 +768,18 @@ export function DailyHealthCurve({
     || Math.abs(Date.parse(nearestContextBandSample.occurred_at) - cursorTime) > data.exposure.model.sample_interval_minutes * 30_000
     ? undefined
     : nearestContextBandSample;
+  const nearestWakeReferenceSample = !visibleWakeReferenceBand
+    ? undefined
+    : wakeReference.samples.reduce<typeof wakeReference.samples[number] | undefined>((nearest, sample) => {
+      if (nearest === undefined) return sample;
+      return Math.abs(Date.parse(sample.occurred_at) - cursorTime) < Math.abs(Date.parse(nearest.occurred_at) - cursorTime)
+        ? sample
+        : nearest;
+    }, undefined);
+  const cursorWakeReferenceSample = nearestWakeReferenceSample === undefined
+    || Math.abs(Date.parse(nearestWakeReferenceSample.occurred_at) - cursorTime) > data.exposure.model.sample_interval_minutes * 30_000
+    ? undefined
+    : nearestWakeReferenceSample;
   const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
   const cursorUnscoredSymptoms = visible.symptoms
     ? nearbySymptomObservations(unscoredSymptoms, cursorTime)
@@ -752,6 +819,11 @@ export function DailyHealthCurve({
       key: `context-band-${cursorContextBandSample.occurred_at}`,
       series: "Illustrative circadian context",
       value: `${Number(cursorContextBandSample.lower_nmol_l).toFixed(1)}–${Number(cursorContextBandSample.upper_nmol_l).toFixed(1)} nmol/L (center ${Number(cursorContextBandSample.center_nmol_l).toFixed(1)})`,
+    }]),
+    ...(cursorWakeReferenceSample === undefined ? [] : [{
+      key: `wake-reference-${cursorWakeReferenceSample.occurred_at}`,
+      series: "Wake-anchored healthy reference",
+      value: `P5 ${Number(cursorWakeReferenceSample.serum_free_p5_nmol_l).toFixed(1)} · median ${Number(cursorWakeReferenceSample.serum_free_p50_nmol_l).toFixed(1)} · P95 ${Number(cursorWakeReferenceSample.serum_free_p95_nmol_l).toFixed(1)} nmol/L free`,
     }]),
     ...cursorUnscoredSymptoms.map((symptom) => ({
       key: `unscored-symptom-${symptom.id}`,
@@ -802,19 +874,24 @@ export function DailyHealthCurve({
   return <Paper component="section" className="healthcurve-card" withBorder radius="lg" p={{ base: "md", sm: "lg" }} aria-labelledby="daily-healthcurve-title">
     <Title order={2} id="daily-healthcurve-title">Your daily HealthCurve</Title>
     <Text mt="xs">{data.exposure.safety_label}</Text>
+    {isWakeFreeCurve(data.exposure) ? <Text size="sm" c="dimmed">The modeled and healthy-reference curves are estimates for review, not measurements, medication-adequacy tests, alerts, or dosing guidance. Recorded symptoms and physician-authored instructions take precedence.</Text> : null}
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd className="healthcurve-selected-day">{onPreviousDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review previous day" onClick={onPreviousDay}>←</button>}<span>{data.exposure.date}</span>{onNextDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review next day" disabled={nextDayDisabled} onClick={onNextDay}>→</button>}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div></dl>
     <details className="metric-definition healthcurve-context">
       <summary>HealthCurve context and limits</summary>
       <div className="healthcurve-context-content">
         <dl className="metric-metadata healthcurve-context-model"><div><dt>Exposure model</dt><dd>{exposureModelVersion(data.exposure)}</dd></div></dl>
         <aside className="association-caution"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
-        <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. Every enabled series uses a relative 0–100 display scale. Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
+        <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. {isWakeFreeCurve(data.exposure) ? "The modeled and wake-anchored reference cortisol series share one absolute serum-free-cortisol axis in nmol/L and are never independently normalized. Other enabled health series use a separate relative 0–100 display position." : "Every enabled series uses a relative 0–100 display scale."} Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
         <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
+        {!isWakeFreeCurve(data.exposure) ? null : data.exposure.wake_reference.available && data.exposure.wake_reference.assumptions != null ? <div>
+          <p><strong>Wake-anchored reference inputs:</strong> final wake {experiencedTime(data.exposure.wake_reference.assumptions.wake_at, data.exposure.timezone)}; sleep onset {experiencedTime(data.exposure.wake_reference.assumptions.sleep_onset_at, data.exposure.timezone)}.</p>
+          <p><strong>Observed meal assumptions:</strong> {Object.entries(data.exposure.wake_reference.assumptions.observed_meals).length === 0 ? "No meals were recorded, so no meal bumps were added." : Object.entries(data.exposure.wake_reference.assumptions.observed_meals).map(([role, occurredAt]) => `${role} ${experiencedTime(occurredAt, data.exposure.timezone)}`).join("; ")}. Unobserved meals are never invented.</p>
+        </div> : <p role="status"><strong>Wake-anchored reference unavailable:</strong> {data.exposure.wake_reference.missing_inputs.map((input) => input === "wake_at" ? "final wake time" : "sleep onset time").join(" and ")} {data.exposure.wake_reference.missing_inputs.length === 1 ? "is" : "are"} missing from current Garmin sleep facts. The modeled dose curve remains available; HealthCurve does not invent the missing timing.</p>}
       </div>
     </details>
     <Stack className="healthcurve-controls" gap="sm" aria-label="HealthCurve chart controls"><Group className="healthcurve-focus" gap="xs" role="group" aria-label="Choose a focused HealthCurve comparison"><Text fw={750}>Quick focus:</Text>{FOCUS_PRESETS.map((preset) => <Button key={preset.label} type="button" size="sm" variant={isPresetVisible(visible, preset.keys) ? "filled" : "outline"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</Button>)}</Group>
       <Paper component="fieldset" className="curve-toggles" withBorder radius="md" p="md"><legend>Show or hide chart series</legend><SimpleGrid cols={{ base: 1, xs: 2, md: 3 }}>{Object.entries({
-        exposure: isPhysiologicalCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
+        exposure: isWakeFreeCurve(data.exposure) ? "Wake-anchored free-cortisol model and actual doses" : isAbsoluteCortisolCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
         stress: "Garmin stress",
         heart_rate: "Heart rate",
         hrv: "HRV",
@@ -824,10 +901,10 @@ export function DailyHealthCurve({
         temperature: "Temperature",
         symptoms: "Symptoms",
         episodes: "Stress episodes",
-      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}<Checkbox label="Illustrative circadian context band" description="Population-shape context only; not a personal target or adequacy range." checked={showContextBand} onChange={(event) => { setShowContextBand(event.target.checked); }} /></SimpleGrid>
+      } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}<Checkbox label="Illustrative circadian context band" description="Population-shape context only; not a personal target or adequacy range." checked={showContextBand} onChange={(event) => { setShowContextBand(event.target.checked); }} />{isWakeFreeCurve(data.exposure) ? <Checkbox label="Wake-anchored healthy P5–P95 reference" description="Healthy-adult context regenerated from observed wake, sleep, and meals; not a personal target." checked={showWakeReferenceBand} disabled={!data.exposure.wake_reference.available} onChange={(event) => { setShowWakeReferenceBand(event.target.checked); }} /> : null}</SimpleGrid>
       {stepsUnavailable ? <Text role="status" c="dimmed">Hourly Steps are unavailable for this day because Garmin supplied no observed intraday step samples. The untimed daily step total is not drawn at an invented time.</Text> : null}
     </Paper></Stack>
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
       <button type="button" className="button-secondary" aria-label="Zoom chart out" disabled={chartZoom === 1} onClick={() => { setChartZoom(chartZoom === 2 ? 1.5 : 1); }}>−</button>
@@ -835,8 +912,12 @@ export function DailyHealthCurve({
       <button type="button" className="button-secondary" aria-label="Zoom chart in" disabled={chartZoom === 2} onClick={() => { setChartZoom(chartZoom === 1 ? 1.5 : 2); }}>+</button>
     </div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; relative display positions share one time axis and exact values follow.`}>
+      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.`}>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
+        {expectedPreWakeEnd === undefined || expectedPreWakeEnd <= start ? null : <g data-series="expected-pre-wake-gap">
+          <rect className="healthcurve-expected-pre-wake" x={LEFT} y={TOP} width={Math.max(0, Math.min(PLOT_WIDTH, (expectedPreWakeEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH))} height={PLOT_HEIGHT} />
+          <text className="healthcurve-expected-pre-wake-label" x={LEFT + 8} y={TOP + 47}>Expected oral pre-wake gap</text>
+        </g>}
         {sleepRecords.length === 0 ? null : <g data-series="sleep">{sleepRecords.map((record) => {
           const sessionStart = Date.parse(record.time.occurred_at);
           const sessionEnd = Date.parse(record.ended_at ?? record.time.occurred_at);
@@ -860,7 +941,10 @@ export function DailyHealthCurve({
         })}</g>}
         {[0, 25, 50, 75, 100].map((relative) => {
           const y = TOP + PLOT_HEIGHT - relative / 100 * PLOT_HEIGHT;
-          return <g key={relative}><line className="healthcurve-relative-grid" x1={LEFT} y1={y} x2={LEFT + PLOT_WIDTH} y2={y} /><text className="healthcurve-scale-label" x={LEFT - 10} y={y} dy="0.35em" textAnchor="end">{relative.toString()}</text></g>;
+          const cortisolLabel = wakeAbsoluteBounds === undefined
+            ? relative.toString()
+            : summaryNumber(wakeAbsoluteBounds.minimum + relative / 100 * (wakeAbsoluteBounds.maximum - wakeAbsoluteBounds.minimum), 1);
+          return <g key={relative}><line className="healthcurve-relative-grid" x1={LEFT} y1={y} x2={LEFT + PLOT_WIDTH} y2={y} /><text className="healthcurve-scale-label" x={LEFT - 10} y={y} dy="0.35em" textAnchor="end">{cortisolLabel}</text>{wakeAbsoluteBounds === undefined ? null : <text className="healthcurve-scale-label healthcurve-secondary-scale-label" x={LEFT + PLOT_WIDTH + 7} y={y} dy="0.35em" textAnchor="start">{relative.toString()}</text>}</g>;
         })}
         {ticks.map((tick) => {
           const x = LEFT + (tick.time - start) / Math.max(end - start, 1) * PLOT_WIDTH;
@@ -872,6 +956,10 @@ export function DailyHealthCurve({
         })}
         {!visibleContextBand || exposureLane === undefined || contextBandBounds === undefined ? null : <g data-series="context-band" aria-label={contextBand.safety_label}>
           <path className="healthcurve-context-band" d={contextBandPath(exposureLane, contextBand.samples, start, end, contextBandBounds)} />
+        </g>}
+        {!visibleWakeReferenceBand || exposureLane === undefined || wakeAbsoluteBounds === undefined ? null : <g data-series="wake-reference-band" aria-label={wakeReference.safety_label}>
+          <path className="healthcurve-wake-reference-band" d={wakeReferenceBandPath(exposureLane, wakeReference.samples, start, end, wakeAbsoluteBounds)} />
+          <path className="healthcurve-wake-reference-median" d={wakeReferenceMedianPath(exposureLane, wakeReference.samples, start, end, wakeAbsoluteBounds)} />
         </g>}
         {visible.episodes ? <g data-series="episodes">{data.episodes.map((episode) => {
             const x = Math.max(LEFT, Math.min(LEFT + PLOT_WIDTH, xPosition(episode.started_at, start, end)));
@@ -916,7 +1004,8 @@ export function DailyHealthCurve({
           onPointerCancel={() => { activeTouchPointer.current = null; }}
           onPointerMove={(event) => { if (event.pointerType === "touch" && activeTouchPointer.current !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); moveCursor(event.clientX, bounds.left, bounds.width); }} />
         {hoveringChart || touchSelected ? <foreignObject className={`healthcurve-hover-tooltip${touchSelected && !hoveringChart ? " healthcurve-touch-tooltip" : ""}`} x={tooltipX} y={TOP + 12} width={tooltipWidth} height={tooltipHeight}><div className="healthcurve-hover-tooltip-card" role="tooltip"><strong>{cursorLabel}</strong>{cursorRows.length === 0 ? <p>No exact observation at this time.</p> : <ul>{cursorRows.map((row) => <li key={`tooltip-${row.key}`}><strong>{row.series}:</strong> {row.value}</li>)}</ul>}</div></foreignObject> : null}
-        <text transform={`translate(18 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="healthcurve-axis-title">Relative display position (0–100)</text>
+        <text transform={`translate(18 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="healthcurve-axis-title">{wakeAbsoluteBounds === undefined ? "Relative display position (0–100)" : "Serum free cortisol (nmol/L)"}</text>
+        {wakeAbsoluteBounds === undefined ? null : <text transform={`translate(${String(WIDTH - 4)} ${String(TOP + PLOT_HEIGHT / 2)}) rotate(90)`} textAnchor="middle" className="healthcurve-axis-title healthcurve-secondary-axis-title">Other series relative (0–100)</text>}
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 8} textAnchor="middle" className="healthcurve-axis-title">Local time ({timezoneAbbreviation(data.exposure.timezone, data.exposure.day_start)})</text>
       </svg>
     </div>
@@ -948,6 +1037,15 @@ export function DailyHealthCurve({
         </div>
       </section>;
     })}</div>
+    {wakeReference === undefined ? null : <details className="metric-definition wake-reference-values">
+      <summary>Wake-anchored healthy reference values and assumptions</summary>
+      <p><strong>{wakeReference.safety_label}</strong> P5–P95 describes a wide healthy-adult population reference, not a personal target, alert, medication-adequacy test, or dosing guide.</p>
+      {!wakeReference.available || wakeReference.assumptions == null ? <p>No reference values were generated because {wakeReference.missing_inputs.map((input) => input === "wake_at" ? "final wake time" : "sleep onset time").join(" and ")} {wakeReference.missing_inputs.length === 1 ? "was" : "were"} unavailable. Missing timing remains missing.</p> : <>
+        <p>The band uses observed final wake at {experiencedTime(wakeReference.assumptions.wake_at, data.exposure.timezone)}, observed sleep onset at {experiencedTime(wakeReference.assumptions.sleep_onset_at, data.exposure.timezone)}, age {formatDecimal(wakeReference.assumptions.age_years)}, sex {wakeReference.assumptions.sex}, and {Object.keys(wakeReference.assumptions.observed_meals).length.toString()} observed meal {Object.keys(wakeReference.assumptions.observed_meals).length === 1 ? "time" : "times"}. Unrecorded meals are not invented.</p>
+        <p>The pre-wake difference between this healthy reference and oral-dose model is neutrally expected because immediate-release oral hydrocortisone cannot create a rise before the first dose is taken.</p>
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Wake-anchored cortisol reference exact values"><table><caption>Exact serum-free and derived serum-total reference percentiles supplied by {wakeReference.reference.revision}. Model and reference samples share identical timestamps.</caption><thead><tr><th scope="col">Local time</th><th scope="col">Free P5</th><th scope="col">Free median</th><th scope="col">Free P95</th><th scope="col">Total P5</th><th scope="col">Total median</th><th scope="col">Total P95</th></tr></thead><tbody>{wakeReference.samples.map((sample) => <tr key={sample.occurred_at}><td>{experiencedTime(sample.occurred_at, data.exposure.timezone)}</td><td>{formatMeasurement(sample.serum_free_p5_nmol_l, "nmol/L")}</td><td>{formatMeasurement(sample.serum_free_p50_nmol_l, "nmol/L")}</td><td>{formatMeasurement(sample.serum_free_p95_nmol_l, "nmol/L")}</td><td>{formatMeasurement(sample.serum_total_p5_nmol_l, "nmol/L")}</td><td>{formatMeasurement(sample.serum_total_p50_nmol_l, "nmol/L")}</td><td>{formatMeasurement(sample.serum_total_p95_nmol_l, "nmol/L")}</td></tr>)}</tbody></table></div>
+      </>}
+    </details>}
     <details className="metric-definition context-band-values">
       <summary>Illustrative circadian context band values</summary>
       <p><strong>{contextBand.safety_label}</strong> This population-shape context is not a personal target, measured cortisol range, medication-adequacy assessment, or dosing guide. Recorded stress and symptoms do not change this band.</p>
@@ -958,7 +1056,14 @@ export function DailyHealthCurve({
       <p>{data.exposure.definition}</p>
       <h3>Exact implemented exposure formula</h3>
       <p><strong>{exposureModelVersion(data.exposure)}</strong> supports only {data.exposure.model.supported_formulation} {data.exposure.model.supported_route} {data.exposure.model.supported_medication} recorded in {data.exposure.model.amount_unit}.</p>
-      {isPhysiologicalCurve(data.exposure) ? <>
+      {isWakeFreeCurve(data.exposure) ? <>
+        <pre><code>{`ka = ${formatDecimal(data.exposure.model.parameters.absorption_rate_per_hour)} per hour
+ke = ln(2) / ${formatDecimal(data.exposure.model.parameters.elimination_half_life_hours)} hours = ${formatDecimal(data.exposure.model.parameters.elimination_rate_per_hour)} per hour
+t_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.parameters.peak_time_hours)} hours
+free(t) = calibrated dose contribution × ka/(ka-ke) × (exp(-ke×t) - exp(-ka×t)) nmol/L
+display total(t) = one-site CBG saturation + linear albumin binding applied to free(t)`}</code></pre>
+        <p>This wake-anchored model runs and sums every oral dose in serum free cortisol. Its population defaults are user-editable in settings: half-life {formatDecimal(data.exposure.model.parameters.elimination_half_life_hours)} hours, peak time {formatDecimal(data.exposure.model.parameters.peak_time_hours)} hours, distribution volume {formatDecimal(data.exposure.model.parameters.distribution_volume_liters)} L, and oral bioavailability {formatDecimal(data.exposure.model.parameters.oral_bioavailability)}. Derived total cortisol is display-only and never drives the free-cortisol model or symptom correlation. Samples occur every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots.</p>
+      </> : isPhysiologicalCurve(data.exposure) ? <>
         <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = clearance / distribution volume = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nC(t) = (F × dose / V) × (1,000,000 / molecular weight) × ka/(ka-ke) × (exp(-ke×t) - exp(-ka×t)) nmol/L`}</code></pre>
         <p>This is a population-parameter plasma-free-cortisol scenario. It is not a measured value, personal target, medication-adequacy test, or dosing guide. Contributions from close or simultaneous doses are summed and sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots.</p>
       </> : <>
@@ -968,19 +1073,19 @@ export function DailyHealthCurve({
       <h3>Why these parameters are used</h3>
       <ul>{data.exposure.model.references.map((href) => { const detail = EXPOSURE_REFERENCE_DETAILS[href]; return <li key={href}><a href={href} target="_blank" rel="noreferrer">{detail?.label ?? "Model source"}</a>{detail === undefined ? null : ` — ${detail.use}.`}</li>; })}</ul>
       <h3>Model comparison</h3>
-      <div className="table-scroll" tabIndex={0} role="region" aria-label="HealthCurve exposure model comparison"><table><caption>The two selectable models remain separate and versioned.</caption><thead><tr><th scope="col">Model</th><th scope="col">Output</th><th scope="col">Unit</th><th scope="col">Interpretation boundary</th></tr></thead><tbody><tr><th scope="row">hc-exposure-v1</th><td>Normalized oral-dose exposure shape</td><td>REU</td><td>Relative visualization; not cortisol concentration</td></tr><tr><th scope="row">hc-physiology-v2</th><td>Population-parameter plasma-free-cortisol scenario</td><td>nmol/L</td><td>Modeled scenario; not measured or personalized cortisol</td></tr></tbody></table></div>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="HealthCurve exposure model comparison"><table><caption>The three selectable models remain separate and versioned.</caption><thead><tr><th scope="col">Model</th><th scope="col">Output</th><th scope="col">Unit</th><th scope="col">Interpretation boundary</th></tr></thead><tbody><tr><th scope="row">hc-exposure-v1</th><td>Normalized oral-dose exposure shape</td><td>REU</td><td>Relative visualization; not cortisol concentration</td></tr><tr><th scope="row">hc-physiology-v2</th><td>Population-parameter plasma-free-cortisol scenario</td><td>nmol/L</td><td>Modeled scenario; not measured or personalized cortisol</td></tr><tr><th scope="row">hc-wake-free-v3</th><td>Binding-aware serum-free-cortisol model with wake-anchored healthy reference</td><td>nmol/L free</td><td>Modeled and reference context; not measured cortisol, a personal target, or a dosing guide</td></tr></tbody></table></div>
       <>
         <h3>Illustrative circadian context band</h3>
         <pre><code>{`center(t) = shape-preserving PCHIP interpolation of versioned local-clock anchors\nlower(t) = 0.8 × center(t)\nupper(t) = 1.2 × center(t)`}</code></pre>
         <p>The band is an optional, default-hidden population-shape illustration in nmol/L. Its anchors come from the owner-supplied synthetic modeling scenario; published healthy-rhythm evidence informs only general shape and phase. It is not a demographic reference interval, normal range, personal target, or medication-adequacy range. Age, sex, height, and body weight do not create a clinically validated personal range, and recorded stress or symptoms do not modify it.</p>
       </>
       <h3>No “needed cortisol” formula is active</h3>
-      <p>{isPhysiologicalCurve(data.exposure) ? "HealthCurve calculates no Garmin-stress-derived or symptom-derived cortisol “needed” value." : "HealthCurve currently calculates no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value. The supplied exploratory scenario used Req(t) = Base(t) × S(t), but its population baseline anchors and stress multipliers are not part of hc-exposure-v1."} Garmin stress remains a provider score on its own scale. Symptoms retain their recorded 0–10 severity and use <code>severity × 10</code> only for display position. Missing values remain missing. None of these inputs changes the exposure curve or becomes a dose multiplier, coverage ratio, or physiological requirement.</p>
+      <p>{isAbsoluteCortisolCurve(data.exposure) ? "HealthCurve calculates no Garmin-stress-derived or symptom-derived cortisol “needed” value." : "HealthCurve currently calculates no baseline, Garmin-stress-derived, or symptom-derived cortisol “needed” value. The supplied exploratory scenario used Req(t) = Base(t) × S(t), but its population baseline anchors and stress multipliers are not part of hc-exposure-v1."} Garmin stress remains a provider score on its own scale. Symptoms retain their recorded 0–10 severity and use <code>severity × 10</code> only for display position. Missing values remain missing. None of these inputs changes the exposure curve or becomes a dose multiplier, coverage ratio, or physiological requirement.</p>
       <p>That boundary exists because the available evidence describes hydrocortisone pharmacokinetics and stress physiology but does not validate a minute-by-minute conversion from Garmin stress or subjective symptoms to an individual cortisol requirement:</p>
       <ul>{REQUIREMENT_EVIDENCE.map((source) => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>{` — ${source.use}.`}</li>)}</ul>
       <p><strong>Clinical boundary:</strong> Model output never overrides recorded symptoms, physician-approved plans, or physician-authored emergency instructions. Follow those instructions and seek appropriate clinical or emergency care regardless of how either model or the illustrative band appears.</p>
       <h3>Overlay display formula</h3>
-      <p>For every numeric lane without a fixed domain, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment. Body temperature uses a fixed {TEMPERATURE_DISPLAY_MIN.toString()}–{TEMPERATURE_DISPLAY_MAX.toString()} °F structural display domain and discrete points; conversion uses <code>°F = (°C × 9/5) + 32</code>. Values outside fixed domains are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and authoritative Timeline. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
+      <p>{isWakeFreeCurve(data.exposure) ? "The hc-wake-free-v3 modeled curve and wake-anchored P5–P95 reference share one stable absolute serum-free-cortisol axis in nmol/L; neither is independently normalized, and hiding the reference does not rescale the modeled curve. " : ""}For every other numeric lane without a fixed domain, let <code>display_min</code> and <code>display_max</code> be its observed selected-day minimum and maximum. The graph uses <code>display = 100 × (value - display_min) / max(display_max - display_min, 1)</code>. An empty lane uses bounds 0 and 1. If every point equals <code>v</code>, the fallback bounds are <code>min(0, v)</code> and <code>v + max(1, abs(v) × 0.1)</code>. Garmin stress uses fixed bounds 0 and 100. Symptoms use fixed bounds 0 and 10, equivalent to <code>severity × 10</code>. Respiration uses a fixed 0–{RESPIRATION_DISPLAY_MAX.toString()} breaths/min display domain and a centered 5-sample median within each observed contiguous segment. Body temperature uses a fixed {TEMPERATURE_DISPLAY_MIN.toString()}–{TEMPERATURE_DISPLAY_MAX.toString()} °F structural display domain and discrete points; conversion uses <code>°F = (°C × 9/5) + 32</code>. Values outside fixed domains are clipped on the graph only. This changes only screen position; exact native values remain in the tooltip and authoritative Timeline. Relative heights are not equivalent measurements and do not establish cortisol need, correlation, or causation.</p>
     </details>
   </Paper>;
 }

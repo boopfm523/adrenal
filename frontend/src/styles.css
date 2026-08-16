@@ -380,6 +380,7 @@ circle.chart-series { fill: white; }
 .healthcurve-key--sleep { border-color: #315b8a; border-top-style: solid; }
 .healthcurve-key--awake { border-color: #d17d23; border-top-style: solid; }
 .healthcurve-key--context-band { width: 1.6rem; height: 0.7rem; border: 1px solid #8b918e; background: rgb(139 145 142 / 28%); }
+.healthcurve-key--wake-reference { width: 1.6rem; height: 0.7rem; border: 1px solid #5f7ca8; background: rgb(116 154 209 / 28%); }
 .healthcurve-series { fill: none; stroke: #153cc1; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
 .healthcurve-series--stress { stroke: #a14c12; stroke-dasharray: 8 4; }
 .healthcurve-series--heart_rate { stroke: #a32038; }
@@ -393,6 +394,12 @@ circle.chart-series { fill: white; }
 .healthcurve-lane-unit, .healthcurve-lane-range { fill: #47554f; font-size: 11px; }
 .healthcurve-exposure-line { fill: none; stroke: #153cc1; stroke-width: 3.5; stroke-linejoin: round; }
 .healthcurve-context-band { fill: rgb(139 145 142 / 22%); stroke: #777e7a; stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.healthcurve-wake-reference-band { fill: rgb(116 154 209 / 24%); stroke: #7192c4; stroke-width: 1; pointer-events: none; }
+.healthcurve-wake-reference-median { fill: none; stroke: #5579af; stroke-width: 1.4; stroke-dasharray: 5 3; pointer-events: none; }
+.healthcurve-expected-pre-wake { fill: rgb(139 145 142 / 11%); pointer-events: none; }
+.healthcurve-expected-pre-wake-label { fill: #65736d; font-size: 10px; font-weight: 700; pointer-events: none; }
+.healthcurve-secondary-scale-label { fill: #65736d; font-size: 10px; }
+.healthcurve-secondary-axis-title { fill: #65736d; font-size: 10px; }
 .healthcurve-dose-marker { stroke: #9f3e17; stroke-width: 2; stroke-dasharray: 5 3; }
 .healthcurve-dose-dot { fill: #9f3e17; }
 .healthcurve-sleep-band { fill: rgb(49 91 138 / 24%); stroke: #315b8a; stroke-width: 1; }
@@ -429,8 +436,8 @@ circle.chart-series { fill: white; }
 .model-methodology pre { overflow-x: auto; padding: 0.85rem; border: 1px solid #ccd4ce; border-radius: 0.4rem; background: #f4f7f5; white-space: pre-wrap; }
 .model-methodology h3 { margin-top: 1.2rem; }
 .model-methodology li + li { margin-top: 0.45rem; }
-.context-band-values { margin-block: 1rem; }
-.context-band-values .table-scroll { max-height: 24rem; }
+.context-band-values, .wake-reference-values { margin-block: 1rem; }
+.context-band-values .table-scroll, .wake-reference-values .table-scroll { max-height: 24rem; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
 .healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
 .healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }

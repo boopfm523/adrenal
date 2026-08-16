@@ -215,4 +215,18 @@ describe("Analytics page", () => {
     expect(screen.getByTestId("location-search")).toHaveTextContent("model=hc-physiology-v2");
     await waitFor(() => { expect(screen.getByRole("checkbox", { name: "Heart rate" })).toBeChecked(); });
   });
+
+  it("selects the wake-anchored model in the shareable URL", async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url, init?.method)); });
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
+    await screen.findByRole("heading", { name: "Your daily HealthCurve" });
+
+    fireEvent.change(screen.getByLabelText("Exposure model"), { target: { value: "hc-wake-free-v3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review this day" }));
+
+    await waitFor(() => { expect(urls.some((url) => url.includes("model=hc-wake-free-v3"))).toBe(true); });
+    expect(screen.getByTestId("location-search")).toHaveTextContent("model=hc-wake-free-v3");
+    expect(screen.getByLabelText("Exposure model")).toHaveValue("hc-wake-free-v3");
+  });
 });

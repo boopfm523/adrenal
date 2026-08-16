@@ -90,6 +90,83 @@ function physiologicalData(): DailyHealthCurveData {
   });
 }
 
+function wakeFreeData(referenceAvailable = true): DailyHealthCurveData {
+  const base = physiologicalData();
+  return data({
+    exposure: {
+      date: "2026-03-08",
+      timezone: "America/New_York",
+      day_start: "2026-03-08T05:00:00Z",
+      day_end: "2026-03-09T04:00:00Z",
+      elapsed_hours: "23",
+      series_kind: "modeled_serum_free_cortisol_scenario",
+      series_name: "Modeled serum-free-cortisol scenario",
+      series_unit: "nmol/L",
+      safety_label: "Modeled serum free cortisol—not a measurement, personal target, or dosing guide.",
+      definition: "Synthetic binding-aware wake-free scenario.",
+      model: {
+        id: "hc-wake-free-v3",
+        revision: "hc-wake-free-v3.0.0",
+        supported_medication: "hydrocortisone",
+        supported_formulation: "conventional immediate-release tablet",
+        supported_route: "oral",
+        amount_unit: "mg",
+        parameters: {
+          absorption_rate_per_hour: "1.4",
+          created_at: null,
+          derived_clearance_liters_per_hour: "235.78",
+          distribution_volume_liters: "474.38",
+          elimination_half_life_hours: "1.39",
+          elimination_rate_per_hour: "0.497",
+          oral_bioavailability: "0.96",
+          peak_time_hours: "1.147",
+          population_default: true,
+          revision_id: null,
+          revision_number: 1,
+          source_revision: "hc-wake-pk-population-default-v1",
+        },
+        calibration_revision: "hc-free-peak-calibration-v1",
+        binding_revision: "one-site-cbg-linear-albumin-v1",
+        free_peak_10_mg_nmol_l: "69.7",
+        reference_absorption_duration_hours: "2.0",
+        reference_clearance_liters_per_hour: "235.78",
+        contribution_horizon_hours: 48,
+        sample_interval_minutes: 5,
+        references: ["https://doi.org/10.1016/j.metabol.2017.02.005"],
+      },
+      source_revision_sha256: "b".repeat(64),
+      dose_markers: [],
+      samples: [
+        { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, modeled_free_cortisol_nmol_l: "0", regular_modeled_free_cortisol_nmol_l: "0", stress_modeled_free_cortisol_nmol_l: "0", derived_total_cortisol_nmol_l_display: "0" },
+        { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, modeled_free_cortisol_nmol_l: "40", regular_modeled_free_cortisol_nmol_l: "40", stress_modeled_free_cortisol_nmol_l: "0", derived_total_cortisol_nmol_l_display: "490" },
+        { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, modeled_free_cortisol_nmol_l: "1", regular_modeled_free_cortisol_nmol_l: "1", stress_modeled_free_cortisol_nmol_l: "0", derived_total_cortisol_nmol_l_display: "25" },
+      ],
+      supported_dose_count: 0,
+      excluded_dose_count: 0,
+      context_band: base.exposure.context_band,
+      wake_reference: {
+        available: referenceAvailable,
+        date: "2026-03-08",
+        timezone: "America/New_York",
+        day_start: referenceAvailable ? "2026-03-08T05:00:00Z" : null,
+        day_end: referenceAvailable ? "2026-03-09T04:00:00Z" : null,
+        elapsed_hours: referenceAvailable ? "23" : null,
+        series_kind: "wake_anchored_cortisol_reference",
+        series_unit: "nmol/L",
+        safety_label: "Healthy-adult wake-anchored reference context only—not a personal target.",
+        missing_inputs: referenceAvailable ? [] : ["wake_at", "sleep_onset_at"],
+        reference: { id: "hc-wake-reference-v1", revision: "hc-wake-reference-v1.0.0", binding_revision: "one-site-cbg-linear-albumin-v1", default_band: ["p5", "p95"], percentiles: ["p5", "p25", "p50", "p75", "p95"], sample_interval_minutes: 5, source_module: "cortisol_reference.py", references: [] },
+        assumptions: referenceAvailable ? { age_years: "47", sex: "male", wake_at: "2026-03-08T06:30:00Z", sleep_onset_at: "2026-03-09T03:00:00Z", observed_meals: { lunch: "2026-03-08T17:00:00Z" }, healthy_adult_population_context_only: true, pre_wake_gap_expected: true, unobserved_meals_invented: false, wake_amplitude_association_applied: false } : null,
+        samples: !referenceAvailable ? [] : [
+          { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, hour_local: "0", hours_since_wake: "-1.5", serum_free_p5_nmol_l: "1", serum_free_p25_nmol_l: "2", serum_free_p50_nmol_l: "3", serum_free_p75_nmol_l: "4", serum_free_p95_nmol_l: "5", serum_total_p5_nmol_l: "20", serum_total_p25_nmol_l: "30", serum_total_p50_nmol_l: "40", serum_total_p75_nmol_l: "50", serum_total_p95_nmol_l: "60", sigma_log: "0.45" },
+          { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, hour_local: "1", hours_since_wake: "-0.5", serum_free_p5_nmol_l: "20", serum_free_p25_nmol_l: "30", serum_free_p50_nmol_l: "40", serum_free_p75_nmol_l: "55", serum_free_p95_nmol_l: "80", serum_total_p5_nmol_l: "200", serum_total_p25_nmol_l: "300", serum_total_p50_nmol_l: "500", serum_total_p75_nmol_l: "610", serum_total_p95_nmol_l: "720", sigma_log: "0.45" },
+          { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, hour_local: "24", hours_since_wake: "21.5", serum_free_p5_nmol_l: "1", serum_free_p25_nmol_l: "1.5", serum_free_p50_nmol_l: "2", serum_free_p75_nmol_l: "3", serum_free_p95_nmol_l: "5", serum_total_p5_nmol_l: "20", serum_total_p25_nmol_l: "25", serum_total_p50_nmol_l: "30", serum_total_p75_nmol_l: "40", serum_total_p95_nmol_l: "60", sigma_log: "0.45" },
+        ],
+      },
+    },
+  });
+}
+
 function sample(index: number): GarminRecord {
   const occurredAt = new Date(Date.parse("2026-03-08T05:00:00Z") + index * 60_000).toISOString();
   return {
@@ -259,6 +336,45 @@ describe("Daily HealthCurve", () => {
     fireEvent.click(v1Toggle);
     expect(document.querySelector("[data-series='context-band'] .healthcurve-context-band")).toHaveAttribute("d", expect.stringContaining("Z"));
     expect(v1ExposurePath).toHaveAttribute("d", v1ExposureBeforeBand);
+  });
+
+  it("keeps the wake-free model and P5–P95 reference on one stable absolute axis", () => {
+    renderWithTheme(<DailyHealthCurve data={wakeFreeData()} />);
+
+    const referenceToggle = screen.getByRole("checkbox", { name: /Wake-anchored healthy P5–P95 reference/ });
+    expect(referenceToggle).toBeChecked();
+    expect(document.querySelector("[data-series='wake-reference-band'] .healthcurve-wake-reference-band")).toHaveAttribute("d", expect.stringContaining("Z"));
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Wake-anchored healthy reference · P5–P95 free nmol/L");
+    expect(screen.getByRole("img")).toHaveAccessibleName(/share an absolute serum-free-cortisol axis/i);
+    expect(screen.getByText("Serum free cortisol (nmol/L)")).toBeInTheDocument();
+    expect(screen.getByText("Other series relative (0–100)")).toBeInTheDocument();
+
+    const exposurePath = document.querySelector("[data-series='exposure'] .healthcurve-exposure-line");
+    const exposureBeforeHide = exposurePath?.getAttribute("d");
+    expect(hoverAt(60).tooltip).toHaveTextContent("Wake-anchored healthy reference: P5 20.0 · median 40.0 · P95 80.0 nmol/L free");
+    fireEvent.click(referenceToggle);
+    expect(document.querySelector("[data-series='wake-reference-band']")).toBeNull();
+    expect(exposurePath).toHaveAttribute("d", exposureBeforeHide);
+
+    const exactValues = screen.getByText("Wake-anchored healthy reference values and assumptions").parentElement;
+    if (exactValues === null) throw new Error("wake-reference exact-value disclosure missing");
+    expect(exactValues).toHaveTextContent("P5–P95 describes a wide healthy-adult population reference");
+    expect(within(exactValues).getByRole("region", { name: "Wake-anchored cortisol reference exact values" })).toHaveTextContent("720 nmol/L");
+
+    const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
+    if (methodology === null) throw new Error("model methodology disclosure missing");
+    expect(methodology).toHaveTextContent("hc-wake-free-v3.0.0");
+    expect(methodology).toHaveTextContent("The three selectable models remain separate and versioned");
+    expect(methodology).toHaveTextContent("neither is independently normalized");
+  });
+
+  it("keeps missing wake-reference inputs visible and never invents a band", () => {
+    renderWithTheme(<DailyHealthCurve data={wakeFreeData(false)} />);
+
+    expect(screen.getByRole("checkbox", { name: /Wake-anchored healthy P5–P95 reference/ })).toBeDisabled();
+    expect(document.querySelector("[data-series='wake-reference-band']")).toBeNull();
+    expect(screen.getByText(/Wake-anchored reference unavailable/).parentElement).toHaveTextContent("final wake time and sleep onset time are missing");
+    expect(screen.getByText("Wake-anchored healthy reference values and assumptions").parentElement).toHaveTextContent("Missing timing remains missing");
   });
 
   it("publishes versioned v2 formulas, primary sources, comparison, and clinical limits", () => {

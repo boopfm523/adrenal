@@ -9249,6 +9249,9 @@
       "WakeFreeCortisolCurveOut": {
         "additionalProperties": false,
         "properties": {
+          "context_band": {
+            "$ref": "#/components/schemas/CircadianContextBandOut"
+          },
           "date": {
             "format": "date",
             "title": "Date",
@@ -9326,6 +9329,9 @@
           "timezone": {
             "title": "Timezone",
             "type": "string"
+          },
+          "wake_reference": {
+            "$ref": "#/components/schemas/WakeReferenceOut"
           }
         },
         "required": [
@@ -9344,7 +9350,9 @@
           "dose_markers",
           "samples",
           "supported_dose_count",
-          "excluded_dose_count"
+          "excluded_dose_count",
+          "context_band",
+          "wake_reference"
         ],
         "title": "WakeFreeCortisolCurveOut",
         "type": "object"
@@ -9695,6 +9703,389 @@
           "reference_defaults"
         ],
         "title": "WakeFreePkSettingsOut",
+        "type": "object"
+      },
+      "WakeReferenceAssumptionsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "age_years": {
+            "title": "Age Years",
+            "type": "string"
+          },
+          "healthy_adult_population_context_only": {
+            "const": true,
+            "title": "Healthy Adult Population Context Only",
+            "type": "boolean"
+          },
+          "observed_meals": {
+            "additionalProperties": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Observed Meals",
+            "type": "object"
+          },
+          "pre_wake_gap_expected": {
+            "const": true,
+            "title": "Pre Wake Gap Expected",
+            "type": "boolean"
+          },
+          "sex": {
+            "title": "Sex",
+            "type": "string"
+          },
+          "sleep_onset_at": {
+            "format": "date-time",
+            "title": "Sleep Onset At",
+            "type": "string"
+          },
+          "unobserved_meals_invented": {
+            "const": false,
+            "title": "Unobserved Meals Invented",
+            "type": "boolean"
+          },
+          "wake_amplitude_association_applied": {
+            "title": "Wake Amplitude Association Applied",
+            "type": "boolean"
+          },
+          "wake_at": {
+            "format": "date-time",
+            "title": "Wake At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "healthy_adult_population_context_only",
+          "wake_at",
+          "sleep_onset_at",
+          "age_years",
+          "sex",
+          "wake_amplitude_association_applied",
+          "observed_meals",
+          "unobserved_meals_invented",
+          "pre_wake_gap_expected"
+        ],
+        "title": "WakeReferenceAssumptionsOut",
+        "type": "object"
+      },
+      "WakeReferenceCitationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "citation"
+        ],
+        "title": "WakeReferenceCitationOut",
+        "type": "object"
+      },
+      "WakeReferenceIdentityOut": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_revision": {
+            "const": "one-site-cbg-linear-albumin-v1",
+            "title": "Binding Revision",
+            "type": "string"
+          },
+          "default_band": {
+            "items": {
+              "enum": [
+                "p5",
+                "p95"
+              ],
+              "type": "string"
+            },
+            "title": "Default Band",
+            "type": "array"
+          },
+          "id": {
+            "const": "hc-wake-reference-v1",
+            "title": "Id",
+            "type": "string"
+          },
+          "percentiles": {
+            "items": {
+              "enum": [
+                "p5",
+                "p25",
+                "p50",
+                "p75",
+                "p95"
+              ],
+              "type": "string"
+            },
+            "title": "Percentiles",
+            "type": "array"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/WakeReferenceCitationOut"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "revision": {
+            "const": "hc-wake-reference-v1.0.0",
+            "title": "Revision",
+            "type": "string"
+          },
+          "sample_interval_minutes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Interval Minutes"
+          },
+          "source_module": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Module"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "binding_revision"
+        ],
+        "title": "WakeReferenceIdentityOut",
+        "type": "object"
+      },
+      "WakeReferenceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WakeReferenceAssumptionsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "day_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day End"
+          },
+          "day_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Start"
+          },
+          "elapsed_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Hours"
+          },
+          "missing_inputs": {
+            "items": {
+              "enum": [
+                "wake_at",
+                "sleep_onset_at"
+              ],
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/WakeReferenceIdentityOut"
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/WakeReferenceSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "series_kind": {
+            "const": "wake_anchored_cortisol_reference",
+            "title": "Series Kind",
+            "type": "string"
+          },
+          "series_unit": {
+            "const": "nmol/L",
+            "title": "Series Unit",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "date",
+          "timezone",
+          "series_kind",
+          "series_unit",
+          "reference",
+          "missing_inputs",
+          "safety_label",
+          "samples"
+        ],
+        "title": "WakeReferenceOut",
+        "type": "object"
+      },
+      "WakeReferenceSampleOut": {
+        "additionalProperties": false,
+        "properties": {
+          "hour_local": {
+            "title": "Hour Local",
+            "type": "string"
+          },
+          "hours_since_wake": {
+            "title": "Hours Since Wake",
+            "type": "string"
+          },
+          "local_time": {
+            "format": "date-time",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "serum_free_p25_nmol_l": {
+            "title": "Serum Free P25 Nmol L",
+            "type": "string"
+          },
+          "serum_free_p50_nmol_l": {
+            "title": "Serum Free P50 Nmol L",
+            "type": "string"
+          },
+          "serum_free_p5_nmol_l": {
+            "title": "Serum Free P5 Nmol L",
+            "type": "string"
+          },
+          "serum_free_p75_nmol_l": {
+            "title": "Serum Free P75 Nmol L",
+            "type": "string"
+          },
+          "serum_free_p95_nmol_l": {
+            "title": "Serum Free P95 Nmol L",
+            "type": "string"
+          },
+          "serum_total_p25_nmol_l": {
+            "title": "Serum Total P25 Nmol L",
+            "type": "string"
+          },
+          "serum_total_p50_nmol_l": {
+            "title": "Serum Total P50 Nmol L",
+            "type": "string"
+          },
+          "serum_total_p5_nmol_l": {
+            "title": "Serum Total P5 Nmol L",
+            "type": "string"
+          },
+          "serum_total_p75_nmol_l": {
+            "title": "Serum Total P75 Nmol L",
+            "type": "string"
+          },
+          "serum_total_p95_nmol_l": {
+            "title": "Serum Total P95 Nmol L",
+            "type": "string"
+          },
+          "sigma_log": {
+            "title": "Sigma Log",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "local_time",
+          "utc_offset_minutes",
+          "hour_local",
+          "hours_since_wake",
+          "sigma_log",
+          "serum_free_p5_nmol_l",
+          "serum_free_p25_nmol_l",
+          "serum_free_p50_nmol_l",
+          "serum_free_p75_nmol_l",
+          "serum_free_p95_nmol_l",
+          "serum_total_p5_nmol_l",
+          "serum_total_p25_nmol_l",
+          "serum_total_p50_nmol_l",
+          "serum_total_p75_nmol_l",
+          "serum_total_p95_nmol_l"
+        ],
+        "title": "WakeReferenceSampleOut",
         "type": "object"
       },
       "WeightCorrectionChanges": {

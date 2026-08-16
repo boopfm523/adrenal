@@ -22,6 +22,7 @@ from healthcurve.analytics import (
     physiology,
     service,
     wake_pharmacokinetics,
+    wake_reference_inputs,
 )
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.schemas import (
@@ -90,12 +91,29 @@ def steroid_exposure_curve(
         )
         return curve
     if model == "hc-wake-free-v3":
-        return wake_pharmacokinetics.curve_for_owner(
+        curve = wake_pharmacokinetics.curve_for_owner(
             session,
             owner_id=owner.id,
             day=day,
             timezone=zone_name,
         )
+        sample_instants = [
+            cast(datetime, sample["occurred_at"])
+            for sample in cast(list[dict[str, object]], curve["samples"])
+        ]
+        curve["context_band"] = circadian_context.build_band(
+            day=day,
+            timezone=zone_name,
+            sample_instants=sample_instants,
+        )
+        curve["wake_reference"] = wake_reference_inputs.reference_from_observed_facts_for_owner(
+            session,
+            owner_id=owner.id,
+            day=day,
+            timezone=zone_name,
+            sample_instants=sample_instants,
+        )
+        return curve
     curve = physiology.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
     sample_instants = [
         cast(datetime, sample["occurred_at"])

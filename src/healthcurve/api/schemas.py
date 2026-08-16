@@ -1285,6 +1285,96 @@ class WakeFreeCortisolSampleOut(ApiModel):
         return str(value)
 
 
+class WakeReferenceCitationOut(ApiModel):
+    citation: str
+    pmid: str | None = None
+    url: str | None = None
+
+
+class WakeReferenceIdentityOut(ApiModel):
+    id: Literal["hc-wake-reference-v1"]
+    revision: Literal["hc-wake-reference-v1.0.0"]
+    binding_revision: Literal["one-site-cbg-linear-albumin-v1"]
+    source_module: str | None = None
+    sample_interval_minutes: int | None = Field(default=None, gt=0)
+    percentiles: list[Literal["p5", "p25", "p50", "p75", "p95"]] = Field(default_factory=list)
+    default_band: list[Literal["p5", "p95"]] = Field(default_factory=list)
+    references: list[WakeReferenceCitationOut] = Field(default_factory=list)
+
+
+class WakeReferenceAssumptionsOut(ApiModel):
+    healthy_adult_population_context_only: Literal[True]
+    wake_at: datetime
+    sleep_onset_at: datetime
+    age_years: Decimal
+    sex: str
+    wake_amplitude_association_applied: bool
+    observed_meals: dict[str, datetime]
+    unobserved_meals_invented: Literal[False]
+    pre_wake_gap_expected: Literal[True]
+
+    @field_serializer("age_years")
+    def _age(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeReferenceSampleOut(ApiModel):
+    occurred_at: datetime
+    local_time: datetime
+    utc_offset_minutes: int
+    hour_local: Decimal
+    hours_since_wake: Decimal
+    sigma_log: Decimal
+    serum_free_p5_nmol_l: Decimal = Field(ge=0)
+    serum_free_p25_nmol_l: Decimal = Field(ge=0)
+    serum_free_p50_nmol_l: Decimal = Field(ge=0)
+    serum_free_p75_nmol_l: Decimal = Field(ge=0)
+    serum_free_p95_nmol_l: Decimal = Field(ge=0)
+    serum_total_p5_nmol_l: Decimal = Field(ge=0)
+    serum_total_p25_nmol_l: Decimal = Field(ge=0)
+    serum_total_p50_nmol_l: Decimal = Field(ge=0)
+    serum_total_p75_nmol_l: Decimal = Field(ge=0)
+    serum_total_p95_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "hour_local",
+        "hours_since_wake",
+        "sigma_log",
+        "serum_free_p5_nmol_l",
+        "serum_free_p25_nmol_l",
+        "serum_free_p50_nmol_l",
+        "serum_free_p75_nmol_l",
+        "serum_free_p95_nmol_l",
+        "serum_total_p5_nmol_l",
+        "serum_total_p25_nmol_l",
+        "serum_total_p50_nmol_l",
+        "serum_total_p75_nmol_l",
+        "serum_total_p95_nmol_l",
+    )
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeReferenceOut(ApiModel):
+    available: bool
+    date: date
+    timezone: str
+    day_start: datetime | None = None
+    day_end: datetime | None = None
+    elapsed_hours: Decimal | None = None
+    series_kind: Literal["wake_anchored_cortisol_reference"]
+    series_unit: Literal["nmol/L"]
+    reference: WakeReferenceIdentityOut
+    assumptions: WakeReferenceAssumptionsOut | None = None
+    missing_inputs: list[Literal["wake_at", "sleep_onset_at"]]
+    safety_label: str
+    samples: list[WakeReferenceSampleOut]
+
+    @field_serializer("elapsed_hours")
+    def _elapsed(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
 class WakeFreeCortisolCurveOut(ApiModel):
     date: date
     timezone: str
@@ -1302,6 +1392,8 @@ class WakeFreeCortisolCurveOut(ApiModel):
     samples: list[WakeFreeCortisolSampleOut]
     supported_dose_count: int = Field(ge=0)
     excluded_dose_count: int = Field(ge=0)
+    context_band: CircadianContextBandOut
+    wake_reference: WakeReferenceOut
 
     @field_serializer("elapsed_hours")
     def _elapsed(self, value: Decimal) -> str:
