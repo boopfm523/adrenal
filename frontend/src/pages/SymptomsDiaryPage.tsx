@@ -1,9 +1,25 @@
-import { Alert, Button, Checkbox, Group, Paper, SimpleGrid, Text, TextInput, Textarea } from "@mantine/core";
+import { Alert, Button, Checkbox, Group, NativeSelect, Paper, SimpleGrid, Text, TextInput, Textarea } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { correctSymptom, createSymptom, getDiaryEntries, getLifeEvents, getSymptoms, type Symptom, type SymptomCorrectionInput, type SymptomInput, type SymptomsDiaryFilters } from "../api/client";
+import {
+  correctMeal,
+  correctSymptom,
+  createMeal,
+  createSymptom,
+  getDiaryEntries,
+  getLifeEvents,
+  getMeals,
+  getSymptoms,
+  type Meal,
+  type MealCorrectionInput,
+  type MealInput,
+  type Symptom,
+  type SymptomCorrectionInput,
+  type SymptomInput,
+  type SymptomsDiaryFilters,
+} from "../api/client";
 import { useAuth } from "../auth/context";
 import { HistoryDateShortcuts } from "../components/HistoryDateShortcuts";
 import { Page } from "../components/Page";
@@ -20,7 +36,7 @@ function nowLocal(): string {
 
 function words(value: string): string { return value.replaceAll("_", " "); }
 
-interface ViewState extends SymptomsDiaryFilters, HistoryDateRange { symptomPage: number; diaryPage: number; lifePage: number }
+interface ViewState extends SymptomsDiaryFilters, HistoryDateRange { symptomPage: number; mealPage: number; diaryPage: number; lifePage: number }
 
 function pageNumber(params: URLSearchParams, name: string): number {
   const value = params.get(name) ?? "";
@@ -35,6 +51,7 @@ function stateFromSearch(search: string, profileTimezone: string): ViewState {
     timezone,
     includeSensitive: params.get("include_sensitive") === "true",
     symptomPage: pageNumber(params, "symptom_page"),
+    mealPage: pageNumber(params, "meal_page"),
     diaryPage: pageNumber(params, "diary_page"),
     lifePage: pageNumber(params, "life_page"),
   };
@@ -45,6 +62,7 @@ function searchFromState(state: ViewState): URLSearchParams {
   setHistoryDateRange(params, state);
   if (state.includeSensitive) params.set("include_sensitive", "true");
   if (state.symptomPage > 1) params.set("symptom_page", state.symptomPage.toString());
+  if (state.mealPage > 1) params.set("meal_page", state.mealPage.toString());
   if (state.diaryPage > 1) params.set("diary_page", state.diaryPage.toString());
   if (state.lifePage > 1) params.set("life_page", state.lifePage.toString());
   return params;
@@ -142,6 +160,99 @@ function SymptomCreateForm({ timezone }: { timezone: string }): React.JSX.Elemen
   </Paper></form>;
 }
 
+const mealSizeOptions = [
+  { value: "", label: "Not recorded" },
+  { value: "xs", label: "XS" },
+  { value: "s", label: "S" },
+  { value: "m", label: "M" },
+  { value: "l", label: "L" },
+  { value: "xl", label: "XL" },
+  { value: "xxl", label: "XXL" },
+];
+
+function MealCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const initial = { size: "", localTime: nowLocal(), timezone, notes: "" };
+  const [form, setForm] = useState(initial);
+  const mutation = useMutation({
+    mutationFn: (payload: MealInput) => createMeal(payload),
+    onSuccess: async () => {
+      setForm({ ...initial, localTime: nowLocal() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["meals"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-healthcurve"] }),
+      ]);
+    },
+  });
+
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const notes = form.notes.trim();
+    mutation.mutate({
+      size: form.size === "" ? null : form.size as NonNullable<MealInput["size"]>,
+      time: { local_time: form.localTime, timezone: form.timezone, fold: null },
+      notes: notes === "" ? null : notes,
+    });
+  }
+
+  return <form aria-label="Record a meal" onSubmit={submit}><Paper className="correction-form" withBorder p="lg" radius="lg">
+    <Alert className="form-wide" color="blue"><strong>Record only what happened.</strong> Meal timing adds context to the healthy reference band; it does not change your modeled medication curve.</Alert>
+    <NativeSelect label="Meal size" description="Optional T-shirt size. Leave unknown if you did not estimate it." data={mealSizeOptions} value={form.size} onChange={(event) => { setForm({ ...form, size: event.target.value }); }} />
+    <TextInput label="Experienced local time" required aria-label="Meal experienced local time" type="datetime-local" step="1" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} description="When you ate. This exact observed time—not an invented default meal time—feeds the reference band." />
+    <TextInput label="Meal IANA timezone" required aria-label="Meal IANA timezone" value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} description="Usually leave your profile timezone." />
+    <Textarea className="form-wide" label="Notes" maxLength={2000} value={form.notes} onChange={(event) => { setForm({ ...form, notes: event.target.value }); }} description="Optional context; nutrition details are not required." />
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">The meal was not saved. Check the local time and IANA timezone; your entries remain in the form.</Alert> : null}
+    {mutation.isSuccess ? <Alert className="form-wide" color="green" role="status">Meal recorded.</Alert> : null}
+    <Button loading={mutation.isPending} type="submit">Record meal</Button>
+  </Paper></form>;
+}
+
+function MealCorrectionForm({ meal, close }: { meal: Meal; close: () => void }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [size, setSize] = useState(meal.size ?? "");
+  const [local, setLocal] = useState(meal.time.local_time.slice(0, 19));
+  const [timezone, setTimezone] = useState(meal.time.timezone);
+  const [notes, setNotes] = useState(meal.notes ?? "");
+  const [reason, setReason] = useState("");
+  const [validation, setValidation] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: (payload: MealCorrectionInput) => correctMeal(meal.id, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["meals"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-healthcurve"] }),
+      ]);
+      close();
+    },
+  });
+
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const changes: MealCorrectionInput["changes"] = {};
+    if (size !== (meal.size ?? "")) changes.size = size === "" ? null : size as NonNullable<MealInput["size"]>;
+    if (local !== meal.time.local_time.slice(0, 19) || timezone !== meal.time.timezone) changes.time = { local_time: local, timezone, fold: null };
+    if (notes !== (meal.notes ?? "")) changes.notes = notes === "" ? null : notes;
+    if (reason.trim() === "") { setValidation("Explain why this meal fact needs correction."); return; }
+    if (Object.keys(changes).length === 0) { setValidation("Change at least one recorded field."); return; }
+    setValidation(null);
+    mutation.mutate({ reason: reason.trim(), changes });
+  }
+
+  return <form aria-label="Correct meal" onSubmit={submit}><Paper className="correction-form" p="md" radius="md">
+    <Alert className="form-wide" color="orange">This creates a corrected fact and preserves the original.</Alert>
+    <NativeSelect label="Meal size" data={mealSizeOptions} value={size} onChange={(event) => { setSize(event.target.value); }} />
+    <TextInput label="Experienced local time" required aria-label="Corrected meal experienced local time" type="datetime-local" step="1" value={local} onChange={(event) => { setLocal(event.target.value); }} />
+    <TextInput label="Timezone" required value={timezone} onChange={(event) => { setTimezone(event.target.value); }} />
+    <Textarea className="form-wide" label="Notes" value={notes} onChange={(event) => { setNotes(event.target.value); }} />
+    <TextInput className="form-wide" label="Correction reason" required value={reason} onChange={(event) => { setReason(event.target.value); }} />
+    {validation === null ? null : <Alert className="form-wide" color="red" role="alert">{validation}</Alert>}
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">The correction was not saved. Check the values and timezone.</Alert> : null}
+    <Group className="form-wide"><Button type="submit" loading={mutation.isPending}>Save corrected fact</Button><Button type="button" variant="outline" onClick={close}>Cancel</Button></Group>
+  </Paper></form>;
+}
+
 export function SymptomsDiaryPage(): React.JSX.Element {
   const { session } = useAuth();
   const profileTimezone = session?.user.defaultTimezone ?? "UTC";
@@ -157,22 +268,26 @@ export function SymptomsDiaryPage(): React.JSX.Element {
   const [validation, setValidation] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const symptoms = useQuery({ queryKey: ["symptoms", filters, view.symptomPage], queryFn: () => getSymptoms(filters, view.symptomPage), enabled: !invalidRange });
+  const meals = useQuery({ queryKey: ["meals", filters, view.mealPage], queryFn: () => getMeals(filters, view.mealPage), enabled: !invalidRange });
   const diary = useQuery({ queryKey: ["diary", filters, view.diaryPage], queryFn: () => getDiaryEntries(filters, view.diaryPage), enabled: !invalidRange });
   const life = useQuery({ queryKey: ["life-events", filters, view.lifePage], queryFn: () => getLifeEvents(filters, view.lifePage), enabled: !invalidRange });
   const currentSymptoms = symptoms.data?.items ?? [];
   const symptomById = new Map([...currentSymptoms, ...(symptoms.data?.revisions ?? [])].map((item) => [item.id, item]));
+  const currentMeals = meals.data?.items ?? [];
+  const mealById = new Map([...currentMeals, ...(meals.data?.revisions ?? [])].map((item) => [item.id, item]));
 
   function historyFor(item: Symptom): Symptom[] { const history: Symptom[] = []; let id = item.provenance.supersedes_id ?? null; while (id !== null) { const prior = symptomById.get(id); if (prior === undefined) break; history.push(prior); id = prior.provenance.supersedes_id ?? null; } return history; }
-  const loading = symptoms.isFetching || diary.isFetching || life.isFetching;
-  const failed = symptoms.isError || diary.isError || life.isError;
+  function mealHistoryFor(item: Meal): Meal[] { const history: Meal[] = []; let id = item.provenance.supersedes_id ?? null; while (id !== null) { const prior = mealById.get(id); if (prior === undefined) break; history.push(prior); id = prior.provenance.supersedes_id ?? null; } return history; }
+  const loading = symptoms.isFetching || meals.isFetching || diary.isFetching || life.isFetching;
+  const failed = symptoms.isError || meals.isError || diary.isError || life.isError;
 
   return <Page title="Symptoms & diary" description="Subjective symptoms, diary notes, and life events are recorded facts—not diagnoses or causal claims.">
-    <Paper component="form" className="filter-panel" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditing(null); setSearchParams(searchFromState({ ...draft, symptomPage: 1, diaryPage: 1, lifePage: 1 })); }}>
+    <Paper component="form" className="filter-panel" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditing(null); setSearchParams(searchFromState({ ...draft, symptomPage: 1, mealPage: 1, diaryPage: 1, lifePage: 1 })); }}>
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value, allHistory: false }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value, allHistory: false }); }} /><TextInput label="IANA timezone" required aria-label="IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>
       <Checkbox mt="md" label="Reveal sensitive diary and life-event entries" checked={draft.includeSensitive} onChange={(event) => { setDraft({ ...draft, includeSensitive: event.target.checked }); }} />
       {validation === null && !invalidRange ? null : <Alert color="red" mt="md" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}
-      <div className="filter-footer-row"><Group><Button type="submit">Apply filters</Button><Button variant="outline" type="button" onClick={() => { const allHistory = { dateFrom: "", dateTo: "", timezone: profileTimezone, includeSensitive: false, allHistory: true, symptomPage: 1, diaryPage: 1, lifePage: 1 }; setValidation(null); setEditing(null); setDraftState({ search: "", filters: allHistory }); setSearchParams(searchFromState(allHistory)); }}>Clear filters</Button></Group>
-      <HistoryDateShortcuts dateFrom={draft.dateFrom} dateTo={draft.dateTo} timezone={draft.timezone} label="Quick symptom and diary dates" onSelect={(day) => { const selected = { ...view, ...draft, dateFrom: day, dateTo: day, allHistory: false, symptomPage: 1, diaryPage: 1, lifePage: 1 }; setValidation(null); setEditing(null); setDraftState({ search: "", filters: selected }); setSearchParams(searchFromState(selected)); }} /></div>
+      <div className="filter-footer-row"><Group><Button type="submit">Apply filters</Button><Button variant="outline" type="button" onClick={() => { const allHistory = { dateFrom: "", dateTo: "", timezone: profileTimezone, includeSensitive: false, allHistory: true, symptomPage: 1, mealPage: 1, diaryPage: 1, lifePage: 1 }; setValidation(null); setEditing(null); setDraftState({ search: "", filters: allHistory }); setSearchParams(searchFromState(allHistory)); }}>Clear filters</Button></Group>
+      <HistoryDateShortcuts dateFrom={draft.dateFrom} dateTo={draft.dateTo} timezone={draft.timezone} label="Quick symptom, meal, and diary dates" onSelect={(day) => { const selected = { ...view, ...draft, dateFrom: day, dateTo: day, allHistory: false, symptomPage: 1, mealPage: 1, diaryPage: 1, lifePage: 1 }; setValidation(null); setEditing(null); setDraftState({ search: "", filters: selected }); setSearchParams(searchFromState(selected)); }} /></div>
     </Paper>
     {view.allHistory ? <Alert color="blue" mt="md"><strong>Showing all history.</strong> Choose dates or a quick date to bound these records again.</Alert> : null}
     <Text c="dimmed" my="md">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. Sensitive text is hidden by default and appears only after applying the reveal control.</Text>
@@ -186,6 +301,15 @@ export function SymptomsDiaryPage(): React.JSX.Element {
       {symptoms.data?.page.total_items === 0 ? <p>No symptoms recorded.</p> : null}
       {currentSymptoms.length === 0 ? null : <div className="table-scroll symptom-table-region" tabIndex={0} role="region" aria-label="Symptom records table"><table className="symptom-records-table"><caption>Current symptom facts, latest experienced time first, with correction history.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Symptom</th><th scope="col">Severity and area</th><th scope="col">Source and status</th><th scope="col">Notes and actions</th></tr></thead><tbody>{currentSymptoms.flatMap((item) => { const history = historyFor(item); const row = <tr key={item.id}><td data-label="Experienced time" className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th data-label="Symptom" scope="row">{item.name}</th><td data-label="Severity and area">{item.severity === null ? "Not recorded" : `${item.severity.toString()}/10`}{item.body_area === null ? null : <span>{item.body_area}</span>}</td><td data-label="Source and status" className="symptom-records-table__provenance"><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span><span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span></td><td data-label="Notes and actions" className="symptom-records-table__actions"><span>{item.notes ?? <span className="missing-value">None</span>}</span><Button mt="sm" type="button" onClick={() => { setEditing(editing === item.id ? null : item.id); }}>{editing === item.id ? "Close correction form" : "Correct recorded symptom"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><p>{prior.name}{prior.severity === null ? "" : ` · severity ${prior.severity.toString()}/10`} · {localTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p>{prior.body_area === null ? null : <p>Body area: {prior.body_area}</p>}{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</article>)}</details>}</td></tr>; return editing === item.id ? [row, <tr className="correction-table-row" key={`${item.id}-correction`}><td colSpan={5}><SymptomCorrectionForm symptom={item} close={() => { setEditing(null); }} /></td></tr>] : [row]; })}</tbody></table></div>}
       {symptoms.data === undefined ? null : <PaginationControls label="Symptom records" metadata={symptoms.data.page} onPageChange={(symptomPage) => { setEditing(null); setSearchParams(searchFromState({ ...view, symptomPage })); }} />}
+    </section>
+
+    <section aria-labelledby="meals-heading"><h2 id="meals-heading">Meals</h2>
+      <h3>Record a meal</h3>
+      <MealCreateForm timezone={profileTimezone} />
+      <h3>Recorded meals</h3>
+      {meals.data?.page.total_items === 0 ? <p>No meals recorded.</p> : null}
+      {currentMeals.length === 0 ? null : <div className="table-scroll symptom-table-region" tabIndex={0} role="region" aria-label="Meal records table"><table className="symptom-records-table"><caption>Observed meal facts. Size is optional context and does not scale the reference pulse.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Meal size</th><th scope="col">Source and status</th><th scope="col">Notes and actions</th></tr></thead><tbody>{currentMeals.flatMap((item) => { const history = mealHistoryFor(item); const row = <tr key={item.id}><td data-label="Experienced time" className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th data-label="Meal size" scope="row">{item.size === null ? <span className="missing-value">Not recorded</span> : item.size.toUpperCase()}</th><td data-label="Source and status"><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span><span>{item.provenance.is_correction ? `Corrected · ${item.provenance.correction_reason ?? "reason recorded"}` : "Original record"}</span></td><td data-label="Notes and actions" className="symptom-records-table__actions"><span>{item.notes ?? <span className="missing-value">None</span>}</span><Button mt="sm" type="button" onClick={() => { setEditing(editing === item.id ? null : item.id); }}>{editing === item.id ? "Close correction form" : "Correct recorded meal"}</Button>{history.length === 0 ? null : <details className="revision-history"><summary>Revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><p>{prior.size === null ? "Size not recorded" : `Size ${prior.size.toUpperCase()}`} · {localTime(prior.time.local_time)} · {timezoneAbbreviation(prior.time.timezone, prior.time.occurred_at)}</p>{prior.notes === null ? null : <p>Notes: {prior.notes}</p>}</article>)}</details>}</td></tr>; return editing === item.id ? [row, <tr className="correction-table-row" key={`${item.id}-correction`}><td colSpan={4}><MealCorrectionForm meal={item} close={() => { setEditing(null); }} /></td></tr>] : [row]; })}</tbody></table></div>}
+      {meals.data === undefined ? null : <PaginationControls label="Meal records" metadata={meals.data.page} onPageChange={(mealPage) => { setEditing(null); setSearchParams(searchFromState({ ...view, mealPage })); }} />}
     </section>
 
     <section aria-labelledby="diary-heading"><h2 id="diary-heading">Diary</h2>

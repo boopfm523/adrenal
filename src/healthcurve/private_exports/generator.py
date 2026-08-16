@@ -22,7 +22,7 @@ from healthcurve.ai.models import AIAnalysis, ExtractionDraft
 from healthcurve.chat.models import ChatConversation, ChatMessage, ChatToolExecution
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
-from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.events.models import DiaryEvent, LifeEvent, MealEvent, SymptomEvent
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -143,6 +143,7 @@ def _collections(
             ExportCollection("symptoms", _direct(SymptomEvent, owner_id)),
             ExportCollection("diary_events", diary),
             ExportCollection("life_events", life),
+            ExportCollection("meal_events", _direct(MealEvent, owner_id)),
             ExportCollection("stress_episodes", _direct(StressEpisode, owner_id)),
             ExportCollection("emergency_injections", _direct(EmergencyInjectionEvent, owner_id)),
             ExportCollection("context_events", _direct(ContextEvent, owner_id)),

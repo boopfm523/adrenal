@@ -26,7 +26,7 @@ from healthcurve.context.models import ContextEvent, LocationPrecision
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events import service as event_service
 from healthcurve.events.base import EventMixin
-from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.events.models import DiaryEvent, LifeEvent, MealEvent, SymptomEvent
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminMetricEvent,
@@ -248,6 +248,7 @@ def build_projection(
 
     doses = _current_events(session, DoseEvent, owner_id=owner_id, start=start, end=end)
     symptoms = _current_events(session, SymptomEvent, owner_id=owner_id, start=start, end=end)
+    meals = _current_events(session, MealEvent, owner_id=owner_id, start=start, end=end)
     injections = _current_events(
         session, EmergencyInjectionEvent, owner_id=owner_id, start=start, end=end
     )
@@ -323,6 +324,14 @@ def build_projection(
                 "notes": row.notes,
             }
             for row in symptoms
+        ],
+        "meals": [
+            {
+                **_event_time(row, zone),
+                "size": row.size,
+                "notes": row.notes,
+            }
+            for row in meals
         ],
         "stress_episodes": [
             {
@@ -490,6 +499,7 @@ def build_projection(
     availability = {
         "doses": len(doses),
         "symptoms": len(symptoms),
+        "meals": len(meals),
         "stress_episodes": len(episodes),
         "emergency_injections": len(injections),
         "blood_pressure": len(blood_pressure),
@@ -511,6 +521,7 @@ def build_projection(
         for rows in (
             doses,
             symptoms,
+            meals,
             injections,
             blood_pressure,
             weights,

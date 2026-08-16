@@ -30,6 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
+from healthcurve.events.models import MealSize
 from healthcurve.events.timekeeping import (
     AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
@@ -43,8 +44,8 @@ from healthcurve.vitals.models import MeasurementSetting, TemperatureUnit, Weigh
 
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
-PROMPT_VERSION: Final = "extract-v6"
-SCHEMA_VERSION: Final = "candidates-v4"
+PROMPT_VERSION: Final = "extract-v7"
+SCHEMA_VERSION: Final = "candidates-v5"
 
 #: Nothing plausible for adrenal replacement exceeds this. A larger number is a parse
 #: error until a human says otherwise.
@@ -146,6 +147,9 @@ You are a parser, not an adviser. You must:
 - A temperature candidate must put the stated decimal value in temperature_value and
   the explicit lowercase f or c in temperature_unit; leave amount and unit null. Do
   not infer a missing unit, diagnose fever, or comment on the reading.
+- A meal candidate records only that a meal occurred, its optional explicit T-shirt
+  size (xs/s/m/l/xl/xxl), and its time. If size is not stated, leave meal_size null;
+  never default it to medium. Do not infer nutrition or change a medication event.
 - Write amount as a decimal string only (for example "2.5"), with the unit only in
   the unit field.
 - Write local_time as an ISO 8601 local datetime without a UTC offset. A clock time
@@ -167,6 +171,7 @@ class CandidateType(StrEnum):
     BLOOD_PRESSURE = "blood_pressure"
     WEIGHT = "weight"
     TEMPERATURE = "temperature"
+    MEAL = "meal"
 
 
 class ExtractedCandidate(BaseModel):
@@ -190,6 +195,7 @@ class ExtractedCandidate(BaseModel):
     weight_unit: str | None = None
     temperature_value: str | None = Field(default=None, description="Decimal as a string")
     temperature_unit: str | None = None
+    meal_size: MealSize | None = None
     local_time: str | None = Field(default=None, description="ISO 8601 local, no offset")
     negated: bool = False
     hypothetical: bool = False
@@ -232,6 +238,10 @@ CANDIDATE_JSON_SCHEMA: Final[dict[str, Any]] = {
                         "type": ["string", "null"],
                         "enum": ["f", "c", None],
                     },
+                    "meal_size": {
+                        "type": ["string", "null"],
+                        "enum": [size.value for size in MealSize] + [None],
+                    },
                     "local_time": {
                         "type": ["string", "null"],
                         "maxLength": 32,
@@ -258,6 +268,7 @@ CANDIDATE_JSON_SCHEMA: Final[dict[str, Any]] = {
                     "weight_unit",
                     "temperature_value",
                     "temperature_unit",
+                    "meal_size",
                     "local_time",
                     "negated",
                     "hypothetical",
@@ -332,6 +343,7 @@ class ValidatedCandidate(BaseModel):
     weight_unit: WeightUnit | None = None
     temperature_value: Decimal | None = None
     temperature_unit: TemperatureUnit | None = None
+    meal_size: MealSize | None = None
     local_time: datetime | None = None
     timezone: str
     confidence: float = 0.0
@@ -630,6 +642,7 @@ def _validate_candidate(
         weight_unit=weight_unit,
         temperature_value=temperature_value,
         temperature_unit=temperature_unit,
+        meal_size=candidate.meal_size,
         local_time=local_time,
         timezone=timezone,
         confidence=candidate.confidence,

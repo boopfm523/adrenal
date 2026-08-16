@@ -28,6 +28,7 @@ from healthcurve.ai.extraction import (
     normalise_local_time,
     normalise_weight_unit,
 )
+from healthcurve.events.models import MealSize
 from healthcurve.medications.models import DoseCategory
 from healthcurve.vitals.models import MeasurementSetting, WeightUnit
 
@@ -49,6 +50,18 @@ def test_candidate_schema_requires_explicit_nulls_instead_of_silent_omissions() 
 
     candidate = CANDIDATE_JSON_SCHEMA["properties"]["candidates"]["items"]
     assert set(candidate["required"]) == set(candidate["properties"])
+
+
+def test_meal_schema_keeps_size_optional_and_bounded() -> None:
+    from healthcurve.ai.extraction import CANDIDATE_JSON_SCHEMA
+
+    candidate = CANDIDATE_JSON_SCHEMA["properties"]["candidates"]["items"]
+    assert candidate["properties"]["meal_size"]["enum"] == [
+        *[size.value for size in MealSize],
+        None,
+    ]
+    assert "leave meal_size null" in SYSTEM_PROMPT
+    assert "never default it to medium" in SYSTEM_PROMPT
 
 
 @pytest.mark.safety("SAFE-19")

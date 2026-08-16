@@ -5604,6 +5604,194 @@
         "title": "ManualLabResultIn",
         "type": "object"
       },
+      "MealCorrectionChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MealSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventTimeIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "MealCorrectionChanges",
+        "type": "object"
+      },
+      "MealCorrectionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/MealCorrectionChanges"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "changes"
+        ],
+        "title": "MealCorrectionIn",
+        "type": "object"
+      },
+      "MealIn": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MealSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time": {
+            "$ref": "#/components/schemas/EventTimeIn"
+          }
+        },
+        "required": [
+          "time"
+        ],
+        "title": "MealIn",
+        "type": "object"
+      },
+      "MealOut": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "const": "fact",
+            "default": "fact",
+            "title": "Category",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceOut"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MealSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time": {
+            "$ref": "#/components/schemas/EventTimeOut"
+          }
+        },
+        "required": [
+          "id",
+          "size",
+          "time",
+          "provenance",
+          "notes"
+        ],
+        "title": "MealOut",
+        "type": "object"
+      },
+      "MealPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MealOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/MealOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "revisions",
+          "page"
+        ],
+        "title": "MealPage",
+        "type": "object"
+      },
+      "MealSize": {
+        "description": "Optional owner-described meal size; never inferred when omitted.",
+        "enum": [
+          "xs",
+          "s",
+          "m",
+          "l",
+          "xl",
+          "xxl"
+        ],
+        "title": "MealSize",
+        "type": "string"
+      },
       "MeasurementSetting": {
         "description": "Where a person says a manual measurement was taken, not how it entered the app.",
         "enum": [
@@ -9058,6 +9246,457 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WakeFreeCortisolCurveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "day_end": {
+            "format": "date-time",
+            "title": "Day End",
+            "type": "string"
+          },
+          "day_start": {
+            "format": "date-time",
+            "title": "Day Start",
+            "type": "string"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "dose_markers": {
+            "items": {
+              "$ref": "#/components/schemas/SteroidExposureDoseMarker"
+            },
+            "title": "Dose Markers",
+            "type": "array"
+          },
+          "elapsed_hours": {
+            "title": "Elapsed Hours",
+            "type": "string"
+          },
+          "excluded_dose_count": {
+            "minimum": 0.0,
+            "title": "Excluded Dose Count",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/WakeFreeCortisolModelOut"
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/WakeFreeCortisolSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "series_kind": {
+            "const": "modeled_serum_free_cortisol_scenario",
+            "title": "Series Kind",
+            "type": "string"
+          },
+          "series_name": {
+            "const": "Modeled serum-free-cortisol scenario",
+            "title": "Series Name",
+            "type": "string"
+          },
+          "series_unit": {
+            "const": "nmol/L",
+            "title": "Series Unit",
+            "type": "string"
+          },
+          "source_revision_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision Sha256",
+            "type": "string"
+          },
+          "supported_dose_count": {
+            "minimum": 0.0,
+            "title": "Supported Dose Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "day_start",
+          "day_end",
+          "elapsed_hours",
+          "series_kind",
+          "series_name",
+          "series_unit",
+          "safety_label",
+          "definition",
+          "model",
+          "source_revision_sha256",
+          "dose_markers",
+          "samples",
+          "supported_dose_count",
+          "excluded_dose_count"
+        ],
+        "title": "WakeFreeCortisolCurveOut",
+        "type": "object"
+      },
+      "WakeFreeCortisolModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_unit": {
+            "$ref": "#/components/schemas/DoseUnit"
+          },
+          "binding_revision": {
+            "const": "one-site-cbg-linear-albumin-v1",
+            "title": "Binding Revision",
+            "type": "string"
+          },
+          "calibration_revision": {
+            "title": "Calibration Revision",
+            "type": "string"
+          },
+          "contribution_horizon_hours": {
+            "exclusiveMinimum": 0.0,
+            "title": "Contribution Horizon Hours",
+            "type": "integer"
+          },
+          "free_peak_10_mg_nmol_l": {
+            "title": "Free Peak 10 Mg Nmol L",
+            "type": "string"
+          },
+          "id": {
+            "const": "hc-wake-free-v3",
+            "title": "Id",
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/WakeFreePkParametersOut"
+          },
+          "reference_absorption_duration_hours": {
+            "title": "Reference Absorption Duration Hours",
+            "type": "string"
+          },
+          "reference_clearance_liters_per_hour": {
+            "title": "Reference Clearance Liters Per Hour",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "revision": {
+            "const": "hc-wake-free-v3.0.0",
+            "title": "Revision",
+            "type": "string"
+          },
+          "sample_interval_minutes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sample Interval Minutes",
+            "type": "integer"
+          },
+          "supported_formulation": {
+            "title": "Supported Formulation",
+            "type": "string"
+          },
+          "supported_medication": {
+            "title": "Supported Medication",
+            "type": "string"
+          },
+          "supported_route": {
+            "$ref": "#/components/schemas/Route"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "supported_medication",
+          "supported_formulation",
+          "supported_route",
+          "amount_unit",
+          "binding_revision",
+          "calibration_revision",
+          "parameters",
+          "reference_absorption_duration_hours",
+          "reference_clearance_liters_per_hour",
+          "free_peak_10_mg_nmol_l",
+          "contribution_horizon_hours",
+          "sample_interval_minutes",
+          "references"
+        ],
+        "title": "WakeFreeCortisolModelOut",
+        "type": "object"
+      },
+      "WakeFreeCortisolSampleOut": {
+        "additionalProperties": false,
+        "properties": {
+          "derived_total_cortisol_nmol_l_display": {
+            "title": "Derived Total Cortisol Nmol L Display",
+            "type": "string"
+          },
+          "local_time": {
+            "format": "date-time",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "modeled_free_cortisol_nmol_l": {
+            "title": "Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "regular_modeled_free_cortisol_nmol_l": {
+            "title": "Regular Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "stress_modeled_free_cortisol_nmol_l": {
+            "title": "Stress Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "local_time",
+          "utc_offset_minutes",
+          "modeled_free_cortisol_nmol_l",
+          "regular_modeled_free_cortisol_nmol_l",
+          "stress_modeled_free_cortisol_nmol_l",
+          "derived_total_cortisol_nmol_l_display"
+        ],
+        "title": "WakeFreeCortisolSampleOut",
+        "type": "object"
+      },
+      "WakeFreePkParametersIn": {
+        "additionalProperties": false,
+        "properties": {
+          "distribution_volume_liters": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Distribution Volume Liters"
+          },
+          "elimination_half_life_hours": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 0.25,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Elimination Half Life Hours"
+          },
+          "oral_bioavailability": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Oral Bioavailability"
+          },
+          "peak_time_hours": {
+            "anyOf": [
+              {
+                "maximum": 8.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Peak Time Hours"
+          }
+        },
+        "required": [
+          "elimination_half_life_hours",
+          "peak_time_hours",
+          "distribution_volume_liters",
+          "oral_bioavailability"
+        ],
+        "title": "WakeFreePkParametersIn",
+        "type": "object"
+      },
+      "WakeFreePkParametersOut": {
+        "additionalProperties": false,
+        "properties": {
+          "absorption_rate_per_hour": {
+            "title": "Absorption Rate Per Hour",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "derived_clearance_liters_per_hour": {
+            "title": "Derived Clearance Liters Per Hour",
+            "type": "string"
+          },
+          "distribution_volume_liters": {
+            "title": "Distribution Volume Liters",
+            "type": "string"
+          },
+          "elimination_half_life_hours": {
+            "title": "Elimination Half Life Hours",
+            "type": "string"
+          },
+          "elimination_rate_per_hour": {
+            "title": "Elimination Rate Per Hour",
+            "type": "string"
+          },
+          "oral_bioavailability": {
+            "title": "Oral Bioavailability",
+            "type": "string"
+          },
+          "peak_time_hours": {
+            "title": "Peak Time Hours",
+            "type": "string"
+          },
+          "population_default": {
+            "title": "Population Default",
+            "type": "boolean"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "revision_number": {
+            "minimum": 0.0,
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "source_revision": {
+            "title": "Source Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "revision_number",
+          "population_default",
+          "created_at",
+          "source_revision",
+          "elimination_half_life_hours",
+          "peak_time_hours",
+          "distribution_volume_liters",
+          "oral_bioavailability",
+          "absorption_rate_per_hour",
+          "elimination_rate_per_hour",
+          "derived_clearance_liters_per_hour"
+        ],
+        "title": "WakeFreePkParametersOut",
+        "type": "object"
+      },
+      "WakeFreePkReferenceDefaultsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "absorption_duration_hours": {
+            "title": "Absorption Duration Hours",
+            "type": "string"
+          },
+          "calibration_revision": {
+            "title": "Calibration Revision",
+            "type": "string"
+          },
+          "clearance_liters_per_hour": {
+            "title": "Clearance Liters Per Hour",
+            "type": "string"
+          },
+          "free_peak_10_mg_nmol_l": {
+            "title": "Free Peak 10 Mg Nmol L",
+            "type": "string"
+          }
+        },
+        "required": [
+          "absorption_duration_hours",
+          "clearance_liters_per_hour",
+          "free_peak_10_mg_nmol_l",
+          "calibration_revision"
+        ],
+        "title": "WakeFreePkReferenceDefaultsOut",
+        "type": "object"
+      },
+      "WakeFreePkSettingsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "const": "hc-wake-free-v3",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_revision": {
+            "const": "hc-wake-free-v3.0.0",
+            "title": "Model Revision",
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/WakeFreePkParametersOut"
+          },
+          "reference_defaults": {
+            "$ref": "#/components/schemas/WakeFreePkReferenceDefaultsOut"
+          }
+        },
+        "required": [
+          "model_id",
+          "model_revision",
+          "parameters",
+          "reference_defaults"
+        ],
+        "title": "WakeFreePkSettingsOut",
+        "type": "object"
+      },
       "WeightCorrectionChanges": {
         "additionalProperties": false,
         "properties": {
@@ -9989,7 +10628,8 @@
               "default": "hc-exposure-v1",
               "enum": [
                 "hc-exposure-v1",
-                "hc-physiology-v2"
+                "hc-physiology-v2",
+                "hc-wake-free-v3"
               ],
               "title": "Model",
               "type": "string"
@@ -10023,6 +10663,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/PhysiologicalCortisolCurveOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WakeFreeCortisolCurveOut"
                     }
                   ],
                   "title": "Response Steroid Exposure Curve Api V1 Analytics Steroid Exposure Get"
@@ -10128,6 +10771,132 @@
           }
         },
         "summary": "Analytics Summary",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/wake-free-parameters": {
+      "get": {
+        "description": "Return the owner's active immutable assumptions, or reviewed defaults.",
+        "operationId": "get_wake_free_parameters_api_v1_analytics_wake_free_parameters_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WakeFreePkSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Wake Free Parameters",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/v1/analytics/wake-free-parameters/revisions": {
+      "post": {
+        "description": "Append a versioned owner assumption without changing facts or plans.",
+        "operationId": "create_wake_free_parameter_revision_api_v1_analytics_wake_free_parameters_revisions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WakeFreePkParametersIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WakeFreePkSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Wake Free Parameter Revision",
         "tags": [
           "analytics"
         ]
@@ -14631,6 +15400,286 @@
           }
         },
         "summary": "Create Life Event",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/meal-events": {
+      "get": {
+        "operationId": "list_meals_api_v1_meal_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "local_date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Local Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Local Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MealPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Meals",
+        "tags": [
+          "events"
+        ]
+      },
+      "post": {
+        "operationId": "create_meal_api_v1_meal_events_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MealIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MealOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Meal",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/meal-events/{event_id}/correct": {
+      "post": {
+        "operationId": "correct_meal_api_v1_meal_events__event_id__correct_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MealCorrectionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MealOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Correct Meal",
         "tags": [
           "events"
         ]

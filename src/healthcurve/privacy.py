@@ -15,7 +15,7 @@ from healthcurve.ai.models import AIAnalysis, ExtractionDraft, TelegramConversat
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.base import EventMixin
-from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.events.models import DiaryEvent, LifeEvent, MealEvent, SymptomEvent
 from healthcurve.identity.models import AuthSession, Owner
 from healthcurve.integrations.credentials import IntegrationCredential
 from healthcurve.integrations.garmin.models import (
@@ -62,6 +62,7 @@ DELETABLE_RECORDS: dict[str, type] = {
     "symptom": SymptomEvent,
     "diary": DiaryEvent,
     "life_event": LifeEvent,
+    "meal": MealEvent,
     "stress_episode": StressEpisode,
     "emergency_injection": EmergencyInjectionEvent,
     "lab_panel": LabPanel,
@@ -409,6 +410,7 @@ def delete_account(
         SymptomEvent,
         DiaryEvent,
         LifeEvent,
+        MealEvent,
         BloodPressureEvent,
         WeightEvent,
         TemperatureEvent,

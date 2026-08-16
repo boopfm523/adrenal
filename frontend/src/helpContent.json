@@ -41,6 +41,14 @@
       "confirmation": "Review the symptom, severity, and time, then press Confirm. Nothing is recorded before confirmation."
     },
     {
+      "command": "/meal",
+      "syntax": "/meal [XS|S|M|L|XL|XXL] [HH:MM]",
+      "example": "/meal L 12:30",
+      "purpose": "Prepare an observed meal-time fact with an optional simple size. You can also say ‘I just had a meal’ and omit the size.",
+      "result": "Recorded-fact draft and optional wake-anchored reference context",
+      "confirmation": "Review the observed time and optional size, then press Confirm. Missing size stays missing. A meal may shape the healthy reference band but never changes the hydrocortisone PK curve."
+    },
+    {
       "command": "/bp",
       "syntax": "/bp <systolic>/<diastolic> [pulse] [HH:MM]",
       "example": "/bp 120/80 62 08:15",

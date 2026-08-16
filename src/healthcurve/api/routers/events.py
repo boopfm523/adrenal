@@ -23,6 +23,10 @@ from healthcurve.api.schemas import (
     LifeEventIn,
     LifeEventOut,
     LifeEventPage,
+    MealCorrectionIn,
+    MealIn,
+    MealOut,
+    MealPage,
     ProvenanceOut,
     SymptomCorrectionIn,
     SymptomIn,
@@ -35,7 +39,7 @@ from healthcurve.context.models import ContextEvent, LocationPrecision
 from healthcurve.episodes.models import EmergencyInjectionEvent
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
-from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.events.models import DiaryEvent, LifeEvent, MealEvent, SymptomEvent
 from healthcurve.events.timekeeping import timezone_abbreviation
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -262,6 +266,107 @@ def _diary_out(e: DiaryEvent) -> DiaryOut:
 
 
 # ---------------------------------------------------------------------------
+# Meals
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/meal-events",
+    response_model=MealOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def create_meal(payload: MealIn, session: DbSession, owner: CurrentOwner) -> MealOut:
+    event = events.create_event(
+        session,
+        MealEvent,
+        owner_id=owner.id,
+        event_time=resolve_time(payload.time),
+        source_type=SourceType.WEB,
+        confirmation_state=ConfirmationState.DIRECT,
+        size=payload.size,
+        notes=payload.notes,
+    )
+    return _meal_out(event)
+
+
+@router.get("/meal-events", response_model=MealPage)
+def list_meals(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
+) -> MealPage:
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates: list[ColumnElement[bool]] = []
+    if window.start is not None:
+        predicates.append(MealEvent.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        predicates.append(MealEvent.occurred_at < window.end_exclusive)
+    page = paginate_current_facts(
+        session,
+        MealEvent,
+        owner_id=owner.id,
+        request=pagination,
+        predicates=tuple(predicates),
+    )
+    return MealPage(
+        items=[_meal_out(row) for row in page.items],
+        revisions=[_meal_out(row) for row in page.revisions],
+        page=page.metadata,
+    )
+
+
+@router.post(
+    "/meal-events/{event_id}/correct",
+    response_model=MealOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def correct_meal(
+    event_id: uuid.UUID,
+    payload: MealCorrectionIn,
+    session: DbSession,
+    owner: CurrentOwner,
+) -> MealOut:
+    original = _owned_meal(session, owner.id, event_id)
+    changes = payload.changes.model_dump(exclude_unset=True, exclude={"time"})
+    submitted_time = payload.changes.time if "time" in payload.changes.model_fields_set else None
+    event_time = resolve_time(submitted_time) if submitted_time is not None else None
+    if not changes and event_time is None:
+        raise HTTPException(status_code=422, detail="a correction must change at least one field")
+    try:
+        correction = events.correct_event(
+            session,
+            MealEvent,
+            original,
+            reason=payload.reason,
+            changes=changes,
+            event_time=event_time,
+        )
+    except events.CorrectionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return _meal_out(correction)
+
+
+def _meal_out(e: MealEvent) -> MealOut:
+    return MealOut(
+        id=e.id,
+        size=e.size,
+        time=time_out(e),
+        provenance=provenance_out(e),
+        notes=e.notes,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Life events
 # ---------------------------------------------------------------------------
 
@@ -349,6 +454,7 @@ _TIMELINE_TYPES: tuple[tuple[type[EventMixin], str], ...] = (
     (DoseEvent, "dose"),
     (SymptomEvent, "symptom"),
     (DiaryEvent, "diary"),
+    (MealEvent, "meal"),
     (LifeEvent, "life_event"),
     (EmergencyInjectionEvent, "emergency_injection"),
     (ContextEvent, "context"),
@@ -500,6 +606,9 @@ def _summarize(row: EventMixin, type_name: str) -> str:
         case "diary":
             text = row.text  # type: ignore[attr-defined]
             return text[:120] + ("..." if len(text) > 120 else "")
+        case "meal":
+            size = f" · size {row.size.value.upper()}" if row.size is not None else ""  # type: ignore[attr-defined]
+            return f"Meal{size}"
         case "life_event":
             return f"{row.title} ({row.category})"  # type: ignore[attr-defined]
         case "emergency_injection":
@@ -562,6 +671,13 @@ def _summarize(row: EventMixin, type_name: str) -> str:
 
 def _owned_symptom(session: DbSession, owner_id: uuid.UUID, event_id: uuid.UUID) -> SymptomEvent:
     row = session.get(SymptomEvent, event_id)
+    if row is None or row.owner_id != owner_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
+    return row
+
+
+def _owned_meal(session: DbSession, owner_id: uuid.UUID, event_id: uuid.UUID) -> MealEvent:
+    row = session.get(MealEvent, event_id)
     if row is None or row.owner_id != owner_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
     return row

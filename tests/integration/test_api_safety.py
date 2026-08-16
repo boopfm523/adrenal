@@ -44,7 +44,7 @@ from healthcurve.ai.models import (
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import day_analysis as day_analysis_service
 from healthcurve.analytics import service as analytics_service
-from healthcurve.analytics import wake_pharmacokinetics
+from healthcurve.analytics import wake_pharmacokinetics, wake_reference_inputs
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
 from healthcurve.chat import service as chat_service
@@ -577,6 +577,30 @@ def test_wearable_summary_migration_downgrades_and_reinstalls(
         "invalidate_wearable_daily_summary_after_insert",
         "invalidate_wearable_daily_summary_after_delete",
     } <= triggers
+
+
+def test_meal_event_migration_downgrades_and_reinstalls(engine: Engine, settings: Settings) -> None:
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    environment = {"HC_DATABASE_URL": settings.database_url}
+    table_query = text("SELECT to_regclass('fact.meal_event')")
+    try:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.downgrade(
+                alembic_config,
+                "e4c7a1b9d260",  # pragma: allowlist secret - Alembic revision ID
+            )
+        with engine.connect() as connection:
+            assert connection.scalar(table_query) is None
+    finally:
+        with mock.patch.dict(os.environ, environment):
+            get_settings.cache_clear()
+            command.upgrade(alembic_config, "head")
+        get_settings.cache_clear()
+
+    with engine.connect() as connection:
+        assert connection.scalar(table_query) == "fact.meal_event"
 
 
 def test_health_data_requires_authentication(client: TestClient) -> None:
@@ -3427,6 +3451,122 @@ def test_symptom_correction_preserves_typed_history(
     }
     assert {row["id"] for row in [*first["revisions"], *second["revisions"]]} == {original["id"]}
     assert client.get("/api/v1/symptoms", params={**page_params, "page": 3}).status_code == 422
+
+
+def test_meals_are_owner_scoped_correctable_reference_context_without_pk_effect(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    day = date(2021, 6, 7)
+    with Session(engine) as session:
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        curve_before = wake_pharmacokinetics.curve_for_owner(
+            session,
+            owner_id=owner_id,
+            day=day,
+            timezone="Europe/London",
+        )
+
+    original_response = client.post(
+        "/api/v1/meal-events",
+        json={
+            "time": {"local_time": "2021-06-07T12:30:00", "timezone": "Europe/London"},
+            "notes": "Synthetic observed lunch",
+        },
+        headers=logged_in,
+    )
+    assert original_response.status_code == 201, original_response.text
+    original = original_response.json()
+    assert original["size"] is None
+    assert original["provenance"]["source_type"] == "web"
+    assert original["provenance"]["confirmation_state"] == "direct"
+
+    corrected_response = client.post(
+        f"/api/v1/meal-events/{original['id']}/correct",
+        json={
+            "reason": "Synthetic size correction",
+            "changes": {"size": "l"},
+        },
+        headers=logged_in,
+    )
+    assert corrected_response.status_code == 201, corrected_response.text
+    corrected = corrected_response.json()
+    assert corrected["size"] == "l"
+    assert corrected["provenance"]["supersedes_id"] == original["id"]
+
+    page = client.get(
+        "/api/v1/meal-events",
+        params={
+            "local_date_from": day.isoformat(),
+            "local_date_to": day.isoformat(),
+            "timezone": "Europe/London",
+        },
+    ).json()
+    assert [item["id"] for item in page["items"]] == [corrected["id"]]
+    assert [item["id"] for item in page["revisions"]] == [original["id"]]
+
+    timeline = client.get(
+        "/api/v1/timeline",
+        params={
+            "types": "meal",
+            "local_date_from": day.isoformat(),
+            "local_date_to": day.isoformat(),
+            "timezone": "Europe/London",
+        },
+    )
+    assert timeline.status_code == 200, timeline.text
+    assert timeline.json()["items"][0]["summary"] == "Meal · size L"
+
+    with Session(engine) as session:
+        assert owner_id is not None
+        observed = wake_reference_inputs.observed_meals_for_day(
+            session,
+            owner_id=owner_id,
+            day=day,
+            timezone="Europe/London",
+        )
+        assert list(observed) == ["breakfast"]
+        assert observed["breakfast"].hour == 12
+        assert observed["breakfast"].minute == 30
+        reference = wake_reference_inputs.reference_for_owner(
+            session,
+            owner_id=owner_id,
+            day=day,
+            timezone="Europe/London",
+            wake_at=datetime(2021, 6, 7, 6, tzinfo=UTC),
+            sleep_onset_at=datetime(2021, 6, 6, 22, tzinfo=UTC),
+        )
+        assumptions = cast(dict[str, object], reference["assumptions"])
+        meals = cast(dict[str, datetime], assumptions["observed_meals"])
+        assert list(meals) == ["breakfast"]
+        assert meals["breakfast"] == observed["breakfast"]
+        projection = day_analysis_service.build_projection(
+            session,
+            owner_id=owner_id,
+            day=day,
+            timezone="Europe/London",
+        )
+        recorded_context = cast(dict[str, object], projection["recorded_facts_and_plan_context"])
+        projected_meals = cast(list[dict[str, object]], recorded_context["meals"])
+        assert projected_meals == [
+            {
+                "id": corrected["id"],
+                "occurred_at": "2021-06-07T11:30:00+00:00",
+                "local_time": "2021-06-07T12:30:00+01:00",
+                "local_hour": 12,
+                "local_minute": 30,
+                "timezone": "Europe/London",
+                "size": "l",
+                "notes": "Synthetic observed lunch",
+            }
+        ]
+        curve_after = wake_pharmacokinetics.curve_for_owner(
+            session,
+            owner_id=owner_id,
+            day=day,
+            timezone="Europe/London",
+        )
+        assert curve_after == curve_before
 
 
 def test_sensitive_diary_and_life_events_require_explicit_reveal(

@@ -16,6 +16,7 @@ const eventTypes = [
   ["", "All record types"],
   ["dose", "Doses"],
   ["symptom", "Symptoms"],
+  ["meal", "Meals"],
   ["diary", "Diary"],
   ["life_event", "Life events"],
   ["emergency_injection", "Emergency injections"],

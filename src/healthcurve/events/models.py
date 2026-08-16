@@ -60,6 +60,38 @@ class DiaryEvent(EventMixin, FactBase):
     __table_args__ = event_table_args("diary_event")
 
 
+class MealSize(StrEnum):
+    """Optional owner-described meal size; never inferred when omitted."""
+
+    XS = "xs"
+    S = "s"
+    M = "m"
+    L = "l"
+    XL = "xl"
+    XXL = "xxl"
+
+
+class MealEvent(EventMixin, FactBase):
+    """An observed meal time used as context for the healthy reference band.
+
+    Size is intentionally descriptive only. The validated reference model does not
+    define a size-to-cortisol amplitude mapping, so downstream code must not use it to
+    scale the population meal pulse.
+    """
+
+    __tablename__ = "meal_event"
+
+    size: Mapped[MealSize | None] = mapped_column(StrEnumType(MealSize, 8))
+
+    __table_args__ = (
+        CheckConstraint(
+            "size IS NULL OR size IN ('xs', 's', 'm', 'l', 'xl', 'xxl')",
+            name="size_supported",
+        ),
+        *event_table_args("meal_event"),
+    )
+
+
 class LifeEventCategory(StrEnum):
     """Context that helps explain a pattern without asserting it caused anything."""
 

@@ -22,6 +22,10 @@ export type SymptomInput = components["schemas"]["SymptomIn"];
 export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type DiaryPage = components["schemas"]["DiaryPage"];
+export type Meal = components["schemas"]["MealOut"];
+export type MealPage = components["schemas"]["MealPage"];
+export type MealInput = components["schemas"]["MealIn"];
+export type MealCorrectionInput = components["schemas"]["MealCorrectionIn"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
 export type LifeEventPage = components["schemas"]["LifeEventPage"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
@@ -521,6 +525,20 @@ export function correctSymptom(id: string, payload: SymptomCorrectionInput): Pro
 
 export function getDiaryEntries(filters: SymptomsDiaryFilters, page = 1): Promise<DiaryPage> {
   return apiRequest<DiaryPage>(`/diary-events?${symptomsDiaryQuery(filters, page).toString()}`);
+}
+
+export function getMeals(filters: SymptomsDiaryFilters, page = 1): Promise<MealPage> {
+  const params = symptomsDiaryQuery(filters, page);
+  params.delete("include_sensitive");
+  return apiRequest<MealPage>(`/meal-events?${params.toString()}`);
+}
+
+export function createMeal(payload: MealInput): Promise<Meal> {
+  return apiRequest<Meal>("/meal-events", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function correctMeal(id: string, payload: MealCorrectionInput): Promise<Meal> {
+  return apiRequest<Meal>(`/meal-events/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function getLifeEvents(filters: SymptomsDiaryFilters, page = 1): Promise<LifeEventPage> {

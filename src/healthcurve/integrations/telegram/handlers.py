@@ -38,7 +38,7 @@ from healthcurve.db import get_ai_session_factory
 from healthcurve.episodes.models import EmergencyInjectionEvent, EpisodeStatus, StressEpisode
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
-from healthcurve.events.models import DiaryEvent, SymptomEvent
+from healthcurve.events.models import DiaryEvent, MealEvent, MealSize, SymptomEvent
 from healthcurve.events.timekeeping import (
     AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
@@ -109,6 +109,28 @@ _WEIGHT_ONLY_PHRASE: Final = re.compile(
     r"(?:\s+at\s+\d{1,2}[:.]\d{2}\s*(?:am|pm)?)?[.!]?$",
     re.IGNORECASE,
 )
+_MEAL_PHRASE: Final = re.compile(
+    r"^(?:i\s+)?(?:just\s+)?(?:had|ate|finished)\s+"
+    r"(?:(?:a|an|my)\s+)?"
+    r"(?:(?P<size>xxl|xl|xs|small|medium|large|extra[\s-]+small|extra[\s-]+large)\s+)?"
+    r"(?:meal|breakfast|lunch|dinner)"
+    r"(?:\s*(?:,|-|size\s+|with\s+size\s+)?"
+    r"(?P<trailing_size>xxl|xl|xs|small|medium|large|extra[\s-]+small|extra[\s-]+large))?"
+    r"(?:\s+at\s+(?P<time>\d{1,2}[:.]\d{2}\s*(?:am|pm)?))?[.!]?$",
+    re.IGNORECASE,
+)
+_MEAL_SIZE_ALIASES: Final = {
+    "xs": MealSize.XS,
+    "extra small": MealSize.XS,
+    "extra-small": MealSize.XS,
+    "small": MealSize.S,
+    "medium": MealSize.M,
+    "large": MealSize.L,
+    "xl": MealSize.XL,
+    "extra large": MealSize.XL,
+    "extra-large": MealSize.XL,
+    "xxl": MealSize.XXL,
+}
 _BEADS_LIST_PHRASE: Final = re.compile(
     r"^(?:please\s+)?(?:show|give|send|get|tell)\s+(?:me\s+)?(?:the\s+)?"
     r"(?:current\s+)?(?:bd|beads?)\s+(?:list|issues?|tasks?)[?.!]*$",
@@ -142,6 +164,7 @@ SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
         "help",
         "injection",
         "location",
+        "meal",
         "privacy",
         "start",
         "symptom",
@@ -165,6 +188,7 @@ Recording commands (these work even if the language model is offline):
 /bp <systolic>/<diastolic> [pulse] [HH:MM] - record blood pressure
 /weight <value> <lb|lbs|kg|kgs> [HH:MM] - record body weight
 /temperature <value> <F|C> [HH:MM] - record body temperature
+/meal [XS|S|M|L|XL|XXL] [HH:MM] - record a meal (size is optional)
 /symptom <name> [0-10] - record a symptom
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
@@ -314,6 +338,7 @@ def _is_conversational_shortcut(text: str) -> bool:
             _BEADS_STATUS_PHRASE,
             _BEADS_ADD_PHRASE,
             _WEIGHT_ONLY_PHRASE,
+            _MEAL_PHRASE,
             _SYMPTOM_PHRASE,
         )
     )
@@ -374,6 +399,32 @@ def _handle_conversational_shortcut(
             weight_value=Decimal(raw_value),
             weight_unit=unit,
             measurement_setting=explicit_measurement_setting(text),
+            local_time=local,
+            timezone=owner.default_timezone,
+            confidence=1.0,
+            flags=flags,
+        )
+        draft = _store_draft(
+            session, owner, [candidate], raw_text=text, source="telegram_conversational"
+        )
+        return _draft_reply(draft, [candidate])
+
+    meal = _MEAL_PHRASE.fullmatch(text)
+    if meal is not None:
+        raw_size = meal.group("size") or meal.group("trailing_size")
+        size = _meal_size(raw_size) if raw_size else None
+        local = _local_now(owner, now)
+        flags = []
+        if meal.group("time"):
+            parsed = _parse_time_token(meal.group("time"), local)
+            if parsed is None:
+                return None
+            local = parsed
+        else:
+            flags.append(FlagCode.ASSUMED_TIME)
+        candidate = ValidatedCandidate(
+            type=CandidateType.MEAL,
+            meal_size=size,
             local_time=local,
             timezone=owner.default_timezone,
             confidence=1.0,
@@ -449,6 +500,8 @@ def _handle_command(
             return _cmd_weight(session, owner, args, now=now)
         case "temperature":
             return _cmd_temperature(session, owner, args, now=now)
+        case "meal":
+            return _cmd_meal(session, owner, args, now=now)
         case "bd-list":
             if raw_argument:
                 return Reply("Usage: /bd-list (no arguments)")
@@ -748,6 +801,45 @@ def _cmd_symptom(session: Session, owner: Owner, args: list[str], *, now: dateti
     )
     draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
     return _draft_reply(draft, [candidate])
+
+
+def _cmd_meal(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = "Usage: /meal [XS|S|M|L|XL|XXL] [HH:MM]\nExample: /meal L 12:30"
+    if len(args) > 2:
+        return Reply(usage)
+    local = _local_now(owner, now)
+    size: MealSize | None = None
+    has_explicit_time = False
+    for token in args:
+        parsed_size = _meal_size(token)
+        if parsed_size is not None:
+            if size is not None:
+                return Reply(usage)
+            size = parsed_size
+            continue
+        parsed_time = _parse_time_token(token, local)
+        if parsed_time is None or (parsed_time == local and not _looks_like_time(token)):
+            return Reply(usage)
+        local = parsed_time
+        has_explicit_time = True
+    candidate = ValidatedCandidate(
+        type=CandidateType.MEAL,
+        meal_size=size,
+        local_time=local,
+        timezone=owner.default_timezone,
+        confidence=1.0,
+        flags=[] if has_explicit_time else [FlagCode.ASSUMED_TIME],
+    )
+    draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
+    return _draft_reply(draft, [candidate])
+
+
+def _meal_size(value: str) -> MealSize | None:
+    normalized = value.strip().lower().replace("_", " ")
+    try:
+        return MealSize(normalized)
+    except ValueError:
+        return _MEAL_SIZE_ALIASES.get(normalized)
 
 
 def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
@@ -1055,6 +1147,17 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
             owner,
             now,
         )
+    if candidate.type is CandidateType.MEAL:
+        return _edit_meal_candidate(
+            draft,
+            candidates,
+            index,
+            candidate,
+            args[1].lower(),
+            " ".join(args[2:]).strip(),
+            owner,
+            now,
+        )
     if candidate.type is not CandidateType.DOSE:
         return Reply("Only dose amount, unit, time, and medication can be edited here.")
 
@@ -1247,6 +1350,41 @@ def _edit_vital_candidate(
             "is_actionable": not bool(BLOCKING_FLAGS & set(flags)),
         }
     )
+    if draft.original_candidates is None:
+        draft.original_candidates = [dict(item) for item in draft.candidates]
+    candidates[index] = edited
+    draft.candidates = [item.model_dump(mode="json") for item in candidates]
+    draft.state = DraftState.EDITED
+    return _draft_reply(draft, candidates, edited=True)
+
+
+def _edit_meal_candidate(
+    draft: ExtractionDraft,
+    candidates: list[ValidatedCandidate],
+    index: int,
+    candidate: ValidatedCandidate,
+    field: str,
+    value: str,
+    owner: Owner,
+    now: datetime,
+) -> Reply:
+    changes: dict[str, object] = {}
+    if field == "size":
+        if value.lower() in {"none", "unknown", "clear"}:
+            changes["meal_size"] = None
+        else:
+            size = _meal_size(value)
+            if size is None:
+                return Reply("Meal size must be XS, S, M, L, XL, XXL, or none.")
+            changes["meal_size"] = size
+    elif field == "time":
+        local = _parse_time_token(value, _local_now(owner, now))
+        if local is None:
+            return Reply("I couldn't read that time. Use 24-hour HH:MM.")
+        changes["local_time"] = local
+    else:
+        return Reply("For a meal, edit size or time.")
+    edited = ValidatedCandidate.model_validate({**candidate.model_dump(mode="python"), **changes})
     if draft.original_candidates is None:
         draft.original_candidates = [dict(item) for item in draft.candidates]
     candidates[index] = edited
@@ -1625,6 +1763,9 @@ def _describe(candidate: ValidatedCandidate) -> str:
                 candidate.temperature_value, candidate.temperature_unit
             )
             return f"Temperature: {fahrenheit} °F ({celsius} °C) at {when}"
+        case CandidateType.MEAL:
+            size = f" · size {candidate.meal_size.value.upper()}" if candidate.meal_size else ""
+            return f"Meal{size} at {when}"
         case _:  # pragma: no cover
             return str(candidate.type)
 
@@ -1794,6 +1935,16 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                     candidate.temperature_value, candidate.temperature_unit
                 ),
             )
+        case CandidateType.MEAL:
+            return events.create_event(
+                session,
+                MealEvent,
+                owner_id=owner.id,
+                event_time=event_time,
+                source_type=SourceType.TELEGRAM,
+                confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+                size=candidate.meal_size,
+            )
         case _:  # pragma: no cover
             return None
 
@@ -1871,16 +2022,27 @@ def _local_now(owner: Owner, now: datetime) -> datetime:
 
 
 def _looks_like_time(token: str) -> bool:
-    return ":" in token and len(token) <= 5
+    return re.fullmatch(r"\s*\d{1,2}[:.]\d{2}\s*(?:am|pm)?\s*", token, re.IGNORECASE) is not None
 
 
 def _parse_time_token(token: str, local_reference: datetime) -> datetime | None:
     """Parse ``HH:MM`` against today, rolling back a day if that would be the future."""
-    try:
-        hour_text, minute_text = token.split(":")
-        hour, minute = int(hour_text), int(minute_text)
-    except (ValueError, TypeError):
+    match = re.fullmatch(
+        r"\s*(?P<hour>\d{1,2})[:.](?P<minute>\d{2})\s*(?P<meridiem>am|pm)?\s*",
+        token,
+        re.IGNORECASE,
+    )
+    if match is None:
         return None
+    hour, minute = int(match.group("hour")), int(match.group("minute"))
+    meridiem = (match.group("meridiem") or "").lower()
+    if meridiem:
+        if not 1 <= hour <= 12:
+            return None
+        if meridiem == "pm" and hour < 12:
+            hour += 12
+        elif meridiem == "am" and hour == 12:
+            hour = 0
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         return None
 

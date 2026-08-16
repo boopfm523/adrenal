@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_valid
 
 from healthcurve.episodes.models import EpisodeSeverity, EpisodeStatus
 from healthcurve.events.base import ConfirmationState, SourceType
-from healthcurve.events.models import LifeEventCategory
+from healthcurve.events.models import LifeEventCategory, MealSize
 from healthcurve.integrations.garmin.models import GarminMetricType
 from healthcurve.medications.models import (
     DoseCategory,
@@ -610,6 +610,37 @@ class DiaryPage(ApiModel):
     items: list[DiaryOut]
     revisions: list[DiaryOut]
     page: PageMetadata
+
+
+class MealIn(ApiModel):
+    size: MealSize | None = None
+    time: EventTimeIn
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class MealOut(FactResource):
+    id: uuid.UUID
+    size: MealSize | None
+    time: EventTimeOut
+    provenance: ProvenanceOut
+    notes: str | None
+
+
+class MealPage(ApiModel):
+    items: list[MealOut]
+    revisions: list[MealOut]
+    page: PageMetadata
+
+
+class MealCorrectionChanges(ApiModel):
+    size: MealSize | None = None
+    time: EventTimeIn | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class MealCorrectionIn(ApiModel):
+    reason: str = Field(min_length=1, max_length=500)
+    changes: MealCorrectionChanges
 
 
 class LifeEventIn(ApiModel):

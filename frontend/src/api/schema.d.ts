@@ -146,6 +146,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/wake-free-parameters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Wake Free Parameters
+         * @description Return the owner's active immutable assumptions, or reviewed defaults.
+         */
+        get: operations["get_wake_free_parameters_api_v1_analytics_wake_free_parameters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/wake-free-parameters/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Wake Free Parameter Revision
+         * @description Append a versioned owner assumption without changing facts or plans.
+         */
+        post: operations["create_wake_free_parameter_revision_api_v1_analytics_wake_free_parameters_revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-password": {
         parameters: {
             query?: never;
@@ -913,6 +953,41 @@ export interface paths {
         put?: never;
         /** Create Life Event */
         post: operations["create_life_event_api_v1_life_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/meal-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Meals */
+        get: operations["list_meals_api_v1_meal_events_get"];
+        put?: never;
+        /** Create Meal */
+        post: operations["create_meal_api_v1_meal_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/meal-events/{event_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct Meal */
+        post: operations["correct_meal_api_v1_meal_events__event_id__correct_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3350,6 +3425,59 @@ export interface components {
             /** Qualitative Result */
             qualitative_result?: string | null;
         };
+        /** MealCorrectionChanges */
+        MealCorrectionChanges: {
+            /** Notes */
+            notes?: string | null;
+            size?: components["schemas"]["MealSize"] | null;
+            time?: components["schemas"]["EventTimeIn"] | null;
+        };
+        /** MealCorrectionIn */
+        MealCorrectionIn: {
+            changes: components["schemas"]["MealCorrectionChanges"];
+            /** Reason */
+            reason: string;
+        };
+        /** MealIn */
+        MealIn: {
+            /** Notes */
+            notes?: string | null;
+            size?: components["schemas"]["MealSize"] | null;
+            time: components["schemas"]["EventTimeIn"];
+        };
+        /** MealOut */
+        MealOut: {
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Notes */
+            notes: string | null;
+            provenance: components["schemas"]["ProvenanceOut"];
+            size: components["schemas"]["MealSize"] | null;
+            time: components["schemas"]["EventTimeOut"];
+        };
+        /** MealPage */
+        MealPage: {
+            /** Items */
+            items: components["schemas"]["MealOut"][];
+            page: components["schemas"]["PageMetadata"];
+            /** Revisions */
+            revisions: components["schemas"]["MealOut"][];
+        };
+        /**
+         * MealSize
+         * @description Optional owner-described meal size; never inferred when omitted.
+         * @enum {string}
+         */
+        MealSize: "xs" | "s" | "m" | "l" | "xl" | "xxl";
         /**
          * MeasurementSetting
          * @description Where a person says a manual measurement was taken, not how it entered the app.
@@ -4530,6 +4658,184 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WakeFreeCortisolCurveOut */
+        WakeFreeCortisolCurveOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Day End
+             * Format: date-time
+             */
+            day_end: string;
+            /**
+             * Day Start
+             * Format: date-time
+             */
+            day_start: string;
+            /** Definition */
+            definition: string;
+            /** Dose Markers */
+            dose_markers: components["schemas"]["SteroidExposureDoseMarker"][];
+            /** Elapsed Hours */
+            elapsed_hours: string;
+            /** Excluded Dose Count */
+            excluded_dose_count: number;
+            model: components["schemas"]["WakeFreeCortisolModelOut"];
+            /** Safety Label */
+            safety_label: string;
+            /** Samples */
+            samples: components["schemas"]["WakeFreeCortisolSampleOut"][];
+            /**
+             * Series Kind
+             * @constant
+             */
+            series_kind: "modeled_serum_free_cortisol_scenario";
+            /**
+             * Series Name
+             * @constant
+             */
+            series_name: "Modeled serum-free-cortisol scenario";
+            /**
+             * Series Unit
+             * @constant
+             */
+            series_unit: "nmol/L";
+            /** Source Revision Sha256 */
+            source_revision_sha256: string;
+            /** Supported Dose Count */
+            supported_dose_count: number;
+            /** Timezone */
+            timezone: string;
+        };
+        /** WakeFreeCortisolModelOut */
+        WakeFreeCortisolModelOut: {
+            amount_unit: components["schemas"]["DoseUnit"];
+            /**
+             * Binding Revision
+             * @constant
+             */
+            binding_revision: "one-site-cbg-linear-albumin-v1";
+            /** Calibration Revision */
+            calibration_revision: string;
+            /** Contribution Horizon Hours */
+            contribution_horizon_hours: number;
+            /** Free Peak 10 Mg Nmol L */
+            free_peak_10_mg_nmol_l: string;
+            /**
+             * Id
+             * @constant
+             */
+            id: "hc-wake-free-v3";
+            parameters: components["schemas"]["WakeFreePkParametersOut"];
+            /** Reference Absorption Duration Hours */
+            reference_absorption_duration_hours: string;
+            /** Reference Clearance Liters Per Hour */
+            reference_clearance_liters_per_hour: string;
+            /** References */
+            references: string[];
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "hc-wake-free-v3.0.0";
+            /** Sample Interval Minutes */
+            sample_interval_minutes: number;
+            /** Supported Formulation */
+            supported_formulation: string;
+            /** Supported Medication */
+            supported_medication: string;
+            supported_route: components["schemas"]["Route"];
+        };
+        /** WakeFreeCortisolSampleOut */
+        WakeFreeCortisolSampleOut: {
+            /** Derived Total Cortisol Nmol L Display */
+            derived_total_cortisol_nmol_l_display: string;
+            /**
+             * Local Time
+             * Format: date-time
+             */
+            local_time: string;
+            /** Modeled Free Cortisol Nmol L */
+            modeled_free_cortisol_nmol_l: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Regular Modeled Free Cortisol Nmol L */
+            regular_modeled_free_cortisol_nmol_l: string;
+            /** Stress Modeled Free Cortisol Nmol L */
+            stress_modeled_free_cortisol_nmol_l: string;
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
+        };
+        /** WakeFreePkParametersIn */
+        WakeFreePkParametersIn: {
+            /** Distribution Volume Liters */
+            distribution_volume_liters: number | string;
+            /** Elimination Half Life Hours */
+            elimination_half_life_hours: number | string;
+            /** Oral Bioavailability */
+            oral_bioavailability: number | string;
+            /** Peak Time Hours */
+            peak_time_hours: number | string;
+        };
+        /** WakeFreePkParametersOut */
+        WakeFreePkParametersOut: {
+            /** Absorption Rate Per Hour */
+            absorption_rate_per_hour: string;
+            /** Created At */
+            created_at: string | null;
+            /** Derived Clearance Liters Per Hour */
+            derived_clearance_liters_per_hour: string;
+            /** Distribution Volume Liters */
+            distribution_volume_liters: string;
+            /** Elimination Half Life Hours */
+            elimination_half_life_hours: string;
+            /** Elimination Rate Per Hour */
+            elimination_rate_per_hour: string;
+            /** Oral Bioavailability */
+            oral_bioavailability: string;
+            /** Peak Time Hours */
+            peak_time_hours: string;
+            /** Population Default */
+            population_default: boolean;
+            /** Revision Id */
+            revision_id: string | null;
+            /** Revision Number */
+            revision_number: number;
+            /** Source Revision */
+            source_revision: string;
+        };
+        /** WakeFreePkReferenceDefaultsOut */
+        WakeFreePkReferenceDefaultsOut: {
+            /** Absorption Duration Hours */
+            absorption_duration_hours: string;
+            /** Calibration Revision */
+            calibration_revision: string;
+            /** Clearance Liters Per Hour */
+            clearance_liters_per_hour: string;
+            /** Free Peak 10 Mg Nmol L */
+            free_peak_10_mg_nmol_l: string;
+        };
+        /** WakeFreePkSettingsOut */
+        WakeFreePkSettingsOut: {
+            /**
+             * Model Id
+             * @constant
+             */
+            model_id: "hc-wake-free-v3";
+            /**
+             * Model Revision
+             * @constant
+             */
+            model_revision: "hc-wake-free-v3.0.0";
+            parameters: components["schemas"]["WakeFreePkParametersOut"];
+            reference_defaults: components["schemas"]["WakeFreePkReferenceDefaultsOut"];
+        };
         /** WeightCorrectionChanges */
         WeightCorrectionChanges: {
             measurement_setting?: components["schemas"]["MeasurementSetting"] | null;
@@ -4866,7 +5172,7 @@ export interface operations {
             query: {
                 day: string;
                 timezone?: string | null;
-                model?: "hc-exposure-v1" | "hc-physiology-v2";
+                model?: "hc-exposure-v1" | "hc-physiology-v2" | "hc-wake-free-v3";
             };
             header?: never;
             path?: never;
@@ -4882,7 +5188,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SteroidExposureCurveOut"] | components["schemas"]["PhysiologicalCortisolCurveOut"];
+                    "application/json": components["schemas"]["SteroidExposureCurveOut"] | components["schemas"]["PhysiologicalCortisolCurveOut"] | components["schemas"]["WakeFreeCortisolCurveOut"];
                 };
             };
             /** @description Validation Error */
@@ -4918,6 +5224,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalyticsSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_wake_free_parameters_api_v1_analytics_wake_free_parameters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WakeFreePkSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_wake_free_parameter_revision_api_v1_analytics_wake_free_parameters_revisions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WakeFreePkParametersIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WakeFreePkSettingsOut"];
                 };
             };
             /** @description Validation Error */
@@ -6896,6 +7270,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LifeEventOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_meals_api_v1_meal_events_get: {
+        parameters: {
+            query?: {
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_meal_api_v1_meal_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MealIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_meal_api_v1_meal_events__event_id__correct_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MealCorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealOut"];
                 };
             };
             /** @description Validation Error */

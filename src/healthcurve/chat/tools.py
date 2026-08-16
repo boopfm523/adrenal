@@ -27,7 +27,7 @@ from healthcurve.analytics import service as analytics_service
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events import service as event_service
 from healthcurve.events.base import EventMixin
-from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
+from healthcurve.events.models import DiaryEvent, LifeEvent, MealEvent, SymptomEvent
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminMetricEvent,
@@ -102,6 +102,7 @@ class DailyHealthCurveArguments(ToolArguments):
 TimelineRecordType = Literal[
     "dose",
     "symptom",
+    "meal",
     "diary",
     "life_event",
     "blood_pressure",
@@ -115,7 +116,7 @@ TimelineRecordType = Literal[
 
 
 class TimelineArguments(DateRangeArguments):
-    record_types: list[TimelineRecordType] = Field(default_factory=list, max_length=11)
+    record_types: list[TimelineRecordType] = Field(default_factory=list, max_length=12)
     limit: int = Field(default=DEFAULT_SPARSE_ROWS, ge=1, le=MAX_SPARSE_ROWS)
     include_sensitive_text: bool = False
 
@@ -318,6 +319,12 @@ def _event_payload(row: EventMixin, *, include_sensitive: bool) -> dict[str, obj
             episode_id=row.episode_id,
             notes=row.notes,
         )
+    elif isinstance(row, MealEvent):
+        payload.update(
+            record_type="meal",
+            size=row.size,
+            notes=row.notes,
+        )
     elif isinstance(row, DiaryEvent):
         payload.update(
             record_type="diary",
@@ -467,6 +474,7 @@ def _search_timeline(
     models: list[tuple[str, type[EventMixin]]] = [
         ("dose", DoseEvent),
         ("symptom", SymptomEvent),
+        ("meal", MealEvent),
         ("diary", DiaryEvent),
         ("life_event", LifeEvent),
         ("blood_pressure", BloodPressureEvent),
@@ -830,6 +838,7 @@ def _get_data_availability(
     event_models: list[tuple[str, type[EventMixin]]] = [
         ("doses", DoseEvent),
         ("symptoms", SymptomEvent),
+        ("meals", MealEvent),
         ("diary", DiaryEvent),
         ("life_events", LifeEvent),
         ("blood_pressure", BloodPressureEvent),

@@ -28,12 +28,15 @@ describe("Symptoms and diary page", () => {
     const privateDiary = { ...publicDiary, id: "44444444-4444-4444-8444-444444444444", text: "Synthetic private note", is_sensitive: true };
     const publicLife = { id: "55555555-5555-4555-8555-555555555555", category: "fact", title: "Synthetic public event", life_category: "other", description: null, is_sensitive: false, time, provenance };
     const privateLife = { ...publicLife, id: "66666666-6666-4666-8666-666666666666", title: "Synthetic private event", is_sensitive: true };
+    const meal = { id: "88888888-8888-4888-8888-888888888888", category: "fact", size: null, time, provenance, notes: null };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.includes(`/symptoms/${current.id}/correct`) && init?.method === "POST") return Promise.resolve(response({ ...current, severity: 7 }, 201));
       if (url.endsWith("/symptoms") && init?.method === "POST") return Promise.resolve(response({ ...current, id: "77777777-7777-4777-8777-777777777777", name: "Synthetic nausea", severity: 3 }, 201));
       if (url.includes("/symptoms")) { const pageNumber = Number(new URL(url, "http://healthcurve.test").searchParams.get("page") ?? "1"); return Promise.resolve(response({ items: [current], revisions: [prior], page: { page: pageNumber, page_size: 25, total_items: 50, total_pages: 2 } })); }
       if (url.includes("/diary-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicDiary, privateDiary] : [publicDiary])));
+      if (url.endsWith("/meal-events") && init?.method === "POST") return Promise.resolve(response({ ...meal, id: "99999999-9999-4999-8999-999999999999", size: "l" }, 201));
+      if (url.includes("/meal-events")) return Promise.resolve(response(factPage([meal])));
       if (url.includes("/life-events")) return Promise.resolve(response(factPage(url.includes("include_sensitive=true") ? [publicLife, privateLife] : [publicLife])));
       return Promise.resolve(response({ detail: "not found" }, 404));
     });
@@ -53,7 +56,7 @@ describe("Symptoms and diary page", () => {
     expect(screen.getByLabelText("Through date")).toHaveValue(today);
     expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes(`local_date_from=${shiftIsoDate(today, -6)}`) && requestUrl(input).includes(`local_date_to=${today}`))).toBe(true);
     const twoDaysAgo = shiftIsoDate(today, -2);
-    await userEvent.click(within(screen.getByRole("group", { name: "Quick symptom and diary dates" })).getByRole("button", { name: "2 days ago" }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Quick symptom, meal, and diary dates" })).getByRole("button", { name: "2 days ago" }));
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes(`local_date_from=${twoDaysAgo}`) && requestUrl(input).includes(`local_date_to=${twoDaysAgo}`))).toBe(true); });
 
     const createForm = screen.getByRole("form", { name: "Record a symptom" });
@@ -68,6 +71,16 @@ describe("Symptoms and diary page", () => {
     expect(JSON.parse(typeof createWrite?.[1]?.body === "string" ? createWrite[1].body : "{}") as unknown).toEqual({ name: "Synthetic nausea", severity: 3, body_area: null, time: { local_time: "2026-08-10T14:05", timezone: "America/New_York", fold: null }, ended_at: null, episode_id: null, notes: "Synthetic web form test" });
     expect(await screen.findByText("Symptom recorded.")).toBeVisible();
     expect(within(createForm).getByLabelText("Symptom")).toHaveValue("");
+
+    const mealForm = screen.getByRole("form", { name: "Record a meal" });
+    await userEvent.selectOptions(within(mealForm).getByLabelText("Meal size"), "l");
+    await userEvent.clear(within(mealForm).getByLabelText("Meal experienced local time"));
+    await userEvent.type(within(mealForm).getByLabelText("Meal experienced local time"), "2026-08-10T12:30");
+    await userEvent.click(within(mealForm).getByRole("button", { name: "Record meal" }));
+    await waitFor(() => { expect(fetchMock.mock.calls.some(([input, init]) => requestUrl(input).endsWith("/meal-events") && init?.method === "POST")).toBe(true); });
+    const mealWrite = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).endsWith("/meal-events") && init?.method === "POST");
+    expect(JSON.parse(typeof mealWrite?.[1]?.body === "string" ? mealWrite[1].body : "{}") as unknown).toEqual({ size: "l", time: { local_time: "2026-08-10T12:30", timezone: "America/New_York", fold: null }, notes: null });
+    expect(await screen.findByText("Meal recorded.")).toBeVisible();
     await userEvent.click(screen.getByText("Revision history (1)"));
     expect(screen.getByText(/severity 4\/10/)).toBeVisible();
 

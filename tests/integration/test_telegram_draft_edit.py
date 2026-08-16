@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
 import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from healthcurve.ai.extraction import CandidateType, ValidatedCandidate
+from healthcurve.ai.extraction import CandidateType, FlagCode, ValidatedCandidate
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.db import SCHEMAS, Base
 from healthcurve.episodes.models import EpisodeStatus, StressEpisode
+from healthcurve.events.models import MealEvent, MealSize
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
 from healthcurve.integrations.telegram.handlers import (
@@ -287,6 +288,80 @@ def test_plural_and_conversational_weight_entries_create_confirmable_drafts(
         candidate = ValidatedCandidate.model_validate(draft.candidates[0])
         assert candidate.weight_value == expected_value
         assert candidate.weight_unit is expected_unit
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_size", "expected_time", "assumed_time"),
+    [
+        (
+            "I just had a meal",
+            None,
+            datetime(2026, 8, 9, 9, 0),  # noqa: DTZ001
+            True,
+        ),
+        (
+            "I had a large meal at 12:30",
+            MealSize.L,
+            datetime(2026, 8, 8, 12, 30),  # noqa: DTZ001
+            False,
+        ),
+        (
+            "/meal XXL 18:45",
+            MealSize.XXL,
+            datetime(2026, 8, 8, 18, 45),  # noqa: DTZ001
+            False,
+        ),
+        (
+            "/meal L",
+            MealSize.L,
+            datetime(2026, 8, 9, 9, 0),  # noqa: DTZ001
+            True,
+        ),
+        (
+            "I had a small breakfast at 8.15 am",
+            MealSize.S,
+            datetime(2026, 8, 9, 8, 15),  # noqa: DTZ001
+            False,
+        ),
+    ],
+)
+def test_meal_messages_create_confirmable_observed_facts_without_inventing_size(
+    engine: Engine,
+    message: str,
+    expected_size: MealSize | None,
+    expected_time: datetime,
+    assumed_time: bool,
+) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"meal-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        reply = handle_message(session, owner, text=message, now=NOW)
+
+        assert reply.draft_id is not None
+        assert "Nothing is recorded yet" in reply.text
+        assert session.scalar(select(MealEvent).where(MealEvent.owner_id == owner.id)) is None
+        draft = session.get(ExtractionDraft, reply.draft_id)
+        assert draft is not None
+        candidate = ValidatedCandidate.model_validate(draft.candidates[0])
+        assert candidate.type is CandidateType.MEAL
+        assert candidate.meal_size is expected_size
+        assert candidate.local_time == expected_time
+        assert (FlagCode.ASSUMED_TIME in candidate.flags) is assumed_time
+
+        confirm_draft(session, owner, reply.draft_id)
+        session.flush()
+        recorded = session.scalar(select(MealEvent).where(MealEvent.owner_id == owner.id))
+        assert recorded is not None
+        assert recorded.size is expected_size
+        assert recorded.local_time == expected_time
+        assert recorded.confirmation_state.value == "confirmed_from_draft"
 
 
 def test_conversational_episode_shortcuts_allow_an_unspecified_trigger(engine: Engine) -> None:
