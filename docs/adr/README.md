@@ -33,6 +33,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0023](0023-indefinite-hot-wearable-retention.md) | Indefinite exact wearable retention | Accepted |
 | [0024](0024-selectable-physiological-cortisol-scenario-model.md) | Selectable physiological cortisol scenario model without dosing-adequacy claims | Accepted |
 | [0025](0025-private-health-data-chatbot.md) | Private health-data chatbot uses bounded read-only domain tools | Accepted |
+| [0026](0026-wake-anchored-free-cortisol-reference-and-meals.md) | Wake-anchored free-cortisol reference and observed meal context | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.
