@@ -71,6 +71,8 @@ class AuditAction(StrEnum):
     CHAT_CONVERSATION_DELETED = "chat_conversation_deleted"
     CHAT_CONVERSATIONS_DELETED = "chat_conversations_deleted"
     CHAT_MESSAGE_ACCEPTED = "chat_message_accepted"
+    CHAT_RESPONSE_GENERATED = "chat_response_generated"
+    CHAT_RESPONSE_CANCELLED = "chat_response_cancelled"
 
     DATA_DELETED = "data_deleted"
 

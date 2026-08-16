@@ -176,6 +176,81 @@ def append_user_message(
     return message, True
 
 
+def queue_assistant_message(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    user_message: ChatMessage,
+) -> tuple[ChatMessage, bool]:
+    """Create the durable response placeholder paired with one accepted user turn."""
+    conversation = get_owned_conversation(
+        session,
+        owner_id=owner_id,
+        conversation_id=conversation_id,
+        for_update=True,
+    )
+    if conversation is None or user_message.owner_id != owner_id:
+        raise LookupError("conversation not found")
+    if user_message.conversation_id != conversation_id or user_message.role is not ChatRole.USER:
+        raise ValueError("assistant source message is invalid")
+
+    existing = session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.owner_id == owner_id,
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.sequence == user_message.sequence + 1,
+            ChatMessage.role == ChatRole.ASSISTANT,
+        )
+    )
+    if existing is not None:
+        return existing, False
+
+    last_sequence = (
+        session.scalar(
+            select(func.max(ChatMessage.sequence)).where(
+                ChatMessage.conversation_id == conversation_id,
+                ChatMessage.owner_id == owner_id,
+            )
+        )
+        or 0
+    )
+    if last_sequence != user_message.sequence:
+        raise ValueError("assistant source message is not the latest turn")
+
+    now = datetime.now(UTC)
+    message = ChatMessage(
+        conversation_id=conversation_id,
+        owner_id=owner_id,
+        role=ChatRole.ASSISTANT,
+        state=ChatMessageState.QUEUED,
+        sequence=user_message.sequence + 1,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(message)
+    conversation.last_message_at = now
+    conversation.updated_at = now
+    session.flush()
+    return message, True
+
+
+def get_owned_message(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    message_id: uuid.UUID,
+    for_update: bool = False,
+) -> ChatMessage | None:
+    query = select(ChatMessage).where(
+        ChatMessage.id == message_id,
+        ChatMessage.owner_id == owner_id,
+    )
+    if for_update:
+        query = query.with_for_update()
+    return session.scalar(query)
+
+
 def list_messages(
     session: Session,
     *,

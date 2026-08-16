@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from healthcurve.config import Settings
 from healthcurve.db import session_scope
@@ -107,6 +107,13 @@ def app_settings(request: Request) -> Settings:
 
 
 AppSettings = Annotated[Settings, Depends(app_settings)]
+
+
+def app_ai_session_factory(request: Request) -> sessionmaker[Session]:
+    return request.app.state.ai_session_factory
+
+
+AppAiSessionFactory = Annotated[sessionmaker[Session], Depends(app_ai_session_factory)]
 
 
 def app_rate_limiter(request: Request) -> RateLimiter:

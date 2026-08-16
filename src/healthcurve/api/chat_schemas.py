@@ -96,3 +96,9 @@ class ChatMessageOut(ApiModel):
 class ChatMessagePage(ApiModel):
     items: list[ChatMessageOut]
     page: PageMetadata
+
+
+class ChatMessageStalenessOut(ApiModel):
+    status: Literal["fresh", "stale", "unavailable", "not_applicable"]
+    stale: bool | None
+    checked_at: datetime

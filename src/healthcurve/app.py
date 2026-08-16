@@ -8,10 +8,13 @@ about the record or the deployment.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import sessionmaker
 
 from healthcurve.api.routers import (
     analytics,
@@ -32,6 +35,7 @@ from healthcurve.api.routers import (
     vitals,
 )
 from healthcurve.config import Environment, Settings, get_settings
+from healthcurve.db import build_ai_engine
 from healthcurve.logging import configure_logging
 from healthcurve.operations.rate_limit import RateLimiter
 from healthcurve.operations.telemetry import OperationalEvent, OperationalTelemetry
@@ -50,6 +54,14 @@ class NoStoreJSONResponse(JSONResponse):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(json_output=settings.environment is not Environment.DEV)
+    ai_engine = build_ai_engine(settings)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+        try:
+            yield
+        finally:
+            ai_engine.dispose()
 
     is_prod = settings.environment is Environment.PROD
     app = FastAPI(
@@ -60,8 +72,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None if is_prod else f"{API_PREFIX}/openapi.json",
         default_response_class=NoStoreJSONResponse,
+        lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.ai_session_factory = sessionmaker(
+        ai_engine, expire_on_commit=False
+    )
     app.state.rate_limiter = RateLimiter(settings.redis_url)
     app.state.telemetry = OperationalTelemetry(settings.redis_url)
 

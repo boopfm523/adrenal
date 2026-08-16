@@ -14,8 +14,10 @@ import sys
 import threading
 from types import FrameType
 
+from healthcurve.ai.ollama import OllamaClient
+from healthcurve.chat.jobs import CHAT_RESPONSE_TASK, make_chat_response_handler
 from healthcurve.config import Environment, Settings, TelegramMode, get_settings
-from healthcurve.db import get_session_factory
+from healthcurve.db import get_ai_session_factory, get_session_factory
 from healthcurve.integrations.telegram import polling
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.dose_reminders import (
@@ -93,6 +95,9 @@ def main() -> int:
         polling_thread.start()
 
     handlers = {
+        CHAT_RESPONSE_TASK: make_chat_response_handler(
+            get_ai_session_factory(), client=OllamaClient(settings)
+        ),
         DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
         WEATHER_ENRICHMENT_TASK: make_weather_handler(),
     }

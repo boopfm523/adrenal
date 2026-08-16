@@ -47,6 +47,7 @@ from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
 from healthcurve.chat import service as chat_service
+from healthcurve.chat.jobs import CHAT_RESPONSE_TASK
 from healthcurve.chat.models import ChatConversation, ChatMessage, ChatMessageState, ChatRole
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import (
@@ -7840,6 +7841,20 @@ def test_chat_conversation_lifecycle_is_owner_scoped_bounded_and_non_authoritati
     assert appended.json()["content_category"] == "owner_authored"
     message_id = appended.json()["id"]
 
+    queued_page = client.get(
+        f"/api/v1/chat/conversations/{conversation_id}/messages?page=1&page_size=5"
+    )
+    assert queued_page.status_code == 200
+    assert [(item["role"], item["state"]) for item in queued_page.json()["items"]] == [
+        ("user", "accepted"),
+        ("assistant", "queued"),
+    ]
+    assistant_id = queued_page.json()["items"][1]["id"]
+    staleness = client.get(f"/api/v1/chat/messages/{assistant_id}/staleness")
+    assert staleness.status_code == 200, staleness.text
+    assert staleness.json()["status"] == "not_applicable"
+    assert staleness.json()["stale"] is None
+
     duplicate = client.post(
         f"/api/v1/chat/conversations/{conversation_id}/messages",
         headers=logged_in,
@@ -7847,12 +7862,30 @@ def test_chat_conversation_lifecycle_is_owner_scoped_bounded_and_non_authoritati
     )
     assert duplicate.status_code == 202
     assert duplicate.json()["id"] == message_id
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(Job).where(Job.task == CHAT_RESPONSE_TASK)
+            )
+            == 1
+        )
     conflict = client.post(
         f"/api/v1/chat/conversations/{conversation_id}/messages",
         headers=logged_in,
         json={"body": "Different content.", "client_message_id": "browser-1"},
     )
     assert conflict.status_code == 409
+
+    cancelled = client.post(
+        f"/api/v1/chat/messages/{assistant_id}/cancel",
+        headers=logged_in,
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["state"] == "cancelled"
+    assert (
+        client.post(f"/api/v1/chat/messages/{assistant_id}/cancel", headers=logged_in).status_code
+        == 409
+    )
 
     renamed = client.patch(
         f"/api/v1/chat/conversations/{conversation_id}",
@@ -7913,7 +7946,7 @@ def test_chat_conversation_lifecycle_is_owner_scoped_bounded_and_non_authoritati
     page = client.get(f"/api/v1/chat/conversations/{conversation_id}/messages?page=1&page_size=5")
     assert page.status_code == 200
     assert page.headers["cache-control"] == "no-store"
-    assert page.json()["page"]["total_items"] == 14
+    assert page.json()["page"]["total_items"] == 15
     assert [item["sequence"] for item in page.json()["items"]] == [1, 2, 3, 4, 5]
 
     deleted = client.delete(f"/api/v1/chat/conversations/{conversation_id}", headers=logged_in)

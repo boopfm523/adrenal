@@ -13,14 +13,25 @@ from healthcurve.api.chat_schemas import (
     ChatConversationUpdate,
     ChatMessageOut,
     ChatMessagePage,
+    ChatMessageStalenessOut,
     ChatUserMessageCreate,
 )
-from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
+from healthcurve.api.deps import (
+    AppAiSessionFactory,
+    AppRateLimiter,
+    AppSettings,
+    CurrentOwner,
+    DbSession,
+    enforce_rate_limit,
+    require_csrf,
+)
 from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.chat import service
-from healthcurve.chat.models import ChatConversation, ChatMessage, ChatRole
+from healthcurve.chat.jobs import check_source_staleness, enqueue_chat_response
+from healthcurve.chat.models import ChatConversation, ChatMessage, ChatMessageState, ChatRole
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditAction
+from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -176,7 +187,17 @@ def append_message(
     payload: ChatUserMessageCreate,
     session: DbSession,
     owner: CurrentOwner,
+    response: Response,
+    limiter: AppRateLimiter,
+    settings: AppSettings,
 ) -> ChatMessageOut:
+    enforce_rate_limit(
+        response,
+        limiter,
+        scope="chat_model",
+        identity=str(owner.id),
+        policy=RateLimitPolicy(settings.model_rate_limit, settings.model_rate_window_s),
+    )
     try:
         message, created = service.append_user_message(
             session,
@@ -195,6 +216,13 @@ def append_message(
             detail={"code": "client_message_id_conflict"},
         ) from None
     if created:
+        assistant, _ = service.queue_assistant_message(
+            session,
+            owner_id=owner.id,
+            conversation_id=conversation_id,
+            user_message=message,
+        )
+        enqueue_chat_response(session, assistant)
         audit.record(
             session,
             actor=audit.actor_for_owner(owner.id),
@@ -204,6 +232,70 @@ def append_message(
             change_summary="accepted owner-authored chat message; content omitted",
         )
     return _message_out(message)
+
+
+@router.post(
+    "/messages/{message_id}/cancel",
+    response_model=ChatMessageOut,
+    dependencies=[Depends(require_csrf)],
+)
+def cancel_message(
+    message_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+) -> ChatMessageOut:
+    message = service.get_owned_message(
+        session,
+        owner_id=owner.id,
+        message_id=message_id,
+        for_update=True,
+    )
+    if message is None or message.role is not ChatRole.ASSISTANT:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="message not found")
+    if message.state not in {
+        ChatMessageState.QUEUED,
+        ChatMessageState.PLANNING,
+        ChatMessageState.READING,
+        ChatMessageState.GENERATING,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "message_not_cancellable"},
+        )
+    message.state = ChatMessageState.CANCELLED
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(owner.id),
+        action=AuditAction.CHAT_RESPONSE_CANCELLED,
+        target_type="chat_message",
+        target_id=message.id,
+        change_summary="cancelled private chat response; content omitted",
+    )
+    return _message_out(message)
+
+
+@router.get(
+    "/messages/{message_id}/staleness",
+    response_model=ChatMessageStalenessOut,
+)
+def get_message_staleness(
+    message_id: uuid.UUID,
+    session: DbSession,
+    owner: CurrentOwner,
+    ai_factory: AppAiSessionFactory,
+) -> ChatMessageStalenessOut:
+    if service.get_owned_message(session, owner_id=owner.id, message_id=message_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="message not found")
+    result = check_source_staleness(
+        ai_factory,
+        owner_id=owner.id,
+        assistant_message_id=message_id,
+    )
+    return ChatMessageStalenessOut(
+        status=result.status,
+        stale=result.stale,
+        checked_at=result.checked_at,
+    )
 
 
 def _owned_conversation(
