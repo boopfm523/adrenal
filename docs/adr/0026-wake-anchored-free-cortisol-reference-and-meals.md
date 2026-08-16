@@ -166,6 +166,23 @@ required dose, trigger medication advice, or suppress symptom/emergency pathways
 structural pre-wake gap between oral replacement and a healthy endogenous rise is
 labeled expected for this model and excluded from urgent or prescriptive language.
 
+### 7. Deploy additively and prefer forward-fix rollback
+
+The schema upgrade is additive and ordered: create immutable owner-scoped cortisol PK
+parameter revisions, create owner-scoped meal facts with correction provenance, then
+add the nullable symptom-category and blood-pressure-position fields. Upgrade tests
+run each migration from its immediate predecessor and exercise its downgrade and
+reinstall path.
+
+The model selector isolates v3 from v1 and v2, so the operational rollback is to
+disable or remove the v3 route and UI option while leaving its additive data intact.
+After an owner has saved parameter revisions, meal facts, symptom categories, or body
+positions, prefer a forward fix over a schema downgrade. The mechanical downgrades are
+valid for an empty or disposable environment, but they drop the new table or columns
+and therefore require a verified encrypted backup/export before use on retained data.
+Existing dose facts, physician-approved plan versions, v1/v2 calculations, and legacy
+chart behavior do not depend on these new tables or columns.
+
 ## Consequences
 
 HealthCurve gains a third, more detailed comparison whose modeled and reference

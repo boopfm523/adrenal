@@ -465,17 +465,18 @@ judgment. See
 
 ### Exact HealthCurve formulas and evidence
 
-The Analytics page lets the owner switch between two preserved, versioned models and
+The Analytics page lets the owner switch between three preserved, versioned models and
 publishes the selected model's executable formula, live parameter values, evidence
 links, and limitations under **How this model works: formulas, sources, and limits**.
-The URL keeps `model=hc-exposure-v1` or `model=hc-physiology-v2` across day navigation.
-An absent selector uses v1; an unknown selector fails validation rather than silently
-falling back.
+The URL keeps `model=hc-exposure-v1`, `model=hc-physiology-v2`, or
+`model=hc-wake-free-v3` across day navigation. An absent selector uses v1; an unknown
+selector fails validation rather than silently falling back.
 
 | Model | Output | Unit | Boundary |
 |---|---|---|---|
 | `hc-exposure-v1` | normalized oral-dose exposure shape | REU | relative visualization, not cortisol concentration |
 | `hc-physiology-v2` | population-parameter plasma-free-cortisol scenario | nmol/L | modeled scenario, not measured or personalized cortisol |
+| `hc-wake-free-v3` | wake-era serum-free-cortisol scenario | nmol/L | modeled scenario compared with an independently generated healthy-adult population reference |
 
 For elapsed hours `t` after a supported actual dose, the v1 implementation is exactly:
 
@@ -557,6 +558,57 @@ symptoms, and recorded episodes do not modify the band or either drug model. No
 time-in-range, deficit, excess, adequacy, or dose calculation is produced. Full model
 selection, parameter provenance, uncertainty, and rejected alternatives are in
 [ADR-0024](adr/0024-selectable-physiological-cortisol-scenario-model.md).
+
+For v3, let `tau = t - t_i` be elapsed real hours after each supported
+immediate-release oral hydrocortisone dose. Its owner-revisable parameter set contains
+the elimination half-life `t_half`, peak time `tmax`, distribution volume `Vd`, and
+oral bioavailability `F`. HealthCurve derives the elimination rate and solves the
+Bateman peak-time relationship for a positive absorption rate:
+
+```text
+ke = ln(2) / t_half
+tmax = ln(ka / ke) / (ka - ke)       solve deterministically for ka > 0
+raw(tau) = exp(-ke*tau) - exp(-ka*tau)
+shape(tau) = raw(tau) / raw(tmax)
+C_i(t) = peak_free_10mg(F, Vd) * (D_i / 10 mg) * shape(tau)
+C_free(t) = sum_i C_i(t)
+```
+
+Absorption and elimination occur concurrently, so elimination does not wait for a dose
+to reach the bloodstream. Every supported dose contributes independently for up to 72
+hours, including closely spaced, simultaneous, prior-day, regular, and explicitly
+categorized stress doses. Regular and stress contributions remain separately visible
+and sum to the plotted total. Parameter edits create immutable owner-scoped revisions;
+they do not rewrite previous calculations or physician-approved plans.
+
+V3 calculations and symptom correlations remain in serum free cortisol. Derived serum
+total cortisol is display-only lab context and uses the versioned saturable binding
+conversion rather than a fixed ratio:
+
+```text
+C_total = C_free * (1 + N_ALB) + (CBG_G * CBG_K * C_free) / (1 + CBG_K * C_free)
+```
+
+`hc-wake-reference-v1` is generated on demand for the selected local day's real
+23-, 24-, or 25-hour duration. It anchors the cortisol-awakening response and daytime
+decline to the confirmed wake time, anchors the overnight segment to sleep onset, and
+adds only confirmed meal-time pulses. Missing wake, sleep, or meal timing is never
+invented or treated as zero. P5, P50, and P95 use the versioned log-distribution width;
+the default ribbon is P5–P95. The modeled v3 curve, reference median, and reference band
+share one absolute serum-free-cortisol axis and are never independently normalized.
+The pre-wake oral-replacement gap is labeled as an expected structural limitation, not
+an alert or dosing instruction.
+
+The daily `hc-wake-coverage-v1.1.0` feature set records descriptive comparisons such as
+time below P5/P25, inter-dose troughs, maximum fall rate, time since the last dose at a
+symptom, time and magnitude above P95, and modeled-versus-reference AUC. Symptom
+category and blood-pressure body position remain separate context so HealthCurve does
+not attribute every observation to glucocorticoid exposure. These features are
+hypothesis-generating only: they do not establish causation, determine medication
+need, recommend a dose, or override symptoms and physician-authored instructions. Full
+model boundaries, assumptions, reference citations, meal behavior, and rejected
+alternatives are in
+[ADR-0026](adr/0026-wake-anchored-free-cortisol-reference-and-meals.md).
 
 For display only, each non-stress, non-symptom numeric lane uses
 `display = 100 * (value - display_min) / max(display_max - display_min, 1)`, where
