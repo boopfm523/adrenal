@@ -22,6 +22,7 @@ include_external_packages = False
 name = Domain modules form a one-way dependency stack
 type = layers
 layers =
+    healthcurve.chat
     healthcurve.reports
     healthcurve.analytics
     healthcurve.integrations
