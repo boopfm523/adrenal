@@ -32,6 +32,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0022](0022-durable-streamed-private-exports.md) | Durable streamed private exports | Accepted |
 | [0023](0023-indefinite-hot-wearable-retention.md) | Indefinite exact wearable retention | Accepted |
 | [0024](0024-selectable-physiological-cortisol-scenario-model.md) | Selectable physiological cortisol scenario model without dosing-adequacy claims | Accepted |
+| [0025](0025-private-health-data-chatbot.md) | Private health-data chatbot uses bounded read-only domain tools | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

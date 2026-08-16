@@ -92,6 +92,8 @@ Suggested domain modules:
 - `integrations`: Telegram, Garmin, location/timezone, weather.
 - `labs`: panels, analytes, ranges, source metadata.
 - `ai`: extraction drafts, model/prompt registry, analysis and safety gate.
+- `chat`: retained owner conversations, bounded context, read-only domain tools,
+  source fingerprints, and durable response orchestration.
 - `analytics`: deterministic metrics and aggregations.
 - `reports`: snapshots, rendering, PDF/CSV/JSON exports.
 - `operations`: jobs, import batches, audit, backup/restore status.
@@ -141,6 +143,9 @@ Use relational columns for invariants and JSON only for source payloads or truly
 - `LabPanel` and `LabResult`: specimen/report time, analyte, value or qualitative result, original unit, original reference range, abnormal flag, source.
 - `ExtractionDraft`: raw-input reference, candidates, confidence, prompt/model/schema versions, user corrections, state.
 - `AIAnalysis`: type, source record IDs/date range, result, model/prompt version, generated time, disclaimer.
+- `ChatConversation`, `ChatMessage`, and `ChatToolExecution`: retained owner-visible
+  turns, response lifecycle, source/tool/model provenance, and deletable conversation
+  metadata; raw prompts and tool-result bodies are transient.
 - `ImportBatch`: integration, cursor/window, status, counts, checksum/errors.
 - `ReportSnapshot`: selected range/sections, included record IDs, metric values, render version, checksum.
 - `AuditEntry`: actor, action, target, timestamp, correlation ID, change reference/diff.
@@ -169,6 +174,8 @@ Representative endpoints:
 - `POST /integrations/telegram/webhook`, `/integrations/garmin/sync`
 - `GET /integrations/{provider}/status`, disconnect/revoke endpoints
 - `GET /analytics/{metric}`, `POST /reports`, `GET /reports/{id}`
+- `POST/GET /chat/conversations`, conversation-scoped message/run status, cancel,
+  regenerate, rename, and delete endpoints
 - `POST /exports`, `POST /imports`, `GET /data-quality`
 - `GET /health/live`, `GET /health/ready` without sensitive output
 
@@ -215,6 +222,11 @@ Maintain a versioned evaluation set covering relative dates, overnight events, t
 
 Compute totals, comparisons, rolling summaries, and chart datasets in deterministic code. The LLM may summarize computed results and selected facts; it should cite source record IDs and omit unsupported claims. Store model name/digest, prompt/schema version, input IDs, generation time, and settings. Reports exclude AI by default and provide regenerate/hide/delete controls.
 
+The first-party chatbot follows ADR-0025: the model selects only allow-listed,
+owner-scoped, read-only domain tools; deterministic code performs calculations; durable
+runs expose progress and typed failures; and retained answers preserve source scope and
+stale-data fingerprints. The model never receives SQL or a mutation tool.
+
 ## 10. Web pages
 
 - **Today:** plan schedule, actual doses, symptoms, open episode, sleep/activity context, quick add, emergency-plan link.
@@ -226,6 +238,9 @@ Compute totals, comparisons, rolling summaries, and chart datasets in determinis
 - **Sleep, vitals, activity:** daily/weekly views, availability and gap indicators.
 - **Labs:** analyte trend, original range bands/units, table and source metadata.
 - **Analytics:** user-selected overlays with metric definitions and correlation cautions.
+- **Chat:** retained private conversations for questions about owner data, with bounded
+  read-only tools, visible progress, suggested questions, source details, stale-answer
+  warnings, and owner-controlled deletion.
 - **Reports:** range/section selection, preview, labeled fact/plan/AI sections, PDF/CSV/JSON.
 - **Data quality:** duplicates, ambiguous drafts, missing units/timezones, integration gaps.
 - **Settings/privacy:** integrations, retention, location precision, export/deletion, security, backups, audit.
@@ -262,6 +277,9 @@ A physician report should include reporting period; current approved regimen and
 - Use least privilege, pinned/patched dependencies, container/non-root users, and CI scanning.
 - Redact logs; do not log tokens, raw Telegram bodies, exact location, labs, or free-text health data by default.
 - Provide complete export, integration disconnect, retention controls, and account/data deletion.
+- Include retained chatbot conversations in complete private export; exclude them from
+  physician reports by default; provide conversation and bulk deletion controls; never
+  persist or log assembled prompts or raw tool-result bodies.
 - Audit logins/security changes, plan approval changes, corrections, exports, and reports.
 - Reassess regulatory and legal obligations before adding clinicians, multiple users, or commercial use.
 
@@ -292,8 +310,14 @@ Observability:
 - Property tests: event windows, totals, idempotency, import ordering/revisions, and non-overlapping plan rules.
 - Database/integration tests: migrations from prior versions, constraints, Telegram secret/deduplication, Garmin reconciliation fixtures, weather/lab mappings.
 - LLM evaluation: gold cases, field accuracy thresholds, ambiguity/negation/hallucination/prompt-injection tests, and regression gates for model/prompt changes.
+- Chatbot evaluation: bounded tool selection, owner isolation, conversation continuity,
+  source/numeric validation, missingness, stale-data handling, cancellation/timeouts,
+  deletion/export, and prompt injection using the synthetic contract in
+  `docs/chatbot-evaluation.md`.
 - Security/API tests: ownership, CSRF, sessions, rate limits, invalid units, malicious HTML, payload limits, and secret/log redaction.
 - End-to-end tests: Telegram confirm, web correction, plan transition, episode, injection, import, chart, report, export/deletion.
+- Chat end-to-end tests: retained follow-ups, refresh-safe durable runs, cancel/retry,
+  sensitive-text opt-in, data-changed regeneration, and iPhone/iPad/desktop journeys.
 - Accessibility/visual tests: keyboard journey, automated audit, responsive UI, chart alternatives, and rendered PDF inspection.
 - Operations tests: backup/restore, dependency outage, retry/dead-letter behavior, expired-token recovery, and emergency page with AI/integrations offline.
 
