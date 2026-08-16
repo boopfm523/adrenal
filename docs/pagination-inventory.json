@@ -1,6 +1,8 @@
 {
   "schema_version": 2,
   "api_collections": {
+    "routers/chat.py:/conversations": { "status": "paginated", "issue": "hc-met.3", "pagination_contract": "PageRequest", "date_filter": "none_current", "sensitivity": "owner_scoped_sensitive_ai_working_state", "reason": "Owner-visible conversation history is retained until explicit deletion and ordered by latest message time with stable tie-breakers." },
+    "routers/chat.py:/conversations/{conversation_id}/messages": { "status": "paginated", "issue": "hc-met.3", "pagination_contract": "PageRequest", "date_filter": "none_current", "sensitivity": "owner_scoped_sensitive_ai_working_state", "reason": "Messages are bounded per page and ordered by immutable conversation sequence." },
     "routers/context.py:": { "status": "paginated", "issue": "hc-inbox.20.2", "pagination_contract": "PageRequest", "date_filter": "experienced_local", "timezone": "explicit_iana", "sensitivity": "owner_scoped_health" },
     "routers/data_quality.py:/data-quality": { "status": "paginated", "issue": "hc-inbox.20.3", "pagination_contract": "PageRequest", "date_filter": "none_current", "sensitivity": "owner_scoped_operational", "reason": "Current deterministic findings have no experienced timestamp; date filtering would invent temporal meaning." },
     "routers/doses.py:/doses": { "status": "paginated", "issue": "hc-inbox.20.2", "pagination_contract": "PageRequest", "date_filter": "experienced_local", "timezone": "explicit_iana", "sensitivity": "owner_scoped_health" },

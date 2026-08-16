@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import Range
 from sqlalchemy.orm import Session, sessionmaker
 
 from healthcurve.ai.models import AIAnalysis, ExtractionDraft
+from healthcurve.chat.models import ChatConversation, ChatMessage, ChatToolExecution
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
@@ -115,6 +116,13 @@ def _collections(
         if include_sensitive:
             ai_rows.append(
                 ExportCollection("extraction_drafts", _direct(ExtractionDraft, owner_id))
+            )
+            ai_rows.extend(
+                (
+                    ExportCollection("chat_conversations", _direct(ChatConversation, owner_id)),
+                    ExportCollection("chat_messages", _direct(ChatMessage, owner_id)),
+                    ExportCollection("chat_tool_executions", _direct(ChatToolExecution, owner_id)),
+                )
             )
 
     return {

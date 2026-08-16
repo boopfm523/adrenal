@@ -66,6 +66,11 @@ class AuditAction(StrEnum):
 
     AI_ANALYSIS_GENERATED = "ai_analysis_generated"
     AI_ANALYSIS_DELETED = "ai_analysis_deleted"
+    CHAT_CONVERSATION_CREATED = "chat_conversation_created"
+    CHAT_CONVERSATION_UPDATED = "chat_conversation_updated"
+    CHAT_CONVERSATION_DELETED = "chat_conversation_deleted"
+    CHAT_CONVERSATIONS_DELETED = "chat_conversations_deleted"
+    CHAT_MESSAGE_ACCEPTED = "chat_message_accepted"
 
     DATA_DELETED = "data_deleted"
 

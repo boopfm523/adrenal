@@ -273,6 +273,27 @@ def test_ai_role_owns_its_own_namespace(ai_engine: Engine) -> None:
         assert conn.execute(text("SELECT count(*) FROM ai.analysis_probe")).scalar_one() == 1
 
 
+@pytest.mark.safety("SAFE-15")
+def test_chat_tables_have_deliberate_ai_and_backup_privileges(owner_engine: Engine) -> None:
+    """Chat working state is writable by AI; backup remains strictly read-only."""
+    tables = ("chat_conversation", "chat_message", "chat_tool_execution")
+    with owner_engine.connect() as conn:
+        for table in tables:
+            qualified = f"ai.{table}"
+            assert conn.scalar(
+                text("SELECT has_table_privilege(:role, :table, 'SELECT,INSERT,UPDATE,DELETE')"),
+                {"role": "healthcurve_ai", "table": qualified},
+            )
+            assert conn.scalar(
+                text("SELECT has_table_privilege(:role, :table, 'SELECT')"),
+                {"role": "healthcurve_backup", "table": qualified},
+            )
+            assert not conn.scalar(
+                text("SELECT has_table_privilege(:role, :table, 'INSERT')"),
+                {"role": "healthcurve_backup", "table": qualified},
+            )
+
+
 def test_ai_role_can_record_job_progress(owner_engine: Engine, ai_engine: Engine) -> None:
     """AI jobs write to ops, so the restriction must not block the queue (ADR-0004)."""
     with owner_engine.begin() as conn:

@@ -82,15 +82,16 @@ def test_category_of_matches_the_table_schema() -> None:
 
 
 @pytest.mark.safety("SAFE-01")
-def test_no_foreign_key_points_into_the_ai_namespace() -> None:
+def test_no_authoritative_or_operational_foreign_key_points_into_ai() -> None:
     """Facts and plans must never depend on generated content (SAFE-06).
 
-    An FK into `ai` would make deleting an analysis capable of affecting a fact.
+    An FK from outside `ai` would make deleting an analysis capable of affecting an
+    authoritative or operational record. AI-internal ownership cascades are allowed.
     """
     offenders: list[str] = []
     for model in _mapped_models():
         for fk in model.__table__.foreign_keys:
-            if fk.column.table.schema == "ai":
+            if model.__table__.schema != "ai" and fk.column.table.schema == "ai":
                 offenders.append(f"{model.__table__.fullname} -> {fk.target_fullname}")
     assert not offenders, f"foreign keys into the ai namespace: {offenders}"
 

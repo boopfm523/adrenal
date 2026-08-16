@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from healthcurve.api.routers import (
     analytics,
     auth,
+    chat,
     context,
     data_quality,
     doses,
@@ -87,6 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     for router in (
         auth.router,
+        chat.router,
         context.router,
         data_quality.router,
         analytics.router,

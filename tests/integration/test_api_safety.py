@@ -46,6 +46,8 @@ from healthcurve.analytics import day_analysis as day_analysis_service
 from healthcurve.analytics import service as analytics_service
 from healthcurve.api import deps as api_deps
 from healthcurve.api.routers import events as events_router
+from healthcurve.chat import service as chat_service
+from healthcurve.chat.models import ChatConversation, ChatMessage, ChatMessageState, ChatRole
 from healthcurve.config import Environment, Settings, get_settings
 from healthcurve.context.models import (
     ContextEvent,
@@ -7794,3 +7796,186 @@ def test_common_views_meet_latency_targets_on_six_year_synthetic_volume(
         finally:
             session.close()
             transaction.rollback()
+
+
+def test_chat_conversation_lifecycle_is_owner_scoped_bounded_and_non_authoritative(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    """Chat persistence is usable but cannot mutate fact or plan categories."""
+
+    def authoritative_signature() -> dict[str, tuple[int, str]]:
+        signatures: dict[str, tuple[int, str]] = {}
+        with engine.connect() as connection:
+            for table in all_models.Base.metadata.sorted_tables:
+                if table.schema not in {"fact", "plan"}:
+                    continue
+                key = f"{table.schema}.{table.name}"
+                count, digest = connection.execute(
+                    text(
+                        f"SELECT count(*), md5(coalesce("
+                        f"string_agg(to_jsonb(t)::text, ',' ORDER BY to_jsonb(t)::text), '')) "
+                        f'FROM "{table.schema}"."{table.name}" AS t'
+                    )
+                ).one()
+                signatures[key] = (count, digest)
+        return signatures
+
+    before = authoritative_signature()
+    created = client.post(
+        "/api/v1/chat/conversations",
+        headers=logged_in,
+        json={"title": "Synthetic continuity check", "include_sensitive_text": False},
+    )
+    assert created.status_code == 201, created.text
+    assert created.headers["cache-control"] == "no-store"
+    conversation_id = created.json()["id"]
+    assert created.json()["category"] == "ai"
+
+    appended = client.post(
+        f"/api/v1/chat/conversations/{conversation_id}/messages",
+        headers=logged_in,
+        json={"body": "Compare the synthetic dates.", "client_message_id": "browser-1"},
+    )
+    assert appended.status_code == 202, appended.text
+    assert appended.json()["content_category"] == "owner_authored"
+    message_id = appended.json()["id"]
+
+    duplicate = client.post(
+        f"/api/v1/chat/conversations/{conversation_id}/messages",
+        headers=logged_in,
+        json={"body": "Compare the synthetic dates.", "client_message_id": "browser-1"},
+    )
+    assert duplicate.status_code == 202
+    assert duplicate.json()["id"] == message_id
+    conflict = client.post(
+        f"/api/v1/chat/conversations/{conversation_id}/messages",
+        headers=logged_in,
+        json={"body": "Different content.", "client_message_id": "browser-1"},
+    )
+    assert conflict.status_code == 409
+
+    renamed = client.patch(
+        f"/api/v1/chat/conversations/{conversation_id}",
+        headers=logged_in,
+        json={"title": "Renamed synthetic conversation", "include_sensitive_text": True},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["title"] == "Renamed synthetic conversation"
+    assert renamed.json()["include_sensitive_text"] is True
+
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        other_owner = Owner(
+            email=f"chat-other-{uuid.uuid4()}@example.test",
+            password_hash=auth.hash_password("synthetic-other-password"),
+            default_timezone="UTC",
+        )
+        session.add(other_owner)
+        session.flush()
+        other_conversation = ChatConversation(owner_id=other_owner.id, title="Other owner")
+        session.add(other_conversation)
+        session.flush()
+        other_id = other_conversation.id
+
+        conversation_uuid = uuid.UUID(conversation_id)
+        last_sequence = (
+            session.scalar(
+                select(func.max(ChatMessage.sequence)).where(
+                    ChatMessage.conversation_id == conversation_uuid
+                )
+            )
+            or 0
+        )
+        for index in range(13):
+            session.add(
+                ChatMessage(
+                    conversation_id=conversation_uuid,
+                    owner_id=owner_id,
+                    role=ChatRole.USER,
+                    state=ChatMessageState.ACCEPTED,
+                    body=f"turn-{index}:" + ("x" * 2490),
+                    sequence=last_sequence + index + 1,
+                    client_message_id=f"bounded-{index}",
+                )
+            )
+        session.flush()
+        bounded = chat_service.bounded_context(
+            session, owner_id=owner_id, conversation_id=conversation_uuid
+        )
+        assert len(bounded.turns) <= chat_service.MAX_CONTEXT_TURNS
+        assert bounded.character_count <= chat_service.MAX_CONTEXT_CHARS
+        assert [turn.sequence for turn in bounded.turns] == sorted(
+            turn.sequence for turn in bounded.turns
+        )
+
+    assert client.get(f"/api/v1/chat/conversations/{other_id}").status_code == 404
+    page = client.get(f"/api/v1/chat/conversations/{conversation_id}/messages?page=1&page_size=5")
+    assert page.status_code == 200
+    assert page.headers["cache-control"] == "no-store"
+    assert page.json()["page"]["total_items"] == 14
+    assert [item["sequence"] for item in page.json()["items"]] == [1, 2, 3, 4, 5]
+
+    deleted = client.delete(f"/api/v1/chat/conversations/{conversation_id}", headers=logged_in)
+    assert deleted.status_code == 204
+    assert deleted.headers["cache-control"] == "no-store"
+    assert client.get(f"/api/v1/chat/conversations/{conversation_id}").status_code == 404
+    assert authoritative_signature() == before
+    with Session(engine) as session:
+        actions = set(
+            session.scalars(
+                select(AuditEntry.action).where(
+                    AuditEntry.target_id.in_((uuid.UUID(conversation_id), uuid.UUID(message_id)))
+                )
+            )
+        )
+        assert AuditAction.CHAT_CONVERSATION_CREATED in actions
+        assert AuditAction.CHAT_MESSAGE_ACCEPTED in actions
+        assert AuditAction.CHAT_CONVERSATION_DELETED in actions
+        audit_text = " ".join(
+            summary or ""
+            for summary in session.scalars(
+                select(AuditEntry.change_summary).where(
+                    AuditEntry.target_id.in_((uuid.UUID(conversation_id), uuid.UUID(message_id)))
+                )
+            )
+        )
+        assert "Compare the synthetic dates" not in audit_text
+
+    for title in ("First synthetic thread", "Second synthetic thread"):
+        response = client.post(
+            "/api/v1/chat/conversations", headers=logged_in, json={"title": title}
+        )
+        assert response.status_code == 201
+    first_page = client.get("/api/v1/chat/conversations?page=1&page_size=1")
+    assert first_page.status_code == 200
+    assert first_page.json()["page"]["total_items"] == 2
+    assert len(first_page.json()["items"]) == 1
+    deleted_all = client.delete("/api/v1/chat/conversations", headers=logged_in)
+    assert deleted_all.status_code == 204
+    assert client.get("/api/v1/chat/conversations").json()["page"]["total_items"] == 0
+    with Session(engine) as session:
+        assert session.get(ChatConversation, other_id) is not None
+    assert authoritative_signature() == before
+
+
+@pytest.mark.safety("SAFE-05")
+def test_database_rejects_completed_chat_answer_without_full_provenance(engine: Engine) -> None:
+    with Session(engine) as session:
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        conversation = ChatConversation(owner_id=owner_id, title="Synthetic provenance check")
+        session.add(conversation)
+        session.flush()
+        session.add(
+            ChatMessage(
+                conversation_id=conversation.id,
+                owner_id=owner_id,
+                role=ChatRole.ASSISTANT,
+                state=ChatMessageState.COMPLETED,
+                body="Synthetic answer that must not persist without provenance.",
+                sequence=1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
