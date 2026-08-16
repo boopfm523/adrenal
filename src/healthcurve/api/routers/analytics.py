@@ -313,6 +313,7 @@ def generate_day_analysis(
         max_output_tokens=analysis_service.DAY_MAX_OUTPUT_TOKENS,
         context_window=analysis_service.DAY_CONTEXT_WINDOW,
         deterministic_safety_fields=True,
+        compact_output=True,
     )
     if generated.analysis is not None:
         zone = ZoneInfo(zone_name)

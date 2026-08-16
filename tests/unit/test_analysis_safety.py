@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from healthcurve.ai.analysis import (
+    COMPACT_ANALYSIS_SCHEMA,
     AnalysisOutcome,
     AnalysisResponse,
     AnalysisValidationError,
@@ -276,6 +277,88 @@ def test_analysis_forwards_bounded_generation_options() -> None:
     assert model.generate_json.call_args.kwargs["max_output_tokens"] == 1024
     assert model.generate_json.call_args.kwargs["context_window"] == 16_384
     assert model.generate_json.call_args.kwargs["read_timeout_s"] == 120.0
+
+
+def test_compact_day_analysis_adds_provenance_and_safety_fields() -> None:
+    session = Mock()
+    model = Mock(spec=OllamaClient)
+    model.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.OK,
+        data={
+            "refused": False,
+            "refusal_reason": None,
+            "claims": ["Stress averaged 25 while heart rate averaged 68."],
+        },
+        model_name="synthetic-model:latest",
+        model_digest="a" * 64,
+    )
+
+    result = generate_analysis(
+        session,
+        owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[SOURCE],
+        computed_inputs={
+            "stress_average": 25,
+            "heart_rate_average": 68,
+            "missing_domains": ["labs"],
+        },
+        client=model,
+        deterministic_safety_fields=True,
+        compact_output=True,
+    )
+
+    assert result.outcome is AnalysisOutcome.CREATED
+    assert result.analysis is not None
+    assert f"[sources: {SOURCE}]" in result.analysis.body
+    assert "Missing domains in deterministic inputs: labs." in result.analysis.body
+    assert "do not establish causation or diagnosis" in result.analysis.body
+    assert model.generate_json.call_args.kwargs["json_schema"] == COMPACT_ANALYSIS_SCHEMA
+
+
+@pytest.mark.safety("SAFE-17")
+def test_compact_day_analysis_still_rejects_medication_guidance() -> None:
+    session = Mock()
+    model = Mock(spec=OllamaClient)
+    model.generate_json.return_value = ModelResult(
+        outcome=ModelOutcome.OK,
+        data={
+            "refused": False,
+            "refusal_reason": None,
+            "claims": ["You should increase the dose to 15 mg."],
+        },
+        model_name="synthetic-model:latest",
+        model_digest="a" * 64,
+    )
+
+    result = generate_analysis(
+        session,
+        owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        analysis_type=AnalysisType.DAILY_SUMMARY,
+        source_record_ids=[SOURCE],
+        computed_inputs={"total_mg": 15},
+        client=model,
+        deterministic_safety_fields=True,
+        compact_output=True,
+    )
+
+    assert result.outcome is AnalysisOutcome.INVALID
+    assert result.analysis is None
+    assert result.detail is not None and "medication guidance" in result.detail
+    session.add.assert_not_called()
+
+
+def test_compact_output_requires_application_owned_safety_fields() -> None:
+    with pytest.raises(ValueError, match="compact output requires deterministic safety fields"):
+        generate_analysis(
+            Mock(),
+            owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+            analysis_type=AnalysisType.DAILY_SUMMARY,
+            source_record_ids=[SOURCE],
+            computed_inputs={"missing_domains": ["labs"]},
+            client=Mock(spec=OllamaClient),
+            compact_output=True,
+        )
 
 
 def test_analysis_resolves_missing_chat_digest_from_local_inventory() -> None:
