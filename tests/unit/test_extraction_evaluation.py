@@ -88,7 +88,25 @@ def test_gold_set_covers_required_synthetic_safety_cases() -> None:
         "blood-pressure",
         "body-temperature",
         "body-weight",
+        "meal-with-explicit-size",
+        "meal-without-size",
     }
     assert {case.id for case in gold.cases} == required
     assert gold.synthetic_marker == SYNTHETIC_MARKER
     assert all(case.synthetic_marker == SYNTHETIC_MARKER for case in gold.cases)
+
+
+def test_checked_in_baseline_preserves_optional_and_explicit_meal_sizes() -> None:
+    predictions = {
+        prediction.id: prediction for prediction in load_report(BASELINE_PATH).predictions
+    }
+
+    unsized = predictions["meal-without-size"].candidates
+    sized = predictions["meal-with-explicit-size"].candidates
+
+    assert len(unsized) == 1
+    assert unsized[0]["type"] == "meal"
+    assert unsized[0]["meal_size"] is None
+    assert len(sized) == 1
+    assert sized[0]["type"] == "meal"
+    assert sized[0]["meal_size"] == "xl"

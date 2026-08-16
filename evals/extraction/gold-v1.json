@@ -1,6 +1,6 @@
 {
   "version": "gold-v1",
-  "prompt_version": "extract-v6",
+  "prompt_version": "extract-v7",
   "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
   "known_medications": ["hydrocortisone", "fludrocortisone"],
   "thresholds": {
@@ -8,6 +8,7 @@
     "candidate_count": 0.9,
     "hypothetical": 1.0,
     "local_time": 0.8,
+    "meal_size": 1.0,
     "medication_name": 0.9,
     "negated": 1.0,
     "severity": 1.0,
@@ -25,6 +26,7 @@
     "candidate_count": 0.98,
     "hypothetical": 1.0,
     "local_time": 0.95,
+    "meal_size": 1.0,
     "medication_name": 0.98,
     "negated": 1.0,
     "severity": 1.0,
@@ -136,6 +138,22 @@
       "timezone": "Europe/London",
       "now": "2026-08-09T09:00:00+01:00",
       "expected": [{"fields": {"type": "weight", "amount": "180.5", "unit": "lb", "local_time": "2026-08-09T08:20:00", "negated": false, "hypothetical": false}}]
+    },
+    {
+      "id": "meal-without-size",
+      "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
+      "message": "I just ate at 12:05.",
+      "timezone": "Europe/London",
+      "now": "2026-08-09T13:00:00+01:00",
+      "expected": [{"fields": {"type": "meal", "meal_size": null, "local_time": "2026-08-09T12:05:00", "negated": false, "hypothetical": false}}]
+    },
+    {
+      "id": "meal-with-explicit-size",
+      "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
+      "message": "I had an XL meal at 18:30.",
+      "timezone": "Europe/London",
+      "now": "2026-08-09T19:00:00+01:00",
+      "expected": [{"fields": {"type": "meal", "meal_size": "xl", "local_time": "2026-08-09T18:30:00", "negated": false, "hypothetical": false}}]
     },
     {
       "id": "body-temperature",
