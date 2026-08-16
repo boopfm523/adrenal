@@ -108,7 +108,7 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
     mutation.mutate({ reason: reason.trim(), changes });
   }
 
-  return <form aria-label={`Correct ${symptom.name} symptom`} onSubmit={submit}><Paper className="correction-form" p="md" radius="md">
+  return <form aria-label={`Correct ${symptom.name} symptom`} onSubmit={submit}><Paper className="aligned-form-grid correction-form" p="md" radius="md">
     <Alert className="form-wide" color="orange">This creates a corrected fact and preserves the original.</Alert>
     <TextInput label="Name" required aria-label="Name" value={name} onChange={(event) => { setName(event.target.value); }} />
     <TextInput label="Severity (0–10)" type="number" min="0" max="10" value={severity} onChange={(event) => { setSeverity(event.target.value); }} />
@@ -161,7 +161,7 @@ function SymptomCreateForm({ timezone }: { timezone: string }): React.JSX.Elemen
     });
   }
 
-  return <form aria-label="Record a symptom" onSubmit={submit}><Paper className="correction-form" withBorder p="lg" radius="lg">
+  return <form aria-label="Record a symptom" onSubmit={submit}><Paper className="aligned-form-grid correction-form" withBorder p="lg" radius="lg">
     <Alert className="form-wide" color="orange"><strong>Record what you experienced.</strong> This creates a subjective health fact, not a diagnosis or an explanation of its cause.</Alert>
     <TextInput id="new-symptom-name" label="Symptom" required aria-label="Symptom" maxLength={120} value={form.name} onChange={(event) => { setForm({ ...form, name: event.target.value }); }} placeholder="For example: fatigue, dizziness, or nausea" description="Use a short description of what you felt. Record each distinct symptom separately." />
     <TextInput id="new-symptom-severity" label="Severity (0–10)" type="number" min="0" max="10" inputMode="numeric" value={form.severity} onChange={(event) => { setForm({ ...form, severity: event.target.value }); }} description="Optional personal rating, where 0 is no noticeable impact and 10 is your most severe. Missing is kept as unknown, not zero." />
@@ -213,7 +213,7 @@ function MealCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
     });
   }
 
-  return <form aria-label="Record a meal" onSubmit={submit}><Paper className="correction-form" withBorder p="lg" radius="lg">
+  return <form aria-label="Record a meal" onSubmit={submit}><Paper className="aligned-form-grid correction-form" withBorder p="lg" radius="lg">
     <Alert className="form-wide" color="blue"><strong>Record only what happened.</strong> Meal timing adds context to the healthy reference band; it does not change your modeled medication curve.</Alert>
     <NativeSelect label="Meal size" description="Optional T-shirt size. Leave unknown if you did not estimate it." data={mealSizeOptions} value={form.size} onChange={(event) => { setForm({ ...form, size: event.target.value }); }} />
     <TextInput label="Experienced local time" required aria-label="Meal experienced local time" type="datetime-local" step="1" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} description="When you ate. This exact observed time—not an invented default meal time—feeds the reference band." />
@@ -257,7 +257,7 @@ function MealCorrectionForm({ meal, close }: { meal: Meal; close: () => void }):
     mutation.mutate({ reason: reason.trim(), changes });
   }
 
-  return <form aria-label="Correct meal" onSubmit={submit}><Paper className="correction-form" p="md" radius="md">
+  return <form aria-label="Correct meal" onSubmit={submit}><Paper className="aligned-form-grid correction-form" p="md" radius="md">
     <Alert className="form-wide" color="orange">This creates a corrected fact and preserves the original.</Alert>
     <NativeSelect label="Meal size" data={mealSizeOptions} value={size} onChange={(event) => { setSize(event.target.value); }} />
     <TextInput label="Experienced local time" required aria-label="Corrected meal experienced local time" type="datetime-local" step="1" value={local} onChange={(event) => { setLocal(event.target.value); }} />

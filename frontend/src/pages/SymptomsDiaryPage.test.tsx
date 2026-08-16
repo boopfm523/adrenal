@@ -60,6 +60,7 @@ describe("Symptoms and diary page", () => {
     await waitFor(() => { expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes(`local_date_from=${twoDaysAgo}`) && requestUrl(input).includes(`local_date_to=${twoDaysAgo}`))).toBe(true); });
 
     const createForm = screen.getByRole("form", { name: "Record a symptom" });
+    expect(createForm.querySelector(".correction-form")).toHaveClass("aligned-form-grid");
     await userEvent.type(within(createForm).getByLabelText("Symptom"), "Synthetic nausea");
     await userEvent.type(within(createForm).getByLabelText("Severity (0–10)"), "3");
     await userEvent.selectOptions(within(createForm).getByLabelText("Tracking category"), "postural");

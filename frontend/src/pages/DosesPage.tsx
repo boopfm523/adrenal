@@ -121,7 +121,7 @@ function RecordDoseForm({ timezone }: { timezone: string }): React.JSX.Element {
   return <Paper component="section" className="metric-card" withBorder radius="lg" p={{ base: "md", sm: "xl" }} aria-labelledby="record-dose-heading">
     <Title order={2} id="record-dose-heading">Record a dose taken</Title>
     <Text mt="xs">This records what happened; it does not change your physician-approved plan. A dose is regular unless you explicitly select Stress dose.</Text>
-    <form className="plan-form-grid" aria-label="Record a dose taken" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+    <form className="aligned-form-grid plan-form-grid" aria-label="Record a dose taken" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
       <NativeSelect label="Medication" aria-label="Medication" required value={values.medicationId} onChange={(event) => { chooseMedication(medications.data?.find((item) => item.id === event.target.value)); }}><option value="">Choose medication</option>{(medications.data ?? []).map((medication) => <option value={medication.id} key={medication.id}>{medication.name}{medication.formulation === null ? "" : ` · ${medication.formulation}`}</option>)}</NativeSelect>
       <TextInput label="Amount" aria-label="Amount" required inputMode="decimal" value={values.amount} onChange={(event) => { setValues({ ...values, amount: event.target.value }); }} />
       <NativeSelect label="Unit" value={values.unit} onChange={(event) => { setValues({ ...values, unit: event.target.value as DoseInput["unit"] }); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">ml</option><option value="tablet">tablet</option></NativeSelect>
@@ -170,7 +170,7 @@ function CorrectionForm({ dose, onCancel }: { dose: Dose; onCancel: () => void }
   }
 
   return (
-    <form className="correction-form" onSubmit={submit} aria-label={`Correct ${dose.medication_name} dose`}>
+    <form className="aligned-form-grid correction-form" onSubmit={submit} aria-label={`Correct ${dose.medication_name} dose`}>
       <p className="correction-warning">This creates a corrected fact. The original remains in revision history.</p>
       <TextInput label="Amount" aria-label="Amount" required inputMode="decimal" value={values.amount} onChange={(event) => { setValues({ ...values, amount: event.target.value }); }} />
       <NativeSelect label="Unit" value={values.unit} onChange={(event) => { setValues({ ...values, unit: event.target.value as Dose["unit"] }); }}><option>mg</option><option>mcg</option><option>ml</option><option>tablet</option></NativeSelect>

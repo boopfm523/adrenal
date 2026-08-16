@@ -287,7 +287,7 @@ function MedicationCreator({ onCreated }: { onCreated: (medication: Medication) 
   });
   return <details className="nested-form">
     <summary>Add a medication to the list</summary>
-    <form className="plan-form-grid" onSubmit={(event) => {
+    <form className="aligned-form-grid plan-form-grid" onSubmit={(event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const data = new FormData(form);
@@ -375,7 +375,7 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
         instructions: instructions.map((instruction, index) => ({ ...instruction, sort_order: index })),
       });
     }}>
-      <div className="plan-form-grid">
+      <div className="aligned-form-grid plan-form-grid">
         <TextInput label="Version label" aria-label="Version label" name="version_label" required maxLength={60} defaultValue={editDraft?.version_label ?? (source === null ? "" : nextVersionLabel(source.version_label))} />
         <TextInput label="Effective start (optional)" name="effective_from" type="datetime-local" aria-describedby="effective-period-help" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); }} />
         <TextInput label="Effective through (optional)" name="effective_to" type="datetime-local" aria-describedby="effective-period-help" value={effectiveTo} min={effectiveFrom || undefined} onChange={(event) => { setEffectiveTo(event.target.value); }} />
@@ -434,7 +434,7 @@ function ApprovalForm({ version, activeVersion, focusOnMount, onComplete }: { ve
     <p><strong>This draft is not active.</strong> Record approval here only after a physician has actually approved this plan. HealthCurve and its AI cannot approve it.</p>
     <p>Required provenance: the approving clinician or role and the source of approval, such as a consultation, letter, or portal message.</p>
     <div className="proposed-plan-interval" aria-live="polite"><h5>What will happen</h5><p>Choose the start below. If left blank, this plan starts when you press the set-live button.</p>{activeVersion === null ? <p>No plan is currently live.</p> : <p>HealthCurve will automatically end “{activeVersion.version_label}” at the new plan’s start. Its earlier history and all recorded doses remain unchanged.</p>}</div>
-    <form className="plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null, activation_local_time: formString(data, "activation_local_time") || null, activation_timezone: version.effective_timezone ?? "UTC", activation_fold: null }); }}>
+    <form className="aligned-form-grid plan-form-grid" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); mutation.mutate({ approved_by: formString(data, "approved_by"), approval_source: formString(data, "approval_source"), approved_at: formString(data, "approved_at") || null, source_document_checksum: null, activation_local_time: formString(data, "activation_local_time") || null, activation_timezone: version.effective_timezone ?? "UTC", activation_fold: null }); }}>
       <TextInput label="Approving clinician or role" aria-label="Approving clinician or role" name="approved_by" required maxLength={200} />
       <TextInput label="Approval source" aria-label="Approval source" name="approval_source" required maxLength={200} placeholder="Consultation, letter, or portal message" />
       <TextInput label="When the physician approved it (optional)" name="approved_at" type="datetime-local" />

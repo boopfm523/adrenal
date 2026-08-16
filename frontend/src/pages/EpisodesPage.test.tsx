@@ -45,6 +45,7 @@ describe("Episodes page", () => {
     expect(screen.getByLabelText("Highest temperature (°C)")).toHaveAccessibleDescription(/degrees Celsius/i);
     expect(screen.getByLabelText("Illness or stress context")).toHaveAccessibleDescription(/illness, injury, procedure, exertion, travel, or emotional stress/i);
     expect(screen.getByLabelText("Notes")).toHaveAccessibleDescription(/record doses and symptoms in their own forms/i);
+    expect(screen.getByLabelText("Trigger").closest(".episode-entry-form")).toHaveClass("aligned-form-grid");
     const injectionRegion = screen.getByRole("region", { name: "Emergency injection records table" });
     expect(within(injectionRegion).getByText("100 mg")).toBeVisible();
     expect(within(injectionRegion).getByText("intramuscular")).toBeVisible();
