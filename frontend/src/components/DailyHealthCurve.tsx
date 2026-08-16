@@ -707,6 +707,7 @@ export function DailyHealthCurve({
   const contextBand = data.exposure.context_band;
   const visibleContextBand = showContextBand;
   const wakeReference = isWakeFreeCurve(data.exposure) ? data.exposure.wake_reference : undefined;
+  const coverageFeatures = isWakeFreeCurve(data.exposure) ? data.exposure.coverage_features : undefined;
   const visibleWakeReferenceBand = wakeReference?.available === true && showWakeReferenceBand;
   const wakeAbsoluteBounds = !isWakeFreeCurve(data.exposure) || exposureLane === undefined
     ? undefined
@@ -1037,6 +1038,28 @@ export function DailyHealthCurve({
         </div>
       </section>;
     })}</div>
+    {coverageFeatures === undefined ? null : <details className="metric-definition wake-coverage-features">
+      <summary>Deterministic cortisol comparison features</summary>
+      <p><strong>{coverageFeatures.safety_label}</strong></p>
+      {!coverageFeatures.available || coverageFeatures.auc == null ? <p role="status">These comparisons are unavailable because {coverageFeatures.missing_inputs.join(" and ") || "the aligned modeled and reference window is unavailable"}. Missing inputs remain missing.</p> : <>
+        <dl className="metric-metadata">
+          <div><dt>Analysis window</dt><dd>{formatDecimal(coverageFeatures.elapsed_hours)} elapsed hours · {coverageFeatures.day_state}</dd></div>
+          <div><dt>Neutral comparison window</dt><dd>{formatDecimal(coverageFeatures.comparison_minutes ?? "0")} minutes</dd></div>
+          <div><dt>Expected sleep / pre-dose time excluded</dt><dd>{formatDecimal(coverageFeatures.expected_pre_wake_excluded_minutes ?? "0")} minutes</dd></div>
+          <div><dt>Below healthy-reference P5</dt><dd>{formatDecimal(coverageFeatures.time_below_p5_minutes ?? "0")} minutes</dd></div>
+          <div><dt>Below healthy-reference P25</dt><dd>{formatDecimal(coverageFeatures.time_below_p25_minutes ?? "0")} minutes</dd></div>
+          <div><dt>Modeled free-cortisol AUC</dt><dd>{formatDecimal(coverageFeatures.auc.modeled_free_nmol_l_hours)} nmol/L-hours</dd></div>
+          <div><dt>Healthy-reference median AUC</dt><dd>{formatDecimal(coverageFeatures.auc.reference_p50_nmol_l_hours)} nmol/L-hours</dd></div>
+          <div><dt>Regular / stress-dose AUC</dt><dd>{formatDecimal(coverageFeatures.auc.regular_modeled_free_nmol_l_hours)} / {formatDecimal(coverageFeatures.auc.stress_modeled_free_nmol_l_hours)} nmol/L-hours</dd></div>
+          <div><dt>Time above healthy-reference P95</dt><dd>{formatDecimal(coverageFeatures.p95_overshoot?.duration_minutes ?? "0")} minutes</dd></div>
+          <div><dt>Maximum fall rate</dt><dd>{coverageFeatures.maximum_fall == null ? "No falling interval" : `${formatDecimal(coverageFeatures.maximum_fall.magnitude_nmol_l_per_hour)} nmol/L per hour at ${experiencedTime(coverageFeatures.maximum_fall.interval_started_at, data.exposure.timezone)}`}</dd></div>
+        </dl>
+        <p>Expected overnight and pre-first-dose differences are excluded from below-band time rather than treated as anomalies. Percentile position is population context only.</p>
+        {coverageFeatures.inter_dose_troughs.length === 0 ? <p>No inter-dose trough was available for this day.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="Inter-dose cortisol troughs"><table><caption>Modeled minima between consecutive supported recorded doses.</caption><thead><tr><th scope="col">Time</th><th scope="col">Modeled free</th><th scope="col">Regular</th><th scope="col">Stress dose</th><th scope="col">Reference median</th></tr></thead><tbody>{coverageFeatures.inter_dose_troughs.map((trough) => <tr key={`${trough.previous_dose_event_id}-${trough.next_dose_event_id}`}><td>{experiencedTime(trough.occurred_at, data.exposure.timezone)}</td><td>{formatMeasurement(trough.modeled_free_cortisol_nmol_l, "nmol/L")}</td><td>{formatMeasurement(trough.regular_modeled_free_cortisol_nmol_l, "nmol/L")}</td><td>{formatMeasurement(trough.stress_modeled_free_cortisol_nmol_l, "nmol/L")}</td><td>{formatMeasurement(trough.reference_p50_nmol_l, "nmol/L")}</td></tr>)}</tbody></table></div>}
+        {coverageFeatures.symptom_contexts.length === 0 ? <p>No recorded symptom had aligned modeled/reference context in this analysis window.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="Symptom cortisol timing context"><table><caption>Temporal context at recorded symptoms; proximity does not establish causation.</caption><thead><tr><th scope="col">Symptom and time</th><th scope="col">Time since supported dose</th><th scope="col">Modeled free</th><th scope="col">Reference P5–P95</th></tr></thead><tbody>{coverageFeatures.symptom_contexts.map((symptom) => <tr key={symptom.symptom_event_id}><td><strong>{symptom.name}</strong><br />{experiencedTime(symptom.occurred_at, data.exposure.timezone)}</td><td>{symptom.minutes_since_previous_supported_dose == null ? "No previous supported dose" : `${formatDecimal(symptom.minutes_since_previous_supported_dose)} minutes`}</td><td>{formatMeasurement(symptom.modeled_free_cortisol_nmol_l, "nmol/L")}</td><td>{formatDecimal(symptom.reference_p5_nmol_l)}–{formatDecimal(symptom.reference_p95_nmol_l)} nmol/L</td></tr>)}</tbody></table></div>}
+      </>}
+      <p className="muted">Feature version {coverageFeatures.feature_revision}; source fingerprint {coverageFeatures.source_revision_sha256.slice(0, 12)}…</p>
+    </details>}
     {wakeReference === undefined ? null : <details className="metric-definition wake-reference-values">
       <summary>Wake-anchored healthy reference values and assumptions</summary>
       <p><strong>{wakeReference.safety_label}</strong> P5–P95 describes a wide healthy-adult population reference, not a personal target, alert, medication-adequacy test, or dosing guide.</p>

@@ -4658,9 +4658,184 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WakeCoverageAucOut */
+        WakeCoverageAucOut: {
+            /** Modeled Free Nmol L Hours */
+            modeled_free_nmol_l_hours: string | null;
+            /** Modeled Minus Reference P50 Nmol L Hours */
+            modeled_minus_reference_p50_nmol_l_hours: string | null;
+            /** Modeled To Reference P50 Ratio */
+            modeled_to_reference_p50_ratio: string | null;
+            /** Reference P50 Nmol L Hours */
+            reference_p50_nmol_l_hours: string | null;
+            /** Regular Modeled Free Nmol L Hours */
+            regular_modeled_free_nmol_l_hours: string | null;
+            /** Stress Modeled Free Nmol L Hours */
+            stress_modeled_free_nmol_l_hours: string | null;
+        };
+        /** WakeCoverageFeaturesOut */
+        WakeCoverageFeaturesOut: {
+            /**
+             * Analyzed From
+             * Format: date-time
+             */
+            analyzed_from: string;
+            /**
+             * Analyzed Through
+             * Format: date-time
+             */
+            analyzed_through: string;
+            auc: components["schemas"]["WakeCoverageAucOut"] | null;
+            /** Available */
+            available: boolean;
+            /** Comparison Minutes */
+            comparison_minutes?: string | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Day State
+             * @enum {string}
+             */
+            day_state: "complete" | "partial";
+            /** Definitions */
+            definitions: {
+                [key: string]: string;
+            };
+            /** Elapsed Hours */
+            elapsed_hours: string | null;
+            /** Expected Pre Wake Excluded Minutes */
+            expected_pre_wake_excluded_minutes?: string | null;
+            /**
+             * Feature Id
+             * @constant
+             */
+            feature_id: "hc-wake-coverage-v1";
+            /**
+             * Feature Revision
+             * @constant
+             */
+            feature_revision: "hc-wake-coverage-v1.0.0";
+            /** Inter Dose Troughs */
+            inter_dose_troughs: components["schemas"]["WakeCoverageTroughOut"][];
+            maximum_fall: components["schemas"]["WakeCoverageMaximumFallOut"] | null;
+            /** Missing Inputs */
+            missing_inputs: string[];
+            p95_overshoot: components["schemas"]["WakeCoverageOvershootOut"] | null;
+            /** Safety Label */
+            safety_label: string;
+            /** Source Revision Sha256 */
+            source_revision_sha256: string;
+            /** Symptom Contexts */
+            symptom_contexts: components["schemas"]["WakeCoverageSymptomContextOut"][];
+            /** Time Below P25 Minutes */
+            time_below_p25_minutes?: string | null;
+            /** Time Below P5 Minutes */
+            time_below_p5_minutes?: string | null;
+            /** Timezone */
+            timezone: string;
+        };
+        /** WakeCoverageMaximumFallOut */
+        WakeCoverageMaximumFallOut: {
+            /** From Modeled Free Cortisol Nmol L */
+            from_modeled_free_cortisol_nmol_l: string;
+            /**
+             * Interval Ended At
+             * Format: date-time
+             */
+            interval_ended_at: string;
+            /**
+             * Interval Started At
+             * Format: date-time
+             */
+            interval_started_at: string;
+            /** Magnitude Nmol L Per Hour */
+            magnitude_nmol_l_per_hour: string;
+            /** To Modeled Free Cortisol Nmol L */
+            to_modeled_free_cortisol_nmol_l: string;
+        };
+        /** WakeCoverageOvershootOut */
+        WakeCoverageOvershootOut: {
+            /** Duration Minutes */
+            duration_minutes: string;
+            /** Maximum At */
+            maximum_at: string | null;
+            /** Maximum Nmol L */
+            maximum_nmol_l: string;
+        };
+        /** WakeCoverageSymptomContextOut */
+        WakeCoverageSymptomContextOut: {
+            /** Minutes Since Previous Supported Dose */
+            minutes_since_previous_supported_dose?: string | null;
+            /** Modeled Free Cortisol Nmol L */
+            modeled_free_cortisol_nmol_l: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Previous Dose Categories */
+            previous_dose_categories: string[];
+            /** Previous Supported Dose Event Ids */
+            previous_supported_dose_event_ids: string[];
+            /** Reference P50 Nmol L */
+            reference_p50_nmol_l: string | null;
+            /** Reference P5 Nmol L */
+            reference_p5_nmol_l: string | null;
+            /** Reference P95 Nmol L */
+            reference_p95_nmol_l: string | null;
+            /** Regular Modeled Free Cortisol Nmol L */
+            regular_modeled_free_cortisol_nmol_l: string | null;
+            /** Severity */
+            severity?: number | null;
+            /** Stress Modeled Free Cortisol Nmol L */
+            stress_modeled_free_cortisol_nmol_l: string | null;
+            /**
+             * Symptom Event Id
+             * Format: uuid
+             */
+            symptom_event_id: string;
+        };
+        /** WakeCoverageTroughOut */
+        WakeCoverageTroughOut: {
+            /** Depth Below P50 Nmol L */
+            depth_below_p50_nmol_l: string;
+            /** Modeled Free Cortisol Nmol L */
+            modeled_free_cortisol_nmol_l: string;
+            /**
+             * Next Dose Event Id
+             * Format: uuid
+             */
+            next_dose_event_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Previous Dose Event Id
+             * Format: uuid
+             */
+            previous_dose_event_id: string;
+            /** Reference P25 Nmol L */
+            reference_p25_nmol_l: string;
+            /** Reference P50 Nmol L */
+            reference_p50_nmol_l: string;
+            /** Reference P5 Nmol L */
+            reference_p5_nmol_l: string;
+            /** Regular Modeled Free Cortisol Nmol L */
+            regular_modeled_free_cortisol_nmol_l: string;
+            /** Stress Modeled Free Cortisol Nmol L */
+            stress_modeled_free_cortisol_nmol_l: string;
+        };
         /** WakeFreeCortisolCurveOut */
         WakeFreeCortisolCurveOut: {
             context_band: components["schemas"]["CircadianContextBandOut"];
+            coverage_features: components["schemas"]["WakeCoverageFeaturesOut"];
             /**
              * Date
              * Format: date

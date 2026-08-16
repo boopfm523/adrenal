@@ -163,6 +163,68 @@ function wakeFreeData(referenceAvailable = true): DailyHealthCurveData {
           { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, hour_local: "24", hours_since_wake: "21.5", serum_free_p5_nmol_l: "1", serum_free_p25_nmol_l: "1.5", serum_free_p50_nmol_l: "2", serum_free_p75_nmol_l: "3", serum_free_p95_nmol_l: "5", serum_total_p5_nmol_l: "20", serum_total_p25_nmol_l: "25", serum_total_p50_nmol_l: "30", serum_total_p75_nmol_l: "40", serum_total_p95_nmol_l: "60", sigma_log: "0.45" },
         ],
       },
+      coverage_features: {
+        available: referenceAvailable,
+        feature_id: "hc-wake-coverage-v1",
+        feature_revision: "hc-wake-coverage-v1.0.0",
+        date: "2026-03-08",
+        timezone: "America/New_York",
+        analyzed_from: "2026-03-08T05:00:00Z",
+        analyzed_through: "2026-03-09T04:00:00Z",
+        elapsed_hours: "23.0000",
+        day_state: "complete",
+        safety_label: "Descriptive comparison only—not a measurement, personal target, alert, or dosing guide.",
+        definitions: {},
+        missing_inputs: referenceAvailable ? [] : ["wake_reference.wake_at", "wake_reference.sleep_onset_at"],
+        source_revision_sha256: "c".repeat(64),
+        comparison_minutes: referenceAvailable ? "900.0000" : null,
+        expected_pre_wake_excluded_minutes: referenceAvailable ? "480.0000" : null,
+        time_below_p5_minutes: referenceAvailable ? "45.0000" : null,
+        time_below_p25_minutes: referenceAvailable ? "120.0000" : null,
+        auc: !referenceAvailable ? null : {
+          modeled_free_nmol_l_hours: "200.0000",
+          regular_modeled_free_nmol_l_hours: "180.0000",
+          stress_modeled_free_nmol_l_hours: "20.0000",
+          reference_p50_nmol_l_hours: "240.0000",
+          modeled_minus_reference_p50_nmol_l_hours: "-40.0000",
+          modeled_to_reference_p50_ratio: "0.8333",
+        },
+        inter_dose_troughs: !referenceAvailable ? [] : [{
+          previous_dose_event_id: "00000000-0000-0000-0000-000000000001",
+          next_dose_event_id: "00000000-0000-0000-0000-000000000002",
+          occurred_at: "2026-03-08T17:00:00Z",
+          modeled_free_cortisol_nmol_l: "5.0000",
+          regular_modeled_free_cortisol_nmol_l: "4.0000",
+          stress_modeled_free_cortisol_nmol_l: "1.0000",
+          reference_p5_nmol_l: "6.0000",
+          reference_p25_nmol_l: "8.0000",
+          reference_p50_nmol_l: "10.0000",
+          depth_below_p50_nmol_l: "5.0000",
+        }],
+        maximum_fall: referenceAvailable ? {
+          magnitude_nmol_l_per_hour: "12.0000",
+          interval_started_at: "2026-03-08T08:00:00Z",
+          interval_ended_at: "2026-03-08T09:00:00Z",
+          from_modeled_free_cortisol_nmol_l: "40.0000",
+          to_modeled_free_cortisol_nmol_l: "28.0000",
+        } : null,
+        p95_overshoot: referenceAvailable ? { duration_minutes: "15.0000", maximum_nmol_l: "3.0000", maximum_at: "2026-03-08T08:00:00Z" } : null,
+        symptom_contexts: !referenceAvailable ? [] : [{
+          symptom_event_id: "00000000-0000-0000-0000-000000000090",
+          occurred_at: "2026-03-08T18:00:00Z",
+          name: "synthetic symptom",
+          severity: 4,
+          previous_supported_dose_event_ids: ["00000000-0000-0000-0000-000000000002"],
+          previous_dose_categories: ["stress"],
+          minutes_since_previous_supported_dose: "60.0000",
+          modeled_free_cortisol_nmol_l: "6.0000",
+          regular_modeled_free_cortisol_nmol_l: "4.0000",
+          stress_modeled_free_cortisol_nmol_l: "2.0000",
+          reference_p5_nmol_l: "5.0000",
+          reference_p50_nmol_l: "9.0000",
+          reference_p95_nmol_l: "15.0000",
+        }],
+      },
     },
   });
 }
@@ -361,6 +423,18 @@ describe("Daily HealthCurve", () => {
     expect(exactValues).toHaveTextContent("P5–P95 describes a wide healthy-adult population reference");
     expect(within(exactValues).getByRole("region", { name: "Wake-anchored cortisol reference exact values" })).toHaveTextContent("720 nmol/L");
 
+    const features = screen.getByText("Deterministic cortisol comparison features").parentElement;
+    if (features === null) throw new Error("cortisol comparison feature disclosure missing");
+    expect(features).not.toHaveAttribute("open");
+    expect(features).toHaveTextContent("Below healthy-reference P5");
+    expect(features).toHaveTextContent("45 minutes");
+    expect(features).toHaveTextContent("Regular / stress-dose AUC");
+    expect(features).toHaveTextContent("180 / 20 nmol/L-hours");
+    expect(features).toHaveTextContent("Expected overnight and pre-first-dose differences are excluded");
+    expect(within(features).getByRole("region", { name: "Inter-dose cortisol troughs" })).toHaveTextContent("5 nmol/L");
+    expect(within(features).getByRole("region", { name: "Symptom cortisol timing context" })).toHaveTextContent("synthetic symptom");
+    expect(features).toHaveTextContent("proximity does not establish causation");
+
     const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
     if (methodology === null) throw new Error("model methodology disclosure missing");
     expect(methodology).toHaveTextContent("hc-wake-free-v3.0.0");
@@ -375,6 +449,7 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelector("[data-series='wake-reference-band']")).toBeNull();
     expect(screen.getByText(/Wake-anchored reference unavailable/).parentElement).toHaveTextContent("final wake time and sleep onset time are missing");
     expect(screen.getByText("Wake-anchored healthy reference values and assumptions").parentElement).toHaveTextContent("Missing timing remains missing");
+    expect(screen.getByText("Deterministic cortisol comparison features").parentElement).toHaveTextContent("wake_reference.wake_at and wake_reference.sleep_onset_at");
   });
 
   it("publishes versioned v2 formulas, primary sources, comparison, and clinical limits", () => {

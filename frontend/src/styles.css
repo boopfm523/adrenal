@@ -436,8 +436,8 @@ circle.chart-series { fill: white; }
 .model-methodology pre { overflow-x: auto; padding: 0.85rem; border: 1px solid #ccd4ce; border-radius: 0.4rem; background: #f4f7f5; white-space: pre-wrap; }
 .model-methodology h3 { margin-top: 1.2rem; }
 .model-methodology li + li { margin-top: 0.45rem; }
-.context-band-values, .wake-reference-values { margin-block: 1rem; }
-.context-band-values .table-scroll, .wake-reference-values .table-scroll { max-height: 24rem; }
+.context-band-values, .wake-reference-values, .wake-coverage-features { margin-block: 1rem; }
+.context-band-values .table-scroll, .wake-reference-values .table-scroll, .wake-coverage-features .table-scroll { max-height: 24rem; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
 .healthcurve-cursor { stroke: #17221e; stroke-width: 1.4; pointer-events: none; }
 .healthcurve-pointer-target { fill: transparent; cursor: crosshair; touch-action: pan-y; }

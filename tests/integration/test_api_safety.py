@@ -6425,6 +6425,23 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         "2024-02-01T22:30:00Z"
     )
     assert wake_free_body["wake_reference"]["assumptions"]["observed_meals"] == {}
+    coverage = wake_free_body["coverage_features"]
+    assert coverage["available"] is True
+    assert coverage["feature_id"] == "hc-wake-coverage-v1"
+    assert coverage["feature_revision"] == "hc-wake-coverage-v1.0.0"
+    assert coverage["day_state"] == "complete"
+    assert coverage["missing_inputs"] == []
+    assert len(coverage["source_revision_sha256"]) == 64
+    assert Decimal(coverage["comparison_minutes"]) > 0
+    assert Decimal(coverage["expected_pre_wake_excluded_minutes"]) > 0
+    assert Decimal(coverage["time_below_p5_minutes"]) >= 0
+    assert Decimal(coverage["time_below_p25_minutes"]) >= 0
+    assert Decimal(coverage["auc"]["modeled_free_nmol_l_hours"]) == (
+        Decimal(coverage["auc"]["regular_modeled_free_nmol_l_hours"])
+        + Decimal(coverage["auc"]["stress_modeled_free_nmol_l_hours"])
+    )
+    assert len(coverage["inter_dose_troughs"]) == 1
+    assert coverage["symptom_contexts"] == []
     assert {row["occurred_at"] for row in wake_free_body["samples"]} == {
         row["occurred_at"] for row in wake_free_body["wake_reference"]["samples"]
     }
@@ -6817,6 +6834,7 @@ def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(
         "weight",
         "diary",
         "life_events",
+        "meals",
         "labs",
         "garmin_intraday_samples",
         "garmin_daily_or_point_metrics",

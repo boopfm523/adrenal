@@ -1375,6 +1375,133 @@ class WakeReferenceOut(ApiModel):
         return None if value is None else str(value)
 
 
+class WakeCoverageAucOut(ApiModel):
+    modeled_free_nmol_l_hours: Decimal
+    regular_modeled_free_nmol_l_hours: Decimal
+    stress_modeled_free_nmol_l_hours: Decimal
+    reference_p50_nmol_l_hours: Decimal
+    modeled_minus_reference_p50_nmol_l_hours: Decimal
+    modeled_to_reference_p50_ratio: Decimal | None
+
+    @field_serializer("*")
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class WakeCoverageTroughOut(ApiModel):
+    previous_dose_event_id: uuid.UUID
+    next_dose_event_id: uuid.UUID
+    occurred_at: datetime
+    modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    regular_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    stress_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    reference_p5_nmol_l: Decimal = Field(ge=0)
+    reference_p25_nmol_l: Decimal = Field(ge=0)
+    reference_p50_nmol_l: Decimal = Field(ge=0)
+    depth_below_p50_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "modeled_free_cortisol_nmol_l",
+        "regular_modeled_free_cortisol_nmol_l",
+        "stress_modeled_free_cortisol_nmol_l",
+        "reference_p5_nmol_l",
+        "reference_p25_nmol_l",
+        "reference_p50_nmol_l",
+        "depth_below_p50_nmol_l",
+    )
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeCoverageMaximumFallOut(ApiModel):
+    magnitude_nmol_l_per_hour: Decimal = Field(ge=0)
+    interval_started_at: datetime
+    interval_ended_at: datetime
+    from_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    to_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "magnitude_nmol_l_per_hour",
+        "from_modeled_free_cortisol_nmol_l",
+        "to_modeled_free_cortisol_nmol_l",
+    )
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeCoverageOvershootOut(ApiModel):
+    duration_minutes: Decimal = Field(ge=0)
+    maximum_nmol_l: Decimal = Field(ge=0)
+    maximum_at: datetime | None
+
+    @field_serializer("duration_minutes", "maximum_nmol_l")
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class WakeCoverageSymptomContextOut(ApiModel):
+    symptom_event_id: uuid.UUID
+    occurred_at: datetime
+    name: str
+    severity: int | None = Field(default=None, ge=0, le=10)
+    previous_supported_dose_event_ids: list[uuid.UUID]
+    previous_dose_categories: list[str]
+    minutes_since_previous_supported_dose: Decimal | None = Field(default=None, ge=0)
+    modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    regular_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    stress_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    reference_p5_nmol_l: Decimal = Field(ge=0)
+    reference_p50_nmol_l: Decimal = Field(ge=0)
+    reference_p95_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "minutes_since_previous_supported_dose",
+        "modeled_free_cortisol_nmol_l",
+        "regular_modeled_free_cortisol_nmol_l",
+        "stress_modeled_free_cortisol_nmol_l",
+        "reference_p5_nmol_l",
+        "reference_p50_nmol_l",
+        "reference_p95_nmol_l",
+    )
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class WakeCoverageFeaturesOut(ApiModel):
+    available: bool
+    feature_id: Literal["hc-wake-coverage-v1"]
+    feature_revision: Literal["hc-wake-coverage-v1.0.0"]
+    date: date
+    timezone: str
+    analyzed_from: datetime
+    analyzed_through: datetime
+    elapsed_hours: Decimal = Field(ge=0)
+    day_state: Literal["complete", "partial"]
+    safety_label: str
+    definitions: dict[str, str]
+    missing_inputs: list[str]
+    source_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    comparison_minutes: Decimal | None = Field(default=None, ge=0)
+    expected_pre_wake_excluded_minutes: Decimal | None = Field(default=None, ge=0)
+    time_below_p5_minutes: Decimal | None = Field(default=None, ge=0)
+    time_below_p25_minutes: Decimal | None = Field(default=None, ge=0)
+    auc: WakeCoverageAucOut | None
+    inter_dose_troughs: list[WakeCoverageTroughOut]
+    maximum_fall: WakeCoverageMaximumFallOut | None
+    p95_overshoot: WakeCoverageOvershootOut | None
+    symptom_contexts: list[WakeCoverageSymptomContextOut]
+
+    @field_serializer(
+        "elapsed_hours",
+        "comparison_minutes",
+        "expected_pre_wake_excluded_minutes",
+        "time_below_p5_minutes",
+        "time_below_p25_minutes",
+    )
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
 class WakeFreeCortisolCurveOut(ApiModel):
     date: date
     timezone: str
@@ -1394,6 +1521,7 @@ class WakeFreeCortisolCurveOut(ApiModel):
     excluded_dose_count: int = Field(ge=0)
     context_band: CircadianContextBandOut
     wake_reference: WakeReferenceOut
+    coverage_features: WakeCoverageFeaturesOut
 
     @field_serializer("elapsed_hours")
     def _elapsed(self, value: Decimal) -> str:

@@ -9246,11 +9246,554 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WakeCoverageAucOut": {
+        "additionalProperties": false,
+        "properties": {
+          "modeled_free_nmol_l_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modeled Free Nmol L Hours"
+          },
+          "modeled_minus_reference_p50_nmol_l_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modeled Minus Reference P50 Nmol L Hours"
+          },
+          "modeled_to_reference_p50_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modeled To Reference P50 Ratio"
+          },
+          "reference_p50_nmol_l_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference P50 Nmol L Hours"
+          },
+          "regular_modeled_free_nmol_l_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regular Modeled Free Nmol L Hours"
+          },
+          "stress_modeled_free_nmol_l_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Modeled Free Nmol L Hours"
+          }
+        },
+        "required": [
+          "modeled_free_nmol_l_hours",
+          "regular_modeled_free_nmol_l_hours",
+          "stress_modeled_free_nmol_l_hours",
+          "reference_p50_nmol_l_hours",
+          "modeled_minus_reference_p50_nmol_l_hours",
+          "modeled_to_reference_p50_ratio"
+        ],
+        "title": "WakeCoverageAucOut",
+        "type": "object"
+      },
+      "WakeCoverageFeaturesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "analyzed_from": {
+            "format": "date-time",
+            "title": "Analyzed From",
+            "type": "string"
+          },
+          "analyzed_through": {
+            "format": "date-time",
+            "title": "Analyzed Through",
+            "type": "string"
+          },
+          "auc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WakeCoverageAucOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "comparison_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Minutes"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "day_state": {
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "Day State",
+            "type": "string"
+          },
+          "definitions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Definitions",
+            "type": "object"
+          },
+          "elapsed_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Hours"
+          },
+          "expected_pre_wake_excluded_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Pre Wake Excluded Minutes"
+          },
+          "feature_id": {
+            "const": "hc-wake-coverage-v1",
+            "title": "Feature Id",
+            "type": "string"
+          },
+          "feature_revision": {
+            "const": "hc-wake-coverage-v1.0.0",
+            "title": "Feature Revision",
+            "type": "string"
+          },
+          "inter_dose_troughs": {
+            "items": {
+              "$ref": "#/components/schemas/WakeCoverageTroughOut"
+            },
+            "title": "Inter Dose Troughs",
+            "type": "array"
+          },
+          "maximum_fall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WakeCoverageMaximumFallOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "p95_overshoot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WakeCoverageOvershootOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "safety_label": {
+            "title": "Safety Label",
+            "type": "string"
+          },
+          "source_revision_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision Sha256",
+            "type": "string"
+          },
+          "symptom_contexts": {
+            "items": {
+              "$ref": "#/components/schemas/WakeCoverageSymptomContextOut"
+            },
+            "title": "Symptom Contexts",
+            "type": "array"
+          },
+          "time_below_p25_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Below P25 Minutes"
+          },
+          "time_below_p5_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Below P5 Minutes"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "feature_id",
+          "feature_revision",
+          "date",
+          "timezone",
+          "analyzed_from",
+          "analyzed_through",
+          "elapsed_hours",
+          "day_state",
+          "safety_label",
+          "definitions",
+          "missing_inputs",
+          "source_revision_sha256",
+          "auc",
+          "inter_dose_troughs",
+          "maximum_fall",
+          "p95_overshoot",
+          "symptom_contexts"
+        ],
+        "title": "WakeCoverageFeaturesOut",
+        "type": "object"
+      },
+      "WakeCoverageMaximumFallOut": {
+        "additionalProperties": false,
+        "properties": {
+          "from_modeled_free_cortisol_nmol_l": {
+            "title": "From Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "interval_ended_at": {
+            "format": "date-time",
+            "title": "Interval Ended At",
+            "type": "string"
+          },
+          "interval_started_at": {
+            "format": "date-time",
+            "title": "Interval Started At",
+            "type": "string"
+          },
+          "magnitude_nmol_l_per_hour": {
+            "title": "Magnitude Nmol L Per Hour",
+            "type": "string"
+          },
+          "to_modeled_free_cortisol_nmol_l": {
+            "title": "To Modeled Free Cortisol Nmol L",
+            "type": "string"
+          }
+        },
+        "required": [
+          "magnitude_nmol_l_per_hour",
+          "interval_started_at",
+          "interval_ended_at",
+          "from_modeled_free_cortisol_nmol_l",
+          "to_modeled_free_cortisol_nmol_l"
+        ],
+        "title": "WakeCoverageMaximumFallOut",
+        "type": "object"
+      },
+      "WakeCoverageOvershootOut": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_minutes": {
+            "title": "Duration Minutes",
+            "type": "string"
+          },
+          "maximum_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum At"
+          },
+          "maximum_nmol_l": {
+            "title": "Maximum Nmol L",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_minutes",
+          "maximum_nmol_l",
+          "maximum_at"
+        ],
+        "title": "WakeCoverageOvershootOut",
+        "type": "object"
+      },
+      "WakeCoverageSymptomContextOut": {
+        "additionalProperties": false,
+        "properties": {
+          "minutes_since_previous_supported_dose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes Since Previous Supported Dose"
+          },
+          "modeled_free_cortisol_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modeled Free Cortisol Nmol L"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "previous_dose_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Previous Dose Categories",
+            "type": "array"
+          },
+          "previous_supported_dose_event_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Previous Supported Dose Event Ids",
+            "type": "array"
+          },
+          "reference_p50_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference P50 Nmol L"
+          },
+          "reference_p5_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference P5 Nmol L"
+          },
+          "reference_p95_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference P95 Nmol L"
+          },
+          "regular_modeled_free_cortisol_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regular Modeled Free Cortisol Nmol L"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "stress_modeled_free_cortisol_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Modeled Free Cortisol Nmol L"
+          },
+          "symptom_event_id": {
+            "format": "uuid",
+            "title": "Symptom Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symptom_event_id",
+          "occurred_at",
+          "name",
+          "previous_supported_dose_event_ids",
+          "previous_dose_categories",
+          "modeled_free_cortisol_nmol_l",
+          "regular_modeled_free_cortisol_nmol_l",
+          "stress_modeled_free_cortisol_nmol_l",
+          "reference_p5_nmol_l",
+          "reference_p50_nmol_l",
+          "reference_p95_nmol_l"
+        ],
+        "title": "WakeCoverageSymptomContextOut",
+        "type": "object"
+      },
+      "WakeCoverageTroughOut": {
+        "additionalProperties": false,
+        "properties": {
+          "depth_below_p50_nmol_l": {
+            "title": "Depth Below P50 Nmol L",
+            "type": "string"
+          },
+          "modeled_free_cortisol_nmol_l": {
+            "title": "Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "next_dose_event_id": {
+            "format": "uuid",
+            "title": "Next Dose Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "previous_dose_event_id": {
+            "format": "uuid",
+            "title": "Previous Dose Event Id",
+            "type": "string"
+          },
+          "reference_p25_nmol_l": {
+            "title": "Reference P25 Nmol L",
+            "type": "string"
+          },
+          "reference_p50_nmol_l": {
+            "title": "Reference P50 Nmol L",
+            "type": "string"
+          },
+          "reference_p5_nmol_l": {
+            "title": "Reference P5 Nmol L",
+            "type": "string"
+          },
+          "regular_modeled_free_cortisol_nmol_l": {
+            "title": "Regular Modeled Free Cortisol Nmol L",
+            "type": "string"
+          },
+          "stress_modeled_free_cortisol_nmol_l": {
+            "title": "Stress Modeled Free Cortisol Nmol L",
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous_dose_event_id",
+          "next_dose_event_id",
+          "occurred_at",
+          "modeled_free_cortisol_nmol_l",
+          "regular_modeled_free_cortisol_nmol_l",
+          "stress_modeled_free_cortisol_nmol_l",
+          "reference_p5_nmol_l",
+          "reference_p25_nmol_l",
+          "reference_p50_nmol_l",
+          "depth_below_p50_nmol_l"
+        ],
+        "title": "WakeCoverageTroughOut",
+        "type": "object"
+      },
       "WakeFreeCortisolCurveOut": {
         "additionalProperties": false,
         "properties": {
           "context_band": {
             "$ref": "#/components/schemas/CircadianContextBandOut"
+          },
+          "coverage_features": {
+            "$ref": "#/components/schemas/WakeCoverageFeaturesOut"
           },
           "date": {
             "format": "date",
@@ -9352,7 +9895,8 @@
           "supported_dose_count",
           "excluded_dose_count",
           "context_band",
-          "wake_reference"
+          "wake_reference",
+          "coverage_features"
         ],
         "title": "WakeFreeCortisolCurveOut",
         "type": "object"

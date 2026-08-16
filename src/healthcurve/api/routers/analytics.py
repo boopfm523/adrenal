@@ -16,6 +16,7 @@ from healthcurve.ai import analysis as analysis_service
 from healthcurve.ai.models import AIAnalysis, AnalysisType
 from healthcurve.analytics import (
     circadian_context,
+    cortisol_features,
     day_analysis,
     exposure,
     patterns,
@@ -106,12 +107,19 @@ def steroid_exposure_curve(
             timezone=zone_name,
             sample_instants=sample_instants,
         )
-        curve["wake_reference"] = wake_reference_inputs.reference_from_observed_facts_for_owner(
+        wake_reference = wake_reference_inputs.reference_from_observed_facts_for_owner(
             session,
             owner_id=owner.id,
             day=day,
             timezone=zone_name,
             sample_instants=sample_instants,
+        )
+        curve["wake_reference"] = wake_reference
+        curve["coverage_features"] = cortisol_features.features_for_owner(
+            session,
+            owner_id=owner.id,
+            curve=curve,
+            reference=wake_reference,
         )
         return curve
     curve = physiology.curve_for_owner(session, owner_id=owner.id, day=day, timezone=zone_name)
