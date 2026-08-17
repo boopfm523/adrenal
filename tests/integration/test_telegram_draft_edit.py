@@ -364,6 +364,12 @@ def test_plural_and_conversational_weight_entries_create_confirmable_drafts(
             datetime(2026, 8, 9, 8, 15),  # noqa: DTZ001
             False,
         ),
+        (
+            "Had an extra small meal.",
+            MealSize.XS,
+            datetime(2026, 8, 9, 9, 0),  # noqa: DTZ001
+            True,
+        ),
     ],
 )
 def test_meal_messages_create_confirmable_observed_facts_without_inventing_size(

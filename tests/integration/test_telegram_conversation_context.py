@@ -288,6 +288,7 @@ def test_cancel_supersession_model_failure_and_injection_fail_closed(
         seed()
         help_reply = handlers.handle_message(session, owner, text="/help", chat_id=CHAT_ID, now=NOW)
         assert "/dose" in help_reply.text
+        assert "/meal [XS|S|M|L|XL|XXL] [HH:MM]" in help_reply.text
         assert (
             conversation.pending_intent(session, owner_id=owner.id, chat_id=CHAT_ID, now=NOW)
             is None
