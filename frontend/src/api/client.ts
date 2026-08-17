@@ -524,6 +524,10 @@ export function correctSymptom(id: string, payload: SymptomCorrectionInput): Pro
   return apiRequest<Symptom>(`/symptoms/${id}/correct`, { method: "POST", body: JSON.stringify(payload) });
 }
 
+export async function deleteSymptom(id: string): Promise<void> {
+  await apiRequest<unknown>(`/symptoms/${id}`, { method: "DELETE" });
+}
+
 export function getDiaryEntries(filters: SymptomsDiaryFilters, page = 1): Promise<DiaryPage> {
   return apiRequest<DiaryPage>(`/diary-events?${symptomsDiaryQuery(filters, page).toString()}`);
 }

@@ -121,4 +121,29 @@ describe("Symptoms and diary page", () => {
     expect(screen.getByLabelText("Through date")).toHaveValue("");
     await waitFor(() => { expect(fetchMock.mock.calls.slice(callsBeforeClear).some(([input]) => !requestUrl(input).includes("local_date_from"))).toBe(true); });
   });
+
+  it("offers confirmed symptom deletion only from the open correction form", async () => {
+    const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+    sessionStore.set(session);
+    const symptom = { id: "22222222-2222-4222-8222-222222222222", category: "fact", name: "Synthetic removable symptom", severity: 4, body_area: null, tracking_category: null, tracking_category_revision: null, time, provenance, episode_id: null, notes: null };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (url.includes(`/symptoms/${symptom.id}`) && init?.method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+      if (url.includes("/symptoms")) return Promise.resolve(response(factPage([symptom])));
+      if (url.includes("/diary-events") || url.includes("/meal-events") || url.includes("/life-events")) return Promise.resolve(response(factPage([])));
+      return Promise.resolve(response({ detail: "not found" }, 404));
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><SymptomsDiaryPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
+
+    expect(await screen.findByText("Synthetic removable symptom")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Delete symptom" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Correct recorded symptom" }));
+    await userEvent.click(within(screen.getByRole("form", { name: "Correct Synthetic removable symptom symptom" })).getByRole("button", { name: "Delete symptom" }));
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("complete revision history"));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input, init]) => requestUrl(input).includes(`/symptoms/${symptom.id}`) && init?.method === "DELETE")).toBe(true);
+    });
+  });
 });

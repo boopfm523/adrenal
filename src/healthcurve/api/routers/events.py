@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.sql.elements import ColumnElement
 
+from healthcurve.ai.models import AIAnalysis
 from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
@@ -189,6 +190,31 @@ def correct_symptom(
     except events.CorrectionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _symptom_out(correction)
+
+
+@router.delete(
+    "/symptoms/{event_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+def delete_symptom(event_id: uuid.UUID, session: DbSession, owner: CurrentOwner) -> None:
+    selected = _owned_symptom(session, owner.id, event_id)
+    try:
+        _, deleted_ids = events.delete_correction_chain(session, SymptomEvent, selected)
+    except events.DeletionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    deleted_keys = {str(value) for value in deleted_ids}
+    active_analyses = session.scalars(
+        select(AIAnalysis).where(
+            AIAnalysis.owner_id == owner.id,
+            AIAnalysis.hidden_at.is_(None),
+        )
+    )
+    invalidated_at = datetime.now(tz=ZoneInfo("UTC"))
+    for analysis in active_analyses:
+        if deleted_keys.intersection(analysis.source_record_ids):
+            analysis.hidden_at = invalidated_at
 
 
 def _symptom_out(e: SymptomEvent) -> SymptomOut:

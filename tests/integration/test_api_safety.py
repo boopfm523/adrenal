@@ -3511,6 +3511,74 @@ def test_symptom_correction_preserves_typed_history(
     assert client.get("/api/v1/symptoms", params={**page_params, "page": 3}).status_code == 422
 
 
+def test_symptom_deletion_removes_complete_chain_and_preserves_structural_audit(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    original_response = client.post(
+        "/api/v1/symptoms",
+        json={
+            "name": "Synthetic symptom to delete",
+            "severity": 3,
+            "time": {"local_time": "2021-05-06T09:00:00", "timezone": "Europe/London"},
+        },
+        headers=logged_in,
+    )
+    assert original_response.status_code == 201, original_response.text
+    original = original_response.json()
+    corrected_response = client.post(
+        f"/api/v1/symptoms/{original['id']}/correct",
+        json={"reason": "Synthetic correction", "changes": {"severity": 5}},
+        headers=logged_in,
+    )
+    assert corrected_response.status_code == 201, corrected_response.text
+    corrected = corrected_response.json()
+
+    with Session(engine) as session:
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        analysis = AIAnalysis(
+            owner_id=owner_id,
+            analysis_type=AnalysisType.DAILY_SUMMARY,
+            body="Synthetic analysis fixture.",
+            source_record_ids=[corrected["id"]],
+            range_start=datetime(2021, 5, 6, tzinfo=UTC),
+            range_end=datetime(2021, 5, 7, tzinfo=UTC),
+            computed_inputs={"fixture": True},
+            model_name="synthetic-model",
+            model_digest="sha256:synthetic",
+            prompt_version="synthetic-v1",
+            schema_version="analysis-v1",
+        )
+        session.add(analysis)
+        session.commit()
+        analysis_id = analysis.id
+
+    deleted = client.delete(f"/api/v1/symptoms/{corrected['id']}", headers=logged_in)
+    assert deleted.status_code == 204, deleted.text
+    page = client.get("/api/v1/symptoms").json()
+    remaining_ids = {row["id"] for row in [*page["items"], *page["revisions"]]}
+    assert original["id"] not in remaining_ids
+    assert corrected["id"] not in remaining_ids
+    assert (
+        client.delete(f"/api/v1/symptoms/{corrected['id']}", headers=logged_in).status_code == 404
+    )
+
+    with Session(engine) as session:
+        assert session.get(SymptomEvent, uuid.UUID(original["id"])) is None
+        assert session.get(SymptomEvent, uuid.UUID(corrected["id"])) is None
+        hidden_analysis = session.get(AIAnalysis, analysis_id)
+        assert hidden_analysis is not None
+        assert hidden_analysis.hidden_at is not None
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.RECORD_DELETED,
+                AuditEntry.target_id == uuid.UUID(original["id"]),
+            )
+        )
+        assert entry is not None
+        assert entry.change_summary == "deleted correction chain (2 revisions)"
+
+
 def test_meals_are_owner_scoped_correctable_reference_context_without_pk_effect(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:

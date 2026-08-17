@@ -8,6 +8,7 @@ import {
   correctSymptom,
   createMeal,
   createSymptom,
+  deleteSymptom,
   getDiaryEntries,
   getLifeEvents,
   getMeals,
@@ -92,6 +93,25 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
   const [reason, setReason] = useState("");
   const [validation, setValidation] = useState<string | null>(null);
   const mutation = useMutation({ mutationFn: (payload: SymptomCorrectionInput) => correctSymptom(symptom.id, payload), onSuccess: async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ["symptoms"] }), queryClient.invalidateQueries({ queryKey: ["timeline"] })]); close(); } });
+  const deletion = useMutation({
+    mutationFn: () => deleteSymptom(symptom.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["symptoms"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-healthcurve"] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+      ]);
+      close();
+    },
+  });
+
+  function remove(): void {
+    const confirmed = window.confirm(
+      `Delete “${symptom.name}”?\n\nThis removes the symptom and its complete revision history from HealthCurve. This cannot be undone.`,
+    );
+    if (confirmed) deletion.mutate();
+  }
 
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -120,7 +140,8 @@ function SymptomCorrectionForm({ symptom, close }: { symptom: Symptom; close: ()
     <TextInput className="form-wide" label="Correction reason" required aria-label="Correction reason" value={reason} onChange={(event) => { setReason(event.target.value); }} />
     {validation === null ? null : <Alert className="form-wide" color="red" role="alert">{validation}</Alert>}
     {mutation.isError ? <Alert className="form-wide" color="red" role="alert">The correction was not saved. Check the values and timezone.</Alert> : null}
-    <Group className="form-wide"><Button type="submit" loading={mutation.isPending}>Save corrected fact</Button><Button type="button" variant="outline" onClick={close}>Cancel</Button></Group>
+    {deletion.isError ? <Alert className="form-wide" color="red" role="alert">The symptom was not deleted. Refresh the page and try again.</Alert> : null}
+    <Group className="form-wide"><Button type="submit" loading={mutation.isPending} disabled={deletion.isPending}>Save corrected fact</Button><Button type="button" variant="outline" onClick={close} disabled={mutation.isPending || deletion.isPending}>Cancel</Button><Button type="button" color="red" variant="outline" loading={deletion.isPending} disabled={mutation.isPending} onClick={remove}>Delete symptom</Button></Group>
   </Paper></form>;
 }
 

@@ -24,6 +24,10 @@ class CorrectionError(Exception):
     """A correction that would break the supersession rules (SAFE-08)."""
 
 
+class DeletionError(Exception):
+    """A requested correction-chain deletion cannot be completed safely."""
+
+
 def build_event_time(local_time: datetime, timezone: str, fold: int | None = None) -> EventTime:
     """Resolve a submitted local time. Raises on ambiguous or nonexistent times."""
     naive = local_time.replace(tzinfo=None) if local_time.tzinfo else local_time
@@ -166,3 +170,52 @@ def current_fact_predicate[E: EventMixin](
 
 def is_superseded[E: EventMixin](session: Session, model: type[E], event_id: uuid.UUID) -> bool:
     return session.scalar(select(model.id).where(model.supersedes_id == event_id)) is not None
+
+
+def delete_correction_chain[E: EventMixin](
+    session: Session,
+    model: type[E],
+    selected: E,
+    *,
+    correlation_id: str | None = None,
+) -> tuple[uuid.UUID, tuple[uuid.UUID, ...]]:
+    """Delete an explicitly selected fact and its complete correction chain.
+
+    Correction rows use a restrictive self-reference so history cannot be orphaned.
+    Resolve the root and sole linear descendant chain first, then delete child-first.
+    A structural audit entry survives without copying health content into operations data.
+    """
+    root = selected
+    while root.supersedes_id is not None:
+        parent = session.get(model, root.supersedes_id)
+        if parent is None or parent.owner_id != selected.owner_id:
+            raise DeletionError("the correction chain is incomplete")
+        root = parent
+
+    chain = [root]
+    while True:
+        child = session.scalar(
+            select(model).where(
+                model.owner_id == selected.owner_id,
+                model.supersedes_id == chain[-1].id,
+            )
+        )
+        if child is None:
+            break
+        chain.append(child)
+
+    chain_ids = tuple(row.id for row in chain)
+    for row in reversed(chain):
+        session.delete(row)
+        session.flush()
+
+    audit.record(
+        session,
+        actor=audit.actor_for_owner(selected.owner_id),
+        action=audit.AuditAction.RECORD_DELETED,
+        target_type=model.__tablename__,
+        target_id=root.id,
+        correlation_id=correlation_id,
+        change_summary=f"deleted correction chain ({len(chain)} revisions)",
+    )
+    return root.id, chain_ids
