@@ -27,11 +27,11 @@ Before closing anything: `make check` must exit 0.
 |---|---|
 | **P0 Foundation** | **Done.** Safety, threat model, architecture, CI, schemas, UI IA, and feasibility spikes are complete |
 | **P1 Trusted record** | **Done.** Auth, plans, doses, events, episodes, corrections, audit, timeline, export, emergency page |
-| **P2 Telegram + AI** | In progress. Capture, long polling, safe fallback, and live local extraction work; draft editing, expiry, and evaluation remain |
-| **P3 Dashboard, labs, reports** | Complete. Today, timeline, plan, episode, symptom/diary, analytics/chart, data-quality, settings/privacy, and report-builder views are live with immutable local PDF/CSV/JSON snapshots |
-| **P4 Integrations** | Garmin export ingestion and isolated read-only personal sync are implemented; official provider API access remains conditional |
-| **P5 Production** | In progress. Private Tailscale hosting and encrypted local/offsite recovery are verified; release checklist remains |
-| **P6 Hardening** | Not started |
+| **P2 Telegram + AI** | **Done.** Capture, long polling, safe fallback, local extraction, draft editing/expiry, evaluation, conversational continuity, and the private in-site chatbot are complete |
+| **P3 Dashboard, labs, reports** | Complete. Today, timeline, plan, episode, Symptoms & Meals, analytics/chart, data-quality, settings/privacy, and report-builder views are live with immutable local PDF/CSV/JSON snapshots |
+| **P4 Integrations** | **Done for the private application.** Garmin export ingestion and isolated read-only personal sync, reconciliation, health visibility, timezone/location controls, and context handling are implemented. Official provider API access remains an optional conditional path, not a release dependency |
+| **P5 Private deployment** | **Done.** Private Tailscale hosting, password sessions, rate limits, encrypted integration credentials, monitoring, deletion/export controls, release checks, and encrypted local/offsite recovery are verified |
+| **P6 Hardening** | Active maintenance. Performance, accessibility, AI regression, analytics, and operational hardening are complete; the next quarterly isolated restore drill is deliberately deferred until November 2026 |
 
 The API, Telegram capture, and authenticated web shell are operational. Beads is the
 authority for exact open counts and dependencies; run `bd ready` rather than copying a
@@ -151,73 +151,41 @@ confidently produce a plausible number.
 
 ---
 
-## What else is missing
+## Current remaining work
 
-Grouped by why it matters rather than by phase.
+The original implementation gaps in this document are closed. In particular, the
+durable PostgreSQL job queue, Telegram edit and expiry flows, extraction evaluation,
+authenticated web application, Garmin integration, deterministic analytics, report
+builder, retention/deletion controls, rate limiting, encrypted integration
+credentials, monitoring, realistic-volume performance work, and backup/restore drills
+are implemented and verified in their closed Beads issues.
 
-### Security gaps that matter before real data
+Current private-use HealthCurve work is intentionally maintenance-driven:
 
-- **Password-only is an explicit owner decision.** It is acceptable only while the
-  application remains behind the owner-restricted Tailscale boundary. Public exposure
-  requires a new authentication/security review. `hc-cbs.14`.
-- **No rate limiting anywhere.** Redis is deployed and completely unused. Login,
-  extraction and report generation are all unbounded. `hc-cbs.5`.
-- **Integration tokens are not encrypted at rest.** Fine while Telegram's token lives
-  in the environment; not fine once Garmin OAuth tokens are in the database. Class C8
-  requires keys held outside the database. `hc-cbs.7`.
-- **Backup recovery is implemented and drilled.** Nightly age-encrypted local and
-  Google Drive copies are operational, and a newest-offsite isolated restore passed
-  the documented RPO/RTO and safety checks. The owner accepted that declining an
-  external drive means this is not strict 3-2-1. See `docs/backup-runbook.md`.
-- **Deletion does not exist.** Export works; you cannot delete a record, an
-  integration's data, or your account. `hc-cbs.10`.
+- Run `bd ready` for newly reported product work and regressions. Do not use an issue
+  number copied from this narrative as evidence that work remains open.
+- `hc-4lg.4` is the next scheduled quarterly isolated restore drill. It is deferred
+  until November 2026 so it does not pollute the actionable queue before the drill
+  window.
+- The owner-password design remains valid only behind the owner-restricted Tailscale
+  boundary. Public exposure still requires a new authentication and security review.
 
-### Correctness gaps
-
-- **Extraction evaluation is gated.** The versioned synthetic gold set records the
-  local model digest and prompt version, and CI recomputes explicit per-field
-  thresholds from the checked-in predictions. See `docs/extraction-evaluation.md`.
-- **No draft edit.** A wrong amount can only be cancelled and retyped. The plan
-  specifies confirm/**edit**/cancel. `hc-h5r.5`.
-- **Draft expiry is scheduled.** The durable worker runs it every fifteen minutes;
-  unanswered drafts expire after six hours and their raw message text is purged.
-  Operators can inspect its last run with `healthcurve draft-expiry-status`.
-- **The job queue is a placeholder.** The worker idles and logs
-  `reason_code=job_queue_not_implemented`. Every scheduled thing above needs it.
-  `hc-7hu.1`.
-- **15 of 29 safety rules are still `pending`.** Mostly UI and report rules that need
-  a UI to exist. CI reports the gap on every run.
-
-### The whole user interface
-
-There is no web frontend at all. Six issues (`hc-xo6.*`) cover the foundation, Today,
-timeline, plan, charts, and settings. The emergency page is deliberately separate and
-already works without any of it.
-
-### Not started, lower urgency
-
-Garmin (gated on its feasibility spike — verify access before building anything),
-weather and location enrichment, deterministic analytics, the data-quality page, the
-report builder with PDF rendering, monitoring and alerting, accessibility and
-performance work.
+Optional public-source preparation is a separate track, not part of the private
+application release: choosing a license, repeatable redacted history scanning, secret
+scanning, and any required history sanitation remain represented by their current
+Beads. They must not displace private HealthCurve/model work unless the owner resumes
+that publication effort.
 
 ---
 
-## Suggested order
+## How to choose the next task
 
-1. **The three ADRs.** Small, and they change what you build.
-2. **Backup design and implementation.** You are accumulating real health data now.
-   This is the thing you would most regret skipping.
-3. **Job queue.** Several things below need scheduled work.
-4. **Labs and PDF.** What you asked for, and independent of the frontend up to the
-   review UI.
-5. **Frontend foundation, then Today and timeline.** The point at which it becomes an
-   application rather than an API.
-6. **Telegram long polling.** Makes capture work on your actual hosting.
-7. **Security: Tailscale boundary, password sessions, rate limiting, deletion.**
-8. **Analytics and reports.** The physician-appointment payoff.
-9. **Garmin spike**, then Garmin if the spike says go.
-10. **Production checklist, security review, restore drill.**
+1. Run `bd prime` and follow its current Dolt synchronization instructions.
+2. Run `bd ready` and select the highest-priority eligible issue.
+3. Respect explicit owner scope. Publication-only work is not interchangeable with
+   private-use HealthCurve work merely because it is ready.
+4. If a real gap is discovered and no Bead exists, create one with observable
+   acceptance criteria before implementation.
 
-`bd ready` already reflects this ordering through priorities and dependencies. Trust it
-over this list — this list will drift, and Beads will not.
+Beads is authoritative for status, priority, dependencies, and completion evidence.
+This narrative supplies architectural context only.
