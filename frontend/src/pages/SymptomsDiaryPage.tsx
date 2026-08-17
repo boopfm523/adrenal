@@ -319,7 +319,7 @@ export function SymptomsDiaryPage(): React.JSX.Element {
   const loading = symptoms.isFetching || meals.isFetching || diary.isFetching || life.isFetching;
   const failed = symptoms.isError || meals.isError || diary.isError || life.isError;
 
-  return <Page title="Symptoms & diary" description="Subjective symptoms, diary notes, and life events are recorded facts—not diagnoses or causal claims.">
+  return <Page title="Symptoms & Meals" description="Subjective symptoms, diary notes, and life events are recorded facts—not diagnoses or causal claims.">
     <Paper component="form" className="filter-panel" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditing(null); setSearchParams(searchFromState({ ...draft, symptomPage: 1, mealPage: 1, diaryPage: 1, lifePage: 1 })); }}>
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md"><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value, allHistory: false }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value, allHistory: false }); }} /><TextInput label="IANA timezone" required aria-label="IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>
       <Checkbox mt="md" label="Reveal sensitive diary and life-event entries" checked={draft.includeSensitive} onChange={(event) => { setDraft({ ...draft, includeSensitive: event.target.checked }); }} />

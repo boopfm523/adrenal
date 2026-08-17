@@ -47,7 +47,7 @@ describe("primary HealthCurve route", () => {
     ["/today", "Today"],
     ["/timeline", "Timeline"],
     ["/doses", "Doses"],
-    ["/symptoms-diary", "Symptoms & diary"],
+    ["/symptoms-diary", "Symptoms & Meals"],
     ["/plan", "Medication plan"],
     ["/episodes", "Stress episodes"],
     ["/settings", "Settings & privacy"],

@@ -20,7 +20,7 @@ does not depend on JavaScript.
 | Record a symptom or note | Telegram bot |
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
-| Review symptoms, diary, and life events | Web Symptoms & diary; sensitive entries are hidden until explicitly revealed |
+| Review symptoms, diary, and life events | Web Symptoms & Meals; sensitive entries are hidden until explicitly revealed |
 | Create, review, approve, retire, or compare plan versions | Web Plan; approval is an explicit human action with clinician provenance |
 | Learn how to enter or import data | Web Help; examples are synthetic and distinguish immediate records from drafts |
 | Load your medications | `python -m healthcurve.cli load-medications` |
@@ -95,7 +95,7 @@ backups may retain the deleted draft until their configured expiry.
 
 ## Browsing recorded history
 
-Timeline, Symptoms & diary, and Episodes open with the latest seven local calendar days,
+Timeline, Symptoms & Meals, and Episodes open with the latest seven local calendar days,
 including today, in the profile timezone. The visible From and Through fields are the
 dates sent to the API. **Today**, **Yesterday**, and **2 days ago** set both fields to one
 day and refresh immediately. Custom dates remain editable and become shareable URL

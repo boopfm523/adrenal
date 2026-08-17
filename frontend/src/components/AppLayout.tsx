@@ -14,7 +14,7 @@ const navigation = [
   ["Doses", "/doses"],
   ["Plan", "/plan"],
   ["Episodes", "/episodes"],
-  ["Symptoms & diary", "/symptoms-diary"],
+  ["Symptoms & Meals", "/symptoms-diary"],
   ["Health data", "/health-data"],
   ["Labs", "/labs"],
   ["Reports", "/reports"],

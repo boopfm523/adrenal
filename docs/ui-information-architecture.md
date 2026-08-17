@@ -21,7 +21,7 @@ navigation drawer:
 2. **Timeline** — the canonical chronological record.
 3. **Plan & doses** — physician-approved regimen and actual-versus-plan views.
 4. **Episodes** — stress/up-dose and emergency-injection episode review.
-5. **Symptoms & diary** — subjective facts and contextual life events.
+5. **Symptoms & Meals** — subjective symptoms, meals, diary notes, and contextual life events.
 6. **Health data** — sleep, vitals, activity, and labs.
 7. **Analytics** — deterministic trends and exploratory overlays.
 8. **Reports** — physician-report builder and prior snapshots.
