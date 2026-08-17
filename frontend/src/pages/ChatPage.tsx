@@ -104,21 +104,19 @@ function MessageCard({ message, priorUserMessage, onCancel, onRetry, cancelling,
 function ConversationList({ conversations, selectedId, onSelect, onCreate, onDelete, creating, deletingId }: { conversations: ChatConversation[]; selectedId: string | null; onSelect: (id: string) => void; onCreate: () => void; onDelete: (id: string) => void; creating: boolean; deletingId: string | null }): React.JSX.Element {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   return (
-    <aside className="chat-conversations" aria-label="Chat conversations">
+    <aside id="chat-conversation-rail" className="chat-conversations" aria-label="Chat conversations">
       <Button fullWidth onClick={onCreate} loading={creating}>New chat</Button>
-      <details className="chat-history">
-        <summary>Conversation history ({conversations.length})</summary>
-        <div className="chat-conversation-list">
-          {conversations.length === 0 ? <p className="chat-empty-copy">No conversations yet.</p> : conversations.map((conversation) => (
-            <div className={`chat-conversation${conversation.id === selectedId ? " chat-conversation--active" : ""}`} key={conversation.id}>
-              <button type="button" className="chat-conversation__select" aria-pressed={conversation.id === selectedId} onClick={() => { onSelect(conversation.id); }}>
-                <span>{conversation.title}</span><small>{formatConversationDate(conversation.last_message_at)}</small>
-              </button>
-              {confirmDeleteId === conversation.id ? <div className="chat-conversation__confirm"><span>Delete?</span><button type="button" disabled={deletingId === conversation.id} onClick={() => { onDelete(conversation.id); }}>Yes</button><button type="button" onClick={() => { setConfirmDeleteId(null); }}>No</button></div> : <button type="button" className="chat-conversation__delete" aria-label={`Delete ${conversation.title}`} onClick={() => { setConfirmDeleteId(conversation.id); }}>Delete</button>}
-            </div>
-          ))}
-        </div>
-      </details>
+      <h2 className="chat-history-heading">Conversation history ({conversations.length})</h2>
+      <div className="chat-conversation-list">
+        {conversations.length === 0 ? <p className="chat-empty-copy">No conversations yet.</p> : conversations.map((conversation) => (
+          <div className={`chat-conversation${conversation.id === selectedId ? " chat-conversation--active" : ""}`} key={conversation.id}>
+            <button type="button" className="chat-conversation__select" aria-pressed={conversation.id === selectedId} onClick={() => { onSelect(conversation.id); }}>
+              <span>{conversation.title}</span><small>{formatConversationDate(conversation.last_message_at)}</small>
+            </button>
+            {confirmDeleteId === conversation.id ? <div className="chat-conversation__confirm"><span>Delete?</span><button type="button" disabled={deletingId === conversation.id} onClick={() => { onDelete(conversation.id); }}>Yes</button><button type="button" onClick={() => { setConfirmDeleteId(null); }}>No</button></div> : <button type="button" className="chat-conversation__delete" aria-label={`Delete ${conversation.title}`} onClick={() => { setConfirmDeleteId(conversation.id); }}>Delete</button>}
+          </div>
+        ))}
+      </div>
     </aside>
   );
 }
@@ -127,6 +125,7 @@ export function ChatPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const conversations = useQuery({ queryKey: ["chat-conversations"], queryFn: () => getChatConversations() });
   const effectiveSelectedId = selectedId ?? conversations.data?.items[0]?.id ?? null;
@@ -167,8 +166,18 @@ export function ChatPage(): React.JSX.Element {
   return (
     <Page title="Chat" description="Ask your private HealthCurve AI questions about your recorded data. Answers are exploratory, not diagnoses or dosing advice.">
       <Alert color="blue" variant="light" title="Private, read-only analysis" role="note">The chatbot can read only your approved HealthCurve data tools. It cannot change recorded facts or plans, and no health text is sent to a cloud AI service.</Alert>
-      <div className="chat-layout">
-        <ConversationList conversations={conversations.data?.items ?? []} selectedId={effectiveSelectedId} onSelect={setSelectedId} onCreate={() => { createConversation.mutate(); }} onDelete={(id) => { removeConversation.mutate(id); }} creating={createConversation.isPending} deletingId={removeConversation.isPending ? removeConversation.variables : null} />
+      <div className="chat-history-controls">
+        <Button
+          variant="outline"
+          aria-controls="chat-conversation-rail"
+          aria-expanded={!historyCollapsed}
+          onClick={() => { setHistoryCollapsed((collapsed) => !collapsed); }}
+        >
+          {historyCollapsed ? "Show New chat and history" : "Hide New chat and history"}
+        </Button>
+      </div>
+      <div className={`chat-layout${historyCollapsed ? " chat-layout--history-collapsed" : ""}`}>
+        {historyCollapsed ? null : <ConversationList conversations={conversations.data?.items ?? []} selectedId={effectiveSelectedId} onSelect={setSelectedId} onCreate={() => { createConversation.mutate(); }} onDelete={(id) => { removeConversation.mutate(id); }} creating={createConversation.isPending} deletingId={removeConversation.isPending ? removeConversation.variables : null} />}
         <section className="chat-panel" aria-label="Current conversation">
           {conversations.isError ? <Alert color="red" role="alert">Conversations could not be loaded.</Alert> : null}
           {selected === null ? <div className="chat-welcome"><h2>Start a conversation</h2><p>Ask about a day, a trend, recorded symptoms, doses, episodes, sleep, or Garmin observations.</p><Button onClick={() => { createConversation.mutate(); }} loading={createConversation.isPending}>New chat</Button></div> : (

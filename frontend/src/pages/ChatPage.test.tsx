@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { MemoryRouter } from "react-router-dom";
@@ -108,16 +108,24 @@ describe("HealthCurve Chat page", () => {
     await waitFor(() => { expect(api.updateChatConversation).toHaveBeenCalledWith(conversation.id, { include_sensitive_text: true }); });
   });
 
-  it("lets the owner collapse and expand conversation history", async () => {
+  it("collapses and restores the entire New chat and history rail", async () => {
     renderChat([]);
-    const summary = await screen.findByText("Conversation history (1)");
-    const details = summary.closest("details");
-    expect(details).not.toBeNull();
-    expect(details).not.toHaveAttribute("open");
-    await userEvent.click(summary);
-    expect(details).toHaveAttribute("open");
-    await userEvent.click(summary);
-    expect(details).not.toHaveAttribute("open");
+    const user = userEvent.setup();
+    const rail = await screen.findByRole("complementary", { name: "Chat conversations" });
+    expect(rail).toBeVisible();
+    expect(within(rail).getByRole("button", { name: "New chat" })).toBeVisible();
+
+    const hide = screen.getByRole("button", { name: "Hide New chat and history" });
+    expect(hide).toHaveAttribute("aria-expanded", "true");
+    await user.click(hide);
+    expect(screen.queryByRole("complementary", { name: "Chat conversations" })).not.toBeInTheDocument();
+
+    const show = screen.getByRole("button", { name: "Show New chat and history" });
+    expect(show).toHaveAttribute("aria-expanded", "false");
+    await user.click(show);
+    const restoredRail = await screen.findByRole("complementary", { name: "Chat conversations" });
+    expect(restoredRail).toBeVisible();
+    expect(within(restoredRail).getByRole("button", { name: "New chat" })).toBeVisible();
   });
 
   it("makes durable failures visible and offers retry", async () => {

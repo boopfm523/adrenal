@@ -21,6 +21,10 @@ from healthcurve.chat.tools import ChatToolResult, ToolArguments, tool_definitio
 
 PROMPT_VERSION: Final = "healthcurve-chat-v4"
 SCHEMA_VERSION: Final = "healthcurve-chat-answer-v3"
+DETERMINISTIC_GENERATOR_NAME: Final = "HealthCurve deterministic calculation"
+DETERMINISTIC_GENERATOR_DIGEST: Final = (
+    "sha256:" + hashlib.sha256(b"healthcurve-chat-direct-aggregate-v1").hexdigest()
+)
 MAX_PLANNING_ROUNDS: Final = 3
 MAX_TOOL_CALLS: Final = 8
 MAX_WHOLE_RUN_SECONDS: Final = 180.0
@@ -228,7 +232,8 @@ def run(
             _canonical_sha({"tool": direct_call.tool_name, "arguments": direct_call.arguments})
         )
         observe_tool(execution)
-        planning_complete = True
+        observe_state(ChatMessageState.GENERATING)
+        return _direct_aggregate_result(execution)
 
     for _round in range(MAX_PLANNING_ROUNDS if not planning_complete else 0):
         if now() - started >= MAX_WHOLE_RUN_SECONDS:
@@ -521,6 +526,106 @@ def _direct_aggregate_call(
             arguments=common,
         )
     return None
+
+
+def _direct_aggregate_result(execution: ExecutedTool) -> OrchestrationResult:
+    """Render simple validated aggregates without asking the model to reinterpret them."""
+    data = execution.result.data
+    date_scope = execution.result.date_scope or {}
+    date_from = str(date_scope.get("date_from") or execution.arguments.get("date_from") or "")
+    date_to = str(date_scope.get("date_to") or execution.arguments.get("date_to") or "")
+    scope = _display_date_scope(date_from, date_to)
+
+    if execution.call_id == "deterministic-wake-summary":
+        summary = data.get("wake_time_summary")
+        if isinstance(summary, dict):
+            sample_count = summary.get("sample_count")
+            average_local_time = summary.get("average_local_time")
+        else:
+            sample_count = 0
+            average_local_time = None
+        if (
+            isinstance(sample_count, int)
+            and not isinstance(sample_count, bool)
+            and sample_count > 0
+            and isinstance(average_local_time, str)
+            and average_local_time
+        ):
+            session_word = "session" if sample_count == 1 else "sessions"
+            body = (
+                f"Your average wake time across {sample_count} recorded sleep {session_word} "
+                f"{scope} was {_display_clock_time(average_local_time)}."
+            )
+        else:
+            body = (
+                f"I found no recorded sleep sessions {scope}. Missing sleep data remains "
+                "unavailable and is not treated as zero."
+            )
+    elif execution.call_id == "deterministic-symptom-count":
+        symptom_count = data.get("symptom_count")
+        if not isinstance(symptom_count, int) or isinstance(symptom_count, bool):
+            symptom_count = 0
+        event_word = "event" if symptom_count == 1 else "events"
+        body = (
+            f"HealthCurve contains {symptom_count} recorded symptom {event_word} {scope}. "
+            "This counts recorded events only; unrecorded symptoms remain unknown."
+        )
+    else:  # pragma: no cover - direct calls are created only for the cases above
+        raise ValueError("unsupported direct aggregate")
+
+    manifest = [_manifest_entry(execution)]
+    fingerprint = _canonical_sha(
+        [
+            {
+                "tool": execution.result.tool_name,
+                "version": execution.result.tool_version,
+                "arguments": execution.arguments,
+                "result": execution.result.result_sha256,
+            }
+        ]
+    )
+    return OrchestrationResult(
+        state=ChatMessageState.COMPLETED,
+        body=body,
+        model_name=DETERMINISTIC_GENERATOR_NAME,
+        model_digest=DETERMINISTIC_GENERATOR_DIGEST,
+        tool_versions={execution.result.tool_name: execution.result.tool_version},
+        source_manifest=manifest,
+        source_scope={
+            "tool_references": [execution.reference],
+            "date_scopes": [date_scope] if date_scope else [],
+        },
+        source_fingerprint=fingerprint,
+    )
+
+
+def _display_date_scope(date_from: str, date_to: str) -> str:
+    try:
+        start = date.fromisoformat(date_from)
+        end = date.fromisoformat(date_to)
+    except ValueError:
+        return "in the requested date range"
+    start_text = f"{start.strftime('%B')} {start.day}"
+    end_text = f"{end.strftime('%B')} {end.day}, {end.year}"
+    if start == end:
+        return f"on {end_text}"
+    if start.year != end.year:
+        start_text = f"{start_text}, {start.year}"
+    return f"from {start_text} through {end_text}"
+
+
+def _display_clock_time(value: str) -> str:
+    try:
+        hour_text, minute_text = value.split(":", maxsplit=1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ValueError
+    except (TypeError, ValueError):
+        return value
+    suffix = "AM" if hour < 12 else "PM"
+    display_hour = hour % 12 or 12
+    return f"{display_hour}:{minute:02d} {suffix}"
 
 
 def _answer_content(

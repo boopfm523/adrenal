@@ -134,22 +134,11 @@ def test_basic_symptom_count_uses_requested_recent_week_without_model_planning()
         seen.update(name=name, arguments=arguments)
         return result_source
 
-    answer: dict[str, object] = {
-        "refused": False,
-        "refusal_reason": "",
-        "claims": [
-            {
-                "text": "You recorded 3 symptoms in the past week.",
-                "source_references": ["source_1"],
-                "numeric_values": ["3"],
-            }
-        ],
-    }
     result = run(
         question="How many symptoms have I had in the past week?",
         context=_context(),
         execute_tool=execute,
-        client=_client(_ok(answer)),
+        client=_client(),
         current_local_date=date(2026, 8, 17),
         default_timezone="America/New_York",
     )
@@ -160,7 +149,8 @@ def test_basic_symptom_count_uses_requested_recent_week_without_model_planning()
     assert arguments["date_from"] == "2026-08-11"
     assert arguments["date_to"] == "2026-08-17"
     assert arguments["timezone"] == "America/New_York"
-    assert result.body is not None and "3 symptoms" in result.body
+    assert result.body is not None and "3 recorded symptom events" in result.body
+    assert result.model_name == "HealthCurve deterministic calculation"
 
 
 def test_basic_average_wake_question_defaults_to_latest_fourteen_local_dates() -> None:
@@ -188,22 +178,11 @@ def test_basic_average_wake_question_defaults_to_latest_fourteen_local_dates() -
         seen.update(name=name, arguments=arguments)
         return result_source
 
-    answer: dict[str, object] = {
-        "refused": False,
-        "refusal_reason": "",
-        "claims": [
-            {
-                "text": "Your average wake time across 10 sleep sessions was 07:31.",
-                "source_references": ["source_1"],
-                "numeric_values": ["10", "07", "31"],
-            }
-        ],
-    }
     result = run(
         question="What is my average time awake in the morning?",
         context=_context(),
         execute_tool=execute,
-        client=_client(_ok(answer)),
+        client=_client(),
         current_local_date=date(2026, 8, 17),
         default_timezone="America/New_York",
     )
@@ -214,7 +193,85 @@ def test_basic_average_wake_question_defaults_to_latest_fourteen_local_dates() -
     assert arguments["date_from"] == "2026-08-04"
     assert arguments["date_to"] == "2026-08-17"
     assert arguments["record_types"] == ["garmin_sleep"]
-    assert result.body is not None and "07:31" in result.body
+    assert result.body is not None and "7:31 AM" in result.body
+    assert "August 4 through August 17, 2026" in result.body
+    assert result.model_name == "HealthCurve deterministic calculation"
+
+
+def test_misspelled_average_wake_question_honors_explicit_past_week() -> None:
+    seen: dict[str, object] = {}
+    result_source = ChatToolResult(
+        tool_name="search_timeline",
+        timezone="America/New_York",
+        date_scope={"date_from": "2026-08-11", "date_to": "2026-08-17"},
+        data={
+            "items": [],
+            "record_counts": {"garmin_sleep": 6},
+            "wake_time_summary": {
+                "sample_count": 6,
+                "average_local_time": "07:18",
+                "average_local_hour": 7,
+                "average_local_minute": 18,
+            },
+        },
+        missingness={"no_matching_records": False},
+        source_manifest={"fact": ["synthetic-sleep"]},
+        result_sha256="e" * 64,
+    )
+
+    def execute(name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.update(name=name, arguments=arguments)
+        return result_source
+
+    result = run(
+        question="What is my averrage time I awake in the morning for the past week?",
+        context=_context(),
+        execute_tool=execute,
+        client=_client(),
+        current_local_date=date(2026, 8, 17),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    arguments = cast(dict[str, object], seen["arguments"])
+    assert arguments["date_from"] == "2026-08-11"
+    assert arguments["date_to"] == "2026-08-17"
+    assert result.body is not None and "7:18 AM" in result.body
+
+
+def test_average_wake_question_reports_missing_sleep_without_inventing_zero() -> None:
+    result_source = ChatToolResult(
+        tool_name="search_timeline",
+        timezone="America/New_York",
+        date_scope={"date_from": "2026-08-04", "date_to": "2026-08-17"},
+        data={
+            "items": [],
+            "record_counts": {"garmin_sleep": 0},
+            "wake_time_summary": {
+                "sample_count": 0,
+                "average_local_time": None,
+                "average_local_hour": None,
+                "average_local_minute": None,
+            },
+        },
+        missingness={"no_matching_records": True},
+        source_manifest={"fact": []},
+        result_sha256="f" * 64,
+    )
+
+    result = run(
+        question="What is my average wake time?",
+        context=_context(),
+        execute_tool=lambda _name, _arguments: result_source,
+        client=_client(),
+        current_local_date=date(2026, 8, 17),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert result.body is not None
+    assert "no recorded sleep sessions" in result.body.lower()
+    assert "not treated as zero" in result.body
 
 
 def test_explicit_calendar_dates_are_not_replaced_by_recent_default() -> None:
