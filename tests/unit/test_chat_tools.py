@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from unittest import mock
 
@@ -81,6 +81,18 @@ def test_unknown_tool_is_rejected_before_database_access() -> None:
         )
 
     session.assert_not_called()
+
+
+def test_average_local_time_uses_circular_clock_mean() -> None:
+    average = tools._average_local_time(  # pyright: ignore[reportPrivateUsage]
+        [
+            datetime(2026, 8, 10, 10, 0, tzinfo=UTC),
+            datetime(2026, 8, 11, 12, 0, tzinfo=UTC),
+        ],
+        timezone="America/New_York",
+    )
+
+    assert average == "07:00"
 
 
 def test_sensitive_text_requires_conversation_level_permission() -> None:

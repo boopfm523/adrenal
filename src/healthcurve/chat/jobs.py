@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -22,6 +23,7 @@ from healthcurve.chat.models import (
     ChatToolOutcome,
 )
 from healthcurve.chat.tools import ChatToolResult, execute_chat_tool
+from healthcurve.identity.models import Owner
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditAction
 from healthcurve.operations.jobs import Job, JobQueueError, enqueue
@@ -153,7 +155,8 @@ def make_chat_response_handler(
                 )
             )
             conversation = session.get(ChatConversation, conversation_id)
-            if source is None or source.body is None or conversation is None:
+            owner = session.get(Owner, owner_id)
+            if source is None or source.body is None or conversation is None or owner is None:
                 raise JobQueueError("chat_source_missing")
             question = source.body
             include_sensitive = conversation.include_sensitive_text
@@ -162,6 +165,8 @@ def make_chat_response_handler(
                 owner_id=owner_id,
                 conversation_id=conversation_id,
             )
+            default_timezone = owner.default_timezone
+            current_local_date = datetime.now(ZoneInfo(default_timezone)).date()
 
         def observe_state(state: ChatMessageState) -> None:
             with factory() as state_session, state_session.begin():
@@ -215,6 +220,8 @@ def make_chat_response_handler(
                 client=client,
                 observe_state=observe_state,
                 observe_tool=observe_tool,
+                current_local_date=current_local_date,
+                default_timezone=default_timezone,
             )
         except _ChatCancelled:
             return

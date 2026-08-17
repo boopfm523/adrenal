@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
+from datetime import date
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest import mock
@@ -115,6 +116,140 @@ def test_valid_answer_requires_validated_tool_source_and_number() -> None:
         ChatMessageState.PLANNING,
         ChatMessageState.GENERATING,
     ]
+
+
+def test_basic_symptom_count_uses_requested_recent_week_without_model_planning() -> None:
+    seen: dict[str, object] = {}
+    result_source = ChatToolResult(
+        tool_name="get_symptom_episode_context",
+        timezone="America/New_York",
+        date_scope={"date_from": "2026-08-11", "date_to": "2026-08-17"},
+        data={"symptom_count": 3, "symptoms": [], "stress_episodes": []},
+        missingness={"no_symptoms": False},
+        source_manifest={"fact": ["synthetic-symptom"]},
+        result_sha256="c" * 64,
+    )
+
+    def execute(name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.update(name=name, arguments=arguments)
+        return result_source
+
+    answer: dict[str, object] = {
+        "refused": False,
+        "refusal_reason": "",
+        "claims": [
+            {
+                "text": "You recorded 3 symptoms in the past week.",
+                "source_references": ["source_1"],
+                "numeric_values": ["3"],
+            }
+        ],
+    }
+    result = run(
+        question="How many symptoms have I had in the past week?",
+        context=_context(),
+        execute_tool=execute,
+        client=_client(_ok(answer)),
+        current_local_date=date(2026, 8, 17),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert seen["name"] == "get_symptom_episode_context"
+    arguments = cast(dict[str, object], seen["arguments"])
+    assert arguments["date_from"] == "2026-08-11"
+    assert arguments["date_to"] == "2026-08-17"
+    assert arguments["timezone"] == "America/New_York"
+    assert result.body is not None and "3 symptoms" in result.body
+
+
+def test_basic_average_wake_question_defaults_to_latest_fourteen_local_dates() -> None:
+    seen: dict[str, object] = {}
+    result_source = ChatToolResult(
+        tool_name="search_timeline",
+        timezone="America/New_York",
+        date_scope={"date_from": "2026-08-04", "date_to": "2026-08-17"},
+        data={
+            "items": [],
+            "record_counts": {"garmin_sleep": 10},
+            "wake_time_summary": {
+                "sample_count": 10,
+                "average_local_time": "07:31",
+                "average_local_hour": 7,
+                "average_local_minute": 31,
+            },
+        },
+        missingness={"no_matching_records": False},
+        source_manifest={"fact": ["synthetic-sleep"]},
+        result_sha256="d" * 64,
+    )
+
+    def execute(name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.update(name=name, arguments=arguments)
+        return result_source
+
+    answer: dict[str, object] = {
+        "refused": False,
+        "refusal_reason": "",
+        "claims": [
+            {
+                "text": "Your average wake time across 10 sleep sessions was 07:31.",
+                "source_references": ["source_1"],
+                "numeric_values": ["10", "07", "31"],
+            }
+        ],
+    }
+    result = run(
+        question="What is my average time awake in the morning?",
+        context=_context(),
+        execute_tool=execute,
+        client=_client(_ok(answer)),
+        current_local_date=date(2026, 8, 17),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert seen["name"] == "search_timeline"
+    arguments = cast(dict[str, object], seen["arguments"])
+    assert arguments["date_from"] == "2026-08-04"
+    assert arguments["date_to"] == "2026-08-17"
+    assert arguments["record_types"] == ["garmin_sleep"]
+    assert result.body is not None and "07:31" in result.body
+
+
+def test_explicit_calendar_dates_are_not_replaced_by_recent_default() -> None:
+    seen: dict[str, object] = {}
+    plan: dict[str, object] = {
+        "calls": [
+            {
+                "call_id": "timeline-explicit",
+                "tool_name": "search_timeline",
+                "arguments": {
+                    "date_from": "2026-08-01",
+                    "date_to": "2026-08-03",
+                    "timezone": "America/New_York",
+                    "record_types": ["symptom"],
+                },
+            }
+        ]
+    }
+
+    def execute(_name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.update(arguments)
+        return _tool_result()
+
+    result = run(
+        question="Summarize symptoms from August 1 through August 3.",
+        context=_context(),
+        execute_tool=execute,
+        client=_client(_ok(plan), _ok({"calls": []}), _ok(_answer())),
+        current_local_date=date(2026, 8, 17),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert seen["date_from"] == "2026-08-01"
+    assert seen["date_to"] == "2026-08-03"
 
 
 def test_safe_refusal_can_complete_without_reading_health_data() -> None:

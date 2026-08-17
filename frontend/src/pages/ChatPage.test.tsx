@@ -108,6 +108,18 @@ describe("HealthCurve Chat page", () => {
     await waitFor(() => { expect(api.updateChatConversation).toHaveBeenCalledWith(conversation.id, { include_sensitive_text: true }); });
   });
 
+  it("lets the owner collapse and expand conversation history", async () => {
+    renderChat([]);
+    const summary = await screen.findByText("Conversation history (1)");
+    const details = summary.closest("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(details).toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(details).not.toHaveAttribute("open");
+  });
+
   it("makes durable failures visible and offers retry", async () => {
     const userMessage = message({ id: "00000000-0000-4000-8000-000000000004", role: "user", content_category: "owner_authored", state: "accepted", body: "Summarize my day", sequence: 1, generated_at: null });
     renderChat([userMessage, message({ id: "00000000-0000-4000-8000-000000000005", state: "unavailable", body: null, error_code: "model_unavailable" })]);

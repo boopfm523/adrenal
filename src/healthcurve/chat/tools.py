@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import uuid
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
@@ -284,6 +285,94 @@ def _current_rows(
     return list(session.scalars(statement))
 
 
+def _current_row_count(
+    session: Session,
+    model: type[EventMixin],
+    *,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> int:
+    return int(
+        session.scalar(
+            select(func.count(model.id)).where(
+                model.owner_id == owner_id,
+                model.occurred_at >= start,
+                model.occurred_at < end,
+                event_service.current_fact_predicate(model, owner_id=owner_id),
+            )
+        )
+        or 0
+    )
+
+
+def _current_sleep_rows_by_wake(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+    limit: int,
+) -> list[GarminSleepEvent]:
+    """Return current sleep facts assigned to the local date of their wake time."""
+    statement = (
+        select(GarminSleepEvent)
+        .where(
+            GarminSleepEvent.owner_id == owner_id,
+            GarminSleepEvent.ended_at >= start,
+            GarminSleepEvent.ended_at < end,
+            event_service.current_fact_predicate(GarminSleepEvent, owner_id=owner_id),
+        )
+        .order_by(GarminSleepEvent.ended_at.desc(), GarminSleepEvent.id)
+        .limit(limit)
+    )
+    return list(session.scalars(statement))
+
+
+def _current_sleep_count_by_wake(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> int:
+    return int(
+        session.scalar(
+            select(func.count(GarminSleepEvent.id)).where(
+                GarminSleepEvent.owner_id == owner_id,
+                GarminSleepEvent.ended_at >= start,
+                GarminSleepEvent.ended_at < end,
+                event_service.current_fact_predicate(GarminSleepEvent, owner_id=owner_id),
+            )
+        )
+        or 0
+    )
+
+
+def _average_local_time(instants: list[datetime], *, timezone: str) -> str | None:
+    """Return a circular mean clock time so values around midnight remain adjacent."""
+    if not instants:
+        return None
+    zone = ZoneInfo(timezone)
+    angles = [
+        2.0
+        * math.pi
+        * (
+            instant.astimezone(zone).hour * 3_600
+            + instant.astimezone(zone).minute * 60
+            + instant.astimezone(zone).second
+        )
+        / 86_400.0
+        for instant in instants
+    ]
+    angle = math.atan2(
+        sum(math.sin(item) for item in angles),
+        sum(math.cos(item) for item in angles),
+    )
+    seconds = round((angle % (2.0 * math.pi)) * 86_400.0 / (2.0 * math.pi) / 60.0) * 60
+    return f"{(seconds // 3_600) % 24:02d}:{(seconds % 3_600) // 60:02d}"
+
+
 def _event_base(row: EventMixin) -> dict[str, object]:
     return {
         "id": row.id,
@@ -486,24 +575,73 @@ def _search_timeline(
         ("emergency_injection", EmergencyInjectionEvent),
     ]
     selected = [item for item in models if not types or item[0] in types]
+    record_counts = {
+        name: (
+            _current_sleep_count_by_wake(
+                session,
+                owner_id=owner_id,
+                start=start,
+                end=end,
+            )
+            if model is GarminSleepEvent
+            else _current_row_count(
+                session,
+                model,
+                owner_id=owner_id,
+                start=start,
+                end=end,
+            )
+        )
+        for name, model in selected
+    }
     rows = [
         row
         for _, model in selected
-        for row in _current_rows(
-            session,
-            model,
-            owner_id=owner_id,
-            start=start,
-            end=end,
-            limit=args.limit,
+        for row in (
+            _current_sleep_rows_by_wake(
+                session,
+                owner_id=owner_id,
+                start=start,
+                end=end,
+                limit=args.limit,
+            )
+            if model is GarminSleepEvent
+            else _current_rows(
+                session,
+                model,
+                owner_id=owner_id,
+                start=start,
+                end=end,
+                limit=args.limit,
+            )
         )
     ]
     rows.sort(key=lambda row: (row.occurred_at, row.id), reverse=True)
     limited = rows[: args.limit]
     items = [_event_payload(row, include_sensitive=args.include_sensitive_text) for row in limited]
+    sleep_rows = [row for row in rows if isinstance(row, GarminSleepEvent)]
+    wake_instants = [row.ended_at for row in sleep_rows]
+    average_wake_time = _average_local_time(wake_instants, timezone=args.timezone)
+    average_wake_hour: int | None = None
+    average_wake_minute: int | None = None
+    if average_wake_time is not None:
+        hour_text, minute_text = average_wake_time.split(":", maxsplit=1)
+        average_wake_hour = int(hour_text)
+        average_wake_minute = int(minute_text)
     return _result(
         name="search_timeline",
-        data={"items": items, "limit": args.limit, "has_more": len(rows) > args.limit},
+        data={
+            "items": items,
+            "limit": args.limit,
+            "has_more": len(rows) > args.limit,
+            "record_counts": record_counts,
+            "wake_time_summary": {
+                "sample_count": len(wake_instants),
+                "average_local_time": average_wake_time,
+                "average_local_hour": average_wake_hour,
+                "average_local_minute": average_wake_minute,
+            },
+        },
         missingness={
             "no_matching_records": not items,
             "sensitive_text_included": args.include_sensitive_text,
@@ -597,6 +735,13 @@ def _get_symptom_episode_context(
     session: Session, owner_id: uuid.UUID, args: SymptomEpisodeArguments
 ) -> ChatToolResult:
     start, end = _bounds(args)
+    symptom_count = _current_row_count(
+        session,
+        SymptomEvent,
+        owner_id=owner_id,
+        start=start,
+        end=end,
+    )
     symptoms = cast(
         list[SymptomEvent],
         _current_rows(
@@ -623,6 +768,7 @@ def _get_symptom_episode_context(
     return _result(
         name="get_symptom_episode_context",
         data={
+            "symptom_count": symptom_count,
             "symptoms": [_event_payload(row, include_sensitive=False) for row in symptoms],
             "stress_episodes": [
                 {
@@ -643,7 +789,7 @@ def _get_symptom_episode_context(
             ],
         },
         missingness={
-            "no_symptoms": not symptoms,
+            "no_symptoms": symptom_count == 0,
             "no_overlapping_episodes": not episodes,
             "symptoms_without_severity": sum(row.severity is None for row in symptoms),
             "open_episodes": sum(row.ended_at is None for row in episodes),

@@ -106,16 +106,19 @@ function ConversationList({ conversations, selectedId, onSelect, onCreate, onDel
   return (
     <aside className="chat-conversations" aria-label="Chat conversations">
       <Button fullWidth onClick={onCreate} loading={creating}>New chat</Button>
-      <div className="chat-conversation-list">
-        {conversations.length === 0 ? <p className="chat-empty-copy">No conversations yet.</p> : conversations.map((conversation) => (
-          <div className={`chat-conversation${conversation.id === selectedId ? " chat-conversation--active" : ""}`} key={conversation.id}>
-            <button type="button" className="chat-conversation__select" aria-pressed={conversation.id === selectedId} onClick={() => { onSelect(conversation.id); }}>
-              <span>{conversation.title}</span><small>{formatConversationDate(conversation.last_message_at)}</small>
-            </button>
-            {confirmDeleteId === conversation.id ? <div className="chat-conversation__confirm"><span>Delete?</span><button type="button" disabled={deletingId === conversation.id} onClick={() => { onDelete(conversation.id); }}>Yes</button><button type="button" onClick={() => { setConfirmDeleteId(null); }}>No</button></div> : <button type="button" className="chat-conversation__delete" aria-label={`Delete ${conversation.title}`} onClick={() => { setConfirmDeleteId(conversation.id); }}>Delete</button>}
-          </div>
-        ))}
-      </div>
+      <details className="chat-history">
+        <summary>Conversation history ({conversations.length})</summary>
+        <div className="chat-conversation-list">
+          {conversations.length === 0 ? <p className="chat-empty-copy">No conversations yet.</p> : conversations.map((conversation) => (
+            <div className={`chat-conversation${conversation.id === selectedId ? " chat-conversation--active" : ""}`} key={conversation.id}>
+              <button type="button" className="chat-conversation__select" aria-pressed={conversation.id === selectedId} onClick={() => { onSelect(conversation.id); }}>
+                <span>{conversation.title}</span><small>{formatConversationDate(conversation.last_message_at)}</small>
+              </button>
+              {confirmDeleteId === conversation.id ? <div className="chat-conversation__confirm"><span>Delete?</span><button type="button" disabled={deletingId === conversation.id} onClick={() => { onDelete(conversation.id); }}>Yes</button><button type="button" onClick={() => { setConfirmDeleteId(null); }}>No</button></div> : <button type="button" className="chat-conversation__delete" aria-label={`Delete ${conversation.title}`} onClick={() => { setConfirmDeleteId(conversation.id); }}>Delete</button>}
+            </div>
+          ))}
+        </div>
+      </details>
     </aside>
   );
 }
