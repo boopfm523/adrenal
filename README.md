@@ -112,6 +112,14 @@ CI fails if a rule marked `enforced` loses its coverage.
 Build status lives in Beads, not in this file. Run `bd ready` to see claimable work, and
 read [docs/roadmap.md](docs/roadmap.md) for what remains and in what order.
 
+## License
+
+HealthCurve is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). You may use, modify, and distribute
+the software only for purposes permitted by that license. Commercial use requires
+separate permission from the licensor. HealthCurve is therefore not OSI-approved
+open-source software.
+
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) — provisions Python 3.13 (ADR-0006) and locks deps
