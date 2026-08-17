@@ -49,8 +49,10 @@ Run the regression gate with:
 uv run python scripts/benchmark_cortisol_models.py --runs 7 --check
 ```
 
-The gate requires every model to stay below 16 MiB peak traced memory. Latency budgets
-are 100 ms for `hc-exposure-v1`, 150 ms each for `hc-physiology-v2` and
+The gate requires every model to stay below 16 MiB peak traced memory. Model latency
+uses process CPU time so unrelated shared-runner scheduling pauses do not create false
+regressions; database, browser, and network latency remain outside this pure in-memory
+gate. Budgets are 100 ms for `hc-exposure-v1`, 150 ms each for `hc-physiology-v2` and
 `hc-wake-free-v3`, and 250 ms for `hc-wake-free-v3` plus its reference band. These are
 generous CI regression ceilings rather than clinical or production claims.
 

@@ -16,7 +16,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from statistics import median
-from time import perf_counter
+from time import process_time
 from typing import Final
 
 from healthcurve.analytics import exposure, physiology, wake_pharmacokinetics, wake_reference
@@ -78,9 +78,12 @@ def _measure(
     operation()
     samples = []
     for _ in range(runs):
-        started = perf_counter()
+        # These model operations are pure CPU work. Process time keeps the
+        # regression budget stable when a shared CI runner deschedules this
+        # process, while still measuring added computation in the models.
+        started = process_time()
         operation()
-        samples.append((perf_counter() - started) * 1_000)
+        samples.append((process_time() - started) * 1_000)
 
     gc.collect()
     tracemalloc.start()
