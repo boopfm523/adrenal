@@ -114,6 +114,22 @@ encryption, database-major, or topology changes.
 
 ## 7. Security review
 
+Run the repository-owned current-tree and full-history scans. They report rule and
+location metadata with candidate values redacted. An unreviewed history finding blocks
+publication; false positives require an explicit hash-bound entry with a reason in
+`.secrets.history-reviews.json`. Candidates already reviewed as false positives in
+`.secrets.baseline` reuse that decision. Never paste a candidate value into either file.
+
+```bash
+make secrets
+```
+
+Pass only when both scans report no unresolved or confirmed secrets. This scans every
+reachable Git blob, including values removed from the current working tree. Scanner
+metadata, Beads state, and package-manager lockfiles use the same explicit exclusions as
+the current-tree scanner because their stored hashes are not credentials. A confirmed
+credential must be removed from the proposed public history and rotated before release.
+
 ```bash
 bd show hc-cbs.1
 ```

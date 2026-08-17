@@ -182,6 +182,7 @@ jobs:
           uv run detect-secrets scan --baseline .secrets.baseline \
             --exclude-files 'uv\.lock|\.beads/'
           uv run python scripts/check_secret_baseline.py
+          uv run python scripts/check_history_secrets.py
 
       - name: Refuse a committed .env (threat model T3)
         run: |
