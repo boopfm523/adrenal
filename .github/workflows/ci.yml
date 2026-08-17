@@ -180,7 +180,7 @@ jobs:
       - name: Secret scan (SAFE-29)
         run: |
           uv run detect-secrets scan --baseline .secrets.baseline \
-            --exclude-files 'uv\.lock|\.beads/'
+            --exclude-files 'uv\.lock|\.beads/|^\.secrets\.history-reviews\.json$'
           uv run python scripts/check_secret_baseline.py
           uv run python scripts/check_history_secrets.py
 
