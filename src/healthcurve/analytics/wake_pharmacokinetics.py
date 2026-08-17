@@ -202,11 +202,27 @@ def create_parameter_revision(
 
 
 def _normalized_shape(elapsed_hours: float, parameters: WakeFreeParameters) -> float:
+    return _normalized_shape_with_rates(
+        elapsed_hours,
+        absorption_rate=parameters.absorption_rate_per_hour,
+        elimination_rate=parameters.elimination_rate_per_hour,
+        peak_time=parameters.peak_time_hours,
+    )
+
+
+def _normalized_shape_with_rates(
+    elapsed_hours: float,
+    *,
+    absorption_rate: float,
+    elimination_rate: float,
+    peak_time: float,
+) -> float:
+    """Evaluate the normalized Bateman shape from already-validated constants."""
     if elapsed_hours < 0.0 or elapsed_hours > HORIZON_HOURS:
         return 0.0
-    ka = parameters.absorption_rate_per_hour
-    ke = parameters.elimination_rate_per_hour
-    peak_at = parameters.peak_time_hours
+    ka = absorption_rate
+    ke = elimination_rate
+    peak_at = peak_time
     if abs(ka - ke) <= 1e-8:
         raw = elapsed_hours * math.exp(-ke * elapsed_hours)
         peak = peak_at * math.exp(-ke * peak_at)
@@ -380,6 +396,38 @@ def build_curve(
     ordered = sorted(doses, key=lambda dose: (dose.occurred_at.astimezone(UTC), dose.id))
     supported = [dose for dose in ordered if exclusion_reason(dose) is None]
 
+    # These constants and dose scales do not change across the roughly 300 points in
+    # a selected day. Precomputing them avoids repeating parameter validation, cached
+    # tmax solving, timezone conversion, and category filtering for every dose at
+    # every sample while preserving an uncached rebuild whenever facts change.
+    absorption_rate = parameters.absorption_rate_per_hour
+    elimination_rate = parameters.elimination_rate_per_hour
+    peak_time = parameters.peak_time_hours
+    free_peak_10_mg = parameters.free_peak_10_mg_nmol_l
+    regular_doses: list[tuple[float, float]] = []
+    stress_doses: list[tuple[float, float]] = []
+    for dose in supported:
+        prepared = (
+            dose.occurred_at.astimezone(UTC).timestamp(),
+            free_peak_10_mg * (float(dose.amount) / 10.0),
+        )
+        if dose.category is DoseCategory.STRESS:
+            stress_doses.append(prepared)
+        else:
+            regular_doses.append(prepared)
+
+    def contribution_sum(prepared_doses: list[tuple[float, float]], instant_ts: float) -> float:
+        return math.fsum(
+            scale
+            * _normalized_shape_with_rates(
+                (instant_ts - administered_ts) / 3600.0,
+                absorption_rate=absorption_rate,
+                elimination_rate=elimination_rate,
+                peak_time=peak_time,
+            )
+            for administered_ts, scale in prepared_doses
+        )
+
     samples: list[dict[str, object]] = []
     for instant in _sample_instants(
         start=start,
@@ -387,16 +435,9 @@ def build_curve(
         supported_doses=supported,
         parameters=parameters,
     ):
-        regular_float = math.fsum(
-            contribution_nmol_per_liter(dose, instant, parameters=parameters)
-            for dose in supported
-            if dose.category is not DoseCategory.STRESS
-        )
-        stress_float = math.fsum(
-            contribution_nmol_per_liter(dose, instant, parameters=parameters)
-            for dose in supported
-            if dose.category is DoseCategory.STRESS
-        )
+        instant_ts = instant.timestamp()
+        regular_float = contribution_sum(regular_doses, instant_ts)
+        stress_float = contribution_sum(stress_doses, instant_ts)
         total_free_float = regular_float + stress_float
         regular_display = _display_decimal(regular_float)
         stress_display = _display_decimal(stress_float)
