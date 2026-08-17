@@ -63,6 +63,12 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .sidebar-link:hover { background: var(--hc-color-surface-muted); }
 .sidebar-link.active { background: var(--mantine-color-horizonTeal-0); color: var(--mantine-color-horizonTeal-9); font-weight: 750; box-shadow: inset 0.25rem 0 var(--mantine-color-horizonTeal-7); }
 .sidebar-footer { display: grid; gap: var(--mantine-spacing-md); padding: var(--mantine-spacing-md); border-top: 1px solid var(--hc-color-border); }
+@media (min-width: 75em) {
+  .sidebar-navigation-links {
+    align-content: start;
+    gap: 0.125rem;
+  }
+}
 .main-content-inner { width: min(80rem, 100%); margin-inline: auto; padding: var(--mantine-spacing-xl) clamp(1rem, 4vw, 3rem) 4rem; }
 h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.035em; }
 .page-title:focus-visible { outline: none; }
