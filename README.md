@@ -26,13 +26,45 @@ value; the adjacent table remains authoritative. Daily and nightly Garmin summar
 without an observation time are shown as context rather than invented as intraday
 points.
 
-The default exposure line is `hc-exposure-v1` in relative exposure units (REU). The
-owner may instead select the separately versioned `hc-physiology-v2` population-
-parameter plasma-free-cortisol scenario in nmol/L and optionally show its default-off
-illustrative circadian context ribbon. Neither is a cortisol measurement, conclusion
-about adequate coverage, personal target, or dosing advice. Recorded stress and
-symptoms remain context: HealthCurve does **not** convert them into a personal cortisol
-“needed” or medication-demand curve. The formulas, parameters, primary evidence,
+The exposure-model selector keeps three separately versioned views available:
+
+- `hc-exposure-v1` is a relative oral-dose exposure shape in relative exposure units
+  (REU). Its height is useful for comparing the timing of modeled peaks and troughs,
+  but it is not a cortisol concentration.
+- `hc-physiology-v2` is a population-parameter plasma-free-cortisol scenario in
+  nmol/L.
+- `hc-wake-free-v3` is a binding-aware, wake-anchored serum-free-cortisol scenario in
+  absolute nmol/L free. Select **Wake-anchored free cortisol (v3)** in Daily Review to
+  use it. Its modeled curve and healthy reference are never independently normalized;
+  both use the same stable serum-free-cortisol axis, while non-cortisol health series
+  continue to use the separate relative display axis.
+
+### Wake-anchored free cortisol (v3)
+
+V3 builds a deterministic Bateman absorption/elimination curve from every supported
+recorded immediate-release oral hydrocortisone dose, using the actual administration
+time. Dose contributions—including doses taken close together—are summed in serum
+free cortisol. The owner-revisable population defaults for elimination half-life,
+time to peak, distribution volume, and oral bioavailability are stored as immutable
+model-parameter revisions so a historical result remains explainable. Derived total
+cortisol is available only as display context; it does not drive the free-cortisol
+curve or symptom correlations.
+
+The optional **Wake-anchored healthy P5–P95 reference** is a wide healthy-adult
+population context band, not a personal target. HealthCurve regenerates it for each
+selected day from that day's observed Garmin final wake and relevant sleep onset. Up
+to the first three confirmed meal-time facts may add population-reference meal pulses
+at their exact observed times; meal size is retained as context but does not scale a
+pulse, unrecorded meals are never invented, and meals never alter the medication PK
+curve. If the required observed sleep timing is missing, the band remains unavailable
+rather than substituting an invented wake time. The expected pre-wake gap from an
+immediate-release oral regimen is context, not an alert.
+
+V3 and its reference are modeled estimates, not cortisol measurements, conclusions
+about adequate coverage, personal targets, warnings, or dosing advice. Recorded
+stress and symptoms remain context: HealthCurve does **not** convert them into a
+personal cortisol “needed” or medication-demand curve. Symptoms and physician advice
+take precedence over any visualization. The formulas, parameters, primary evidence,
 limitations, and model comparison are published in the Analytics page and
 [the user guide](docs/using-healthcurve.md#exact-healthcurve-formulas-and-evidence).
 
