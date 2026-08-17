@@ -506,7 +506,7 @@ def test_intraday_contract_requires_provider_descriptors() -> None:
     assert mapped.capabilities["respiration_daily_low"] == "unavailable"
 
 
-def test_stress_summary_hides_decimal_padding_and_internal_unit() -> None:
+def test_measurement_summary_hides_decimal_padding_and_internal_unit() -> None:
     assert (
         measurement_summary(
             GarminMetricType.STRESS,
@@ -523,5 +523,23 @@ def test_stress_summary_hides_decimal_padding_and_internal_unit() -> None:
             Decimal("14.2000"),
             "breaths/min",
         )
-        == "Average waking respiration: 14.2000 breaths/min"
+        == "Average waking respiration: 14.2 breaths/min"
+    )
+    assert (
+        measurement_summary(
+            GarminMetricType.HRV,
+            "lastNightAvg",
+            Decimal("35.0000"),
+            "ms",
+        )
+        == "Nightly average HRV: 35 ms"
+    )
+    assert (
+        measurement_summary(
+            GarminMetricType.STEPS,
+            "totalSteps",
+            Decimal("0.0000"),
+            "steps",
+        )
+        == "Steps: 0 steps"
     )

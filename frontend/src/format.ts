@@ -85,7 +85,7 @@ export function formatGarminDailyValue(metricType: string | null | undefined, va
 
 export function formatQuantitativeText(value: string): string {
   return value.replace(
-    /(-?\d+(?:\.\d+)?)\s+(mg|mcg|ml|mL|tablets?|lb|kg|mmHg|bpm|steps|mi)\b/g,
+    /(-?\d+(?:\.\d+)?)\s+(breaths\/min|mg|mcg|ml|mL|tablets?|lb|kg|mmHg|bpm|steps|mi|ms)\b/g,
     (_match, number: string, unit: string) => `${formatDecimal(number)} ${humanizeUnit(unit)}`,
   );
 }

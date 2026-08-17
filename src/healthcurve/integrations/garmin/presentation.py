@@ -41,6 +41,11 @@ def aggregate_period_label(field_name: str) -> str | None:
     return None if presentation is None else presentation[1]
 
 
+def _compact_decimal(value: Decimal) -> str:
+    compact = format(value, "f").rstrip("0").rstrip(".")
+    return "0" if compact in {"", "-"} else compact
+
+
 def measurement_summary(
     metric_type: GarminMetricType,
     field_name: str,
@@ -50,7 +55,7 @@ def measurement_summary(
     """Return a human-facing summary without leaking provider unit tokens."""
 
     label = measurement_label(metric_type, field_name)
+    display_value = _compact_decimal(value)
     if metric_type is GarminMetricType.STRESS:
-        display_value = format(value, "f").rstrip("0").rstrip(".")
         return f"{label}: {display_value}"
-    return f"{label}: {value} {unit}"
+    return f"{label}: {display_value} {unit}"

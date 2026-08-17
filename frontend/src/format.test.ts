@@ -44,6 +44,8 @@ describe("health value presentation formatting", () => {
   it("formats quantitative summaries and previews without mutating their source values", () => {
     const snapshot = { amount: "15.0000", unit: "mg", stress: "28.0000", stress_unit: "garmin_score" };
     expect(formatQuantitativeText("Synthetic medicine 10.0000 mg")).toBe("Synthetic medicine 10 mg");
+    expect(formatQuantitativeText("Average sleeping respiration: 14.0000 breaths/min")).toBe("Average sleeping respiration: 14 breaths/min");
+    expect(formatQuantitativeText("Nightly average HRV: 35.5000 ms")).toBe("Nightly average HRV: 35.5 ms");
     expect(formatPreviewJson(snapshot)).toContain('"amount": "15"');
     expect(formatPreviewJson(snapshot)).toContain('"stress_unit": "score"');
     expect(snapshot).toEqual({ amount: "15.0000", unit: "mg", stress: "28.0000", stress_unit: "garmin_score" });

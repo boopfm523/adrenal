@@ -2387,12 +2387,12 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         "garmin_activity"
     ) == 1
     assert {item["summary"] for item in garmin_timeline.json()["items"]} == {
-        "Steps: 120.0000 steps",
-        "Nightly average HRV: 43.0000 ms",
-        "Average waking respiration: 14.2000 breaths/min",
-        "Average sleeping respiration: 12.8000 breaths/min",
-        "Lowest respiration: 10.1000 breaths/min",
-        "Highest respiration: 19.2000 breaths/min",
+        "Steps: 120 steps",
+        "Nightly average HRV: 43 ms",
+        "Average waking respiration: 14.2 breaths/min",
+        "Average sleeping respiration: 12.8 breaths/min",
+        "Lowest respiration: 10.1 breaths/min",
+        "Highest respiration: 19.2 breaths/min",
         "Activity: Walking; 1.0000 mi",
     }
     assert all(
