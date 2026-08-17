@@ -107,9 +107,9 @@ function selectedHealthCurveDay(
     timezone: requestedTimezone === undefined || requestedTimezone === ""
       ? profileTimezone
       : requestedTimezone,
-    model: requestedModel === "hc-physiology-v2" || requestedModel === "hc-wake-free-v3"
+    model: requestedModel === "hc-exposure-v1" || requestedModel === "hc-physiology-v2"
       ? requestedModel
-      : "hc-exposure-v1",
+      : "hc-wake-free-v3",
   };
 }
 

@@ -403,6 +403,15 @@ describe("Daily HealthCurve", () => {
     expect(v1ExposurePath).toHaveAttribute("d", v1ExposureBeforeBand);
   });
 
+  it("keeps the wake-anchored reference discoverable when another model is selected", () => {
+    renderWithTheme(<DailyHealthCurve data={data()} />);
+
+    const referenceToggle = screen.getByRole("checkbox", { name: /Wake-anchored healthy P5–P95 reference/ });
+    expect(referenceToggle).toBeDisabled();
+    expect(referenceToggle).not.toBeChecked();
+    expect(screen.getByText(/Available with the Wake-anchored free cortisol \(v3\) exposure model/)).toBeVisible();
+  });
+
   it("keeps the wake-free model and P5–P95 reference on one stable absolute axis", () => {
     renderWithTheme(<DailyHealthCurve data={wakeFreeData()} />);
 
