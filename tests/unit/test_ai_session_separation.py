@@ -95,3 +95,20 @@ def test_command_paths_do_not_use_the_ai_session() -> None:
     the restricted role would imply the AI produced them."""
     for name in ("_cmd_dose", "_cmd_symptom", "_cmd_injection"):
         assert "get_ai_session_factory" not in _source_of(name)
+
+
+def test_chat_worker_keeps_identity_out_of_the_ai_role() -> None:
+    """Chat output is restricted, but profile timezone lookup is not an AI read."""
+    import inspect
+
+    from healthcurve import worker
+    from healthcurve.chat import jobs
+
+    wiring = inspect.getsource(worker.main)
+    handler = inspect.getsource(jobs.make_chat_response_handler)
+
+    assert "get_ai_session_factory()" in wiring
+    assert "identity_factory=get_session_factory()" in wiring
+    assert "with identity_factory() as identity_session" in handler
+    assert "with factory() as failure_session" in handler
+    assert 'failed.error_code = "chat_worker_failed"' in handler

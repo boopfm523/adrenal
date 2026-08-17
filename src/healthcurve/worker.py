@@ -96,7 +96,9 @@ def main() -> int:
 
     handlers = {
         CHAT_RESPONSE_TASK: make_chat_response_handler(
-            get_ai_session_factory(), client=OllamaClient(settings)
+            get_ai_session_factory(),
+            identity_factory=get_session_factory(),
+            client=OllamaClient(settings),
         ),
         DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
         WEATHER_ENRICHMENT_TASK: make_weather_handler(),

@@ -133,9 +133,17 @@ def _message_id(payload: Mapping[str, object]) -> uuid.UUID:
 
 
 def make_chat_response_handler(
-    factory: sessionmaker[Session], *, client: OllamaClient
+    factory: sessionmaker[Session],
+    *,
+    identity_factory: sessionmaker[Session],
+    client: OllamaClient,
 ) -> JobHandler:
-    """Build an injectable worker handler using the restricted AI database role."""
+    """Build a handler with restricted AI writes and a bounded identity lookup.
+
+    ``healthcurve_ai`` must remain unable to read the identity schema.  The owner
+    timezone is therefore read through the ordinary application role, while all
+    chat state and generated output continue to use the restricted AI role.
+    """
 
     def handle(queue_session: Session, payload: Mapping[str, object]) -> None:
         message_id = _message_id(payload)
@@ -155,8 +163,7 @@ def make_chat_response_handler(
                 )
             )
             conversation = session.get(ChatConversation, conversation_id)
-            owner = session.get(Owner, owner_id)
-            if source is None or source.body is None or conversation is None or owner is None:
+            if source is None or source.body is None or conversation is None:
                 raise JobQueueError("chat_source_missing")
             question = source.body
             include_sensitive = conversation.include_sensitive_text
@@ -165,8 +172,13 @@ def make_chat_response_handler(
                 owner_id=owner_id,
                 conversation_id=conversation_id,
             )
+
+        with identity_factory() as identity_session:
+            owner = identity_session.get(Owner, owner_id)
+            if owner is None:
+                raise JobQueueError("chat_owner_missing")
             default_timezone = owner.default_timezone
-            current_local_date = datetime.now(ZoneInfo(default_timezone)).date()
+        current_local_date = datetime.now(ZoneInfo(default_timezone)).date()
 
         def observe_state(state: ChatMessageState) -> None:
             with factory() as state_session, state_session.begin():
@@ -225,6 +237,17 @@ def make_chat_response_handler(
             )
         except _ChatCancelled:
             return
+        except Exception:
+            # A worker defect must never leave the browser polling an apparently
+            # active response forever.  Persist only a stable safe code; the queue
+            # still records and retries the operational failure without health text.
+            with factory() as failure_session, failure_session.begin():
+                failed = failure_session.get(ChatMessage, message_id)
+                if failed is not None and failed.state not in _TERMINAL_STATES:
+                    failed.state = ChatMessageState.FAILED
+                    failed.error_code = "chat_worker_failed"
+                    failed.updated_at = datetime.now(UTC)
+            raise
 
         completed_at = datetime.now(UTC)
         with factory() as result_session, result_session.begin():
