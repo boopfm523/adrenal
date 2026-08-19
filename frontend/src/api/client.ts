@@ -184,6 +184,7 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -224,9 +225,14 @@ function toSession(response: LoginResponse | WhoAmI): ActiveSession {
 
 async function parseError(response: Response): Promise<ApiError> {
   let detail = "The request could not be completed.";
+  let code: string | null = null;
   try {
     const body = (await response.json()) as ApiErrorBody;
     if (typeof body.detail === "string") detail = body.detail;
+    if (typeof body.detail === "object" && body.detail !== null && !Array.isArray(body.detail)) {
+      const candidate = (body.detail as { code?: unknown }).code;
+      if (typeof candidate === "string") code = candidate;
+    }
     if (Array.isArray(body.detail)) {
       const issues = body.detail.flatMap((item) => {
         if (typeof item !== "object" || item === null) return [];
@@ -243,7 +249,7 @@ async function parseError(response: Response): Promise<ApiError> {
   } catch {
     // Privacy-safe fallback: never surface server response bodies as HTML or diagnostics.
   }
-  return new ApiError(response.status, detail);
+  return new ApiError(response.status, detail, code);
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {

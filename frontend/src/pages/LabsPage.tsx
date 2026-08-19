@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
 import {
+  ApiError,
   confirmLabDocument,
   deleteLabDocument,
   getLabDocument,
@@ -85,28 +86,66 @@ function sourceDownloadUrl(documentId: string): string {
   return `/api/v1/labs/documents/${documentId}/download`;
 }
 
+function labDocumentProblem(reason: string | null): string {
+  switch (reason) {
+    case "pdf_page_limit_exceeded":
+      return "This PDF has more than 100 pages. Export or print only the laboratory pages as a PDF of 100 pages or fewer, then upload that smaller PDF.";
+    case "pdf_interactive_content_rejected":
+      return "This PDF contains interactive content. Print it to a new PDF, then upload the non-interactive copy.";
+    case "pdf_structure_invalid":
+    case "pdf_page_count_invalid":
+    case "pdf_signature_invalid":
+      return "HealthCurve could not validate this PDF. Open it and print or export it to a new PDF, then try again.";
+    default:
+      return "HealthCurve could not safely validate this PDF. Nothing was recorded. Try a non-interactive PDF of 100 pages or fewer.";
+  }
+}
+
+function labUploadProblem(error: Error | null): string {
+  if (!(error instanceof ApiError)) return "The PDF could not be uploaded. Nothing was recorded. Try again.";
+  switch (error.code) {
+    case "pdf_size_invalid":
+      return "This PDF is larger than 25 MB. Export or print only the laboratory pages to a smaller PDF, then try again.";
+    case "pdf_media_type_invalid":
+    case "pdf_signature_invalid":
+      return "The selected file is not a valid PDF. Choose a PDF file and try again.";
+    default:
+      return "The PDF could not be uploaded. Nothing was recorded. Check your connection and try again.";
+  }
+}
+
 function UploadPanel({ onUploaded }: { onUploaded: (document: LabDocument) => void }): React.JSX.Element {
   const queryClient = useQueryClient();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
   const upload = useMutation({
     mutationFn: uploadLabDocument,
     onSuccess: async (document) => {
+      setSelectedFile(null);
+      setSelectionError(null);
       onUploaded(document);
       await queryClient.invalidateQueries({ queryKey: ["lab-documents"] });
     },
   });
   function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
     event.preventDefault();
-    const file = new FormData(event.currentTarget).get("file");
-    if (file instanceof File && file.size > 0) upload.mutate(file);
+    if (selectedFile === null || selectedFile.size === 0) {
+      setSelectionError("Choose a PDF file before uploading.");
+      return;
+    }
+    setSelectionError(null);
+    upload.mutate(selectedFile);
   }
   return <Paper component="section" withBorder p="lg" radius="lg" aria-labelledby="pdf-import-heading">
     <Title order={2} id="pdf-import-heading">Import and review a lab PDF</Title>
     <Text my="sm">Upload creates a private extraction draft only. Nothing enters charts, reports, or your health record until you review and confirm it.</Text>
-    <form className="lab-upload-form" onSubmit={submit} aria-label="Upload lab PDF">
-      <FileInput required name="file" label="PDF file" placeholder="Choose PDF file" accept="application/pdf,.pdf" clearable />
+    <form className="lab-upload-form" onSubmit={submit} aria-label="Upload lab PDF" noValidate>
+      <FileInput name="file" label="PDF file" placeholder="Choose PDF file" accept="application/pdf,.pdf" clearable value={selectedFile} error={selectionError} onChange={(file) => { setSelectedFile(file); setSelectionError(null); upload.reset(); }} />
       <Button type="submit" loading={upload.isPending}>Upload for review</Button>
     </form>
-    {upload.isError ? <Alert color="red" mt="md" role="alert">The PDF could not be uploaded. Use a non-interactive PDF up to 25 MB.</Alert> : null}
+    {selectedFile === null ? null : <Text c="dimmed" mt="sm">Ready to upload: {selectedFile.name} ({(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)</Text>}
+    {upload.isPending ? <Alert color="blue" mt="md" role="status">Uploading privately… Nothing will be recorded until you review and confirm the extraction.</Alert> : null}
+    {upload.isError ? <Alert color="red" mt="md" role="alert">{labUploadProblem(upload.error)}</Alert> : null}
   </Paper>;
 }
 
@@ -192,7 +231,7 @@ function DocumentList({ documents, selectedId, select, onDeleted }: { documents:
       const resolved = document.draft_state === "confirmed" || document.draft_state === "edited";
       return <tr key={document.document_id}>
         <td><time dateTime={document.created_at}>{new Date(document.created_at).toLocaleString()}</time></td><th scope="row">{document.display_name}<span>{document.page_count === null ? "Validation pending" : `${String(document.page_count)} page${document.page_count === 1 ? "" : "s"}`}</span></th>
-        <td>{resolved ? "Confirmed into recorded facts" : document.status === "rejected" ? `Rejected: ${document.rejection_reason ?? "validation failed"}` : "Not recorded—review required"}</td>
+        <td>{resolved ? "Confirmed into recorded facts" : document.status === "rejected" ? labDocumentProblem(document.rejection_reason) : "Not recorded—review required"}</td>
         <td><div className="quick-actions">
           {resolved ? <a className="button-link" href={sourcePreviewUrl(document.document_id, 1)} target="_blank" rel="noreferrer">View first source page</a> : <button type="button" className={selectedId === document.document_id ? undefined : "button-secondary"} disabled={document.status === "rejected"} onClick={() => { select(document.document_id); }}>{selectedId === document.document_id ? "Review open below" : "Open review"}</button>}
           <a href={sourceDownloadUrl(document.document_id)}>Download original PDF</a>
@@ -306,7 +345,7 @@ function DocumentReview({ documentId, timezone, close }: { documentId: string; t
     enabled: status.data?.extraction_status === "draft_ready",
   });
   if (status.isError) return <p className="error-summary" role="alert">The document status could not be loaded.</p>;
-  if (status.data?.status === "rejected") return <p className="error-summary" role="alert">The PDF was rejected during private structural validation: {status.data.rejection_reason ?? "validation failed"}.</p>;
+  if (status.data?.status === "rejected") return <p className="error-summary" role="alert">{labDocumentProblem(status.data.rejection_reason)}</p>;
   if (status.data?.extraction_status !== "draft_ready" || extraction.data === undefined) return <p role="status">Validating and extracting locally… This page updates automatically.</p>;
   if (extraction.isError) return <p className="error-summary" role="alert">The extraction draft could not be loaded.</p>;
   return <ReviewForm key={extraction.data.draft_id} document={status.data} draft={extraction.data} timezone={timezone} done={close} />;
@@ -331,12 +370,12 @@ export function LabsPage(): React.JSX.Element {
   return <Page title="Laboratory results" description="Review private PDF extraction drafts, then view recorded source facts and deterministic trends. HealthCurve does not diagnose, interpret cortisol, or recommend treatment.">
     <Alert color="orange" mb="xl"><strong>Descriptive records only.</strong> Reference ranges are preserved exactly from each source and are never invented or used here to diagnose. Cortisol collection time and specimen type materially affect context; discuss interpretation with your physician.</Alert>
     <UploadPanel onUploaded={(document) => { setSelectedDocumentId(document.document_id); }} />
+    {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
     <Paper component="form" withBorder p="lg" my="xl" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...draft, resultPage: 1, documentPage: 1 })); }}><Title order={2} mb="md">Filter laboratory history</Title><SimpleGrid cols={{base:1,sm:3}}><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="History IANA timezone" required aria-label="History IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>{validation === null && !invalidRange ? null : <Alert color="red" mt="md" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}<Group mt="md"><Button type="submit">Apply history filters</Button><Button variant="outline" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone }; setValidation(null); setSelectedDocumentId(null); setDraftState({ search: "", filters: reset }); setSearchParams(new URLSearchParams()); }}>Clear history filters</Button></Group></Paper>
     <Text c="dimmed" my="md">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. Result dates mean specimen collection; document dates mean private upload time.</Text>
     {documentsQuery.isFetching ? <Text role="status">Loading lab documents…</Text> : null}
     {documentsQuery.isError ? <Alert color="red" role="alert">Lab documents could not be loaded.</Alert> : null}
     {documentsQuery.data === undefined ? null : <><DocumentList documents={documentsQuery.data.items} selectedId={selectedDocumentId} select={setSelectedDocumentId} onDeleted={(id) => { if (selectedDocumentId === id) setSelectedDocumentId(null); if (view.documentPage > 1 && documentsQuery.data.items.length === 1) setSearchParams(labHistorySearch({ ...view, documentPage: view.documentPage - 1 })); }} /><PaginationControls label="Lab document history" metadata={documentsQuery.data.page} onPageChange={(documentPage) => { setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...view, documentPage })); }} /></>}
-    {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
     <hr />
     {resultsQuery.isFetching ? <p role="status">Loading laboratory facts…</p> : null}
     {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}

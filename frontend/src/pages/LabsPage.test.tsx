@@ -34,6 +34,53 @@ function renderPage(initialEntry = "/labs"): void {
 describe("Labs page", () => {
   afterEach(() => { sessionStore.clear(); });
 
+  it("explains that a PDF must be selected instead of silently ignoring submit", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(page(requestUrl(input).includes("/labs/documents?") ? [] : []))));
+    renderPage();
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload for review" }));
+
+    expect(await screen.findByText("Choose a PDF file before uploading.")).toBeVisible();
+  });
+
+  it("shows an oversized document rejection beside the upload panel", async () => {
+    const pendingDocument = { ...document, display_name: "synthetic-long-report.pdf", status: "pending", page_count: null, extraction_status: "queued", extraction_draft_id: null };
+    const rejectedDocument = { ...pendingDocument, status: "rejected", rejection_reason: "pdf_page_limit_exceeded" };
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (init?.method === "POST" && url.endsWith("/labs/documents")) return Promise.resolve(json(pendingDocument, 202));
+      if (url.endsWith(`/labs/documents/${documentId}`)) return Promise.resolve(json(rejectedDocument));
+      return Promise.resolve(json(page([])));
+    });
+    renderPage();
+    const fileInput = globalThis.document.querySelector('input[type="file"]');
+    if (!(fileInput instanceof HTMLInputElement)) throw new Error("PDF file input was not rendered");
+    await userEvent.upload(fileInput, new File(["%PDF-1.4 synthetic"], "synthetic-long-report.pdf", { type: "application/pdf" }));
+    expect(screen.getByText(/Ready to upload: synthetic-long-report\.pdf/)).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload for review" }));
+
+    const rejection = await screen.findByText(/This PDF has more than 100 pages/);
+    expect(rejection).toHaveTextContent("more than 100 pages");
+    expect(rejection).toHaveTextContent("Export or print only the laboratory pages");
+    expect(rejection.compareDocumentPosition(screen.getByRole("heading", { name: "Filter laboratory history" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("turns a structured upload error into actionable guidance", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      if (init?.method === "POST" && requestUrl(input).endsWith("/labs/documents")) return Promise.resolve(json({ detail: { code: "pdf_size_invalid" } }, 413));
+      return Promise.resolve(json(page([])));
+    });
+    renderPage();
+    const fileInput = globalThis.document.querySelector('input[type="file"]');
+    if (!(fileInput instanceof HTMLInputElement)) throw new Error("PDF file input was not rendered");
+    await userEvent.upload(fileInput, new File(["%PDF-1.4 synthetic"], "synthetic-results.pdf", { type: "application/pdf" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload for review" }));
+
+    expect(await screen.findByText(/This PDF is larger than 25 MB/)).toBeVisible();
+  });
+
   it("applies one shareable date range to specimen and document histories", async () => {
     const urls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(json(page(url.includes("/labs/documents?") ? [document] : [base]))); });
