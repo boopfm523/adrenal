@@ -16,7 +16,7 @@ import math
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Final
+from typing import Final, cast
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -75,7 +75,7 @@ def exclusion_reason(dose: ExposureDose) -> str | None:
     return injectable_exclusion_reason(dose)
 
 
-def _iv_total_contribution(dose: ExposureDose, instant: datetime) -> float:
+def iv_total_contribution(dose: ExposureDose, instant: datetime) -> float:
     if injectable_exclusion_reason(dose) is not None:
         return 0.0
     elapsed = (instant.astimezone(UTC) - dose.occurred_at.astimezone(UTC)).total_seconds() / 3600
@@ -186,12 +186,12 @@ def build_curve(
         oral_regular_total = oral_total * oral_regular_free / oral_free if oral_free > 0.0 else 0.0
         oral_stress_total = oral_total - oral_regular_total
         iv_regular_total = math.fsum(
-            _iv_total_contribution(dose, instant)
+            iv_total_contribution(dose, instant)
             for dose in supported
             if dose.category is not DoseCategory.STRESS
         )
         iv_stress_total = math.fsum(
-            _iv_total_contribution(dose, instant)
+            iv_total_contribution(dose, instant)
             for dose in supported
             if dose.category is DoseCategory.STRESS
         )
@@ -203,8 +203,8 @@ def build_curve(
             combined_free * regular_total / combined_total if combined_total > 0.0 else 0.0
         )
         regular_free = max(0.0, min(combined_free, regular_free))
-        combined_free_display = oral_model._display_decimal(combined_free)
-        regular_free_display = oral_model._display_decimal(regular_free)
+        combined_free_display = oral_model.display_decimal(combined_free)
+        regular_free_display = oral_model.display_decimal(regular_free)
         stress_free_display = combined_free_display - regular_free_display
         local = instant.astimezone(zone)
         offset = local.utcoffset() or timedelta()
@@ -216,9 +216,7 @@ def build_curve(
                 "modeled_free_cortisol_nmol_l": combined_free_display,
                 "regular_modeled_free_cortisol_nmol_l": regular_free_display,
                 "stress_modeled_free_cortisol_nmol_l": stress_free_display,
-                "derived_total_cortisol_nmol_l_display": oral_model._display_decimal(
-                    combined_total
-                ),
+                "derived_total_cortisol_nmol_l_display": oral_model.display_decimal(combined_total),
             }
         )
 
@@ -260,7 +258,8 @@ def build_curve(
         doses=[],
         parameters=parameters,
     )
-    model = dict(oral_curve["model"])
+    model = dict(cast(dict[str, object], oral_curve["model"]))
+    oral_references = cast(list[str], model.get("references", []))
     model.update(
         {
             "id": MODEL_ID,
@@ -276,7 +275,7 @@ def build_curve(
             "iv_push_elimination_rate_per_hour": Decimal(str(IV_ELIMINATION_RATE_PER_HOUR)),
             "iv_push_elimination_half_life_hours": Decimal(str(IV_ELIMINATION_HALF_LIFE_HOURS)),
             "references": [
-                *model["references"],
+                *oral_references,
                 "https://pmc.ncbi.nlm.nih.gov/articles/PMC7241266/",
                 "https://pmc.ncbi.nlm.nih.gov/articles/PMC4280712/",
                 "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/009866s121lbl.pdf",

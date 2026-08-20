@@ -273,7 +273,7 @@ def contribution_nmol_per_liter(
     )
 
 
-def _display_decimal(value: float) -> Decimal:
+def display_decimal(value: float) -> Decimal:
     if not math.isfinite(value) or value < 0.0:
         raise ValueError("invalid wake-free PK result")
     result = Decimal(str(value)).quantize(DISPLAY_QUANTUM)
@@ -439,8 +439,8 @@ def build_curve(
         regular_float = contribution_sum(regular_doses, instant_ts)
         stress_float = contribution_sum(stress_doses, instant_ts)
         total_free_float = regular_float + stress_float
-        regular_display = _display_decimal(regular_float)
-        stress_display = _display_decimal(stress_float)
+        regular_display = display_decimal(regular_float)
+        stress_display = display_decimal(stress_float)
         local = instant.astimezone(zone)
         offset = local.utcoffset() or timedelta()
         samples.append(
@@ -451,7 +451,7 @@ def build_curve(
                 "modeled_free_cortisol_nmol_l": regular_display + stress_display,
                 "regular_modeled_free_cortisol_nmol_l": regular_display,
                 "stress_modeled_free_cortisol_nmol_l": stress_display,
-                "derived_total_cortisol_nmol_l_display": _display_decimal(
+                "derived_total_cortisol_nmol_l_display": display_decimal(
                     total_from_free(total_free_float)
                 ),
             }

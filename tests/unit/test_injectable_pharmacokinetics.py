@@ -76,7 +76,7 @@ def test_iv_push_total_contribution_halves_at_fitted_half_life() -> None:
         hours=injectable_pharmacokinetics.IV_ELIMINATION_HALF_LIFE_HOURS
     )
 
-    contribution = injectable_pharmacokinetics._iv_total_contribution(
+    contribution = injectable_pharmacokinetics.iv_total_contribution(
         dose(identity=2, occurred_at=administered), instant
     )
 
