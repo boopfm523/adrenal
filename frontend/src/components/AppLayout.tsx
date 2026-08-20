@@ -1,5 +1,5 @@
 import { AppShell, Box, Burger, Button, Group, ScrollArea, Text } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
@@ -23,11 +23,12 @@ const navigation = [
   ["Help", "/help"],
 ] as const;
 
-// Phones and tablets share one predictable drawer interaction. Mantine's
-// default `lg` breakpoint is 75em (1200px at the default root font size), so
-// representative iPhone and iPad layouts use the same hamburger control while
-// wider desktop layouts retain the persistent sidebar.
+// Phones and tablets share one predictable drawer interaction. Width alone is
+// deliberately insufficient: a narrow desktop browser still keeps the
+// persistent sidebar, while touch-first iPhone and iPad layouts use the drawer.
 export const NAVIGATION_DRAWER_BREAKPOINT = "lg" as const;
+export const NAVIGATION_DRAWER_MEDIA_QUERY =
+  "(max-width: 74.99em) and (any-pointer: coarse)";
 
 function Brand(): React.JSX.Element {
   return (
@@ -49,6 +50,7 @@ export function AppLayout(): React.JSX.Element {
   const { session, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpened, { close: closeMobile, toggle: toggleMobile }] = useDisclosure(false);
+  const usesDrawerNavigation = useMediaQuery(NAVIGATION_DRAWER_MEDIA_QUERY, false);
 
   useEffect(() => {
     closeMobile();
@@ -65,24 +67,32 @@ export function AppLayout(): React.JSX.Element {
   return (
     <AppShell
       className="app-shell"
-      header={{ height: { base: 64, lg: 0 } }}
-      navbar={{ width: "var(--hc-sidebar-width)", breakpoint: NAVIGATION_DRAWER_BREAKPOINT, collapsed: { mobile: !mobileOpened } }}
+      header={{ height: usesDrawerNavigation ? 64 : 0 }}
+      navbar={{
+        width: "var(--hc-sidebar-width)",
+        breakpoint: usesDrawerNavigation ? NAVIGATION_DRAWER_BREAKPOINT : 0,
+        collapsed: { mobile: usesDrawerNavigation && !mobileOpened },
+      }}
       padding={0}
     >
       <a className="skip-link" href="#main-content">Skip to main content</a>
 
-      <AppShell.Header className="mobile-header" hiddenFrom={NAVIGATION_DRAWER_BREAKPOINT}>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Burger opened={mobileOpened} onClick={toggleMobile} aria-label={mobileOpened ? "Close navigation" : "Open navigation"} size="sm" />
-          <Brand />
-          <EmergencyLink />
-        </Group>
-      </AppShell.Header>
+      {usesDrawerNavigation ? (
+        <AppShell.Header className="mobile-header">
+          <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+            <Burger opened={mobileOpened} onClick={toggleMobile} aria-label={mobileOpened ? "Close navigation" : "Open navigation"} size="sm" />
+            <Brand />
+            <EmergencyLink />
+          </Group>
+        </AppShell.Header>
+      ) : null}
 
       <AppShell.Navbar className="sidebar" aria-label="Primary">
-        <AppShell.Section className="sidebar-brand" visibleFrom={NAVIGATION_DRAWER_BREAKPOINT}>
-          <Brand />
-        </AppShell.Section>
+        {!usesDrawerNavigation ? (
+          <AppShell.Section className="sidebar-brand">
+            <Brand />
+          </AppShell.Section>
+        ) : null}
 
         <AppShell.Section component={ScrollArea} grow className="sidebar-navigation">
           <div className="sidebar-navigation-links">
@@ -95,7 +105,7 @@ export function AppLayout(): React.JSX.Element {
         </AppShell.Section>
 
         <AppShell.Section className="sidebar-footer">
-          <Box visibleFrom={NAVIGATION_DRAWER_BREAKPOINT}><EmergencyLink /></Box>
+          {!usesDrawerNavigation ? <Box><EmergencyLink /></Box> : null}
           <Text size="sm" fw={650} truncate>{session?.user.displayName ?? "Owner"}</Text>
           <Button variant="light" fullWidth onClick={() => { void signOut(); }}>Sign out</Button>
         </AppShell.Section>

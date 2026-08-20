@@ -30,7 +30,7 @@ describe("primary HealthCurve route", () => {
     await waitFor(() => { expect(screen.getByLabelText("Current route")).toHaveTextContent("/healthcurve"); });
     expect(await screen.findByRole("heading", { name: "Daily review", level: 1 })).toBeVisible();
     const brands = screen.getAllByRole("link", { name: "HealthCurve.ai home" });
-    expect(brands).toHaveLength(2);
+    expect(brands).toHaveLength(1);
     expect(brands.every((brand) => brand.getAttribute("aria-current") === "page")).toBe(true);
     expect(brands[0]?.querySelector("img")).toHaveAttribute(
       "src",

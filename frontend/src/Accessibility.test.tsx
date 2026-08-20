@@ -5,7 +5,7 @@ import axe from "axe-core";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthContext, type AuthContextValue } from "./auth/context";
-import { AppLayout } from "./components/AppLayout";
+import { AppLayout, NAVIGATION_DRAWER_MEDIA_QUERY } from "./components/AppLayout";
 import { HealthCurveProvider } from "./components/HealthCurveProvider";
 import { AccessibleLineChart } from "./components/AccessibleLineChart";
 import { LoginPage } from "./pages/LoginPage";
@@ -46,6 +46,16 @@ describe("automated accessibility audit", () => {
   });
 
   it("audits the signed-in shell and physician-approval journey and keeps it keyboard reachable", async () => {
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: query === NAVIGATION_DRAWER_MEDIA_QUERY,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
     const draft = {
       id: "33333333-3333-4333-8333-333333333333", category: "plan", version_label: "Synthetic keyboard plan", status: "draft",
       effective_from: "2099-01-01T07:00:00", effective_to: null, approved_at: null, approved_by: null, approval_source: null, retired_at: null, notes: null, deletion_allowed: false,
