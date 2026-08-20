@@ -17,9 +17,16 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEWS = ROOT / ".secrets.history-reviews.json"
 EXCLUDED_SOURCE_PATHS = {".secrets.baseline", ".secrets.history-reviews.json", "uv.lock"}
 EXCLUDED_SOURCE_NAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml"}
-GIT = shutil.which("git")
-if GIT is None:  # pragma: no cover - Git is required before the script can run.
-    raise RuntimeError("git executable is unavailable")
+
+
+def _git_executable() -> str:
+    executable = shutil.which("git")
+    if executable is None:  # pragma: no cover - Git is required before the script can run.
+        raise RuntimeError("git executable is unavailable")
+    return executable
+
+
+GIT = _git_executable()
 
 
 @dataclass(frozen=True)

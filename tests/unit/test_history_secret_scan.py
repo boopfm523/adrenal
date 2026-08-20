@@ -7,8 +7,14 @@ from pathlib import Path
 
 from scripts.check_history_secrets import check_history, scan_history
 
-GIT = shutil.which("git")
-assert GIT is not None
+
+def _git_executable() -> str:
+    executable = shutil.which("git")
+    assert executable is not None
+    return executable
+
+
+GIT = _git_executable()
 
 
 def _git(repo: Path, *args: str) -> None:
