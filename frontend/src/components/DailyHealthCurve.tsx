@@ -1060,6 +1060,10 @@ export function DailyHealthCurve({
       const aggregates = dailyAggregatesForLane(data, lane);
       const values = summaryValues(lane, data);
       const average = values.length === 0 ? null : values.reduce((total, value) => total + value, 0) / values.length;
+      const hasRecordedValues = aggregates.length > 0
+        || values.length > 0
+        || (lane.key === "blood_pressure" && data.bloodPressure.length > 0)
+        || (lane.key === "temperature" && data.temperature.length > 0);
       const metadataId = `curve-summary-metadata-${lane.key}`;
       return <section key={lane.key} className="curve-summary-card" aria-labelledby={`curve-summary-title-${lane.key}`}>
         <h3 id={`curve-summary-title-${lane.key}`}>{lane.label}<SummaryInfo id={metadataId} label={lane.label}>{laneMetadata(lane, data, unscoredSymptoms.length)}</SummaryInfo></h3>
@@ -1071,7 +1075,7 @@ export function DailyHealthCurve({
           {lane.key === "blood_pressure" ? data.bloodPressure.map((record) => <p key={record.id}><strong>{record.systolic_mmhg.toString()}/{record.diastolic_mmhg.toString()} mmHg</strong>{record.pulse_bpm == null ? null : ` · pulse ${record.pulse_bpm.toString()} bpm`}</p>) : null}
           {lane.key === "temperature" ? data.temperature.map((record) => <p key={record.id}><strong>{record.display_f} °F</strong> ({record.display_c} °C)</p>) : null}
           {lane.key === "symptoms" ? data.symptoms.map((record) => <p key={record.id}><strong>{record.name}</strong>{record.severity == null ? " · severity not recorded" : ` · ${record.severity.toString()}/10`}</p>) : null}
-          {aggregates.length === 0 && values.length === 0 && lane.key !== "symptoms" ? <p className="muted">No values recorded.</p> : null}
+          {!hasRecordedValues && lane.key !== "symptoms" ? <p className="muted">No values recorded.</p> : null}
           {lane.key === "symptoms" && data.symptoms.length === 0 ? <p className="muted">No symptoms recorded.</p> : null}
         </div>
       </section>;

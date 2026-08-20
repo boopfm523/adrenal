@@ -610,9 +610,12 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelector(".healthcurve-point--diastolic")).not.toBeNull();
     expect(screen.getByRole("img")).toHaveTextContent("Blood pressure 121/81 mmHg");
     const summaries = screen.getByLabelText("Series sample counts");
+    const bloodPressureCard = within(summaries).getByRole("heading", { name: /Blood pressure/ }).closest("section");
+    expect(bloodPressureCard).not.toBeNull();
     expect(within(summaries).getByText("121/81 mmHg")).toBeVisible();
     expect(within(summaries).getByText("130/85 mmHg")).toBeVisible();
     expect(summaries).toHaveTextContent("121/81 mmHg · pulse 88 bpm");
+    expect(bloodPressureCard).not.toHaveTextContent("No values recorded.");
     const { tooltip } = hoverAt(660);
     expect(within(tooltip).getAllByText("Blood pressure:")).toHaveLength(1);
     expect(tooltip).toHaveTextContent("Blood pressure: 121/81 mmHg");
@@ -643,7 +646,11 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("Temperature: 100.4 °F (38.0 °C)");
     const exactValues = screen.getByRole("region", { name: "Selected-day temperature exact values" });
     expect(exactValues).toHaveTextContent("100.4 °F (38.0 °C)");
-    expect(screen.getByLabelText("Series sample counts")).toHaveTextContent("100.4 °F (38.0 °C)");
+    const summaries = screen.getByLabelText("Series sample counts");
+    const temperatureCard = within(summaries).getByRole("heading", { name: /Temperature/ }).closest("section");
+    expect(temperatureCard).not.toBeNull();
+    expect(temperatureCard).toHaveTextContent("100.4 °F (38.0 °C)");
+    expect(temperatureCard).not.toHaveTextContent("No values recorded.");
     const info = screen.getByRole("button", { name: "About Temperature data" });
     fireEvent.focus(info);
     expect(document.getElementById(info.getAttribute("aria-describedby") ?? "")).toHaveTextContent("1 recorded measurement(s)");
@@ -924,6 +931,8 @@ describe("Daily HealthCurve", () => {
     ]);
     const summaries = screen.getByLabelText("Series sample counts");
     expect(within(summaries).getByRole("heading", { name: /Garmin stress/ }).parentElement).toHaveTextContent("No values recorded");
+    expect(within(summaries).getByRole("heading", { name: /Blood pressure/ }).parentElement).toHaveTextContent("No values recorded");
+    expect(within(summaries).getByRole("heading", { name: /Temperature/ }).parentElement).toHaveTextContent("No values recorded");
     fireEvent.focus(screen.getByRole("button", { name: "About Garmin stress data" }));
     expect(screen.getByRole("tooltip")).toHaveTextContent("0 exact point(s)");
     fireEvent.blur(screen.getByRole("button", { name: "About Garmin stress data" }));
