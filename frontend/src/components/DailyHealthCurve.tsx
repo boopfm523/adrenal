@@ -67,6 +67,16 @@ interface AwakeInterval {
   endedAt: number;
 }
 
+function doseExclusionReason(reason: SteroidExposureCurve["dose_markers"][number]["exclusion_reason"]): string {
+  switch (reason) {
+    case "unsupported_medication": return "this medication is not supported by the selected exposure model";
+    case "unsupported_formulation": return "this formulation is not supported by the selected exposure model";
+    case "unsupported_route": return "this administration route is not supported by the selected exposure model";
+    case "unsupported_unit": return "this recorded unit is not supported by the selected exposure model";
+    default: return "this recorded dose is not supported by the selected exposure model";
+  }
+}
+
 const WIDTH = 960;
 const HEIGHT = 430;
 const LEFT = 74;
@@ -658,8 +668,8 @@ function doseTooltipObservations(
       return [{
         id: `dose-${dose.dose_event_id}`,
         time: dose.occurred_at,
-        series: dose.category === "stress" ? "Stress dose" : "Regular dose",
-        value: `${dose.medication_name} ${formatMeasurement(dose.amount, dose.unit)}`,
+        series: `${dose.category === "stress" ? "Stress dose" : "Regular dose"}${dose.supported ? "" : " (not modeled)"}`,
+        value: `${dose.medication_name} ${formatMeasurement(dose.amount, dose.unit)}${dose.supported ? "" : ` — ${doseExclusionReason(dose.exclusion_reason)}`}`,
       }];
     });
 }
@@ -749,6 +759,10 @@ export function DailyHealthCurve({
     (interval) => cursorTime >= interval.startedAt && cursorTime < interval.endedAt,
   );
   const doseObservations = doseTooltipObservations(data.exposure, start, end);
+  const unmodeledDoses = data.exposure.dose_markers.filter((dose) => {
+    const occurredAt = Date.parse(dose.occurred_at);
+    return !dose.supported && occurredAt >= start && occurredAt < end;
+  });
   const cursorDoseObservations = visible.exposure
     ? nearbyTooltipObservations(doseObservations, cursorTime)
     : [];
@@ -905,6 +919,11 @@ export function DailyHealthCurve({
       } satisfies Record<LaneKey, string>).map(([key, label]) => <Checkbox key={key} label={label} checked={visible[key as LaneKey]} onChange={(event) => { setVisible({ ...visible, [key]: event.target.checked }); }} />)}<Checkbox label="Illustrative circadian context band" description="Population-shape context only; not a personal target or adequacy range." checked={showContextBand} onChange={(event) => { setShowContextBand(event.target.checked); }} />{isWakeFreeCurve(data.exposure) ? <Checkbox label="Wake-anchored healthy P5–P95 reference" description="Healthy-adult context regenerated from observed wake, sleep, and meals; not a personal target." checked={showWakeReferenceBand} disabled={!data.exposure.wake_reference.available} onChange={(event) => { setShowWakeReferenceBand(event.target.checked); }} /> : <Checkbox label="Wake-anchored healthy P5–P95 reference" description="Available with the Wake-anchored free cortisol (v3) exposure model. Select v3 above to compare against this observed-wake reference." checked={false} disabled />}</SimpleGrid>
       {stepsUnavailable ? <Text role="status" c="dimmed">Hourly Steps are unavailable for this day because Garmin supplied no observed intraday step samples. The untimed daily step total is not drawn at an invented time.</Text> : null}
     </Paper></Stack>
+    {unmodeledDoses.length === 0 ? null : <aside className="healthcurve-unmodeled-doses" role="status">
+      <strong>{unmodeledDoses.length.toString()} recorded {unmodeledDoses.length === 1 ? "dose is" : "doses are"} shown but not modeled.</strong>{" "}
+      These are actual recorded facts and do not require a dose plan. The selected model supports only {data.exposure.model.supported_formulation} {data.exposure.model.supported_route} {data.exposure.model.supported_medication}; it does not invent exposure for a different medication, formulation, route, or unit. Hollow diamond markers show the recorded administration times.
+      <ul>{unmodeledDoses.map((dose) => <li key={dose.dose_event_id}><time dateTime={dose.occurred_at}>{experiencedTime(dose.occurred_at, data.exposure.timezone)}</time>: <strong>{dose.category === "stress" ? "Stress dose" : "Dose"} — {dose.medication_name} {formatMeasurement(dose.amount, dose.unit)}</strong> ({dose.route}; {doseExclusionReason(dose.exclusion_reason)})</li>)}</ul>
+    </aside>}
     <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
@@ -989,7 +1008,10 @@ export function DailyHealthCurve({
         </g>)}
         {visible.exposure ? data.exposure.dose_markers.map((dose) => {
           const x = xPosition(dose.occurred_at, start, end);
-          return <g key={dose.dose_event_id}><line className="healthcurve-dose-marker" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT}><title>{experiencedTime(dose.occurred_at, data.exposure.timezone)}: actual dose {formatMeasurement(dose.amount, dose.unit)} {dose.medication_name}</title></line><circle className="healthcurve-dose-dot" cx={x} cy={TOP} r="5" /></g>;
+          const title = `${experiencedTime(dose.occurred_at, data.exposure.timezone)}: recorded ${dose.category === "stress" ? "stress " : ""}dose ${formatMeasurement(dose.amount, dose.unit)} ${dose.medication_name}${dose.supported ? "" : `; not modeled because ${doseExclusionReason(dose.exclusion_reason)}`}`;
+          return dose.supported
+            ? <g key={dose.dose_event_id}><line className="healthcurve-dose-marker" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT}><title>{title}</title></line><circle className="healthcurve-dose-dot" cx={x} cy={TOP} r="5" /></g>
+            : <g key={dose.dose_event_id} className="healthcurve-unmodeled-dose"><line className="healthcurve-dose-marker healthcurve-dose-marker--unmodeled" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT}><title>{title}</title></line><polygon className="healthcurve-dose-dot healthcurve-dose-dot--unmodeled" points={`${(x - 6).toString()},${TOP.toString()} ${x.toString()},${(TOP - 6).toString()} ${(x + 6).toString()},${TOP.toString()} ${x.toString()},${(TOP + 6).toString()}`} /></g>;
         }) : null}
         {visible.symptoms ? <g data-series="unscored-symptoms">{unscoredSymptoms.map((symptom, index) => {
           const x = xPosition(symptom.time, start, end);

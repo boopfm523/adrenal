@@ -858,17 +858,60 @@ describe("Daily HealthCurve", () => {
     ] } })} />);
 
     const tooltip = hoverAt(60).tooltip;
-    const doseRows = within(tooltip).getAllByText(/(?:Regular|Stress) dose:/).map((label) => label.parentElement?.textContent);
+    const doseRows = within(tooltip).getAllByText(/(?:Regular|Stress) dose(?: \(not modeled\))?:/).map((label) => label.parentElement?.textContent);
     expect(doseRows).toEqual([
       "Stress dose: Hydrocortisone 2.5 mg",
       "Regular dose: Hydrocortisone 10 mg",
-      "Regular dose: Prednisone 5 mg",
+      "Regular dose (not modeled): Prednisone 5 mg — this medication is not supported by the selected exposure model",
     ]);
+    const unmodeledNotice = screen.getByText(/1 recorded dose is shown but not modeled/).closest("aside");
+    expect(unmodeledNotice).toHaveTextContent("These are actual recorded facts and do not require a dose plan");
+    expect(document.querySelectorAll(".healthcurve-unmodeled-dose")).toHaveLength(1);
     expect(tooltip.textContent.match(/GMT-5/g)).toHaveLength(1);
     expect(tooltip).not.toHaveTextContent(/manual|confirmed|source|provider/i);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Theoretical exposure and actual doses" }));
     expect(hoverAt(60).tooltip).not.toHaveTextContent(/Regular dose|Stress dose/);
+  });
+
+  it("keeps a no-plan intramuscular hydrocortisone sodium succinate stress injection visible without inventing exposure", () => {
+    const baseExposure = data().exposure;
+    if ("series_kind" in baseExposure) throw new Error("Expected the v1 exposure fixture");
+    renderWithTheme(<DailyHealthCurve data={data({ exposure: {
+      ...baseExposure,
+      supported_dose_count: 0,
+      excluded_dose_count: 1,
+      samples: baseExposure.samples.map((sample) => ({ ...sample, theoretical_exposure_reu: "0" })),
+      dose_markers: [{
+        dose_event_id: "90000000-0000-4000-8000-000000000050",
+        occurred_at: "2026-03-08T12:00:00Z",
+        local_time: "2026-03-08T08:00:00",
+        timezone: "America/New_York",
+        utc_offset_minutes: -240,
+        medication_name: "Hydrocortisone sodium succinate",
+        formulation: null,
+        amount: "50",
+        unit: "mg",
+        route: "intramuscular",
+        category: "stress",
+        source_type: "web",
+        confirmation_state: "direct",
+        supersedes_id: null,
+        supported: false,
+        exclusion_reason: "unsupported_medication",
+        carryover: false,
+        modeled_peak_at: null,
+      }],
+    } })} />);
+
+    const notice = screen.getByText(/1 recorded dose is shown but not modeled/).closest("aside");
+    expect(notice).toHaveTextContent("Stress dose — Hydrocortisone sodium succinate 50 mg");
+    expect(notice).toHaveTextContent("intramuscular");
+    expect(document.querySelector(".healthcurve-unmodeled-dose")).not.toBeNull();
+
+    const tooltip = hoverAt(420).tooltip;
+    expect(tooltip).toHaveTextContent("Stress dose (not modeled): Hydrocortisone sodium succinate 50 mg");
+    expect(tooltip).toHaveTextContent("not supported by the selected exposure model");
   });
 
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {

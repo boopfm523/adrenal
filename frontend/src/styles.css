@@ -425,6 +425,11 @@ circle.chart-series { fill: white; }
 .healthcurve-secondary-axis-title { fill: #65736d; font-size: 10px; }
 .healthcurve-dose-marker { stroke: #9f3e17; stroke-width: 2; stroke-dasharray: 5 3; }
 .healthcurve-dose-dot { fill: #9f3e17; }
+.healthcurve-dose-marker--unmodeled { stroke: #6b3f82; stroke-width: 2.5; stroke-dasharray: 2 4; }
+.healthcurve-dose-dot--unmodeled { fill: white; stroke: #6b3f82; stroke-width: 2.5; }
+.healthcurve-unmodeled-doses { margin: 0.85rem 0; padding: 0.85rem 1rem; border: 1px solid #6b3f82; border-left-width: 0.35rem; border-radius: 0.5rem; background: #faf7fc; color: #302337; }
+.healthcurve-unmodeled-doses ul { margin: 0.55rem 0 0; padding-left: 1.25rem; }
+.healthcurve-unmodeled-doses li + li { margin-top: 0.25rem; }
 .healthcurve-sleep-band { fill: rgb(49 91 138 / 24%); stroke: #315b8a; stroke-width: 1; }
 .healthcurve-awake-interval { fill: rgb(209 125 35 / 14%); stroke: #b05f0c; stroke-width: 1; stroke-dasharray: 3 3; }
 .healthcurve-sleep-marker { stroke: #315b8a; stroke-width: 2; stroke-dasharray: 5 3; }
