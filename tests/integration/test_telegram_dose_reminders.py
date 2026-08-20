@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
+from typing import cast
 
 import pytest
 from pydantic import SecretStr
@@ -34,6 +35,7 @@ from healthcurve.medications import service as medications
 from healthcurve.medications.models import (
     DoseCategory,
     DoseEvent,
+    DoseTimingMode,
     DoseUnit,
     Medication,
     RegimenDoseSlot,
@@ -105,6 +107,7 @@ def _approved_plan(
     timezone: str = "America/New_York",
     clocks: tuple[time, ...] = (time(7),),
     effective_from: datetime = datetime(2026, 1, 1),  # noqa: DTZ001
+    wake_reminder: time | None = None,
 ) -> tuple[Owner, Medication, list[RegimenDoseSlot]]:
     owner = Owner(
         email=f"reminders-{uuid.uuid4()}@example.invalid",
@@ -134,7 +137,13 @@ def _approved_plan(
         RegimenDoseSlot(
             regimen_version_id=version.id,
             medication_id=medication.id,
-            scheduled_local_time=clock,
+            timing_mode=(
+                DoseTimingMode.WAKE
+                if wake_reminder is not None and index == 0
+                else DoseTimingMode.FIXED_TIME
+            ),
+            scheduled_local_time=None if wake_reminder is not None and index == 0 else clock,
+            reminder_local_time=wake_reminder if index == 0 else None,
             amount=Decimal("10"),
             unit=DoseUnit.MG,
             route=Route.ORAL,
@@ -152,6 +161,102 @@ def _approved_plan(
         approved_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     return owner, medication, slots
+
+
+def test_wake_slot_uses_fallback_as_reminder_threshold_not_dose_time(
+    factory: sessionmaker[Session],
+) -> None:
+    with factory() as session, session.begin():
+        owner, _, slots = _approved_plan(session, wake_reminder=time(7, 30))
+        just_before = datetime(2026, 8, 12, 11, 29, tzinfo=UTC)
+        assert schedule_due_reminders(session, just_before) == 0
+
+        threshold = just_before + timedelta(minutes=1)
+        assert schedule_due_reminders(session, threshold) == 1
+        reminder = session.scalar(
+            select(TelegramDoseReminder).where(TelegramDoseReminder.owner_id == owner.id)
+        )
+        assert reminder is not None
+        assert reminder.slot_id == slots[0].id
+        assert reminder.scheduled_at == threshold
+        assert reminder.due_at == threshold
+
+        client = _CapturingTelegramClient()
+        assert send_due_reminders(session, client=client, chat_id=123, now=threshold) == 1
+        assert "When-you-wake dose appears unrecorded" in client.messages[0][1]
+        assert "Reminder threshold: 07:30" in client.messages[0][1]
+
+
+def test_wake_slot_matches_first_dose_without_stealing_afternoon_dose(
+    factory: sessionmaker[Session],
+) -> None:
+    with factory() as session, session.begin():
+        owner, medication, slots = _approved_plan(
+            session,
+            clocks=(time(7), time(14)),
+            wake_reminder=time(7, 30),
+        )
+        morning = _record_dose(
+            session,
+            owner,
+            medication,
+            local_time=datetime(2026, 8, 12, 6, 45),  # noqa: DTZ001
+            category=DoseCategory.SCHEDULED,
+        )
+        afternoon = _record_dose(
+            session,
+            owner,
+            medication,
+            local_time=datetime(2026, 8, 12, 14, 5),  # noqa: DTZ001
+            category=DoseCategory.SCHEDULED,
+        )
+
+        comparison = medications.compare_day(
+            session,
+            owner_id=owner.id,
+            day=datetime(2026, 8, 12).date(),  # noqa: DTZ001
+            timezone=owner.default_timezone,
+        )
+        rows = {
+            row.slot_id: row for row in cast(list[medications.SlotComparison], comparison["slots"])
+        }
+        assert rows[slots[0].id].status == "recorded"
+        assert rows[slots[0].id].dose_id == morning.id
+        assert rows[slots[0].id].minutes_from_scheduled is None
+        assert rows[slots[1].id].status == "on_time"
+        assert rows[slots[1].id].dose_id == afternoon.id
+
+
+def test_missing_wake_dose_does_not_claim_recorded_afternoon_dose(
+    factory: sessionmaker[Session],
+) -> None:
+    with factory() as session, session.begin():
+        owner, medication, slots = _approved_plan(
+            session,
+            clocks=(time(7), time(14)),
+            wake_reminder=time(7, 30),
+        )
+        afternoon = _record_dose(
+            session,
+            owner,
+            medication,
+            local_time=datetime(2026, 8, 12, 14, 5),  # noqa: DTZ001
+            category=DoseCategory.SCHEDULED,
+        )
+
+        comparison = medications.compare_day(
+            session,
+            owner_id=owner.id,
+            day=datetime(2026, 8, 12).date(),  # noqa: DTZ001
+            timezone=owner.default_timezone,
+        )
+        rows = {
+            row.slot_id: row for row in cast(list[medications.SlotComparison], comparison["slots"])
+        }
+        assert rows[slots[0].id].status == "missing"
+        assert rows[slots[0].id].dose_id is None
+        assert rows[slots[1].id].status == "on_time"
+        assert rows[slots[1].id].dose_id == afternoon.id
 
 
 def _record_dose(

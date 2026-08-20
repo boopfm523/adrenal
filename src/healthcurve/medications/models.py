@@ -62,6 +62,13 @@ class RegimenStatus(StrEnum):
     RETIRED = "retired"
 
 
+class DoseTimingMode(StrEnum):
+    """How a physician-plan slot is anchored within the local day."""
+
+    FIXED_TIME = "fixed_time"
+    WAKE = "wake"
+
+
 class DoseCategory(StrEnum):
     """Why this dose was taken. Plan section 3."""
 
@@ -228,7 +235,7 @@ class RegimenVersion(PlanBase):
 
 
 class RegimenDoseSlot(PlanBase):
-    """A scheduled dose within a regimen version. What *should* happen."""
+    """A planned dose within a regimen version. What *should* happen."""
 
     __tablename__ = "regimen_dose_slot"
 
@@ -240,8 +247,15 @@ class RegimenDoseSlot(PlanBase):
         ForeignKey("plan.medication.id", ondelete="RESTRICT"), nullable=False
     )
 
+    timing_mode: Mapped[DoseTimingMode] = mapped_column(
+        StrEnumType(DoseTimingMode, 16), nullable=False, default=DoseTimingMode.FIXED_TIME
+    )
     #: Local wall time, not an instant: "07:00" means 7am wherever the owner is.
-    scheduled_local_time: Mapped[time] = mapped_column(Time, nullable=False)
+    #: NULL for a wake-anchored slot because wake is not an invented clock time.
+    scheduled_local_time: Mapped[time | None] = mapped_column(Time)
+    #: For a wake-anchored slot, the local time at which an unrecorded-dose reminder
+    #: becomes due. This is reminder metadata, never the modeled or recorded dose time.
+    reminder_local_time: Mapped[time | None] = mapped_column(Time)
     amount: Mapped[Decimal] = mapped_column(AmountType, nullable=False)
     unit: Mapped[DoseUnit] = mapped_column(StrEnumType(DoseUnit, 16), nullable=False)
     route: Mapped[Route] = mapped_column(StrEnumType(Route, 24), nullable=False, default=Route.ORAL)
@@ -256,6 +270,13 @@ class RegimenDoseSlot(PlanBase):
 
     __table_args__ = (
         CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(
+            "(timing_mode = 'fixed_time' AND scheduled_local_time IS NOT NULL "
+            "AND reminder_local_time IS NULL) OR "
+            "(timing_mode = 'wake' AND scheduled_local_time IS NULL "
+            "AND reminder_local_time IS NOT NULL)",
+            name="timing_fields_match_mode",
+        ),
         Index("ix_slot_version_time", "regimen_version_id", "scheduled_local_time"),
         PLAN_SCHEMA,
     )

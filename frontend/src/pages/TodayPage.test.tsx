@@ -61,7 +61,9 @@ function plannedSlot(overrides: Record<string, unknown> = {}): Record<string, un
     slot_id: "11111111-1111-4111-8111-111111111111",
     medication_id: "22222222-2222-4222-8222-222222222222",
     medication_name: "Synthetic medicine",
+    timing_mode: "fixed_time",
     scheduled_local_time: "07:00:00",
+    reminder_local_time: null,
     planned_amount: "10.0000",
     actual_amount: null,
     actual_local_time: null,
@@ -199,6 +201,24 @@ describe("Today page", () => {
       slot_id: "11111111-1111-4111-8111-111111111111",
       time: expect.objectContaining({ timezone: "America/New_York" }),
     }));
+  });
+
+  it("shows wake timing and its reminder fallback without inventing a scheduled time", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("plan-comparison")) return Promise.resolve(jsonResponse(comparison({
+        regimen_versions: [{ id: "44444444-4444-4444-8444-444444444444", version_label: "Synthetic approved regimen", effective_from: "2026-01-01T00:00:00", effective_to: null }],
+        slots: [plannedSlot({ timing_mode: "wake", scheduled_local_time: null, reminder_local_time: "07:30:00" })],
+      })));
+      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse(episodePage([])));
+      return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
+    });
+
+    renderToday();
+
+    expect(await screen.findByText("When I wake up")).toBeVisible();
+    expect(screen.getByText("Reminder if unrecorded by 07:30.")).toBeVisible();
+    expect(screen.queryByText("Time not recorded")).not.toBeInTheDocument();
   });
 
   it("shows both historical plan periods when the approved plan changes during the day", async () => {

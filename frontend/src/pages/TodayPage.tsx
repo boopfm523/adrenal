@@ -21,6 +21,7 @@ const statusLabels: Record<string, string> = {
   on_time: "Recorded on time",
   early: "Recorded early",
   late: "Recorded late",
+  recorded: "Recorded",
   missing: "Not recorded",
   unplanned: "Recorded outside the schedule",
   extra: "Additional recorded dose",
@@ -57,10 +58,14 @@ function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: s
     onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["today", day, timezone] }),
   });
   const label = statusLabels[slot.status] ?? slot.status;
+  const planTiming = slot.timing_mode === "wake" ? "When I wake up" : displayTime(slot.scheduled_local_time);
+  const reminder = slot.timing_mode === "wake" && slot.reminder_local_time !== null
+    ? `Reminder if unrecorded by ${displayTime(slot.reminder_local_time)}.`
+    : null;
 
   return (
     <tr className={`dose-slot--${slot.status}`}>
-      <td data-label="Scheduled time"><strong>{displayTime(slot.scheduled_local_time)}</strong></td>
+      <td data-label="Plan timing"><Stack gap={2}><strong>{planTiming}</strong>{reminder === null ? null : <Text size="sm" c="dimmed">{reminder}</Text>}</Stack></td>
       <th data-label="Medication" scope="row">{slot.medication_name}<span>{formatMeasurement(slot.planned_amount, slot.unit)}</span></th>
       <td data-label="Status"><Stack gap="xs">
         <Text className="dose-slot__schedule">
@@ -142,7 +147,7 @@ export function TodayPage(): React.JSX.Element {
       {comparison.data !== undefined && planVersions.length > 0 ? (
         <PlanCard title={planVersions.length === 1 ? planVersions[0]?.version_label ?? "Approved regimen" : `${formatDecimal(planVersions.length)} approved plan periods`} metadata={<Link to="/plan">Review approved plan</Link>}>
           <p>Schedule for {day} in {timezoneAbbreviationForLocalDate(timezone, day)}. {planVersions.length > 1 ? "The physician-approved plan changed during this day; each slot is tied to its historical plan period. " : ""}A missing record is not proof that a dose was not taken.</p>
-          {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : <><div className="table-scroll today-table-region today-table-region--plan" tabIndex={0} role="region" aria-label="Today's approved schedule and recorded status"><Table className="today-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Approved schedule and corresponding recorded facts for today.</caption><thead><tr><th scope="col">Scheduled time</th><th scope="col">Medication</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody>{visiblePlanSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}</tbody></Table></div><PaginationControls label="Today's approved schedule" metadata={{ page: planPage, page_size: pageSize, total_items: planSlots.length, total_pages: Math.ceil(planSlots.length / pageSize) }} onPageChange={(page) => { setPage("plan_page", page); }} /></>}
+          {planSlots.length === 0 ? <p>No scheduled slots are recorded in this approved version.</p> : <><div className="table-scroll today-table-region today-table-region--plan" tabIndex={0} role="region" aria-label="Today's approved schedule and recorded status"><Table className="today-table" verticalSpacing="sm" horizontalSpacing="md"><caption>Approved schedule and corresponding recorded facts for today.</caption><thead><tr><th scope="col">Plan timing</th><th scope="col">Medication</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody>{visiblePlanSlots.map((slot) => <SlotRow key={slot.slot_id} slot={slot} timezone={timezone} day={day} />)}</tbody></Table></div><PaginationControls label="Today's approved schedule" metadata={{ page: planPage, page_size: pageSize, total_items: planSlots.length, total_pages: Math.ceil(planSlots.length / pageSize) }} onPageChange={(page) => { setPage("plan_page", page); }} /></>}
           <details className="metric-definition">
             <summary>How timing status is calculated</summary>
             <p>{comparison.data.metric_definition}</p>

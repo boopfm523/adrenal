@@ -452,10 +452,14 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
         label = _value(plan.get("version_label"))
         for slot in plan.get("slots") or []:
             if isinstance(slot, dict):
+                timing = _value(slot.get("scheduled_local_time"))[:5]
+                if slot.get("timing_mode") == "wake":
+                    reminder = _value(slot.get("reminder_local_time"))[:5]
+                    timing = f"When waking; remind by {reminder}"
                 plan_rows.append(
                     [
                         label,
-                        _value(slot.get("scheduled_local_time"))[:5],
+                        timing,
                         _value(slot.get("medication_name")),
                         f"{_value(slot.get('amount'))} {_value(slot.get('unit'))}",
                         _value(slot.get("route")).title(),

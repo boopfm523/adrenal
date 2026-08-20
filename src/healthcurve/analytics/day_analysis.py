@@ -206,7 +206,9 @@ def _plan(version: RegimenVersion) -> dict[str, object]:
             {
                 "id": slot.id,
                 "medication_name": slot.medication.name,
+                "timing_mode": slot.timing_mode,
                 "scheduled_local_time": slot.scheduled_local_time,
+                "reminder_local_time": slot.reminder_local_time,
                 "amount": slot.amount,
                 "unit": slot.unit,
                 "route": slot.route,

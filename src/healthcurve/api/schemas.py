@@ -23,6 +23,7 @@ from healthcurve.events.models import LifeEventCategory, MealSize, SymptomTracki
 from healthcurve.integrations.garmin.models import GarminMetricType
 from healthcurve.medications.models import (
     DoseCategory,
+    DoseTimingMode,
     DoseUnit,
     InstructionCategory,
     RegimenStatus,
@@ -148,19 +149,37 @@ class MedicationOut(PlanResource):
 
 class DoseSlotIn(ApiModel):
     medication_id: uuid.UUID
-    scheduled_local_time: time
+    timing_mode: DoseTimingMode = DoseTimingMode.FIXED_TIME
+    scheduled_local_time: time | None = None
+    reminder_local_time: time | None = None
     amount: Amount
     unit: DoseUnit
     route: Route = Route.ORAL
     condition: str | None = Field(default=None, max_length=500)
     sort_order: int = 0
 
+    @model_validator(mode="after")
+    def _timing_fields_match_mode(self) -> DoseSlotIn:
+        if self.timing_mode is DoseTimingMode.FIXED_TIME:
+            if self.scheduled_local_time is None:
+                raise ValueError("a fixed-time slot requires scheduled_local_time")
+            if self.reminder_local_time is not None:
+                raise ValueError("a fixed-time slot cannot set reminder_local_time")
+        elif self.scheduled_local_time is not None or self.reminder_local_time is None:
+            raise ValueError(
+                "a wake-anchored slot requires reminder_local_time and cannot set "
+                "scheduled_local_time"
+            )
+        return self
+
 
 class DoseSlotOut(PlanResource):
     id: uuid.UUID
     medication_id: uuid.UUID
     medication_name: str
-    scheduled_local_time: time
+    timing_mode: DoseTimingMode
+    scheduled_local_time: time | None
+    reminder_local_time: time | None
     amount: Decimal
     unit: DoseUnit
     route: Route
@@ -804,12 +823,14 @@ class PlanComparisonSlot(ApiModel):
     slot_id: uuid.UUID | None
     medication_id: uuid.UUID
     medication_name: str
+    timing_mode: DoseTimingMode | None
     scheduled_local_time: time | None
+    reminder_local_time: time | None
     planned_amount: Decimal | None
     actual_amount: Decimal | None
     actual_local_time: datetime | None
     dose_id: uuid.UUID | None
-    #: on_time | late | early | missing | unplanned | extra
+    #: on_time | late | early | recorded | missing | unplanned | extra
     status: str
     minutes_from_scheduled: int | None
     absolute_minutes_from_scheduled: int | None

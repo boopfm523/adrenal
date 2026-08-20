@@ -31,6 +31,7 @@ from healthcurve.logging import get_logger
 from healthcurve.medications import service as medications
 from healthcurve.medications.models import (
     DoseCategory,
+    DoseTimingMode,
     RegimenDoseSlot,
     RegimenStatus,
     RegimenVersion,
@@ -107,9 +108,16 @@ def _schedule_day(
         plan_timezone = version.effective_timezone or owner.default_timezone
         if plan_timezone != timezone:
             continue
+        local_threshold = (
+            item.reminder_local_time
+            if item.timing_mode is DoseTimingMode.WAKE
+            else item.scheduled_local_time
+        )
+        if not isinstance(local_threshold, time):
+            continue
         try:
             scheduled = resolve_event_time(
-                datetime.combine(local_day, cast(time, item.scheduled_local_time)),
+                datetime.combine(local_day, local_threshold),
                 plan_timezone,
                 fold=0,
             ).occurred_at
@@ -120,7 +128,7 @@ def _schedule_day(
                 reason_code="nonexistent_plan_local_time",
             )
             continue
-        due = scheduled + REMINDER_DELAY
+        due = scheduled if item.timing_mode is DoseTimingMode.WAKE else scheduled + REMINDER_DELAY
         now_utc = now.astimezone(UTC)
         if due > now_utc or now_utc - scheduled > MAX_REMINDER_AGE:
             continue
@@ -179,11 +187,18 @@ def send_due_reminders(
             else owner.default_timezone
         )
         scheduled = from_instant(reminder.scheduled_at, timezone).local_time
-        message = (
-            f"Scheduled dose appears unrecorded: {slot.medication.name} "
-            f"{slot.amount} {slot.unit.value} at {scheduled:%H:%M}.\n"
-            "This is a record-completeness reminder, not advice to take medication."
-        )
+        if slot.timing_mode is DoseTimingMode.WAKE:
+            message = (
+                f"When-you-wake dose appears unrecorded: {slot.medication.name} "
+                f"{slot.amount} {slot.unit.value}. Reminder threshold: {scheduled:%H:%M}.\n"
+                "This is a record-completeness reminder, not advice to take medication."
+            )
+        else:
+            message = (
+                f"Scheduled dose appears unrecorded: {slot.medication.name} "
+                f"{slot.amount} {slot.unit.value} at {scheduled:%H:%M}.\n"
+                "This is a record-completeness reminder, not advice to take medication."
+            )
         keyboard = {
             "inline_keyboard": [
                 [

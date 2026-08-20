@@ -28,6 +28,7 @@ from healthcurve.events.timekeeping import EventTime, from_instant, resolve_even
 from healthcurve.medications.models import (
     DoseCategory,
     DoseEvent,
+    DoseTimingMode,
     DoseUnit,
     Medication,
     RegimenDoseSlot,
@@ -48,6 +49,9 @@ TIMING_METRIC_DEFINITION: Final = (
     "uses only matched doses. A slot with no matched dose is 'missing' -- derived from "
     "the absence of a record, never stored as a zero dose. A dose matching no slot is "
     "'unplanned'; missing and unplanned rows are not treated as zero-minute deviations. "
+    "A wake-anchored slot matches the earliest remaining regular dose for the same "
+    "medication before its next fixed slot that local day and is reported as recorded "
+    "without early/late timing; its reminder fallback is not treated as the dose time. "
     "Days are bounded by local midnight in the stated timezone."
 )
 
@@ -433,24 +437,33 @@ def active_version_at(
 def diff_versions(older: RegimenVersion, newer: RegimenVersion) -> dict[str, list[str]]:
     """A human-readable diff of two versions' dose slots."""
 
-    def key(slot: RegimenDoseSlot) -> tuple[str, str]:
-        return (slot.medication.name, slot.scheduled_local_time.isoformat())
+    def timing_label(slot: RegimenDoseSlot) -> str:
+        if slot.timing_mode is DoseTimingMode.WAKE:
+            assert slot.reminder_local_time is not None
+            return f"when waking (reminder if unrecorded by {slot.reminder_local_time:%H:%M})"
+        assert slot.scheduled_local_time is not None
+        return f"at {slot.scheduled_local_time:%H:%M}"
+
+    def key(slot: RegimenDoseSlot) -> tuple[str, str, str]:
+        anchor = slot.scheduled_local_time or slot.reminder_local_time
+        assert anchor is not None
+        return (slot.medication.name, slot.timing_mode.value, anchor.isoformat())
 
     old_map = {key(s): s for s in older.slots}
     new_map = {key(s): s for s in newer.slots}
 
     added = [
-        f"{s.medication.name} {s.amount} {s.unit} at {s.scheduled_local_time}"
+        f"{s.medication.name} {s.amount} {s.unit} {timing_label(s)}"
         for k, s in new_map.items()
         if k not in old_map
     ]
     removed = [
-        f"{s.medication.name} {s.amount} {s.unit} at {s.scheduled_local_time}"
+        f"{s.medication.name} {s.amount} {s.unit} {timing_label(s)}"
         for k, s in old_map.items()
         if k not in new_map
     ]
     changed = [
-        f"{k[0]} at {k[1]}: {old_map[k].amount} {old_map[k].unit} -> {s.amount} {s.unit}"
+        f"{k[0]} {timing_label(s)}: {old_map[k].amount} {old_map[k].unit} -> {s.amount} {s.unit}"
         for k, s in new_map.items()
         if k in old_map and old_map[k].amount != s.amount
     ]
@@ -478,10 +491,12 @@ class SlotComparison:
         "regimen_effective_to",
         "regimen_version_id",
         "regimen_version_label",
+        "reminder_local_time",
         "route",
         "scheduled_local_time",
         "slot_id",
         "status",
+        "timing_mode",
         "unit",
     )
 
@@ -491,7 +506,9 @@ class SlotComparison:
         slot_id: uuid.UUID | None,
         medication_id: uuid.UUID,
         medication_name: str,
+        timing_mode: DoseTimingMode | None,
         scheduled_local_time: object | None,
+        reminder_local_time: object | None,
         planned_amount: Decimal | None,
         actual_amount: Decimal | None,
         actual_local_time: datetime | None,
@@ -505,7 +522,9 @@ class SlotComparison:
         self.slot_id = slot_id
         self.medication_id = medication_id
         self.medication_name = medication_name
+        self.timing_mode = timing_mode
         self.scheduled_local_time = scheduled_local_time
+        self.reminder_local_time = reminder_local_time
         self.planned_amount = planned_amount
         self.actual_amount = actual_amount
         self.actual_local_time = actual_local_time
@@ -557,8 +576,19 @@ def compare_day(
     doses = event_service.current_only(session, DoseEvent, doses)
 
     scheduled_slots: list[tuple[RegimenVersion, RegimenDoseSlot, datetime]] = []
+    wake_slots: list[tuple[RegimenVersion, RegimenDoseSlot]] = []
     for version in versions:
         for slot in version.slots:
+            if slot.timing_mode is DoseTimingMode.WAKE:
+                assert slot.reminder_local_time is not None
+                reminder_local = datetime.combine(day, slot.reminder_local_time)
+                winning_version = _active_from_candidates(
+                    versions, reminder_local.replace(tzinfo=zone)
+                )
+                if winning_version is not None and winning_version.id == version.id:
+                    wake_slots.append((version, slot))
+                continue
+            assert slot.scheduled_local_time is not None
             scheduled_local = datetime.combine(day, slot.scheduled_local_time)
             winning_version = _active_from_candidates(
                 versions, scheduled_local.replace(tzinfo=zone)
@@ -566,13 +596,20 @@ def compare_day(
             if winning_version is not None and winning_version.id == version.id:
                 scheduled_slots.append((version, slot, scheduled_local))
     scheduled_slots.sort(key=lambda item: (item[2], item[1].sort_order, item[1].id))
+    wake_slots.sort(key=lambda item: (item[1].sort_order, item[1].id))
 
     comparisons: list[SlotComparison] = []
     unmatched = list(doses)
     # A stress dose is an explicitly separate recorded fact. It must never silently
     # satisfy a regular physician-plan slot merely because its time is nearby.
     regular_doses = [dose for dose in doses if dose.category is not DoseCategory.STRESS]
-    matches = _match_scheduled_slots(scheduled_slots, regular_doses, zone)
+    wake_matches = _match_wake_slots(wake_slots, scheduled_slots, regular_doses, zone)
+    wake_match_ids = {dose.id for dose in wake_matches.values()}
+    matches = _match_scheduled_slots(
+        scheduled_slots,
+        [dose for dose in regular_doses if dose.id not in wake_match_ids],
+        zone,
+    )
 
     for version, slot, scheduled_local in scheduled_slots:
         match = matches.get(slot.id)
@@ -583,7 +620,9 @@ def compare_day(
                     slot_id=slot.id,
                     medication_id=slot.medication_id,
                     medication_name=slot.medication.name,
+                    timing_mode=slot.timing_mode,
                     scheduled_local_time=slot.scheduled_local_time,
+                    reminder_local_time=slot.reminder_local_time,
                     planned_amount=slot.amount,
                     actual_amount=None,
                     actual_local_time=None,
@@ -613,7 +652,9 @@ def compare_day(
                 slot_id=slot.id,
                 medication_id=slot.medication_id,
                 medication_name=slot.medication.name,
+                timing_mode=slot.timing_mode,
                 scheduled_local_time=slot.scheduled_local_time,
+                reminder_local_time=slot.reminder_local_time,
                 planned_amount=slot.amount,
                 actual_amount=match.amount,
                 actual_local_time=actual_local,
@@ -626,6 +667,30 @@ def compare_day(
             )
         )
 
+    for version, slot in wake_slots:
+        match = wake_matches.get(slot.id)
+        if match is not None:
+            unmatched.remove(match)
+        comparisons.append(
+            SlotComparison(
+                slot_id=slot.id,
+                medication_id=slot.medication_id,
+                medication_name=slot.medication.name,
+                timing_mode=slot.timing_mode,
+                scheduled_local_time=None,
+                reminder_local_time=slot.reminder_local_time,
+                planned_amount=slot.amount,
+                actual_amount=None if match is None else match.amount,
+                actual_local_time=None if match is None else _local_in_zone(match, zone),
+                dose_id=None if match is None else match.id,
+                status="missing" if match is None else "recorded",
+                minutes_from_scheduled=None,
+                regimen_version=version,
+                unit=slot.unit if match is None else match.unit,
+                route=slot.route if match is None else match.route,
+            )
+        )
+
     for dose in unmatched:
         dose_version = active_version_at(session, owner_id, dose.occurred_at)
         comparisons.append(
@@ -633,7 +698,9 @@ def compare_day(
                 slot_id=None,
                 medication_id=dose.medication_id,
                 medication_name=dose.medication.name,
+                timing_mode=None,
                 scheduled_local_time=None,
+                reminder_local_time=None,
                 planned_amount=None,
                 actual_amount=dose.amount,
                 actual_local_time=_local_in_zone(dose, zone),
@@ -648,7 +715,8 @@ def compare_day(
 
     planned_total = (
         sum((slot.amount for _, slot, _ in scheduled_slots), Decimal(0))
-        if scheduled_slots
+        + sum((slot.amount for _, slot in wake_slots), Decimal(0))
+        if scheduled_slots or wake_slots
         else None
     )
     actual_total = sum((d.amount for d in doses), Decimal(0))
@@ -668,6 +736,46 @@ def compare_day(
         "missed_slots": sum(1 for c in comparisons if c.status == "missing"),
         "metric_definition": TIMING_METRIC_DEFINITION,
     }
+
+
+def _match_wake_slots(
+    wake_slots: list[tuple[RegimenVersion, RegimenDoseSlot]],
+    scheduled_slots: list[tuple[RegimenVersion, RegimenDoseSlot, datetime]],
+    doses: list[DoseEvent],
+    zone: ZoneInfo,
+) -> dict[uuid.UUID, DoseEvent]:
+    """Match wake slots to the first dose before the next fixed slot.
+
+    The reminder fallback is deliberately absent from this calculation. It says when
+    to remind about an unrecorded fact, not when the dose happened. Bounding the wake
+    interval by the next fixed slot prevents a missing morning dose from stealing an
+    afternoon dose of the same medication.
+    """
+    remaining = list(doses)
+    matches: dict[uuid.UUID, DoseEvent] = {}
+    for version, slot in wake_slots:
+        cutoff = min(
+            (
+                scheduled_local
+                for fixed_version, fixed_slot, scheduled_local in scheduled_slots
+                if fixed_version.id == version.id
+                and fixed_slot.medication_id == slot.medication_id
+                and fixed_slot.sort_order > slot.sort_order
+            ),
+            default=None,
+        )
+        candidates = [
+            dose
+            for dose in remaining
+            if dose.medication_id == slot.medication_id
+            and (cutoff is None or _local_in_zone(dose, zone) < cutoff)
+        ]
+        if not candidates:
+            continue
+        match = min(candidates, key=lambda dose: (_local_in_zone(dose, zone), dose.id))
+        matches[slot.id] = match
+        remaining.remove(match)
+    return matches
 
 
 def _match_scheduled_slots(
@@ -827,9 +935,14 @@ def association_for_event_time(
         return None, None
     zone = ZoneInfo(timezone)
     candidates: list[tuple[timedelta, RegimenDoseSlot]] = []
+    wake_candidates: list[RegimenDoseSlot] = []
     for slot in version.slots:
         if slot.medication_id != medication_id:
             continue
+        if slot.timing_mode is DoseTimingMode.WAKE:
+            wake_candidates.append(slot)
+            continue
+        assert slot.scheduled_local_time is not None
         scheduled_local = datetime.combine(local_time.date(), slot.scheduled_local_time)
         scheduled_version = active_version_at(
             session, owner_id, scheduled_local.replace(tzinfo=zone)
@@ -839,6 +952,19 @@ def association_for_event_time(
         delta = abs(local_time - scheduled_local)
         if delta <= MATCH_WINDOW:
             candidates.append((delta, slot))
+    if wake_candidates:
+        wake_candidates.sort(key=lambda slot: (slot.sort_order, slot.id))
+        wake_slot = wake_candidates[0]
+        next_fixed_times = [
+            slot.scheduled_local_time
+            for slot in version.slots
+            if slot.medication_id == medication_id
+            and slot.timing_mode is DoseTimingMode.FIXED_TIME
+            and slot.sort_order > wake_slot.sort_order
+            and slot.scheduled_local_time is not None
+        ]
+        if not next_fixed_times or local_time.time() < min(next_fixed_times):
+            return version, wake_slot
     if not candidates:
         return version, None
     candidates.sort(key=lambda item: (item[0], item[1].sort_order, item[1].id))

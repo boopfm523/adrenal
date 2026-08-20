@@ -206,7 +206,9 @@ def create_regimen(
             RegimenDoseSlot(
                 regimen_version_id=version.id,
                 medication_id=slot.medication_id,
+                timing_mode=slot.timing_mode,
                 scheduled_local_time=slot.scheduled_local_time,
+                reminder_local_time=slot.reminder_local_time,
                 amount=slot.amount,
                 unit=slot.unit,
                 route=slot.route,
@@ -287,7 +289,9 @@ def update_regimen_draft(
             RegimenDoseSlot(
                 medication_id=slot.medication_id,
                 medication=medications[slot.medication_id],
+                timing_mode=slot.timing_mode,
                 scheduled_local_time=slot.scheduled_local_time,
+                reminder_local_time=slot.reminder_local_time,
                 amount=slot.amount,
                 unit=slot.unit,
                 route=slot.route,
@@ -477,14 +481,16 @@ def _regimen_out(v: RegimenVersion, *, deletion_allowed: bool) -> RegimenVersion
                 id=s.id,
                 medication_id=s.medication_id,
                 medication_name=s.medication.name,
+                timing_mode=s.timing_mode,
                 scheduled_local_time=s.scheduled_local_time,
+                reminder_local_time=s.reminder_local_time,
                 amount=s.amount,
                 unit=s.unit,
                 route=s.route,
                 condition=s.condition,
                 sort_order=s.sort_order,
             )
-            for s in sorted(v.slots, key=lambda s: s.scheduled_local_time)
+            for s in sorted(v.slots, key=lambda s: (s.sort_order, s.id))
         ],
         instructions=[
             InstructionOut(

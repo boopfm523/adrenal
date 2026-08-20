@@ -29,12 +29,16 @@ import { formatUnzonedDateTime, formatZonedDateTime, timezoneAbbreviation } from
 
 interface SlotDraft {
   medication_id: string;
+  timing_mode: "fixed_time" | "wake";
   scheduled_local_time: string;
+  reminder_local_time: string;
   amount: string;
   unit: "mg" | "mcg" | "ml" | "tablet";
   route: "oral" | "intramuscular" | "subcutaneous" | "intravenous";
   condition: string;
 }
+
+type RegimenSlot = NonNullable<RegimenVersion["slots"]>[number];
 
 interface InstructionDraft {
   category: "illness" | "procedure" | "exercise" | "emergency" | "general";
@@ -50,7 +54,9 @@ function planHistorySearch(view: PlanHistoryView): URLSearchParams { const param
 
 const blankSlot = (medicationId = ""): SlotDraft => ({
   medication_id: medicationId,
+  timing_mode: "fixed_time",
   scheduled_local_time: "07:00",
+  reminder_local_time: "07:30",
   amount: "",
   unit: "mg",
   route: "oral",
@@ -95,7 +101,9 @@ function initialSlots(version: RegimenVersion | null): SlotDraft[] {
   if (slots.length === 0) return [blankSlot()];
   return slots.map((slot) => ({
     medication_id: slot.medication_id,
-    scheduled_local_time: slot.scheduled_local_time.slice(0, 5),
+    timing_mode: slot.timing_mode,
+    scheduled_local_time: slot.scheduled_local_time?.slice(0, 5) ?? "07:00",
+    reminder_local_time: slot.reminder_local_time?.slice(0, 5) ?? "07:30",
     amount: slot.amount,
     unit: slot.unit,
     route: slot.route,
@@ -118,6 +126,13 @@ function initialInstructions(version: RegimenVersion | null): InstructionDraft[]
 
 function RecordedPlanTime({ value }: { value: string }): React.JSX.Element {
   return <time dateTime={value}>{formatUnzonedDateTime(value)}</time>;
+}
+
+function slotTimingLabel(slot: RegimenSlot): string {
+  if (slot.timing_mode === "wake") {
+    return `When I wake up · remind if unrecorded by ${slot.reminder_local_time?.slice(0, 5) ?? "time not recorded"}`;
+  }
+  return slot.scheduled_local_time?.slice(0, 5) ?? "Time not recorded";
 }
 
 function utcOffsetLabel(offsetMinutes: number | null): string {
@@ -259,7 +274,7 @@ function PlanContents({ version, timezone }: { version: RegimenVersion; timezone
   return <>
     <ApprovalProvenance version={version} timezone={timezone} />
     <h3>Scheduled slots</h3>
-    {slots.length === 0 ? <p>No scheduled slots recorded.</p> : <ul className="plan-list">{slots.map((slot) => <li key={slot.id}><strong>{slot.scheduled_local_time.slice(0, 5)}</strong> · {slot.medication_name} · {formatMeasurement(slot.amount, slot.unit)} · {slot.route}{slot.condition === null ? null : <span> · {slot.condition}</span>}</li>)}</ul>}
+    {slots.length === 0 ? <p>No scheduled slots recorded.</p> : <ul className="plan-list">{slots.map((slot) => <li key={slot.id}><strong>{slotTimingLabel(slot)}</strong> · {slot.medication_name} · {formatMeasurement(slot.amount, slot.unit)} · {slot.route}{slot.condition === null ? null : <span> · {slot.condition}</span>}</li>)}</ul>}
     <details className="metric-definition physician-instructions">
       <summary>Physician-authored instructions</summary>
       <div className="physician-instructions__content">
@@ -371,7 +386,17 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
         effective_to: formString(data, "effective_to") || null,
         effective_timezone: timezone,
         notes: formString(data, "notes") || null,
-        slots: slots.map((slot, index) => ({ ...slot, condition: slot.condition || null, scheduled_local_time: slot.scheduled_local_time, sort_order: index })),
+        slots: slots.map((slot, index) => ({
+          medication_id: slot.medication_id,
+          timing_mode: slot.timing_mode,
+          scheduled_local_time: slot.timing_mode === "fixed_time" ? slot.scheduled_local_time : null,
+          reminder_local_time: slot.timing_mode === "wake" ? slot.reminder_local_time : null,
+          amount: slot.amount,
+          unit: slot.unit,
+          route: slot.route,
+          condition: slot.condition || null,
+          sort_order: index,
+        })),
         instructions: instructions.map((instruction, index) => ({ ...instruction, sort_order: index })),
       });
     }}>
@@ -395,7 +420,12 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
         <p>These are scheduled plan entries—not records of medicine actually taken.</p>
         {slots.map((slot, index) => <div className="repeatable-row" key={index}>
           <label>Medication and formulation<select required value={slot.medication_id} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, medication_id: event.target.value } : item)); }}><option value="">Choose medication and formulation</option>{available.map((medication) => <option value={medication.id} key={medication.id}>{medicationOptionLabel(medication)}</option>)}</select></label>
-          <label>Time<input type="time" required value={slot.scheduled_local_time} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, scheduled_local_time: event.target.value } : item)); }} /></label>
+          <label>Timing<select value={slot.timing_mode} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, timing_mode: event.target.value as SlotDraft["timing_mode"] } : item)); }}><option value="fixed_time">At a specific time</option><option value="wake">When I wake up</option></select></label>
+          {slot.timing_mode === "fixed_time" ? (
+            <label>Scheduled time<input type="time" required value={slot.scheduled_local_time} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, scheduled_local_time: event.target.value } : item)); }} /></label>
+          ) : (
+            <div className="field-group"><label htmlFor={`wake-reminder-time-${String(index)}`}>Reminder if unrecorded by</label><input id={`wake-reminder-time-${String(index)}`} type="time" required value={slot.reminder_local_time} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, reminder_local_time: event.target.value } : item)); }} /><small className="field-hint">The planned timing is “when I wake up.” This fallback only controls the reminder; it is not treated as the dose time.</small></div>
+          )}
           <div className="field-group"><label htmlFor={`scheduled-dose-amount-${String(index)}`}>Scheduled dose amount</label><input id={`scheduled-dose-amount-${String(index)}`} aria-describedby={`scheduled-dose-help-${String(index)}`} type="number" required min="0.0001" step="any" inputMode="decimal" value={slot.amount} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item)); }} /><small className="field-hint" id={`scheduled-dose-help-${String(index)}`}>This planned dose may differ from the formulation strength. Enter only the amount in the physician-approved plan.</small></div>
           <label>Scheduled dose unit<select value={slot.unit} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value as SlotDraft["unit"] } : item)); }}><option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">mL</option><option value="tablet">tablet</option></select></label>
           <label>Route<select value={slot.route} onChange={(event) => { setSlots((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, route: event.target.value as SlotDraft["route"] } : item)); }}><option value="oral">Oral</option><option value="intramuscular">Intramuscular</option><option value="subcutaneous">Subcutaneous</option><option value="intravenous">Intravenous</option></select></label>

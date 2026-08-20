@@ -46,7 +46,7 @@ when there is no approved plan, or **Create new version from active plan** to st
 the current schedule. The form lets you:
 
 - select an existing medication or add one to the owner's medication list;
-- enter one or more scheduled times, amounts, units, routes, and optional conditions;
+- enter one or more timing rules, amounts, units, routes, and optional conditions;
 - set effective dates and copy physician-authored instructions with their author/date;
 - cancel without writing, save an unapproved draft, and return later to edit it.
 
@@ -62,6 +62,13 @@ Dates and times use the values shown in the form. An effective-through value mus
 later than effective-from, amounts must be positive, and every slot needs an explicit
 unit and route. If an approval would overlap another approved version, HealthCurve
 refuses it so there is never more than one plan in force for a moment.
+
+Each plan slot can use either **At a specific time** or **When I wake up**. A wake-based
+slot also requires a fallback reminder time, such as 07:30. That fallback controls only
+when HealthCurve sends an unrecorded-dose reminder: it is not saved as the time you
+woke, the time you took medicine, or a modeled dose. Record the actual dose when it is
+taken so the Timeline and HealthCurve retain its real experienced time. Other slots in
+the same plan, such as an afternoon dose, can continue to use fixed clock times.
 
 ### CLI alternative
 

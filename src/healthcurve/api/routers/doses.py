@@ -202,7 +202,9 @@ def plan_comparison(
                 slot_id=c.slot_id,
                 medication_id=c.medication_id,
                 medication_name=c.medication_name,
+                timing_mode=c.timing_mode,
                 scheduled_local_time=c.scheduled_local_time,  # type: ignore[arg-type]
+                reminder_local_time=c.reminder_local_time,  # type: ignore[arg-type]
                 planned_amount=c.planned_amount,
                 actual_amount=c.actual_amount,
                 actual_local_time=c.actual_local_time,

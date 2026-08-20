@@ -3159,19 +3159,42 @@
             "title": "Medication Id",
             "type": "string"
           },
+          "reminder_local_time": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Local Time"
+          },
           "route": {
             "$ref": "#/components/schemas/Route",
             "default": "oral"
           },
           "scheduled_local_time": {
-            "format": "time",
-            "title": "Scheduled Local Time",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Local Time"
           },
           "sort_order": {
             "default": 0,
             "title": "Sort Order",
             "type": "integer"
+          },
+          "timing_mode": {
+            "$ref": "#/components/schemas/DoseTimingMode",
+            "default": "fixed_time"
           },
           "unit": {
             "$ref": "#/components/schemas/DoseUnit"
@@ -3179,7 +3202,6 @@
         },
         "required": [
           "medication_id",
-          "scheduled_local_time",
           "amount",
           "unit"
         ],
@@ -3224,17 +3246,39 @@
             "title": "Medication Name",
             "type": "string"
           },
+          "reminder_local_time": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Local Time"
+          },
           "route": {
             "$ref": "#/components/schemas/Route"
           },
           "scheduled_local_time": {
-            "format": "time",
-            "title": "Scheduled Local Time",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Local Time"
           },
           "sort_order": {
             "title": "Sort Order",
             "type": "integer"
+          },
+          "timing_mode": {
+            "$ref": "#/components/schemas/DoseTimingMode"
           },
           "unit": {
             "$ref": "#/components/schemas/DoseUnit"
@@ -3244,7 +3288,9 @@
           "id",
           "medication_id",
           "medication_name",
+          "timing_mode",
           "scheduled_local_time",
+          "reminder_local_time",
           "amount",
           "unit",
           "route",
@@ -3253,6 +3299,15 @@
         ],
         "title": "DoseSlotOut",
         "type": "object"
+      },
+      "DoseTimingMode": {
+        "description": "How a physician-plan slot is anchored within the local day.",
+        "enum": [
+          "fixed_time",
+          "wake"
+        ],
+        "title": "DoseTimingMode",
+        "type": "string"
       },
       "DoseUnit": {
         "enum": [
@@ -6942,6 +6997,18 @@
             ],
             "title": "Regimen Version Label"
           },
+          "reminder_local_time": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Local Time"
+          },
           "route": {
             "$ref": "#/components/schemas/Route"
           },
@@ -6973,6 +7040,16 @@
             "title": "Status",
             "type": "string"
           },
+          "timing_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DoseTimingMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "unit": {
             "$ref": "#/components/schemas/DoseUnit"
           }
@@ -6981,7 +7058,9 @@
           "slot_id",
           "medication_id",
           "medication_name",
+          "timing_mode",
           "scheduled_local_time",
+          "reminder_local_time",
           "planned_amount",
           "actual_amount",
           "actual_local_time",

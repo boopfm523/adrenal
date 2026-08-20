@@ -25,7 +25,7 @@ function version(id: string, label: string, status: "draft" | "approved" | "reti
     retired_at: status === "retired" ? "2026-07-01T00:00:00Z" : null,
     notes: null,
     deletion_allowed: true,
-    slots: [{ id: `${id.slice(0, 8)}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, medication_id: "99999999-9999-4999-8999-999999999999", medication_name: "Synthetic medicine", scheduled_local_time: "07:00:00", amount: "10.0000", unit: "mg", route: "oral", condition: null, sort_order: 0, category: "plan" }],
+    slots: [{ id: `${id.slice(0, 8)}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, medication_id: "99999999-9999-4999-8999-999999999999", medication_name: "Synthetic medicine", timing_mode: "fixed_time", scheduled_local_time: "07:00:00", reminder_local_time: null, amount: "10.0000", unit: "mg", route: "oral", condition: null, sort_order: 0, category: "plan" }],
     instructions: [],
   };
 }
@@ -303,7 +303,9 @@ describe("Medication plan page", () => {
     expect(within(medicationSelect).getByRole("option", { name: "Synthetic medicine tablet — formulation strength: 10 mg" })).toBeInTheDocument();
     medicationSelect.focus();
     await userEvent.tab();
-    expect(screen.getByLabelText("Time")).toHaveFocus();
+    expect(screen.getByLabelText("Timing")).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByLabelText("Scheduled time")).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByLabelText("Scheduled dose amount")).toHaveFocus();
     await userEvent.selectOptions(medicationSelect, medication.id);
@@ -331,6 +333,45 @@ describe("Medication plan page", () => {
       instructions: [],
     });
     expect(requests.some((request) => request.url.includes("/approve"))).toBe(false);
+  });
+
+  it("saves wake timing with a reminder fallback and no invented scheduled time", async () => {
+    const medication = {
+      id: "99999999-9999-4999-8999-999999999999", category: "plan", name: "Synthetic medicine",
+      formulation: "tablet", strength: "10", strength_unit: "mg", default_unit: "mg", default_route: "oral",
+      active_from: null, active_to: null, notes: null,
+    };
+    const requests: { url: string; method: string; body: Record<string, unknown> | undefined }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.endsWith("/medications")) return Promise.resolve(response([medication]));
+      if (url.endsWith("/regimens") && method === "POST") return Promise.resolve(response(version("33333333-3333-4333-8333-333333333333", "Wake plan", "draft", null)));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([])));
+      return Promise.resolve(response({ added: [], removed: [], changed: [] }));
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
+    await userEvent.type(screen.getByLabelText("Version label"), "Wake plan");
+    await userEvent.selectOptions(screen.getByLabelText("Medication and formulation"), medication.id);
+    await userEvent.selectOptions(screen.getByLabelText("Timing"), "wake");
+    expect(screen.queryByLabelText("Scheduled time")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Reminder if unrecorded by")).toHaveValue("07:30");
+    await userEvent.type(screen.getByLabelText("Scheduled dose amount"), "10");
+    await userEvent.click(screen.getByRole("button", { name: "Save unapproved draft" }));
+
+    const creation = requests.find((request) => request.method === "POST" && request.url.endsWith("/regimens"));
+    expect(creation?.body).toMatchObject({
+      slots: [{
+        timing_mode: "wake",
+        scheduled_local_time: null,
+        reminder_local_time: "07:30",
+      }],
+    });
   });
 
   it("saves a draft without dates and previews activation-time handoff", async () => {

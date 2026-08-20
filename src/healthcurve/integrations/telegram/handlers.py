@@ -75,7 +75,14 @@ from healthcurve.integrations.telegram.feature_requests import (
 )
 from healthcurve.integrations.telegram.models import DoseReminderState, TelegramDoseReminder
 from healthcurve.medications import service as meds
-from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
+from healthcurve.medications.models import (
+    DoseCategory,
+    DoseEvent,
+    DoseTimingMode,
+    DoseUnit,
+    Medication,
+    Route,
+)
 from healthcurve.operations.rate_limit import (
     RateLimiter,
     RateLimitExceeded,
@@ -1104,9 +1111,21 @@ def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
         lines.append("Nothing recorded, and no approved plan for today.")
     for slot in sorted(slots, key=lambda item: _today_slot_sort_key(item, local_today)):
         if slot.status == "missing":
+            if slot.timing_mode is DoseTimingMode.WAKE:
+                plan_time = "when waking"
+            elif isinstance(slot.scheduled_local_time, time):
+                plan_time = f"{slot.scheduled_local_time:%H:%M}"
+            else:
+                raise AssertionError("missing plan slot has no timing anchor")
+            reminder = (
+                f"; remind by {slot.reminder_local_time:%H:%M}"
+                if slot.timing_mode is DoseTimingMode.WAKE
+                and isinstance(slot.reminder_local_time, time)
+                else ""
+            )
             lines.append(
-                f"  [ ] {slot.scheduled_local_time:%H:%M}  {slot.medication_name} "
-                f"{slot.planned_amount} - not recorded"
+                f"  [ ] {plan_time}  {slot.medication_name} "
+                f"{slot.planned_amount} - not recorded{reminder}"
             )
         elif slot.status == "unplanned":
             lines.append(
@@ -1114,7 +1133,7 @@ def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
                 f"{slot.actual_amount} - extra"
             )
         else:
-            mark = "x" if slot.status == "on_time" else "~"
+            mark = "x" if slot.status in {"on_time", "recorded"} else "~"
             lines.append(
                 f"  [{mark}] {slot.actual_local_time:%H:%M}  {slot.medication_name} "
                 f"{slot.actual_amount} ({slot.status.replace('_', ' ')})"
@@ -1144,9 +1163,14 @@ def _today_slot_sort_key(slot: meds.SlotComparison, day: date) -> tuple[datetime
         row_kind = 0
         row_id = slot.dose_id
     else:
-        if not isinstance(slot.scheduled_local_time, time):
+        display_time = (
+            slot.reminder_local_time
+            if slot.timing_mode is DoseTimingMode.WAKE
+            else slot.scheduled_local_time
+        )
+        if not isinstance(display_time, time):
             raise AssertionError("today comparison row has no display time")
-        displayed_at = datetime.combine(day, slot.scheduled_local_time)
+        displayed_at = datetime.combine(day, display_time)
         row_kind = 1
         row_id = slot.slot_id
     return displayed_at, row_kind, slot.medication_name.casefold(), str(row_id or "")

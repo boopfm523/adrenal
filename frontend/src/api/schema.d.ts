@@ -2638,18 +2638,19 @@ export interface components {
              * Format: uuid
              */
             medication_id: string;
+            /** Reminder Local Time */
+            reminder_local_time?: string | null;
             /** @default oral */
             route: components["schemas"]["Route"];
-            /**
-             * Scheduled Local Time
-             * Format: time
-             */
-            scheduled_local_time: string;
+            /** Scheduled Local Time */
+            scheduled_local_time?: string | null;
             /**
              * Sort Order
              * @default 0
              */
             sort_order: number;
+            /** @default fixed_time */
+            timing_mode: components["schemas"]["DoseTimingMode"];
             unit: components["schemas"]["DoseUnit"];
         };
         /** DoseSlotOut */
@@ -2676,16 +2677,22 @@ export interface components {
             medication_id: string;
             /** Medication Name */
             medication_name: string;
+            /** Reminder Local Time */
+            reminder_local_time: string | null;
             route: components["schemas"]["Route"];
-            /**
-             * Scheduled Local Time
-             * Format: time
-             */
-            scheduled_local_time: string;
+            /** Scheduled Local Time */
+            scheduled_local_time: string | null;
             /** Sort Order */
             sort_order: number;
+            timing_mode: components["schemas"]["DoseTimingMode"];
             unit: components["schemas"]["DoseUnit"];
         };
+        /**
+         * DoseTimingMode
+         * @description How a physician-plan slot is anchored within the local day.
+         * @enum {string}
+         */
+        DoseTimingMode: "fixed_time" | "wake";
         /**
          * DoseUnit
          * @enum {string}
@@ -3896,6 +3903,8 @@ export interface components {
             regimen_version_id: string | null;
             /** Regimen Version Label */
             regimen_version_label: string | null;
+            /** Reminder Local Time */
+            reminder_local_time: string | null;
             route: components["schemas"]["Route"];
             /** Scheduled Local Time */
             scheduled_local_time: string | null;
@@ -3903,6 +3912,7 @@ export interface components {
             slot_id: string | null;
             /** Status */
             status: string;
+            timing_mode: components["schemas"]["DoseTimingMode"] | null;
             unit: components["schemas"]["DoseUnit"];
         };
         /**

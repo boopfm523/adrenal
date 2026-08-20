@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import handlers
 from healthcurve.medications import service as meds
-from healthcurve.medications.models import DoseUnit, Route
+from healthcurve.medications.models import DoseTimingMode, DoseUnit, Route
 
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 
@@ -41,13 +41,21 @@ def _slot(
     actual: datetime | None = None,
     planned: str | None = None,
     taken: str | None = None,
+    timing_mode: DoseTimingMode = DoseTimingMode.FIXED_TIME,
+    reminder: time | None = None,
 ) -> meds.SlotComparison:
     recorded = actual is not None
     return meds.SlotComparison(
-        slot_id=None if scheduled is None else uuid.UUID(f"00000000-0000-4000-8000-{number:012d}"),
+        slot_id=(
+            uuid.UUID(f"00000000-0000-4000-8000-{number:012d}")
+            if scheduled is not None or timing_mode is DoseTimingMode.WAKE
+            else None
+        ),
         medication_id=uuid.UUID(f"10000000-0000-4000-8000-{number:012d}"),
         medication_name=medication,
+        timing_mode=timing_mode,
         scheduled_local_time=scheduled,
+        reminder_local_time=reminder,
         planned_amount=Decimal(planned) if planned is not None else None,
         actual_amount=Decimal(taken) if taken is not None else None,
         actual_local_time=actual,
@@ -57,6 +65,28 @@ def _slot(
         unit=DoseUnit.MG,
         route=Route.ORAL,
     )
+
+
+def test_today_describes_wake_anchored_slot_and_reminder_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slots = [
+        _slot(
+            1,
+            medication="Synthetic medicine",
+            status="missing",
+            planned="10",
+            timing_mode=DoseTimingMode.WAKE,
+            reminder=time(7, 30),
+        )
+    ]
+    monkeypatch.setattr(handlers.meds, "compare_day", MagicMock(return_value=_comparison(slots)))
+
+    reply = _today(_owner(), now=datetime(2026, 8, 9, 12, tzinfo=UTC))
+
+    assert "when waking" in reply.text
+    assert "remind by 07:30" in reply.text
+    assert "not recorded" in reply.text
 
 
 def _comparison(slots: list[meds.SlotComparison]) -> dict[str, object]:

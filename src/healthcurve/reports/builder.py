@@ -422,7 +422,17 @@ def build_snapshot(
                         {
                             "id": str(slot.id),
                             "medication_name": slot.medication.name,
-                            "scheduled_local_time": slot.scheduled_local_time.isoformat(),
+                            "timing_mode": slot.timing_mode,
+                            "scheduled_local_time": (
+                                None
+                                if slot.scheduled_local_time is None
+                                else slot.scheduled_local_time.isoformat()
+                            ),
+                            "reminder_local_time": (
+                                None
+                                if slot.reminder_local_time is None
+                                else slot.reminder_local_time.isoformat()
+                            ),
                             "amount": slot.amount,
                             "unit": slot.unit,
                             "route": slot.route,
@@ -430,7 +440,7 @@ def build_snapshot(
                         }
                         for slot in sorted(
                             regimen.slots,
-                            key=lambda slot: (slot.sort_order, slot.scheduled_local_time),
+                            key=lambda slot: (slot.sort_order, slot.id),
                         )
                     ],
                     "instructions": [
