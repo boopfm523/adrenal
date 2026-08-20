@@ -607,7 +607,7 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
 }
 
-export function getSteroidExposure(day: string, timezone: string, model: HealthCurveModel = "hc-exposure-v1"): Promise<SteroidExposureCurve> {
+export function getSteroidExposure(day: string, timezone: string, model: HealthCurveModel = "hc-mixed-route-free-v4"): Promise<SteroidExposureCurve> {
   const params = new URLSearchParams({ day, timezone, model });
   return apiRequest<SteroidExposureCurve>(`/analytics/steroid-exposure?${params.toString()}`);
 }

@@ -56,13 +56,14 @@ function response(url: string, method = "GET"): Response {
 }
 
 describe("Analytics page", () => {
-  it("defaults model-less Daily Review links to the wake-anchored model", async () => {
+  it("defaults model-less Daily Review links to the full cortisol model", async () => {
     const urls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url, init?.method)); });
     render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
 
-    expect(screen.getByLabelText("Exposure model")).toHaveValue("hc-wake-free-v3");
-    await waitFor(() => { expect(urls.some((url) => url.includes("model=hc-wake-free-v3"))).toBe(true); });
+    expect(screen.getByLabelText("Exposure model")).toHaveValue("hc-mixed-route-free-v4");
+    expect(screen.getByRole("option", { name: "Full cortisol model (v4)" })).toBeVisible();
+    await waitFor(() => { expect(urls.some((url) => url.includes("model=hc-mixed-route-free-v4"))).toBe(true); });
   });
 
   it("renders definitions, timezone, missingness, and the no-causation caution", async () => {

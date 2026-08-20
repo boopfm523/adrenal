@@ -28,6 +28,10 @@ points.
 
 The exposure-model selector keeps four separately versioned views available:
 
+**Full cortisol model (v4)** is the default Daily Review view. The shorter product
+name describes the complete current model without encoding its supported routes in
+the selector label; its exact evidence and route boundaries remain documented below.
+
 - `hc-exposure-v1` is a relative oral-dose exposure shape in relative exposure units
   (REU). Its height is useful for comparing the timing of modeled peaks and troughs,
   but it is not a cortisol concentration.
@@ -71,7 +75,7 @@ take precedence over any visualization. The formulas, parameters, primary eviden
 limitations, and model comparison are published in the Analytics page and
 [the user guide](docs/using-healthcurve.md#exact-healthcurve-formulas-and-evidence).
 
-### Oral plus 50 mg IV-push free cortisol (v4)
+### Full cortisol model (v4)
 
 V4 leaves every v3 oral-dose calculation unchanged. Each current, confirmed 50 mg
 intravenous-push hydrocortisone fact contributes the evidence-versioned total-serum

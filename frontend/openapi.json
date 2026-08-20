@@ -11823,7 +11823,7 @@
             "name": "model",
             "required": false,
             "schema": {
-              "default": "hc-exposure-v1",
+              "default": "hc-mixed-route-free-v4",
               "enum": [
                 "hc-exposure-v1",
                 "hc-physiology-v2",

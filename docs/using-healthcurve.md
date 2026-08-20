@@ -469,7 +469,7 @@ The Analytics page lets the owner switch between four preserved, versioned model
 publishes the selected model's executable formula, live parameter values, evidence
 links, and limitations under **How this model works: formulas, sources, and limits**.
 The URL keeps `model=hc-exposure-v1`, `model=hc-physiology-v2`, or
-`model=hc-wake-free-v3`, or `model=hc-mixed-route-free-v4` across day navigation. An absent selector uses v1; an unknown
+`model=hc-wake-free-v3`, or `model=hc-mixed-route-free-v4` across day navigation. An absent selector uses **Full cortisol model (v4)**; an unknown
 selector fails validation rather than silently falling back.
 
 | Model | Output | Unit | Boundary |

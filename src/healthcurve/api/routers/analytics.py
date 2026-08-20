@@ -77,7 +77,7 @@ def steroid_exposure_curve(
         "hc-physiology-v2",
         "hc-wake-free-v3",
         "hc-mixed-route-free-v4",
-    ] = ("hc-exposure-v1"),
+    ] = ("hc-mixed-route-free-v4"),
 ):
     """Return the selected deterministic model from current owner-scoped dose facts."""
     zone_name = timezone or owner.default_timezone

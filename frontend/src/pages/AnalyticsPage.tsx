@@ -107,9 +107,9 @@ function selectedHealthCurveDay(
     timezone: requestedTimezone === undefined || requestedTimezone === ""
       ? profileTimezone
       : requestedTimezone,
-    model: requestedModel === "hc-exposure-v1" || requestedModel === "hc-physiology-v2" || requestedModel === "hc-mixed-route-free-v4"
+    model: requestedModel === "hc-exposure-v1" || requestedModel === "hc-physiology-v2" || requestedModel === "hc-wake-free-v3" || requestedModel === "hc-mixed-route-free-v4"
       ? requestedModel
-      : "hc-wake-free-v3",
+      : "hc-mixed-route-free-v4",
   };
 }
 
@@ -128,7 +128,7 @@ function HealthCurveDateFilter({
     <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
       <TextInput label="HealthCurve date" aria-label="HealthCurve date" required type="date" value={draft.day} onChange={(event) => { setDraft({ ...draft, day: event.target.value }); }} />
       <TextInput label="IANA timezone" aria-label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} />
-      <NativeSelect label="Exposure model" aria-label="Exposure model" required value={draft.model} data={[{ value: "hc-exposure-v1", label: "Simple relative exposure (v1)" }, { value: "hc-physiology-v2", label: "Physiological free-cortisol scenario (v2)" }, { value: "hc-wake-free-v3", label: "Wake-anchored oral free cortisol (v3)" }, { value: "hc-mixed-route-free-v4", label: "Oral + 50 mg IV-push free cortisol (v4)" }]} onChange={(event) => { const value = event.currentTarget.value; if (value === "hc-exposure-v1" || value === "hc-physiology-v2" || value === "hc-wake-free-v3" || value === "hc-mixed-route-free-v4") setDraft({ ...draft, model: value }); }} />
+      <NativeSelect label="Exposure model" aria-label="Exposure model" required value={draft.model} data={[{ value: "hc-exposure-v1", label: "Simple relative exposure (v1)" }, { value: "hc-physiology-v2", label: "Physiological free-cortisol scenario (v2)" }, { value: "hc-wake-free-v3", label: "Wake-anchored oral free cortisol (v3)" }, { value: "hc-mixed-route-free-v4", label: "Full cortisol model (v4)" }]} onChange={(event) => { const value = event.currentTarget.value; if (value === "hc-exposure-v1" || value === "hc-physiology-v2" || value === "hc-wake-free-v3" || value === "hc-mixed-route-free-v4") setDraft({ ...draft, model: value }); }} />
     </SimpleGrid>
     <Group mt="md" justify="space-between" align="center">
       <Group gap="xs" role="group" aria-label="Quick HealthCurve dates"><Text fw={750}>Quick dates:</Text>{shortcuts.map((shortcut) => <Button key={shortcut.label} type="button" variant={selected.day === shortcut.day && selected.timezone === draft.timezone && selected.model === draft.model ? "filled" : "outline"} aria-pressed={selected.day === shortcut.day && selected.timezone === draft.timezone && selected.model === draft.model} onClick={() => { onReview({ day: shortcut.day, timezone: draft.timezone, model: draft.model }); }}>{shortcut.label}</Button>)}</Group>

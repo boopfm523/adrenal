@@ -1,6 +1,6 @@
 # ADR-0024: Add a selectable physiological cortisol scenario model without implying dosing adequacy
 
-**Status:** Accepted — 2026-08-15
+**Status:** Accepted — 2026-08-15; default-selection portion superseded by ADR-0028
 
 ## Context
 

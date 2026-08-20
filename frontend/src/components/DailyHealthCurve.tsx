@@ -922,7 +922,7 @@ export function DailyHealthCurve({
     </details>
     <Stack className="healthcurve-controls" gap="sm" aria-label="HealthCurve chart controls"><Group className="healthcurve-focus" gap="xs" role="group" aria-label="Choose a focused HealthCurve comparison"><Text fw={750}>Quick focus:</Text>{FOCUS_PRESETS.map((preset) => <Button key={preset.label} type="button" size="sm" variant={isPresetVisible(visible, preset.keys) ? "filled" : "outline"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</Button>)}</Group>
       <Paper component="fieldset" className="curve-toggles" withBorder radius="md" p="md"><legend>Show or hide chart series</legend><SimpleGrid cols={{ base: 1, xs: 2, md: 3 }}>{Object.entries({
-        exposure: isMixedRouteCurve(data.exposure) ? "Oral + IV-push free-cortisol model and actual doses" : isWakeFreeCurve(data.exposure) ? "Wake-anchored oral free-cortisol model and actual doses" : isAbsoluteCortisolCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
+        exposure: isMixedRouteCurve(data.exposure) ? "Full cortisol model (v4) and actual doses" : isWakeFreeCurve(data.exposure) ? "Wake-anchored oral free-cortisol model and actual doses" : isAbsoluteCortisolCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
         stress: "Garmin stress",
         heart_rate: "Heart rate",
         hrv: "HRV",

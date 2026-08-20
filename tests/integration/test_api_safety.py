@@ -6546,7 +6546,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
 
     response = client.get(
         "/api/v1/analytics/steroid-exposure",
-        params={"day": selected_day, "timezone": "UTC"},
+        params={"day": selected_day, "timezone": "UTC", "model": "hc-exposure-v1"},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -6596,6 +6596,13 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         row["occurred_at"] for row in body["context_band"]["samples"]
     }
     assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in response.text
+
+    default_response = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "UTC"},
+    )
+    assert default_response.status_code == 200, default_response.text
+    assert default_response.json()["model"]["id"] == "hc-mixed-route-free-v4"
 
     invalid = client.get(
         "/api/v1/analytics/steroid-exposure",
