@@ -275,6 +275,7 @@ class DoseOut(FactResource):
     id: uuid.UUID
     medication_id: uuid.UUID
     medication_name: str
+    formulation: str | None
     amount: Decimal
     unit: DoseUnit
     route: Route
@@ -294,6 +295,7 @@ class DoseOut(FactResource):
 class DoseCorrectionChanges(ApiModel):
     """Fields an owner may correct on a recorded dose."""
 
+    medication_id: uuid.UUID | None = None
     amount: Amount | None = None
     unit: DoseUnit | None = None
     route: Route | None = None
@@ -1000,6 +1002,7 @@ class SteroidExposureDoseMarker(ApiModel):
             "unsupported_formulation",
             "unsupported_route",
             "unsupported_unit",
+            "unsupported_amount",
         ]
         | None
     )
@@ -1251,11 +1254,14 @@ class WakeFreePkSettingsOut(ApiModel):
 
 
 class WakeFreeCortisolModelOut(ApiModel):
-    id: Literal["hc-wake-free-v3"]
-    revision: Literal["hc-wake-free-v3.0.0"]
+    id: Literal["hc-wake-free-v3", "hc-mixed-route-free-v4"]
+    revision: Literal["hc-wake-free-v3.0.0", "hc-mixed-route-free-v4.0.0"]
     supported_medication: str
     supported_formulation: str
     supported_route: Route
+    supported_medications: list[str] | None = None
+    supported_formulations: list[str] | None = None
+    supported_routes: list[Route] | None = None
     amount_unit: DoseUnit
     binding_revision: Literal["one-site-cbg-linear-albumin-v1"]
     calibration_revision: str
@@ -1263,6 +1269,10 @@ class WakeFreeCortisolModelOut(ApiModel):
     reference_absorption_duration_hours: Decimal
     reference_clearance_liters_per_hour: Decimal
     free_peak_10_mg_nmol_l: Decimal
+    iv_push_supported_amount_mg: Decimal | None = None
+    iv_push_initial_total_cortisol_nmol_l: Decimal | None = None
+    iv_push_elimination_rate_per_hour: Decimal | None = None
+    iv_push_elimination_half_life_hours: Decimal | None = None
     contribution_horizon_hours: int = Field(gt=0)
     sample_interval_minutes: int = Field(gt=0)
     references: list[str]
@@ -1271,9 +1281,13 @@ class WakeFreeCortisolModelOut(ApiModel):
         "reference_absorption_duration_hours",
         "reference_clearance_liters_per_hour",
         "free_peak_10_mg_nmol_l",
+        "iv_push_supported_amount_mg",
+        "iv_push_initial_total_cortisol_nmol_l",
+        "iv_push_elimination_rate_per_hour",
+        "iv_push_elimination_half_life_hours",
     )
-    def _parameters(self, value: Decimal) -> str:
-        return str(value)
+    def _parameters(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
 
 
 class WakeFreeCortisolSampleOut(ApiModel):

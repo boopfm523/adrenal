@@ -39,7 +39,11 @@ export type SimpleExposureCurve = components["schemas"]["SteroidExposureCurveOut
 export type PhysiologicalCortisolCurve = components["schemas"]["PhysiologicalCortisolCurveOut"];
 export type WakeFreeCortisolCurve = components["schemas"]["WakeFreeCortisolCurveOut"];
 export type SteroidExposureCurve = SimpleExposureCurve | PhysiologicalCortisolCurve | WakeFreeCortisolCurve;
-export type HealthCurveModel = "hc-exposure-v1" | "hc-physiology-v2" | "hc-wake-free-v3";
+export type HealthCurveModel =
+  | "hc-exposure-v1"
+  | "hc-physiology-v2"
+  | "hc-wake-free-v3"
+  | "hc-mixed-route-free-v4";
 export type DailyPatterns = components["schemas"]["DailyPatternsOut"];
 export type PatternAnalysis = components["schemas"]["PatternAnalysisOut"];
 export type PatternAnalysisGeneration = components["schemas"]["PatternAnalysisGenerationOut"];

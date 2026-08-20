@@ -2542,6 +2542,8 @@ export interface components {
             /** Amount */
             amount?: number | string | null;
             category?: components["schemas"]["DoseCategory"] | null;
+            /** Medication Id */
+            medication_id?: string | null;
             /** Notes */
             notes?: string | null;
             route?: components["schemas"]["Route"] | null;
@@ -2592,6 +2594,8 @@ export interface components {
             dose_category: components["schemas"]["DoseCategory"];
             /** Episode Id */
             episode_id: string | null;
+            /** Formulation */
+            formulation: string | null;
             /**
              * Id
              * Format: uuid
@@ -4351,7 +4355,7 @@ export interface components {
              */
             dose_event_id: string;
             /** Exclusion Reason */
-            exclusion_reason: ("unsupported_medication" | "unsupported_formulation" | "unsupported_route" | "unsupported_unit") | null;
+            exclusion_reason: ("unsupported_medication" | "unsupported_formulation" | "unsupported_route" | "unsupported_unit" | "unsupported_amount") | null;
             /** Formulation */
             formulation: string | null;
             /**
@@ -4943,31 +4947,45 @@ export interface components {
             /** Contribution Horizon Hours */
             contribution_horizon_hours: number;
             /** Free Peak 10 Mg Nmol L */
-            free_peak_10_mg_nmol_l: string;
+            free_peak_10_mg_nmol_l: string | null;
             /**
              * Id
-             * @constant
+             * @enum {string}
              */
-            id: "hc-wake-free-v3";
+            id: "hc-wake-free-v3" | "hc-mixed-route-free-v4";
+            /** Iv Push Elimination Half Life Hours */
+            iv_push_elimination_half_life_hours?: string | null;
+            /** Iv Push Elimination Rate Per Hour */
+            iv_push_elimination_rate_per_hour?: string | null;
+            /** Iv Push Initial Total Cortisol Nmol L */
+            iv_push_initial_total_cortisol_nmol_l?: string | null;
+            /** Iv Push Supported Amount Mg */
+            iv_push_supported_amount_mg?: string | null;
             parameters: components["schemas"]["WakeFreePkParametersOut"];
             /** Reference Absorption Duration Hours */
-            reference_absorption_duration_hours: string;
+            reference_absorption_duration_hours: string | null;
             /** Reference Clearance Liters Per Hour */
-            reference_clearance_liters_per_hour: string;
+            reference_clearance_liters_per_hour: string | null;
             /** References */
             references: string[];
             /**
              * Revision
-             * @constant
+             * @enum {string}
              */
-            revision: "hc-wake-free-v3.0.0";
+            revision: "hc-wake-free-v3.0.0" | "hc-mixed-route-free-v4.0.0";
             /** Sample Interval Minutes */
             sample_interval_minutes: number;
             /** Supported Formulation */
             supported_formulation: string;
+            /** Supported Formulations */
+            supported_formulations?: string[] | null;
             /** Supported Medication */
             supported_medication: string;
+            /** Supported Medications */
+            supported_medications?: string[] | null;
             supported_route: components["schemas"]["Route"];
+            /** Supported Routes */
+            supported_routes?: components["schemas"]["Route"][] | null;
         };
         /** WakeFreeCortisolSampleOut */
         WakeFreeCortisolSampleOut: {
@@ -5544,7 +5562,7 @@ export interface operations {
             query: {
                 day: string;
                 timezone?: string | null;
-                model?: "hc-exposure-v1" | "hc-physiology-v2" | "hc-wake-free-v3";
+                model?: "hc-exposure-v1" | "hc-physiology-v2" | "hc-wake-free-v3" | "hc-mixed-route-free-v4";
             };
             header?: never;
             path?: never;

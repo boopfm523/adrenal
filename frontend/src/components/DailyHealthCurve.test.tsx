@@ -409,7 +409,7 @@ describe("Daily HealthCurve", () => {
     const referenceToggle = screen.getByRole("checkbox", { name: /Wake-anchored healthy P5–P95 reference/ });
     expect(referenceToggle).toBeDisabled();
     expect(referenceToggle).not.toBeChecked();
-    expect(screen.getByText(/Available with the Wake-anchored free cortisol \(v3\) exposure model/)).toBeVisible();
+    expect(screen.getByText(/Available with the wake-anchored v3 and mixed-route v4 exposure models/)).toBeVisible();
   });
 
   it("keeps the wake-free model and P5–P95 reference on one stable absolute axis", () => {
@@ -450,7 +450,7 @@ describe("Daily HealthCurve", () => {
     const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
     if (methodology === null) throw new Error("model methodology disclosure missing");
     expect(methodology).toHaveTextContent("hc-wake-free-v3.0.0");
-    expect(methodology).toHaveTextContent("The three selectable models remain separate and versioned");
+    expect(methodology).toHaveTextContent("The four selectable models remain separate and versioned");
     expect(methodology).toHaveTextContent("neither is independently normalized");
   });
 

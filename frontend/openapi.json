@@ -2815,6 +2815,18 @@
               }
             ]
           },
+          "medication_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medication Id"
+          },
           "notes": {
             "anyOf": [
               {
@@ -2992,6 +3004,17 @@
             ],
             "title": "Episode Id"
           },
+          "formulation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formulation"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3058,6 +3081,7 @@
           "id",
           "medication_id",
           "medication_name",
+          "formulation",
           "amount",
           "unit",
           "route",
@@ -8175,7 +8199,8 @@
                   "unsupported_medication",
                   "unsupported_formulation",
                   "unsupported_route",
-                  "unsupported_unit"
+                  "unsupported_unit",
+                  "unsupported_amount"
                 ],
                 "type": "string"
               },
@@ -10047,24 +10072,92 @@
             "type": "integer"
           },
           "free_peak_10_mg_nmol_l": {
-            "title": "Free Peak 10 Mg Nmol L",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Peak 10 Mg Nmol L"
           },
           "id": {
-            "const": "hc-wake-free-v3",
+            "enum": [
+              "hc-wake-free-v3",
+              "hc-mixed-route-free-v4"
+            ],
             "title": "Id",
             "type": "string"
+          },
+          "iv_push_elimination_half_life_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Push Elimination Half Life Hours"
+          },
+          "iv_push_elimination_rate_per_hour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Push Elimination Rate Per Hour"
+          },
+          "iv_push_initial_total_cortisol_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Push Initial Total Cortisol Nmol L"
+          },
+          "iv_push_supported_amount_mg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Push Supported Amount Mg"
           },
           "parameters": {
             "$ref": "#/components/schemas/WakeFreePkParametersOut"
           },
           "reference_absorption_duration_hours": {
-            "title": "Reference Absorption Duration Hours",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Absorption Duration Hours"
           },
           "reference_clearance_liters_per_hour": {
-            "title": "Reference Clearance Liters Per Hour",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Clearance Liters Per Hour"
           },
           "references": {
             "items": {
@@ -10074,7 +10167,10 @@
             "type": "array"
           },
           "revision": {
-            "const": "hc-wake-free-v3.0.0",
+            "enum": [
+              "hc-wake-free-v3.0.0",
+              "hc-mixed-route-free-v4.0.0"
+            ],
             "title": "Revision",
             "type": "string"
           },
@@ -10087,12 +10183,54 @@
             "title": "Supported Formulation",
             "type": "string"
           },
+          "supported_formulations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Formulations"
+          },
           "supported_medication": {
             "title": "Supported Medication",
             "type": "string"
           },
+          "supported_medications": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Medications"
+          },
           "supported_route": {
             "$ref": "#/components/schemas/Route"
+          },
+          "supported_routes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Route"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Routes"
           }
         },
         "required": [
@@ -11689,7 +11827,8 @@
               "enum": [
                 "hc-exposure-v1",
                 "hc-physiology-v2",
-                "hc-wake-free-v3"
+                "hc-wake-free-v3",
+                "hc-mixed-route-free-v4"
               ],
               "title": "Model",
               "type": "string"

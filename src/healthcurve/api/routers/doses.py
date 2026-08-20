@@ -124,6 +124,10 @@ def correct_dose(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="dose not found")
 
     changes = payload.changes.model_dump(exclude_unset=True, exclude={"time"})
+    corrected_medication_id = changes.get("medication_id", original.medication_id)
+    corrected_medication = session.get(Medication, corrected_medication_id)
+    if corrected_medication is None or corrected_medication.owner_id != owner.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="medication not found")
     submitted_time = payload.changes.time if "time" in payload.changes.model_fields_set else None
     event_time = resolve_time(submitted_time) if submitted_time is not None else None
     if not changes and event_time is None:
@@ -132,14 +136,14 @@ def correct_dose(
             detail="a correction must change at least one field",
         )
 
-    if event_time is not None:
+    if event_time is not None or corrected_medication_id != original.medication_id:
         version, slot = meds.association_for_event_time(
             session,
             owner_id=owner.id,
-            medication_id=original.medication_id,
-            occurred_at=event_time.occurred_at,
-            local_time=event_time.local_time,
-            timezone=event_time.timezone,
+            medication_id=corrected_medication_id,
+            occurred_at=event_time.occurred_at if event_time is not None else original.occurred_at,
+            local_time=event_time.local_time if event_time is not None else original.local_time,
+            timezone=event_time.timezone if event_time is not None else original.timezone,
         )
         changes["regimen_version_id"] = version.id if version else None
         changes["slot_id"] = slot.id if slot else None
@@ -251,6 +255,7 @@ def _dose_out(dose: DoseEvent, medication: Medication) -> DoseOut:
         id=dose.id,
         medication_id=dose.medication_id,
         medication_name=medication.name,
+        formulation=medication.formulation,
         amount=dose.amount,
         unit=dose.unit,
         route=dose.route,

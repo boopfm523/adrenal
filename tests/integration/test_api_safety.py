@@ -3428,13 +3428,81 @@ def test_dose_correction_is_typed_and_preserves_superseded_fact(
     assert {original["id"], body["id"]} <= history_ids
 
 
+def test_dose_correction_can_replace_medication_and_route_without_a_plan(
+    client: TestClient, logged_in: dict[str, str]
+) -> None:
+    legacy_medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Synthetic hydrocortisone sodium succinate",
+            "formulation": "injection",
+            "strength": "50",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "intramuscular",
+        },
+        headers=logged_in,
+    )
+    corrected_medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Synthetic Hydrocortisone Inj Dose",
+            "formulation": "intravenous push",
+            "strength": "50",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "intravenous",
+        },
+        headers=logged_in,
+    )
+    assert legacy_medication.status_code == 201, legacy_medication.text
+    assert corrected_medication.status_code == 201, corrected_medication.text
+    original = client.post(
+        "/api/v1/doses",
+        json={
+            "medication_id": legacy_medication.json()["id"],
+            "amount": "50",
+            "unit": "mg",
+            "route": "intramuscular",
+            "category": "stress",
+            "time": {"local_time": "2026-05-01T07:00:00", "timezone": "Europe/London"},
+        },
+        headers=logged_in,
+    )
+    assert original.status_code == 201, original.text
+
+    corrected = client.post(
+        f"/api/v1/doses/{original.json()['id']}/correct",
+        json={
+            "reason": "Synthetic hospital administration-record correction",
+            "changes": {
+                "medication_id": corrected_medication.json()["id"],
+                "route": "intravenous",
+            },
+        },
+        headers=logged_in,
+    )
+    assert corrected.status_code == 201, corrected.text
+    body = corrected.json()
+    assert body["medication_name"] == "Synthetic Hydrocortisone Inj Dose"
+    assert body["formulation"] == "intravenous push"
+    assert body["route"] == "intravenous"
+    assert body["regimen_version_id"] is None
+    assert body["slot_id"] is None
+    assert body["provenance"]["supersedes_id"] == original.json()["id"]
+
+    history = client.get("/api/v1/doses").json()
+    assert body["id"] in {row["id"] for row in history["items"]}
+    assert original.json()["id"] in {row["id"] for row in history["revisions"]}
+
+
 def test_dose_correction_rejects_unknown_or_empty_changes(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:
     original = _a_dose(client, logged_in)
     unknown = client.post(
         f"/api/v1/doses/{original['id']}/correct",
-        json={"reason": "Synthetic correction", "changes": {"medication_id": str(uuid.uuid4())}},
+        json={"reason": "Synthetic correction", "changes": {"unknown_field": str(uuid.uuid4())}},
         headers=logged_in,
     )
     empty = client.post(
@@ -6345,6 +6413,32 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     original = record("2024-02-01T07:00:00", "10")
     close = record("2024-02-01T07:01:00", "5", category="stress")
     unsupported = record("2024-02-01T13:00:00", "3", "intramuscular")
+    injection_medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Hydrocortisone Inj Dose",
+            "formulation": "intravenous push",
+            "strength": "50",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "intravenous",
+        },
+        headers=logged_in,
+    )
+    assert injection_medication.status_code == 201, injection_medication.text
+    injection = client.post(
+        "/api/v1/doses",
+        json={
+            "medication_id": injection_medication.json()["id"],
+            "amount": "50",
+            "unit": "mg",
+            "route": "intravenous",
+            "category": "stress",
+            "time": {"local_time": "2024-02-01T19:00:00", "timezone": "UTC"},
+        },
+        headers=logged_in,
+    )
+    assert injection.status_code == 201, injection.text
     corrected = client.post(
         f"/api/v1/doses/{original['id']}/correct",
         json={
@@ -6464,8 +6558,14 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert body["elapsed_hours"] == "24.0"
     assert "not a cortisol measurement or dosing guide" in body["safety_label"]
     assert body["supported_dose_count"] == 3
-    assert body["excluded_dose_count"] == 1
-    assert set(marker_ids) == {prior["id"], corrected_id, close["id"], unsupported["id"]}
+    assert body["excluded_dose_count"] == 2
+    assert set(marker_ids) == {
+        prior["id"],
+        corrected_id,
+        close["id"],
+        unsupported["id"],
+        injection.json()["id"],
+    }
     assert original["id"] not in marker_ids
     assert other_dose_id not in marker_ids
     assert body["dose_markers"][0]["carryover"] is True
@@ -6570,7 +6670,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         row["occurred_at"] for row in wake_free_body["wake_reference"]["samples"]
     }
     assert wake_free_body["supported_dose_count"] == 3
-    assert wake_free_body["excluded_dose_count"] == 1
+    assert wake_free_body["excluded_dose_count"] == 2
     assert other_dose_id not in {row["dose_event_id"] for row in wake_free_body["dose_markers"]}
     wake_peak_at = next(
         row for row in wake_free_body["dose_markers"] if row["dose_event_id"] == corrected_id
@@ -6584,6 +6684,35 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         wake_peak["modeled_free_cortisol_nmol_l"]
     )
     assert "SYNTHETIC_PRIVATE_NOTE_MUST_NOT_APPEAR" not in wake_free.text
+
+    mixed_route = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={
+            "day": selected_day,
+            "timezone": "UTC",
+            "model": "hc-mixed-route-free-v4",
+        },
+    )
+    assert mixed_route.status_code == 200, mixed_route.text
+    mixed_body = mixed_route.json()
+    assert mixed_body["model"]["id"] == "hc-mixed-route-free-v4"
+    assert mixed_body["model"]["revision"] == "hc-mixed-route-free-v4.0.0"
+    assert mixed_body["supported_dose_count"] == 4
+    assert mixed_body["excluded_dose_count"] == 1
+    injection_marker = next(
+        row for row in mixed_body["dose_markers"] if row["dose_event_id"] == injection.json()["id"]
+    )
+    assert injection_marker["supported"] is True
+    assert injection_marker["route"] == "intravenous"
+    assert injection_marker["modeled_peak_at"] == "2024-02-01T19:00:00Z"
+    injection_sample = next(
+        row
+        for row in mixed_body["samples"]
+        if row["occurred_at"] == injection_marker["modeled_peak_at"]
+    )
+    assert Decimal(injection_sample["stress_modeled_free_cortisol_nmol_l"]) > 0
+    assert mixed_body["wake_reference"]["available"] is True
+    assert mixed_body["coverage_features"]["available"] is True
 
     unsupported_model = client.get(
         "/api/v1/analytics/steroid-exposure",

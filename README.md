@@ -26,7 +26,7 @@ value; the adjacent table remains authoritative. Daily and nightly Garmin summar
 without an observation time are shown as context rather than invented as intraday
 points.
 
-The exposure-model selector keeps three separately versioned views available:
+The exposure-model selector keeps four separately versioned views available:
 
 - `hc-exposure-v1` is a relative oral-dose exposure shape in relative exposure units
   (REU). Its height is useful for comparing the timing of modeled peaks and troughs,
@@ -38,6 +38,9 @@ The exposure-model selector keeps three separately versioned views available:
   use it. Its modeled curve and healthy reference are never independently normalized;
   both use the same stable serum-free-cortisol axis, while non-cortisol health series
   continue to use the separate relative display axis.
+- `hc-mixed-route-free-v4` preserves the v3 oral calculation and adds a separately
+  evidenced model for recorded **Hydrocortisone Inj Dose 50 mg by intravenous push**.
+  Other injection doses and routes remain visible recorded facts but are not modeled.
 
 ### Wake-anchored free cortisol (v3)
 
@@ -67,6 +70,21 @@ personal cortisol “needed” or medication-demand curve. Symptoms and physicia
 take precedence over any visualization. The formulas, parameters, primary evidence,
 limitations, and model comparison are published in the Analytics page and
 [the user guide](docs/using-healthcurve.md#exact-healthcurve-formulas-and-evidence).
+
+### Oral plus 50 mg IV-push free cortisol (v4)
+
+V4 leaves every v3 oral-dose calculation unchanged. Each current, confirmed 50 mg
+intravenous-push hydrocortisone fact contributes the evidence-versioned total-serum
+increment `1347 × exp(-0.27 × elapsed_hours)` nmol/L from its actual administration
+time. The fitted elimination half-life is about 2.57 hours. Repeated doses sum and do
+not require an approved plan. HealthCurve uses its existing nonlinear binding model
+to combine the IV total-cortisol increment with oral free cortisol and display the
+result on the shared absolute free-cortisol axis.
+
+This is a population-parameter estimate for reviewing recorded facts—not a measured
+cortisol value, receptor-effect model, medication-adequacy test, or dosing guide. The
+exact evidence boundary and primary sources are recorded in
+[ADR-0027](docs/adr/0027-evidence-versioned-50mg-iv-push-hydrocortisone-model.md).
 
 For longer review, HealthCurve compares deterministic day-level features across up
 to 366 days, keeps missing data explicit, and can optionally ask the private local
