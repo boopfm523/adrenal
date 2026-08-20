@@ -1276,7 +1276,11 @@ class WakeFreePkSettingsOut(ApiModel):
 
 class WakeFreeCortisolModelOut(ApiModel):
     id: Literal["hc-wake-free-v3", "hc-mixed-route-free-v4"]
-    revision: Literal["hc-wake-free-v3.0.0", "hc-mixed-route-free-v4.0.0"]
+    revision: Literal[
+        "hc-wake-free-v3.0.0",
+        "hc-mixed-route-free-v4.0.0",
+        "hc-mixed-route-free-v4.1.0",
+    ]
     supported_medication: str
     supported_formulation: str
     supported_route: Route
@@ -1291,6 +1295,8 @@ class WakeFreeCortisolModelOut(ApiModel):
     reference_clearance_liters_per_hour: Decimal
     free_peak_10_mg_nmol_l: Decimal
     iv_push_supported_amount_mg: Decimal | None = None
+    iv_push_supported_amounts_mg: list[Decimal] | None = None
+    iv_push_scaling: str | None = None
     iv_push_initial_total_cortisol_nmol_l: Decimal | None = None
     iv_push_elimination_rate_per_hour: Decimal | None = None
     iv_push_elimination_half_life_hours: Decimal | None = None
@@ -1309,6 +1315,10 @@ class WakeFreeCortisolModelOut(ApiModel):
     )
     def _parameters(self, value: Decimal | None) -> str | None:
         return None if value is None else str(value)
+
+    @field_serializer("iv_push_supported_amounts_mg")
+    def _amounts(self, value: list[Decimal] | None) -> list[str] | None:
+        return None if value is None else [str(amount) for amount in value]
 
 
 class WakeFreeCortisolSampleOut(ApiModel):

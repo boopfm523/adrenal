@@ -10202,6 +10202,17 @@
             ],
             "title": "Iv Push Initial Total Cortisol Nmol L"
           },
+          "iv_push_scaling": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Push Scaling"
+          },
           "iv_push_supported_amount_mg": {
             "anyOf": [
               {
@@ -10212,6 +10223,20 @@
               }
             ],
             "title": "Iv Push Supported Amount Mg"
+          },
+          "iv_push_supported_amounts_mg": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv Push Supported Amounts Mg"
           },
           "parameters": {
             "$ref": "#/components/schemas/WakeFreePkParametersOut"
@@ -10248,7 +10273,8 @@
           "revision": {
             "enum": [
               "hc-wake-free-v3.0.0",
-              "hc-mixed-route-free-v4.0.0"
+              "hc-mixed-route-free-v4.0.0",
+              "hc-mixed-route-free-v4.1.0"
             ],
             "title": "Revision",
             "type": "string"

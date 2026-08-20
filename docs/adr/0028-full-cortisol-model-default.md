@@ -6,7 +6,7 @@ Status: Accepted
 
 HealthCurve preserves four separately versioned exposure models. The newest v4 model
 keeps the complete wake-anchored oral v3 calculation and also models the owner's
-supported recorded 50 mg intravenous-push facts. Daily Review previously defaulted to
+supported recorded 50 mg and 100 mg intravenous-push facts. Daily Review previously defaulted to
 v3 in the web application while the API and client helper defaulted to v1. The v4
 selector label also exposed a long implementation boundary rather than a concise
 product name.

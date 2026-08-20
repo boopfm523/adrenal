@@ -1,11 +1,12 @@
-"""Evidence-versioned mixed oral and 50 mg IV-push hydrocortisone scenario.
+"""Evidence-versioned mixed oral and IV-push hydrocortisone scenario.
 
 The oral contribution is exactly the existing wake-free v3 model. The intravenous
 contribution is a separate total-serum cortisol exponential fitted to repeated
-50 mg IV hydrocortisone boluses in primary adrenal insufficiency. The combined
-total concentration is converted to serum-free cortisol with the same saturable
-binding equation used by v3. This is an exploratory population model, not a
-measurement, adequacy test, or dosing guide.
+50 mg IV hydrocortisone boluses in primary adrenal insufficiency. Exact 100 mg
+IV-push facts use an explicitly versioned two-times dose-proportional extension
+of that fit. The combined total concentration is converted to serum-free cortisol
+with the same saturable binding equation used by v3. This is an exploratory
+population model, not a measurement, adequacy test, or dosing guide.
 """
 
 from __future__ import annotations
@@ -30,20 +31,25 @@ from healthcurve.events import service as event_service
 from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Route
 
 MODEL_ID: Final = "hc-mixed-route-free-v4"
-MODEL_REVISION: Final = "hc-mixed-route-free-v4.0.0"
+MODEL_REVISION: Final = "hc-mixed-route-free-v4.1.0"
 SERIES_KIND: Final = oral_model.SERIES_KIND
 SERIES_NAME: Final = oral_model.SERIES_NAME
 SERIES_UNIT: Final = oral_model.SERIES_UNIT
 SAFETY_LABEL: Final = (
     "Population-parameter modeled serum-free-cortisol scenario from supported oral and "
-    "50 mg IV-push facts—not a measured cortisol value, personal target, "
+    "50 mg or 100 mg IV-push facts—not a measured cortisol value, personal target, "
     "medication-adequacy test, or dosing guide."
 )
 
 # Prete et al. fitted repeated 50 mg IV boluses in primary adrenal insufficiency
 # using Q * exp(-k*t). Q is the initial TOTAL serum cortisol increment for one
-# 50 mg bolus and k is the fitted first-order elimination constant.
-IV_PUSH_AMOUNT_MG: Final = Decimal("50")
+# 50 mg bolus and k is the fitted first-order elimination constant. The FDA label
+# establishes that the 100 mg sodium-succinate presentation is equivalent to
+# 100 mg hydrocortisone and supports immediate IV administration. V4.1 therefore
+# supports only the explicit 50 mg reference dose and a 100 mg dose-proportional
+# scenario. It does not claim that a separate 100 mg concentration curve was fitted.
+IV_PUSH_REFERENCE_AMOUNT_MG: Final = Decimal("50")
+IV_PUSH_SUPPORTED_AMOUNTS_MG: Final = frozenset({Decimal("50"), Decimal("100")})
 IV_INITIAL_TOTAL_NMOL_L: Final = 1347.0
 IV_ELIMINATION_RATE_PER_HOUR: Final = 0.27
 IV_ELIMINATION_HALF_LIFE_HOURS: Final = math.log(2.0) / IV_ELIMINATION_RATE_PER_HOUR
@@ -64,7 +70,7 @@ def injectable_exclusion_reason(dose: ExposureDose) -> str | None:
         return "unsupported_route"
     if dose.unit is not DoseUnit.MG:
         return "unsupported_unit"
-    if dose.amount != IV_PUSH_AMOUNT_MG:
+    if dose.amount not in IV_PUSH_SUPPORTED_AMOUNTS_MG:
         return "unsupported_amount"
     return None
 
@@ -81,7 +87,8 @@ def iv_total_contribution(dose: ExposureDose, instant: datetime) -> float:
     elapsed = (instant.astimezone(UTC) - dose.occurred_at.astimezone(UTC)).total_seconds() / 3600
     if elapsed < 0.0 or elapsed > IV_HORIZON_HOURS:
         return 0.0
-    return IV_INITIAL_TOTAL_NMOL_L * math.exp(-IV_ELIMINATION_RATE_PER_HOUR * elapsed)
+    dose_scale = float(dose.amount / IV_PUSH_REFERENCE_AMOUNT_MG)
+    return IV_INITIAL_TOTAL_NMOL_L * dose_scale * math.exp(-IV_ELIMINATION_RATE_PER_HOUR * elapsed)
 
 
 def _sample_instants(
@@ -138,7 +145,10 @@ def _fingerprint(doses: list[ExposureDose], parameters: oral_model.WakeFreeParam
             "oral_parameters": oral_model.parameter_payload(parameters),
             "iv_initial_total_nmol_l": IV_INITIAL_TOTAL_NMOL_L,
             "iv_elimination_rate_per_hour": IV_ELIMINATION_RATE_PER_HOUR,
-            "iv_supported_amount_mg": str(IV_PUSH_AMOUNT_MG),
+            "iv_reference_amount_mg": str(IV_PUSH_REFERENCE_AMOUNT_MG),
+            "iv_supported_amounts_mg": sorted(
+                str(amount) for amount in IV_PUSH_SUPPORTED_AMOUNTS_MG
+            ),
             "doses": tokens,
         },
         default=str,
@@ -265,12 +275,15 @@ def build_curve(
             "id": MODEL_ID,
             "revision": MODEL_REVISION,
             "supported_medication": "hydrocortisone oral or Hydrocortisone Inj Dose",
-            "supported_formulation": "immediate-release tablet or 50 mg IV push",
+            "supported_formulation": "immediate-release tablet or 50/100 mg IV push",
             "supported_route": Route.ORAL,
             "supported_medications": ["hydrocortisone", "Hydrocortisone Inj Dose"],
             "supported_formulations": ["conventional immediate-release tablet", "intravenous push"],
             "supported_routes": [Route.ORAL, Route.INTRAVENOUS],
-            "iv_push_supported_amount_mg": IV_PUSH_AMOUNT_MG,
+            # Retained for backward compatibility; this is the fitted reference dose.
+            "iv_push_supported_amount_mg": IV_PUSH_REFERENCE_AMOUNT_MG,
+            "iv_push_supported_amounts_mg": sorted(IV_PUSH_SUPPORTED_AMOUNTS_MG),
+            "iv_push_scaling": "100 mg is a 2x dose-proportional extension of the 50 mg fit",
             "iv_push_initial_total_cortisol_nmol_l": Decimal(str(IV_INITIAL_TOTAL_NMOL_L)),
             "iv_push_elimination_rate_per_hour": Decimal(str(IV_ELIMINATION_RATE_PER_HOUR)),
             "iv_push_elimination_half_life_hours": Decimal(str(IV_ELIMINATION_HALF_LIFE_HOURS)),
@@ -279,6 +292,7 @@ def build_curve(
                 "https://pmc.ncbi.nlm.nih.gov/articles/PMC7241266/",
                 "https://pmc.ncbi.nlm.nih.gov/articles/PMC4280712/",
                 "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/009866s121lbl.pdf",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC4413428/",
                 "https://pubmed.ncbi.nlm.nih.gov/7120045/",
             ],
         }
@@ -297,7 +311,8 @@ def build_curve(
         "safety_label": SAFETY_LABEL,
         "definition": (
             "The unchanged wake-free v3 oral model plus a separately fitted 50 mg IV-push "
-            "total-cortisol exponential. Total contributions are summed before nonlinear "
+            "total-cortisol exponential. Exact 100 mg IV-push facts use a disclosed 2x "
+            "dose-proportional extension. Total contributions are summed before nonlinear "
             "binding conversion to serum-free cortisol."
         ),
         "model": model,

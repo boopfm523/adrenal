@@ -4969,8 +4969,12 @@ export interface components {
             iv_push_elimination_rate_per_hour?: string | null;
             /** Iv Push Initial Total Cortisol Nmol L */
             iv_push_initial_total_cortisol_nmol_l?: string | null;
+            /** Iv Push Scaling */
+            iv_push_scaling?: string | null;
             /** Iv Push Supported Amount Mg */
             iv_push_supported_amount_mg?: string | null;
+            /** Iv Push Supported Amounts Mg */
+            iv_push_supported_amounts_mg?: string[] | null;
             parameters: components["schemas"]["WakeFreePkParametersOut"];
             /** Reference Absorption Duration Hours */
             reference_absorption_duration_hours: string | null;
@@ -4982,7 +4986,7 @@ export interface components {
              * Revision
              * @enum {string}
              */
-            revision: "hc-wake-free-v3.0.0" | "hc-mixed-route-free-v4.0.0";
+            revision: "hc-wake-free-v3.0.0" | "hc-mixed-route-free-v4.0.0" | "hc-mixed-route-free-v4.1.0";
             /** Sample Interval Minutes */
             sample_interval_minutes: number;
             /** Supported Formulation */

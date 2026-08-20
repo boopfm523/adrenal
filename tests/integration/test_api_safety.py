@@ -6439,6 +6439,32 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         headers=logged_in,
     )
     assert injection.status_code == 201, injection.text
+    injection_100_medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Hydrocortisone sodium succinate",
+            "formulation": "injection",
+            "strength": "100",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "intravenous",
+        },
+        headers=logged_in,
+    )
+    assert injection_100_medication.status_code == 201, injection_100_medication.text
+    injection_100 = client.post(
+        "/api/v1/doses",
+        json={
+            "medication_id": injection_100_medication.json()["id"],
+            "amount": "100",
+            "unit": "mg",
+            "route": "intravenous",
+            "category": "stress",
+            "time": {"local_time": "2024-02-01T20:00:00", "timezone": "UTC"},
+        },
+        headers=logged_in,
+    )
+    assert injection_100.status_code == 201, injection_100.text
     corrected = client.post(
         f"/api/v1/doses/{original['id']}/correct",
         json={
@@ -6558,13 +6584,14 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert body["elapsed_hours"] == "24.0"
     assert "not a cortisol measurement or dosing guide" in body["safety_label"]
     assert body["supported_dose_count"] == 3
-    assert body["excluded_dose_count"] == 2
+    assert body["excluded_dose_count"] == 3
     assert set(marker_ids) == {
         prior["id"],
         corrected_id,
         close["id"],
         unsupported["id"],
         injection.json()["id"],
+        injection_100.json()["id"],
     }
     assert original["id"] not in marker_ids
     assert other_dose_id not in marker_ids
@@ -6677,7 +6704,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         row["occurred_at"] for row in wake_free_body["wake_reference"]["samples"]
     }
     assert wake_free_body["supported_dose_count"] == 3
-    assert wake_free_body["excluded_dose_count"] == 2
+    assert wake_free_body["excluded_dose_count"] == 3
     assert other_dose_id not in {row["dose_event_id"] for row in wake_free_body["dose_markers"]}
     wake_peak_at = next(
         row for row in wake_free_body["dose_markers"] if row["dose_event_id"] == corrected_id
@@ -6703,8 +6730,9 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
     assert mixed_route.status_code == 200, mixed_route.text
     mixed_body = mixed_route.json()
     assert mixed_body["model"]["id"] == "hc-mixed-route-free-v4"
-    assert mixed_body["model"]["revision"] == "hc-mixed-route-free-v4.0.0"
-    assert mixed_body["supported_dose_count"] == 4
+    assert mixed_body["model"]["revision"] == "hc-mixed-route-free-v4.1.0"
+    assert mixed_body["model"]["iv_push_supported_amounts_mg"] == ["50", "100"]
+    assert mixed_body["supported_dose_count"] == 5
     assert mixed_body["excluded_dose_count"] == 1
     injection_marker = next(
         row for row in mixed_body["dose_markers"] if row["dose_event_id"] == injection.json()["id"]
@@ -6718,6 +6746,14 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         if row["occurred_at"] == injection_marker["modeled_peak_at"]
     )
     assert Decimal(injection_sample["stress_modeled_free_cortisol_nmol_l"]) > 0
+    injection_100_marker = next(
+        row
+        for row in mixed_body["dose_markers"]
+        if row["dose_event_id"] == injection_100.json()["id"]
+    )
+    assert injection_100_marker["supported"] is True
+    assert injection_100_marker["route"] == "intravenous"
+    assert injection_100_marker["modeled_peak_at"] == "2024-02-01T20:00:00Z"
     assert mixed_body["wake_reference"]["available"] is True
     assert mixed_body["coverage_features"]["available"] is True
 

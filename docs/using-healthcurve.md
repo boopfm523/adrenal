@@ -484,7 +484,7 @@ selector fails validation rather than silently falling back.
 | `hc-exposure-v1` | normalized oral-dose exposure shape | REU | relative visualization, not cortisol concentration |
 | `hc-physiology-v2` | population-parameter plasma-free-cortisol scenario | nmol/L | modeled scenario, not measured or personalized cortisol |
 | `hc-wake-free-v3` | wake-era serum-free-cortisol scenario | nmol/L | modeled scenario compared with an independently generated healthy-adult population reference |
-| `hc-mixed-route-free-v4` | v3 oral free cortisol plus exact recorded 50 mg IV-push hydrocortisone | nmol/L | population model for one documented IV dose/route boundary; not a measured concentration or dosing guide |
+| `hc-mixed-route-free-v4` | v3 oral free cortisol plus exact recorded 50 mg and 100 mg IV-push hydrocortisone | nmol/L | population model with a fitted 50 mg reference and disclosed 2× 100 mg scenario; not a measured concentration or dosing guide |
 
 For elapsed hours `t` after a supported actual dose, the v1 implementation is exactly:
 
@@ -619,22 +619,23 @@ alternatives are in
 [ADR-0026](adr/0026-wake-anchored-free-cortisol-reference-and-meals.md).
 
 For v4, the complete v3 oral calculation above remains unchanged. Each supported,
-current 50 mg intravenous-push `Hydrocortisone Inj Dose` fact adds a fitted
+current 50 mg or 100 mg intravenous-push hydrocortisone fact adds a
 total-serum-cortisol increment from its actual administration time:
 
 ```text
-iv_total(tau) = 1347 * exp(-0.27 * tau) nmol/L, tau >= 0
+iv_total(dose, tau) = 1347 * (dose_mg / 50) * exp(-0.27 * tau) nmol/L, tau >= 0
 iv_half_life = ln(2) / 0.27 = 2.567 hours
 combined_total = total_from_free(v3_oral_free) + sum(iv_total)
 combined_free = free_from_total(combined_total)
 ```
 
-Repeated doses sum and do not require an approved plan. The IV equation is restricted
-to the exact documented 50 mg intravenous-push boundary; an intramuscular route,
-another amount, or an ambiguous formulation remains visible as an unmodeled recorded
-marker. V4 is a population-parameter estimate, not a measured cortisol value,
-receptor-effect model, medication-adequacy test, or dosing guide. Evidence and the
-full support boundary are in
+Repeated doses sum and do not require an approved plan. The 50 mg term is the
+published population fit. The exact 100 mg term is a disclosed 2× dose-proportional
+scenario, not a separately fitted or personalized 100 mg curve. The IV equation is
+restricted to those two exact amounts; an intramuscular route, another amount, or an
+ambiguous formulation remains visible as an unmodeled recorded marker. V4 is a
+population-parameter estimate, not a measured cortisol value, receptor-effect model,
+medication-adequacy test, or dosing guide. Evidence and the full support boundary are in
 [ADR-0027](adr/0027-evidence-versioned-50mg-iv-push-hydrocortisone-model.md).
 
 For display only, each non-stress, non-symptom numeric lane uses

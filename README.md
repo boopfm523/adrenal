@@ -43,8 +43,10 @@ the selector label; its exact evidence and route boundaries remain documented be
   both use the same stable serum-free-cortisol axis, while non-cortisol health series
   continue to use the separate relative display axis.
 - `hc-mixed-route-free-v4` preserves the v3 oral calculation and adds a separately
-  evidenced model for recorded **Hydrocortisone Inj Dose 50 mg by intravenous push**.
-  Other injection doses and routes remain visible recorded facts but are not modeled.
+  evidenced model for exact recorded **50 mg and 100 mg intravenous-push
+  hydrocortisone**. The 50 mg contribution uses the published population fit; 100 mg
+  uses an explicit 2× dose-proportional scenario of that fit. Other injection amounts
+  and routes remain visible recorded facts but are not modeled.
 
 ### Wake-anchored free cortisol (v3)
 

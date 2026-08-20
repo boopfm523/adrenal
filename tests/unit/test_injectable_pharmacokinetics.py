@@ -70,6 +70,39 @@ def test_exact_50_mg_iv_push_has_immediate_literature_fitted_contribution() -> N
     assert curve["dose_markers"][0]["modeled_peak_at"] == administered
 
 
+def test_exact_100_mg_iv_push_uses_disclosed_two_times_reference_contribution() -> None:
+    administered = datetime(2026, 8, 20, 2, tzinfo=UTC)
+    curve = cast(
+        dict[str, Any],
+        injectable_pharmacokinetics.build_curve(
+            day=date(2026, 8, 20),
+            timezone="UTC",
+            doses=[dose(identity=11, occurred_at=administered, amount="100")],
+        ),
+    )
+
+    sample = sample_at(curve, administered)
+    assert float(sample["derived_total_cortisol_nmol_l_display"]) == pytest.approx(2694.0)
+    assert float(sample["modeled_free_cortisol_nmol_l"]) == pytest.approx(
+        free_from_total(2694.0), abs=1e-6
+    )
+    assert curve["supported_dose_count"] == 1
+    assert curve["model"]["iv_push_supported_amounts_mg"] == [Decimal("50"), Decimal("100")]
+
+
+def test_100_mg_iv_push_total_contribution_halves_at_fitted_half_life() -> None:
+    administered = datetime(2026, 8, 20, 2, tzinfo=UTC)
+    instant = administered + timedelta(
+        hours=injectable_pharmacokinetics.IV_ELIMINATION_HALF_LIFE_HOURS
+    )
+
+    contribution = injectable_pharmacokinetics.iv_total_contribution(
+        dose(identity=12, occurred_at=administered, amount="100"), instant
+    )
+
+    assert contribution == pytest.approx(2694.0 / 2, abs=1e-7)
+
+
 def test_iv_push_total_contribution_halves_at_fitted_half_life() -> None:
     administered = datetime(2026, 8, 20, 2, tzinfo=UTC)
     instant = administered + timedelta(
@@ -97,6 +130,29 @@ def test_repeated_six_hour_iv_pushes_add_without_a_plan_or_reset() -> None:
 
     sample = sample_at(curve, second_at)
     expected_total = 1347.0 + 1347.0 * math.exp(-0.27 * 6)
+    assert float(sample["derived_total_cortisol_nmol_l_display"]) == pytest.approx(
+        expected_total, abs=1e-6
+    )
+    assert curve["supported_dose_count"] == 2
+
+
+def test_overlapping_50_and_100_mg_iv_pushes_add_without_reset() -> None:
+    first_at = datetime(2026, 8, 20, 2, tzinfo=UTC)
+    second_at = first_at + timedelta(hours=1)
+    curve = cast(
+        dict[str, Any],
+        injectable_pharmacokinetics.build_curve(
+            day=date(2026, 8, 20),
+            timezone="UTC",
+            doses=[
+                dose(identity=14, occurred_at=first_at, amount="50"),
+                dose(identity=15, occurred_at=second_at, amount="100"),
+            ],
+        ),
+    )
+
+    sample = sample_at(curve, second_at)
+    expected_total = 2694.0 + 1347.0 * math.exp(-0.27)
     assert float(sample["derived_total_cortisol_nmol_l_display"]) == pytest.approx(
         expected_total, abs=1e-6
     )
@@ -137,6 +193,10 @@ def test_regular_and_stress_iv_contributions_remain_separate_and_sum() -> None:
         ),
         (
             dose(identity=8, occurred_at=datetime(2026, 8, 20, tzinfo=UTC), amount="40"),
+            "unsupported_amount",
+        ),
+        (
+            dose(identity=13, occurred_at=datetime(2026, 8, 20, tzinfo=UTC), amount="150"),
             "unsupported_amount",
         ),
         (
