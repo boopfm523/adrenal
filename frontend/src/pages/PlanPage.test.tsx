@@ -35,6 +35,33 @@ function response(body: unknown): Response { return new Response(JSON.stringify(
 function versionPage(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
 describe("Medication plan page", () => {
+  it("sorts medication and formulation choices alphabetically after the placeholder", async () => {
+    const medications = [
+      { id: "30000000-0000-4000-8000-000000000000", category: "plan", name: "Zeta medicine", formulation: "tablet", strength: "5", strength_unit: "mg", default_unit: "mg", default_route: "oral", active_from: null, active_to: null, notes: null },
+      { id: "20000000-0000-4000-8000-000000000000", category: "plan", name: "alpha medicine", formulation: "tablet", strength: "20", strength_unit: "mg", default_unit: "mg", default_route: "oral", active_from: null, active_to: null, notes: null },
+      { id: "10000000-0000-4000-8000-000000000000", category: "plan", name: "Alpha medicine", formulation: "tablet", strength: "5", strength_unit: "mg", default_unit: "mg", default_route: "oral", active_from: null, active_to: null, notes: null },
+      { id: "40000000-0000-4000-8000-000000000000", category: "plan", name: "Beta medicine", formulation: "injection", strength: "50", strength_unit: "mg", default_unit: "mg", default_route: "intravenous", active_from: null, active_to: null, notes: null },
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/regimens/active")) return Promise.resolve(response(null));
+      if (url.includes("/regimens?")) return Promise.resolve(response(versionPage([])));
+      if (url.endsWith("/medications")) return Promise.resolve(response(medications));
+      return Promise.resolve(response({ detail: "not found" }));
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Create first plan draft" }));
+    const options = within(screen.getByLabelText("Medication and formulation")).getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Choose medication and formulation",
+      "Alpha medicine tablet — formulation strength: 5 mg",
+      "alpha medicine tablet — formulation strength: 20 mg",
+      "Beta medicine injection — formulation strength: 50 mg",
+      "Zeta medicine tablet — formulation strength: 5 mg",
+    ]);
+  });
+
   it("shows an accessible empty plan timeline", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = requestUrl(input);

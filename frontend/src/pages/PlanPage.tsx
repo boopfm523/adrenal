@@ -79,6 +79,22 @@ function medicationOptionLabel(medication: Medication): string {
   return `${medication.name}${formulation} — ${strength}`;
 }
 
+const medicationOptionCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function sortMedicationsByOptionLabel(medications: Medication[]): Medication[] {
+  return [...medications].sort((left, right) => {
+    const labelOrder = medicationOptionCollator.compare(
+      medicationOptionLabel(left),
+      medicationOptionLabel(right),
+    );
+    if (labelOrder !== 0) return labelOrder;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 function localInput(value: string | null): string {
   return value === null ? "" : value.replace(/Z$/, "").slice(0, 16);
 }
@@ -356,7 +372,11 @@ function PlanEditor({ source, editDraft, medications, existingVersions, timezone
       onSaved(editDraft === null ? "Unapproved plan draft created. It is not in force." : "Unapproved plan draft updated. It is not in force.", version);
     },
   });
-  const available = selectedNewMedication === null || medications.some((item) => item.id === selectedNewMedication.id) ? medications : [...medications, selectedNewMedication];
+  const available = sortMedicationsByOptionLabel(
+    selectedNewMedication === null || medications.some((item) => item.id === selectedNewMedication.id)
+      ? medications
+      : [...medications, selectedNewMedication],
+  );
   const proposedInterval: PlanInterval | null = effectiveFrom === "" ? null : {
     id: editDraft?.id ?? "proposed-draft",
     label: editDraft?.version_label ?? "Proposed draft",
