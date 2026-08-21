@@ -184,7 +184,7 @@ describe("Analytics page", () => {
     expect(screen.getByLabelText("HealthCurve date")).toHaveValue(today);
     expect(within(screen.getByRole("group", { name: "Quick HealthCurve dates" })).getByRole("button", { name: "Today" })).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
-    expect(screen.getByRole("button", { name: "Review next day" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Review next day" })).not.toBeInTheDocument();
   });
 
   it("navigates local calendar days, preserves chart focus, and honors browser history", async () => {
@@ -192,6 +192,7 @@ describe("Analytics page", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => { const url = requestUrl(input); urls.push(url); return Promise.resolve(response(url, init?.method)); });
     render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/healthcurve?day=2026-08-01&timezone=Europe%2FLondon"]}><AnalyticsPage /><LocationProbe /></MemoryRouter></AuthContext.Provider></QueryClientProvider></HealthCurveProvider>);
     await waitFor(() => { expect(screen.getByRole("heading", { name: "Your daily HealthCurve" })).toBeVisible(); });
+    expect(screen.getByRole("button", { name: "Review next day" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(screen.getByRole("checkbox", { name: "Heart rate" })).toBeChecked();
