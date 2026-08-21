@@ -449,10 +449,23 @@ circle.chart-series { fill: white; }
 .healthcurve-point--diastolic { fill: #4a8a68; }
 .healthcurve-blood-pressure-label { fill: #123f2d; font-size: 12px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 3px; stroke-linejoin: round; }
 .healthcurve-point--symptoms { fill: #bd2f6b; }
-.healthcurve-recorded-symptoms { margin: 0.8rem 0; padding: 0.75rem 1rem; border: 1px solid #d5a5bb; border-radius: 0.45rem; background: #fff5f9; }
-.healthcurve-recorded-symptoms h3 { margin: 0; }
-.healthcurve-recorded-symptoms p { margin-block: 0.35rem; }
-.healthcurve-recorded-symptoms ul { margin-block: 0.35rem 0; }
+.healthcurve-recorded-symptoms,
+.healthcurve-recorded-stress-events { margin: 0.8rem 0; padding: 0.75rem 1rem; border: 1px solid #d5a5bb; border-radius: 0.45rem; background: #fff5f9; }
+.healthcurve-recorded-stress-events { border-color: #d8b78d; background: #fffaf2; }
+.healthcurve-recorded-symptoms h3,
+.healthcurve-recorded-stress-events h3 { margin: 0; }
+.healthcurve-recorded-symptoms > p,
+.healthcurve-recorded-stress-events > p { margin-block: 0.35rem; }
+.healthcurve-recorded-event-list { display: grid; gap: 0.75rem; margin-block: 0.5rem 0; padding-left: 1.25rem; }
+.healthcurve-recorded-event-list > li { padding-bottom: 0.75rem; border-bottom: 1px solid rgb(85 100 92 / 18%); }
+.healthcurve-recorded-event-list > li:last-child { padding-bottom: 0; border-bottom: 0; }
+.healthcurve-pre-event-summary { margin-top: 0.45rem; padding: 0.6rem 0.7rem; border: 1px solid rgb(85 100 92 / 22%); border-radius: 0.4rem; background: rgb(255 255 255 / 72%); }
+.healthcurve-pre-event-summary h4 { margin: 0; font-size: 0.95rem; }
+.healthcurve-pre-event-summary p { margin: 0.2rem 0 0.45rem; color: var(--muted); font-size: 0.85rem; }
+.healthcurve-pre-event-summary dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.4rem 0.8rem; margin: 0; }
+.healthcurve-pre-event-summary dl div { min-width: 0; }
+.healthcurve-pre-event-summary dt { font-size: 0.78rem; font-weight: 700; }
+.healthcurve-pre-event-summary dd { margin: 0.1rem 0 0; font-size: 0.88rem; }
 .healthcurve-unscored-symptom-line { stroke: #bd2f6b; stroke-width: 1.5; stroke-dasharray: 2 4; opacity: 0.72; }
 .healthcurve-unscored-symptom-marker { fill: #bd2f6b; stroke: white; stroke-width: 1.5; }
 .garmin-aggregate-context { margin: 1rem 0; padding: 0.85rem 1rem; border: 1px solid #ccd4ce; border-radius: 0.5rem; background: #f4f7f5; }

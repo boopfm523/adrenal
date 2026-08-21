@@ -67,6 +67,12 @@ interface AwakeInterval {
   endedAt: number;
 }
 
+interface PreEventMetricSummary {
+  key: string;
+  label: string;
+  value: string | null;
+}
+
 function doseExclusionReason(reason: SteroidExposureCurve["dose_markers"][number]["exclusion_reason"]): string {
   switch (reason) {
     case "unsupported_medication": return "this medication is not supported by the selected exposure model";
@@ -91,6 +97,7 @@ const RESPIRATION_DISPLAY_MAX = 40;
 const RESPIRATION_MEDIAN_RADIUS = 2;
 const TEMPERATURE_DISPLAY_MIN = 77;
 const TEMPERATURE_DISPLAY_MAX = 113;
+const PRE_EVENT_WINDOW_MILLISECONDS = 60 * 60 * 1_000;
 
 const DEFAULT_VISIBLE: HealthCurveVisibility = {
   exposure: true,
@@ -441,6 +448,71 @@ function dailyAggregateValue(record: GarminRecord): string {
 
 function summaryNumber(value: number, maximumFractionDigits = 1): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(value);
+}
+
+function inPreEventWindow(occurredAt: string, eventAt: number): boolean {
+  const observationAt = Date.parse(occurredAt);
+  return observationAt >= eventAt - PRE_EVENT_WINDOW_MILLISECONDS && observationAt < eventAt;
+}
+
+function average(values: number[]): number | null {
+  return values.length === 0
+    ? null
+    : values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function preEventMetricSummaries(data: DailyHealthCurveData, occurredAt: string): PreEventMetricSummary[] {
+  const eventAt = Date.parse(occurredAt);
+  const garminSamples = data.garmin.filter(
+    (record) => record.kind === "sample" && inPreEventWindow(record.time.occurred_at, eventAt),
+  );
+  const garminValues = (metricType: string): number[] => garminSamples.flatMap((record) => {
+    if (record.metric_type !== metricType) return [];
+    const value = numeric(record.value);
+    return value === null ? [] : [value];
+  });
+  const bloodPressure = data.bloodPressure.filter((record) => inPreEventWindow(record.time.occurred_at, eventAt));
+  const temperatures = data.temperature.filter((record) => inPreEventWindow(record.time.occurred_at, eventAt));
+  const heartRateValues = [
+    ...garminValues("heart_rate"),
+    ...bloodPressure.flatMap((record) => record.pulse_bpm == null ? [] : [record.pulse_bpm]),
+  ];
+  const bloodPressureValue = bloodPressure.length === 0
+    ? null
+    : `${summaryNumber(average(bloodPressure.map((record) => record.systolic_mmhg)) ?? 0)}/${summaryNumber(average(bloodPressure.map((record) => record.diastolic_mmhg)) ?? 0)} mmHg · ${bloodPressure.length.toString()} ${bloodPressure.length === 1 ? "reading" : "readings"}`;
+  const temperatureFValues = temperatures.map((record) => Number(record.display_f)).filter((value) => Number.isFinite(value));
+  const temperatureCValues = temperatures.map((record) => Number(record.display_c)).filter((value) => Number.isFinite(value));
+  const temperatureValue = average(temperatureFValues) === null || average(temperatureCValues) === null
+    ? null
+    : `${summaryNumber(average(temperatureFValues) ?? 0)} °F (${summaryNumber(average(temperatureCValues) ?? 0)} °C) · ${temperatures.length.toString()} ${temperatures.length === 1 ? "reading" : "readings"}`;
+  const metric = (key: string, label: string, values: number[], unit: string, digits = 1): PreEventMetricSummary => {
+    const result = average(values);
+    return {
+      key,
+      label,
+      value: result === null
+        ? null
+        : `${summaryNumber(result, digits)} ${unit} · ${values.length.toString()} ${values.length === 1 ? "point" : "points"}`,
+    };
+  };
+  return [
+    metric("stress", "Garmin stress", garminValues("stress"), "score"),
+    metric("heart-rate", "Heart rate", heartRateValues, "bpm"),
+    metric("hrv", "HRV", garminValues("hrv"), "ms"),
+    metric("respiration", "Respiration", garminValues("respiration_rate"), "breaths/min"),
+    metric("steps", "Steps", garminValues("steps"), "steps/sample", 0),
+    { key: "blood-pressure", label: "Blood pressure", value: bloodPressureValue },
+    { key: "temperature", label: "Temperature", value: temperatureValue },
+  ];
+}
+
+function PreEventMetricAverages({ data, occurredAt }: { data: DailyHealthCurveData; occurredAt: string }): React.JSX.Element {
+  const summaries = preEventMetricSummaries(data, occurredAt);
+  return <section className="healthcurve-pre-event-summary" aria-label="Observed metric averages during the previous hour">
+    <h4>Previous-hour observed averages</h4>
+    <p>Timestamped readings from the 60 minutes before this event. Missing data remains unavailable.</p>
+    <dl>{summaries.map((summary) => <div key={summary.key}><dt>{summary.label}</dt><dd>{summary.value ?? "Unavailable"}</dd></div>)}</dl>
+  </section>;
 }
 
 function summaryValues(lane: Lane, data: DailyHealthCurveData): number[] {
@@ -796,6 +868,14 @@ export function DailyHealthCurve({
     (interval) => cursorTime >= interval.startedAt && cursorTime < interval.endedAt,
   );
   const doseObservations = doseTooltipObservations(data.exposure, start, end);
+  const stressDoses = data.exposure.dose_markers.filter((dose) => {
+    const occurredAt = Date.parse(dose.occurred_at);
+    return dose.category === "stress" && !dose.carryover && occurredAt >= start && occurredAt < end;
+  });
+  const startedEpisodes = data.episodes.filter((episode) => {
+    const startedAt = Date.parse(episode.started_at);
+    return startedAt >= start && startedAt < end;
+  });
   const unmodeledDoses = data.exposure.dose_markers.filter((dose) => {
     const occurredAt = Date.parse(dose.occurred_at);
     return !dose.supported && occurredAt >= start && occurredAt < end;
@@ -1082,7 +1162,28 @@ export function DailyHealthCurve({
         <button type="button" className="button-secondary" disabled={nextObservation === undefined} onClick={() => { if (nextObservation !== undefined) selectTime(nextObservation); }}>Next observation →</button>
       </div>
     </section>
-    {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title"><h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3><p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p><ul>{data.symptoms.map((symptom) => <li key={symptom.id}><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</li>)}</ul></section> : null}
+    {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title">
+      <h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3>
+      <p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p>
+      <ul className="healthcurve-recorded-event-list">{data.symptoms.map((symptom) => <li key={symptom.id}>
+        <div><time dateTime={symptom.time.occurred_at}>{experiencedTime(symptom.time.occurred_at, data.exposure.timezone)}</time>: <strong>{symptom.name}</strong> — {symptom.severity == null ? "severity not recorded" : `${symptom.severity.toString()}/10`}</div>
+        <PreEventMetricAverages data={data} occurredAt={symptom.time.occurred_at} />
+      </li>)}</ul>
+    </section> : null}
+    {stressDoses.length > 0 || startedEpisodes.length > 0 ? <section className="healthcurve-recorded-stress-events" aria-labelledby="healthcurve-recorded-stress-events-title">
+      <h3 id="healthcurve-recorded-stress-events-title">Recorded stress events</h3>
+      <p>The preceding observations provide time context only. They do not establish a cause, medication need, or dosing guidance.</p>
+      <ul className="healthcurve-recorded-event-list">
+        {stressDoses.map((dose) => <li key={`stress-dose-${dose.dose_event_id}`}>
+          <div><time dateTime={dose.occurred_at}>{experiencedTime(dose.occurred_at, data.exposure.timezone)}</time>: <strong>Stress dose</strong> — {dose.medication_name} {formatMeasurement(dose.amount, dose.unit)}</div>
+          <PreEventMetricAverages data={data} occurredAt={dose.occurred_at} />
+        </li>)}
+        {startedEpisodes.map((episode) => <li key={`episode-${episode.id}`}>
+          <div><time dateTime={episode.started_at}>{experiencedTime(episode.started_at, data.exposure.timezone)}</time>: <strong>Episode started</strong> — {episode.trigger}{episode.severity == null ? "" : ` · ${episode.severity}`}</div>
+          <PreEventMetricAverages data={data} occurredAt={episode.started_at} />
+        </li>)}
+      </ul>
+    </section> : null}
     <div className="curve-series-summary" aria-label="Series sample counts">{allLanes.map((lane) => {
       const aggregates = dailyAggregatesForLane(data, lane);
       const values = summaryValues(lane, data);

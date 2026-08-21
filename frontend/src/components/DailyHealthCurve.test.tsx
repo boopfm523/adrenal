@@ -1050,4 +1050,76 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("Synthetic fatigue: severity missing");
     expect(tooltip).toHaveTextContent("Synthetic dizziness: severity missing");
   });
+
+  it("shows observed one-hour averages before symptoms and stress doses without inventing missing values", () => {
+    const base = data();
+    const garminSample = (id: string, occurredAt: string, value: string, kind: "sample" | "daily" = "sample"): GarminRecord => ({
+      ...sample(0),
+      id,
+      kind,
+      summary: `Stress: ${value}`,
+      time: { ...sample(0).time, occurred_at: occurredAt },
+      metric_type: "stress",
+      value,
+      unit: "garmin_score",
+    });
+    const symptomAt = "2026-03-08T16:00:00Z";
+    const stressDoseAt = "2026-03-08T18:00:00Z";
+    renderWithTheme(<DailyHealthCurve data={data({
+      garmin: [
+        garminSample("70000000-0000-4000-8000-000000000001", "2026-03-08T14:59:00Z", "80"),
+        garminSample("70000000-0000-4000-8000-000000000002", "2026-03-08T15:00:00Z", "20"),
+        garminSample("70000000-0000-4000-8000-000000000003", "2026-03-08T15:30:00Z", "40"),
+        garminSample("70000000-0000-4000-8000-000000000004", symptomAt, "100"),
+        garminSample("70000000-0000-4000-8000-000000000005", "2026-03-08T05:00:00Z", "99", "daily"),
+      ],
+      symptoms: [{
+        id: "71000000-0000-4000-8000-000000000001",
+        category: "fact",
+        name: "Synthetic fatigue",
+        severity: 4,
+        body_area: null,
+        tracking_category: null,
+        tracking_category_revision: null,
+        time: { occurred_at: symptomAt, local_time: "2026-03-08T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+        provenance: { ...provenance, source_type: "web", confirmation_state: "direct" },
+        episode_id: null,
+        notes: null,
+      }],
+      exposure: {
+        ...base.exposure,
+        dose_markers: [{
+          dose_event_id: "72000000-0000-4000-8000-000000000001",
+          occurred_at: stressDoseAt,
+          local_time: "2026-03-08T14:00:00",
+          timezone: "America/New_York",
+          utc_offset_minutes: -240,
+          medication_name: "Hydrocortisone",
+          formulation: "conventional immediate-release tablet",
+          amount: "5",
+          unit: "mg",
+          route: "oral",
+          category: "stress",
+          source_type: "web",
+          confirmation_state: "direct",
+          supersedes_id: null,
+          supported: true,
+          exclusion_reason: null,
+          carryover: false,
+          modeled_peak_at: "2026-03-08T19:00:00Z",
+        }],
+      },
+    })} />);
+
+    const symptomSection = screen.getByRole("heading", { name: "Recorded symptoms" }).closest("section");
+    expect(symptomSection).not.toBeNull();
+    expect(symptomSection).toHaveTextContent("Garmin stress30 score · 2 points");
+    expect(symptomSection).toHaveTextContent("HRVUnavailable");
+    expect(symptomSection).not.toHaveTextContent("99 score");
+    const stressSection = screen.getByRole("heading", { name: "Recorded stress events" }).closest("section");
+    expect(stressSection).not.toBeNull();
+    expect(stressSection).toHaveTextContent("Stress dose — Hydrocortisone 5 mg");
+    expect(stressSection).toHaveTextContent("Garmin stressUnavailable");
+    expect(screen.getAllByLabelText("Observed metric averages during the previous hour")).toHaveLength(2);
+  });
 });
