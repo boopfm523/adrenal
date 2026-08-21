@@ -61,10 +61,11 @@ body { margin:0; padding:1rem; font:1rem/1.55 system-ui,-apple-system,Segoe UI,s
 main { max-width: 44rem; margin: 0 auto; }
 h1 { font-size:1.5rem; margin:0 0 .25rem; }
 .urgent { border:3px solid #b30000; background:#fff4f4; color:#111; padding:1rem;
-          border-radius:.5rem; margin-bottom:1.25rem; }
+          border-radius:.5rem; margin:0 0 1rem; }
 @media (prefers-color-scheme: dark){ .urgent { background:#2a0d0d; color:#fff; } }
 .card { border:1px solid #999; border-radius:.5rem; padding:1rem; margin-bottom:1rem; }
-.card h2 { font-size:1.15rem; margin:0 0 .25rem; }
+.card h2,.none h2 { font-size:1.15rem; margin:0 0 .25rem; }
+.urgent p,.none p { margin:.5rem 0 0; }
 .meta { font-size:.85rem; opacity:.85; margin:0 0 .5rem; }
 .stale { border-left:.5rem solid #a15c00; padding-left:.75rem; }
 pre.body { white-space:pre-wrap; font:inherit; margin:0; }
@@ -73,7 +74,7 @@ input,select,button { font:inherit; padding:.6rem; width:100%; border-radius:.4r
                       border:1px solid #777; }
 button { background:#b30000; color:#fff; border:0; font-weight:700; padding:1rem;
          margin-top:1rem; cursor:pointer; }
-.none { padding:1rem; border:2px dashed #999; border-radius:.5rem; }
+.none { padding:1rem; border:2px dashed #999; border-radius:.5rem; margin:0 0 1rem; }
 a { color:inherit; }
 """
 
