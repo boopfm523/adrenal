@@ -320,6 +320,50 @@ def test_a_revised_provider_record_is_a_separate_row(session: Session, owner_id:
     assert len({e.source_revision for e in stored}) == 2
 
 
+def test_provider_can_return_to_an_earlier_revision(session: Session, owner_id: uuid.UUID) -> None:
+    """Provider state A -> B -> A remains a complete, linear correction history."""
+    first = make_symptom(
+        owner_id,
+        source_type=SourceType.PROVIDER,
+        confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+        provider_id="garmin-returned-state",
+        source_revision="rev-a",
+    )
+    session.add(first)
+    session.flush()
+
+    second = make_symptom(
+        owner_id,
+        source_type=SourceType.PROVIDER,
+        confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+        provider_id="garmin-returned-state",
+        source_revision="rev-b",
+        supersedes_id=first.id,
+    )
+    session.add(second)
+    session.flush()
+
+    third = make_symptom(
+        owner_id,
+        source_type=SourceType.PROVIDER,
+        confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+        provider_id="garmin-returned-state",
+        source_revision="rev-a",
+        supersedes_id=second.id,
+    )
+    session.add(third)
+    session.flush()
+
+    stored = session.scalars(
+        select(SymptomEvent)
+        .where(SymptomEvent.provider_id == "garmin-returned-state")
+        .order_by(SymptomEvent.recorded_at, SymptomEvent.id)
+    ).all()
+    assert [event.source_revision for event in stored] == ["rev-a", "rev-b", "rev-a"]
+    assert stored[1].supersedes_id == stored[0].id
+    assert stored[2].supersedes_id == stored[1].id
+
+
 def test_manually_entered_events_are_not_constrained_by_provider_identity(
     session: Session,
     owner_id: uuid.UUID,

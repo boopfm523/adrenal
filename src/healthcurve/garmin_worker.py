@@ -5,6 +5,7 @@ from __future__ import annotations
 import signal
 import sys
 import threading
+from datetime import timedelta
 from types import FrameType
 
 from healthcurve.config import Environment, get_settings
@@ -21,6 +22,12 @@ from healthcurve.operations import worker as queue_worker
 
 log = get_logger(__name__)
 _stop = threading.Event()
+
+# A seven-day Garmin reconciliation can legitimately take longer than the generic
+# queue lease while the provider returns dense intraday samples. Keep this lease
+# bounded, but long enough that a successful import is not rolled back merely
+# because it crossed the five-minute default.
+GARMIN_SYNC_LEASE_DURATION = timedelta(minutes=30)
 
 
 def _handle_signal(signum: int, _frame: FrameType | None) -> None:
@@ -53,6 +60,7 @@ def main() -> int:
         poll_interval_s=settings.job_poll_interval_s,
         worker_id="garmin-worker",
         schedulers=(lambda session, now: schedule_garmin_sync(session, now, settings=settings),),
+        lease_duration=GARMIN_SYNC_LEASE_DURATION,
     )
     log.info("garmin worker stopped", outcome="clean")
     return 0

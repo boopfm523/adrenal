@@ -59,14 +59,20 @@ def event_table_args(tablename: str) -> tuple[Any, ...]:
             unique=True,
             postgresql_where=text("supersedes_id IS NOT NULL"),
         ),
-        # Provider imports are idempotent by (source, provider id, revision).
+        # Provider imports are idempotent at each position in a correction chain.
+        # A provider can legitimately publish A -> B -> A for the same external
+        # record.  The repeated A must be retained as a correction of B rather than
+        # colliding with the historical first A.  NULLS NOT DISTINCT keeps two
+        # initial imports (both with no superseded row) idempotent.
         Index(
             f"uq_{tablename}_provider_identity",
             "source_type",
             "provider_id",
             "source_revision",
+            "supersedes_id",
             unique=True,
             postgresql_where=text("provider_id IS NOT NULL"),
+            postgresql_nulls_not_distinct=True,
         ),
         Index(f"ix_{tablename}_occurred_at", "occurred_at"),
         # Every event table is a recorded fact (SAFE-01).
