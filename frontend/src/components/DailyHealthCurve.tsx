@@ -1,5 +1,5 @@
 import { Button, Checkbox, Group, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   BloodPressure,
@@ -698,6 +698,7 @@ interface DailyHealthCurveProps {
   onPreviousDay?: () => void;
   onNextDay?: () => void;
   nextDayDisabled?: boolean;
+  currentTime?: Date;
 }
 
 export function DailyHealthCurve({
@@ -707,6 +708,7 @@ export function DailyHealthCurve({
   onPreviousDay,
   onNextDay,
   nextDayDisabled = false,
+  currentTime,
 }: DailyHealthCurveProps): React.JSX.Element {
   const [localVisible, setLocalVisible] = useState(DEFAULT_VISIBLE);
   const visible = controlledVisible ?? localVisible;
@@ -718,6 +720,24 @@ export function DailyHealthCurve({
 
   const start = Date.parse(data.exposure.day_start);
   const end = Date.parse(data.exposure.day_end);
+  const [liveCurrentTime, setLiveCurrentTime] = useState(() => new Date());
+  useEffect(() => {
+    if (currentTime !== undefined) return undefined;
+    const timer = window.setInterval(() => { setLiveCurrentTime(new Date()); }, 60_000);
+    return () => { window.clearInterval(timer); };
+  }, [currentTime]);
+  const effectiveCurrentTime = currentTime ?? liveCurrentTime;
+  const currentTimeMillis = effectiveCurrentTime.getTime();
+  const showCurrentTime = localDate(currentTimeMillis, data.exposure.timezone) === data.exposure.date
+    && currentTimeMillis >= start
+    && currentTimeMillis <= end;
+  const currentTimeX = LEFT + (currentTimeMillis - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+  const currentTimeLabel = localClockTime(currentTimeMillis, data.exposure.timezone);
+  const currentTimeLabelWidth = 72;
+  const currentTimeLabelX = Math.max(
+    LEFT + 3,
+    Math.min(LEFT + PLOT_WIDTH - currentTimeLabelWidth - 3, currentTimeX - currentTimeLabelWidth / 2),
+  );
   const [cursorMinute, setCursorMinute] = useState(0);
   const [hoveringChart, setHoveringChart] = useState(false);
   const [touchSelected, setTouchSelected] = useState(false);
@@ -941,7 +961,7 @@ export function DailyHealthCurve({
       These are actual recorded facts and do not require a dose plan. The selected model supports only its listed medications, formulations, routes, amounts, and units{isWakeFreeCurve(data.exposure) ? ` (${supportedDoseDescription(data.exposure)})` : ""}; it does not invent exposure for an unsupported fact. Hollow diamond markers show the recorded administration times.
       <ul>{unmodeledDoses.map((dose) => <li key={dose.dose_event_id}><time dateTime={dose.occurred_at}>{experiencedTime(dose.occurred_at, data.exposure.timezone)}</time>: <strong>{dose.category === "stress" ? "Stress dose" : "Dose"} — {dose.medication_name} {formatMeasurement(dose.amount, dose.unit)}</strong> ({dose.route}; {doseExclusionReason(dose.exclusion_reason)})</li>)}</ul>
     </aside>}
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}</div>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}{showCurrentTime ? <span><i className="healthcurve-key healthcurve-key--current-time" aria-hidden="true" />Current local time · {currentTimeLabel}</span> : null}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
       <button type="button" className="button-secondary" aria-label="Zoom chart out" disabled={chartZoom === 1} onClick={() => { setChartZoom(chartZoom === 2 ? 1.5 : 1); }}>−</button>
@@ -949,8 +969,9 @@ export function DailyHealthCurve({
       <button type="button" className="button-secondary" aria-label="Zoom chart in" disabled={chartZoom === 2} onClick={() => { setChartZoom(chartZoom === 1 ? 1.5 : 2); }}>+</button>
     </div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.`}>
+      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.${showCurrentTime ? ` Current local time is marked at ${currentTimeLabel}; the shaded area is later today and does not represent missing or zero data.` : ""}`}>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
+        {showCurrentTime ? <rect data-current-time-future-region="true" className="healthcurve-future-region" x={currentTimeX} y={TOP} width={Math.max(0, LEFT + PLOT_WIDTH - currentTimeX)} height={PLOT_HEIGHT} aria-hidden="true" /> : null}
         {expectedPreWakeEnd === undefined || expectedPreWakeEnd <= start ? null : <g data-series="expected-pre-wake-gap">
           <rect className="healthcurve-expected-pre-wake" x={LEFT} y={TOP} width={Math.max(0, Math.min(PLOT_WIDTH, (expectedPreWakeEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH))} height={PLOT_HEIGHT} />
           <text className="healthcurve-expected-pre-wake-label" x={LEFT + 8} y={TOP + 47}>Expected oral pre-wake gap</text>
@@ -1035,6 +1056,11 @@ export function DailyHealthCurve({
           const y = TOP + PLOT_HEIGHT + 10 + index % 2 * 10;
           return <g key={symptom.id} className="healthcurve-unscored-symptom"><title>{experiencedTime(symptom.time, data.exposure.timezone)}: {symptom.label}; source {symptom.source}; marker is outside the severity scale</title><line className="healthcurve-unscored-symptom-line" x1={x} y1={TOP} x2={x} y2={TOP + PLOT_HEIGHT} /><polygon className="healthcurve-unscored-symptom-marker" points={`${(x - 5).toString()},${y.toString()} ${x.toString()},${(y - 5).toString()} ${(x + 5).toString()},${y.toString()} ${x.toString()},${(y + 5).toString()}`} /></g>;
         })}</g> : null}
+        {showCurrentTime ? <g data-current-time-marker="true" aria-label={`Current local time ${currentTimeLabel}`}>
+          <line className="healthcurve-current-time-line" x1={currentTimeX} y1={TOP} x2={currentTimeX} y2={TOP + PLOT_HEIGHT} />
+          <rect className="healthcurve-current-time-label-bg" x={currentTimeLabelX} y={TOP + 5} width={currentTimeLabelWidth} height="21" rx="4" />
+          <text className="healthcurve-current-time-label" x={currentTimeLabelX + currentTimeLabelWidth / 2} y={TOP + 19} textAnchor="middle">Now {currentTimeLabel}</text>
+        </g> : null}
         <line className="healthcurve-cursor" x1={cursorX} y1={TOP} x2={cursorX} y2={TOP + PLOT_HEIGHT} />
         <rect className="healthcurve-pointer-target" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT}
           onPointerEnter={(event) => { if (event.pointerType !== "touch") setHoveringChart(true); }}

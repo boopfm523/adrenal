@@ -973,6 +973,29 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll("path.healthcurve-series--heart_rate").length).toBeGreaterThan(0);
   });
 
+  it("marks current local time and shades only the later portion of today's chart", () => {
+    renderWithTheme(<DailyHealthCurve data={data()} currentTime={new Date("2026-03-08T17:00:00Z")} />);
+
+    const marker = document.querySelector('[data-current-time-marker="true"]');
+    expect(marker).not.toBeNull();
+    expect(marker).toHaveAccessibleName("Current local time 13:00");
+    const line = marker?.querySelector("line");
+    expect(Number(line?.getAttribute("x1"))).toBeCloseTo(74 + 12 / 23 * 862, 5);
+    const futureRegion = document.querySelector('[data-current-time-future-region="true"]');
+    expect(Number(futureRegion?.getAttribute("x"))).toBeCloseTo(74 + 12 / 23 * 862, 5);
+    expect(Number(futureRegion?.getAttribute("width"))).toBeCloseTo(11 / 23 * 862, 5);
+    expect(screen.getByRole("img")).toHaveAccessibleName(/shaded area is later today and does not represent missing or zero data/i);
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Current local time · 13:00");
+  });
+
+  it("does not show a current-time marker when reviewing another local date", () => {
+    renderWithTheme(<DailyHealthCurve data={data()} currentTime={new Date("2026-03-10T17:00:00Z")} />);
+
+    expect(document.querySelector('[data-current-time-marker="true"]')).toBeNull();
+    expect(document.querySelector('[data-current-time-future-region="true"]')).toBeNull();
+    expect(screen.getByLabelText("Overlay series legend")).not.toHaveTextContent("Current local time");
+  });
+
   it("shows close unscored symptoms as timed events without inventing severity", () => {
     renderWithTheme(<DailyHealthCurve data={data({ symptoms: [{
       id: "10000000-0000-4000-8000-000000000001",
