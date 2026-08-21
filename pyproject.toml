@@ -25,7 +25,7 @@ dependencies = [
     "garmin-fit-sdk==21.208.0",
     "playwright==1.62.0",
     "redis==8.1.0",
-    "garminconnect==0.3.9",
+    "garminconnect==0.3.11",
 ]
 
 [project.optional-dependencies]

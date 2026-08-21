@@ -10,7 +10,7 @@ selected-day review now needs those recorded observations beside the theoretical
 steroid-exposure curve. Daily aggregates cannot establish within-day timing, and an
 absent wearable sample must never be drawn as zero or silently interpolated.
 
-The pinned `garminconnect==0.3.9` implementation exposes the approved read-only,
+The pinned `garminconnect==0.3.11` implementation exposes the approved read-only,
 single-date methods. Structure-only probes from the isolated Garmin worker on
 2026-08-11 and 2026-08-15 verified
 their configured-account response contracts without emitting metric values, raw
@@ -38,6 +38,13 @@ maximum 31-day job window, at least 0.25 seconds between provider reads, bounded
 retries/backoff, and re-reading recent dates to discover late provider changes.
 
 ## Decision
+
+The dependency was re-audited and upgraded from 0.3.9 to 0.3.11 on 2026-08-21.
+The later release preserves the read methods named below while adding upstream
+hardening for authentication, token-file writes, token-store symlinks, request
+validation, bounded pagination, and sensitive logging. HealthCurve retains its
+own stricter token-store validation and narrow read-only adapter as defense in
+depth.
 
 1. Expand the narrow adapter allow-list to exactly `get_heart_rates`,
    `get_stress_data`, `get_respiration_data`, `get_hrv_data`, and `get_steps_data`, in
