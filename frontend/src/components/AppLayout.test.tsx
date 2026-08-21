@@ -69,6 +69,10 @@ describe("AppLayout responsive navigation", () => {
     expect(screen.queryByRole("button", { name: "Open navigation" })).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeVisible();
     expect(screen.getByRole("link", { name: "HealthCurve.ai home" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /Sick-day plan/ })).toHaveAttribute(
+      "href",
+      "/api/v1/private-documents/sick-day-plan",
+    );
   });
 
   it("uses the hamburger drawer on touch-first phone and tablet layouts", () => {
@@ -76,5 +80,6 @@ describe("AppLayout responsive navigation", () => {
     renderLayout();
 
     expect(screen.getByRole("button", { name: "Open navigation" })).toBeVisible();
+    expect(screen.getAllByRole("link", { name: /Sick-day plan/ })).not.toHaveLength(0);
   });
 });

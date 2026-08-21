@@ -46,6 +46,19 @@ function EmergencyLink(): React.JSX.Element {
   );
 }
 
+function SickDayLink(): React.JSX.Element {
+  return (
+    <a
+      className="sick-day-link"
+      href="/api/v1/private-documents/sick-day-plan"
+      target="_blank"
+      rel="noreferrer"
+    >
+      <span aria-hidden="true">PDF</span> Sick-day plan
+    </a>
+  );
+}
+
 export function AppLayout(): React.JSX.Element {
   const { session, signOut } = useAuth();
   const location = useLocation();
@@ -82,7 +95,10 @@ export function AppLayout(): React.JSX.Element {
           <Group h="100%" px="md" justify="space-between" wrap="nowrap">
             <Burger opened={mobileOpened} onClick={toggleMobile} aria-label={mobileOpened ? "Close navigation" : "Open navigation"} size="sm" />
             <Brand />
-            <EmergencyLink />
+            <Group className="mobile-safety-links" gap="xs" wrap="nowrap">
+              <SickDayLink />
+              <EmergencyLink />
+            </Group>
           </Group>
         </AppShell.Header>
       ) : null}
@@ -105,7 +121,10 @@ export function AppLayout(): React.JSX.Element {
         </AppShell.Section>
 
         <AppShell.Section className="sidebar-footer">
-          {!usesDrawerNavigation ? <Box><EmergencyLink /></Box> : null}
+          <Box className="sidebar-safety-links">
+            <SickDayLink />
+            {!usesDrawerNavigation ? <EmergencyLink /> : null}
+          </Box>
           <Text size="sm" fw={650} truncate>{session?.user.displayName ?? "Owner"}</Text>
           <Button variant="light" fullWidth onClick={() => { void signOut(); }}>Sign out</Button>
         </AppShell.Section>

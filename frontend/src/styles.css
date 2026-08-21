@@ -51,10 +51,19 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 .emergency-link { color: var(--hc-color-error); font-weight: 700; white-space: nowrap; }
 .emergency-link span { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 2px solid currentColor; border-radius: 50%; }
+.sick-day-link { color: var(--hc-color-brand-navy, #113f73); font-weight: 700; white-space: nowrap; }
+.sick-day-link span { display: inline-grid; min-width: 1.65rem; min-height: 1.25rem; place-items: center; border: 1px solid currentColor; border-radius: 0.2rem; font-size: 0.55rem; line-height: 1; }
+.sidebar-safety-links { display: grid; gap: var(--mantine-spacing-xs); }
 .mobile-header { border-color: var(--hc-color-border); background: var(--hc-color-surface); }
 .mobile-header .brand-logo { width: 8.75rem; height: 2.35rem; }
-.mobile-header .emergency-link { font-size: var(--mantine-font-size-xs); }
+.mobile-header .emergency-link, .mobile-header .sick-day-link { font-size: var(--mantine-font-size-xs); }
 .mobile-header .emergency-link span { width: 1.25rem; height: 1.25rem; }
+.mobile-header .sick-day-link span { display: none; }
+@media (max-width: 35em) {
+  .mobile-header .brand-logo { width: 7.5rem; }
+  .mobile-header .sick-day-link { font-size: 0; }
+  .mobile-header .sick-day-link span { display: inline-grid; font-size: 0.5rem; }
+}
 .sidebar { border-color: var(--hc-color-border); background: var(--hc-color-surface); }
 .sidebar-brand { padding: var(--mantine-spacing-lg) var(--mantine-spacing-md); border-bottom: 1px solid var(--hc-color-border); }
 .sidebar-navigation { padding: var(--mantine-spacing-sm); }

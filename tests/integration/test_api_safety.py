@@ -651,6 +651,7 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/labs/documents",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000",
         "/api/v1/labs/documents/00000000-0000-0000-0000-000000000000/pages/1/preview",
+        "/api/v1/private-documents/sick-day-plan",
         "/api/v1/reports",
         "/api/v1/context-events",
         "/api/v1/blood-pressure",
@@ -660,6 +661,32 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         "/api/v1/analytics/daily-patterns.csv?date_from=2026-08-11&date_to=2026-08-11&timezone=UTC",
     ):
         assert client.get(path).status_code == 401, path
+
+
+def test_private_sick_day_plan_is_owner_only_and_not_cached(
+    client: TestClient,
+    logged_in: dict[str, str],
+    settings: Settings,
+) -> None:
+    del logged_in
+    missing = client.get("/api/v1/private-documents/sick-day-plan")
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "sick_day_plan_not_available"
+
+    path = settings.uploads_dir / "reference" / "sick-day-plan.pdf"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    synthetic_pdf = b"%PDF-1.4\n% synthetic private reference\n%%EOF\n"
+    path.write_bytes(synthetic_pdf)
+
+    response = client.get("/api/v1/private-documents/sick-day-plan")
+
+    assert response.status_code == 200
+    assert response.content == synthetic_pdf
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["content-security-policy"] == "sandbox"
+    assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_anonymous_emergency_page_is_useful_without_disclosing_owner_data(
