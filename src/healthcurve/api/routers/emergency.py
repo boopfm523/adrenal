@@ -15,7 +15,9 @@ Injection logging posts to a plain HTML form so it works without scripting too.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from html import escape
 
 from fastapi import APIRouter, Form, HTTPException, status
@@ -36,6 +38,7 @@ from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity import service as auth
 from healthcurve.medications.models import (
     ApprovedInstruction,
+    DoseUnit,
     InstructionCategory,
     Medication,
     RegimenStatus,
@@ -43,6 +46,10 @@ from healthcurve.medications.models import (
 )
 
 router = APIRouter(tags=["emergency"])
+
+_EMERGENCY_INJECTION_NAME = "Hydrocortisone Inj Dose"
+_EMERGENCY_INJECTION_NORMALIZED_NAME = "hydrocortisone inj dose"
+_EMERGENCY_INJECTION_AMOUNT = Decimal("100")
 
 # Inline CSS: an external stylesheet is one more thing that can fail to load.
 _STYLE = """
@@ -183,19 +190,23 @@ def emergency_page(
 def _injection_form(session: DbSession, owner: CurrentOwner, *, csrf_token: str) -> str:
     medications = list(
         session.scalars(
-            select(Medication).where(Medication.owner_id == owner.id).order_by(Medication.name)
+            select(Medication).where(
+                Medication.owner_id == owner.id,
+                Medication.normalized_name == _EMERGENCY_INJECTION_NORMALIZED_NAME,
+                Medication.strength == _EMERGENCY_INJECTION_AMOUNT,
+                Medication.strength_unit == DoseUnit.MG.value,
+            )
         )
     )
     if not medications:
         return (
-            "<div class='none'><h2>Log an injection</h2><p>Add a medication first so "
-            "an injection can be recorded against it.</p></div>"
+            "<div class='none'><h2>Log an emergency injection</h2><p>The "
+            f"{_EMERGENCY_INJECTION_NAME} 100 mg formulation is not configured. "
+            "Add that exact emergency formulation before logging an injection.</p></div>"
         )
 
     options = "".join(
-        f"<option value='{m.id}'>{escape(m.name)}"
-        f"{f' {m.strength}{escape(m.strength_unit or "")}' if m.strength else ''}</option>"
-        for m in medications
+        f"<option value='{m.id}'>{escape(m.name)} 100 mg</option>" for m in medications
     )
     return (
         "<section class='card'><h2>Log an emergency injection</h2>"
@@ -204,7 +215,7 @@ def _injection_form(session: DbSession, owner: CurrentOwner, *, csrf_token: str)
         f"<input type='hidden' name='csrf_token' value='{escape(csrf_token)}'>"
         f"<label for='m'>Medication</label><select id='m' name='medication_id'>{options}</select>"
         "<label for='a'>Amount (mg)</label>"
-        "<input id='a' name='amount' type='number' step='0.5' min='0.5' value='100' required>"
+        "<input id='a' name='amount' type='number' value='100' readonly required>"
         "<label for='s'>Injection site (optional)</label>"
         "<input id='s' name='injection_site' placeholder='outer thigh'>"
         "<label for='b'>Given by (optional)</label>"
@@ -230,17 +241,28 @@ def log_injection_form(
     Uses the moment of submission as the event time -- in an emergency, asking the
     owner to enter a timestamp is the wrong trade. It can be corrected later (SAFE-08).
     """
-    import uuid as _uuid
-    from decimal import Decimal
-
     if not auth.verify_csrf(auth_session, csrf_token):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="missing or invalid CSRF token",
         )
 
-    medication = session.get(Medication, _uuid.UUID(medication_id))
-    if medication is None or medication.owner_id != owner.id:
+    try:
+        parsed_medication_id = uuid.UUID(medication_id)
+        parsed_amount = Decimal(amount)
+    except (ValueError, InvalidOperation):
+        return RedirectResponse("/emergency", status_code=status.HTTP_303_SEE_OTHER)
+
+    medication = session.scalar(
+        select(Medication).where(
+            Medication.id == parsed_medication_id,
+            Medication.owner_id == owner.id,
+            Medication.normalized_name == _EMERGENCY_INJECTION_NORMALIZED_NAME,
+            Medication.strength == _EMERGENCY_INJECTION_AMOUNT,
+            Medication.strength_unit == DoseUnit.MG.value,
+        )
+    )
+    if medication is None or parsed_amount != _EMERGENCY_INJECTION_AMOUNT:
         return RedirectResponse("/emergency", status_code=status.HTTP_303_SEE_OTHER)
 
     now = datetime.now(UTC)
@@ -252,9 +274,9 @@ def log_injection_form(
         source_type=SourceType.WEB,
         confirmation_state=ConfirmationState.DIRECT,
         medication_id=medication.id,
-        amount=Decimal(amount),
-        unit="mg",
-        route="intramuscular",
+        amount=_EMERGENCY_INJECTION_AMOUNT,
+        unit=DoseUnit.MG.value,
+        route=medication.default_route.value,
         injection_site=injection_site or None,
         injected_by=injected_by or None,
     )

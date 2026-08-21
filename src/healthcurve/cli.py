@@ -143,8 +143,8 @@ medications:
     default_unit: mg
     default_route: oral
 
-  # Needed for /injection and the emergency page. Must have route intramuscular.
-  - name: Hydrocortisone sodium succinate
+  # Exact 100 mg emergency-page formulation. Must have route intramuscular.
+  - name: Hydrocortisone Inj Dose
     formulation: injection
     strength: 100
     strength_unit: mg

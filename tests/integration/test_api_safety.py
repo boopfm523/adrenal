@@ -8110,7 +8110,20 @@ def test_owner_recovery_preserves_all_non_identity_tables_and_revokes_sessions(
 def test_emergency_page_renders_without_ai_or_javascript(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:
-    _a_medication(client, logged_in)
+    emergency_medication_id = _an_emergency_medication(client, logged_in)
+    unrelated = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Fludrocortisone",
+            "formulation": "tablet",
+            "strength": "0.1",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "oral",
+        },
+        headers=logged_in,
+    )
+    assert unrelated.status_code == 201, unrelated.text
     response = client.get("/emergency")
     assert response.status_code == 200
     body = response.text
@@ -8118,13 +8131,19 @@ def test_emergency_page_renders_without_ai_or_javascript(
     assert "emergency services" in body.lower()
     assert response.headers["cache-control"] == "no-store"
     assert f"name='csrf_token' value='{logged_in[auth.CSRF_HEADER_NAME]}'" in body
+    assert body.count("<option") == 1
+    assert f"value='{emergency_medication_id}'" in body
+    assert "Hydrocortisone Inj Dose 100 mg" in body
+    assert "Fludrocortisone" not in body
+    assert "Hydrocortisone sodium succinate" not in body
+    assert "value='100' readonly" in body
 
 
 @pytest.mark.safety("SAFE-21")
 def test_emergency_injection_form_rejects_cross_session_and_missing_csrf(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
-    medication_id = _a_medication(client, logged_in)
+    medication_id = _an_emergency_medication(client, logged_in)
     form = {"medication_id": medication_id, "amount": "100"}
 
     with Session(engine) as session:
@@ -8173,6 +8192,43 @@ def test_emergency_injection_form_rejects_cross_session_and_missing_csrf(
                 )
             )
             == audit_count_before
+        )
+
+    unrelated = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Hydrocortisone",
+            "formulation": "tablet",
+            "strength": "10",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "oral",
+        },
+        headers={**logged_in, auth.CSRF_HEADER_NAME: second_csrf},
+    )
+    assert unrelated.status_code == 201, unrelated.text
+    wrong_medication = client.post(
+        "/emergency/injection",
+        data={
+            "medication_id": unrelated.json()["id"],
+            "amount": "100",
+            "csrf_token": second_csrf,
+        },
+        follow_redirects=False,
+    )
+    wrong_amount = client.post(
+        "/emergency/injection",
+        data={**form, "amount": "50", "csrf_token": second_csrf},
+        follow_redirects=False,
+    )
+    assert wrong_medication.status_code == 303
+    assert wrong_medication.headers["location"] == "/emergency"
+    assert wrong_amount.status_code == 303
+    assert wrong_amount.headers["location"] == "/emergency"
+
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(EmergencyInjectionEvent)) == (
+            event_count_before
         )
 
     valid = client.post(
@@ -8355,6 +8411,28 @@ def _a_medication(client: TestClient, headers: dict[str, str]) -> str:
         json={"name": "Hydrocortisone", "default_unit": "mg", "default_route": "oral"},
         headers=headers,
     )
+    return created.json()["id"]
+
+
+def _an_emergency_medication(client: TestClient, headers: dict[str, str]) -> str:
+    for medication in client.get("/api/v1/medications").json():
+        if medication["name"] == "Hydrocortisone Inj Dose" and Decimal(
+            medication["strength"]
+        ) == Decimal("100"):
+            return medication["id"]
+    created = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Hydrocortisone Inj Dose",
+            "formulation": "injection",
+            "strength": "100",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "intramuscular",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
     return created.json()["id"]
 
 
