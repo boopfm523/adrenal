@@ -784,6 +784,13 @@ export function getGarminStatus(): Promise<GarminStatus> {
   return apiRequest<GarminStatus>("/integrations/garmin/status");
 }
 
+export function updateGarminSettings(syncLookbackDays: number): Promise<{ sync_lookback_days: number }> {
+  return apiRequest<{ sync_lookback_days: number }>("/integrations/garmin/settings", {
+    method: "PATCH",
+    body: JSON.stringify({ sync_lookback_days: syncLookbackDays }),
+  });
+}
+
 export function getGarminRecords(filters: HealthDataFilters, page = 1): Promise<GarminRecords> {
   return apiRequest<GarminRecords>(`/integrations/garmin/records?${healthDataQuery(filters, page)}`);
 }

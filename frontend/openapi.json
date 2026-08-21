@@ -4074,6 +4074,34 @@
         "title": "GarminRecordsOut",
         "type": "object"
       },
+      "GarminSettingsIn": {
+        "properties": {
+          "sync_lookback_days": {
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Sync Lookback Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sync_lookback_days"
+        ],
+        "title": "GarminSettingsIn",
+        "type": "object"
+      },
+      "GarminSettingsOut": {
+        "properties": {
+          "sync_lookback_days": {
+            "title": "Sync Lookback Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sync_lookback_days"
+        ],
+        "title": "GarminSettingsOut",
+        "type": "object"
+      },
       "GarminSleepIntervalOut": {
         "properties": {
           "ended_at": {
@@ -4194,12 +4222,17 @@
           "state": {
             "title": "State",
             "type": "string"
+          },
+          "sync_lookback_days": {
+            "title": "Sync Lookback Days",
+            "type": "integer"
           }
         },
         "required": [
           "configured",
           "state",
-          "automatic_sync_hour_local"
+          "automatic_sync_hour_local",
+          "sync_lookback_days"
         ],
         "title": "GarminStatusOut",
         "type": "object"
@@ -15220,6 +15253,81 @@
           }
         },
         "summary": "Samples",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/integrations/garmin/settings": {
+      "patch": {
+        "operationId": "update_settings_api_v1_integrations_garmin_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GarminSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Settings",
         "tags": [
           "garmin"
         ]

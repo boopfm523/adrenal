@@ -104,7 +104,7 @@ commit, Bead, screenshot, or chat.
    HC_GARMIN_EMAIL=your-garmin-login-email
    HC_GARMIN_PASSWORD=your-garmin-password
    HC_GARMIN_TOKEN_STORE_HOST=/Users/jeff/.config/healthcurve/garmin
-   HC_GARMIN_SYNC_LOOKBACK_DAYS=7
+   HC_GARMIN_SYNC_LOOKBACK_DAYS=3
    ```
 
 3. Build the code and apply the migration before connecting:
@@ -167,10 +167,12 @@ The worker queues one bounded window per owner and local calendar day at or afte
 configured owner-local hour (`HC_GARMIN_SYNC_HOUR_LOCAL`, 09:00 by default), with a
 maximum of 31 days per job. This gives the watch and phone time to finish their own
 Garmin Connect sync; manual HealthCurve sync remains available before that hour. The
-initial window uses the configured lookback. After a successful
-checkpoint, the daily scheduler deliberately re-reads the checkpoint day and the two
-preceding days, bounded by that lookback, so late or corrected Garmin values are still
-detected. Reads are rate-spaced and durable jobs have bounded retries. Stable provider
+owner-selected lookback defaults to three days and can be changed from 1 to 31 days on
+Settings. Both automatic sync and **Sync Garmin now** use that saved window. This lets
+an owner temporarily select seven days for a catch-up sync and then restore three days
+for ordinary operation. Every scheduled window re-reads the full saved lookback, so
+late or corrected Garmin values within that window are still detected. Reads are
+rate-spaced and durable jobs have bounded retries. Stable provider
 identifiers and revision hashes make overlapping windows idempotent. If Garmin later
 changes a value, HealthCurve creates a correction linked to the original row; it never
 silently rewrites history.

@@ -2372,6 +2372,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     status_response = client.get("/api/v1/integrations/garmin/status")
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "connected"
+    assert status_response.json()["sync_lookback_days"] == 3
     assert status_response.json()["last_success_at"] is not None
     assert status_response.json()["capabilities"]["hrv_daily_average"] == "unsupported"
     assert status_response.json()["capabilities"]["hrv_nightly_average"] == "available"
@@ -2420,6 +2421,21 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     )
     assert "credentials" not in garmin_export
 
+    saved_window = client.patch(
+        "/api/v1/integrations/garmin/settings",
+        json={"sync_lookback_days": 7},
+        headers=headers,
+    )
+    assert saved_window.status_code == 200, saved_window.text
+    assert saved_window.json() == {"sync_lookback_days": 7}
+    assert client.get("/api/v1/integrations/garmin/status").json()["sync_lookback_days"] == 7
+    invalid_window = client.patch(
+        "/api/v1/integrations/garmin/settings",
+        json={"sync_lookback_days": 0},
+        headers=headers,
+    )
+    assert invalid_window.status_code == 422
+
     disabled_sync = client.post(
         "/api/v1/integrations/garmin/sync",
         headers={**headers, "Idempotency-Key": "synthetic-disabled"},
@@ -2427,6 +2443,16 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert disabled_sync.status_code == 409
     settings.garmin_enabled = True
     try:
+        saved_window_sync = client.post(
+            "/api/v1/integrations/garmin/sync",
+            headers={**headers, "Idempotency-Key": "synthetic-saved-window"},
+        )
+        assert saved_window_sync.status_code == 202, saved_window_sync.text
+        saved_window_body = saved_window_sync.json()
+        assert (
+            date.fromisoformat(saved_window_body["requested_end_date"])
+            - date.fromisoformat(saved_window_body["requested_start_date"])
+        ).days == 6
         future_sync = client.post(
             "/api/v1/integrations/garmin/sync?date_from=2030-01-01&date_to=2030-01-02",
             headers={**headers, "Idempotency-Key": "synthetic-future"},

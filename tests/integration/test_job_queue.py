@@ -145,7 +145,11 @@ def factory(engine: Engine) -> Iterator[sessionmaker[Session]]:
 
 
 def _connected_garmin_owner(
-    factory: sessionmaker[Session], *, email: str, timezone: str = "UTC"
+    factory: sessionmaker[Session],
+    *,
+    email: str,
+    timezone: str = "UTC",
+    sync_lookback_days: int = 3,
 ) -> uuid.UUID:
     with factory() as session, session.begin():
         owner = Owner(
@@ -160,6 +164,7 @@ def _connected_garmin_owner(
                 owner_id=owner.id,
                 state=GarminConnectionState.CONNECTED,
                 connected_at=NOW,
+                sync_lookback_days=sync_lookback_days,
                 capabilities={},
                 client_version="synthetic",
             )
@@ -393,8 +398,10 @@ def test_worker_rolls_back_handler_writes_before_recording_failure(
 def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
     factory: sessionmaker[Session],
 ) -> None:
-    owner_id = _connected_garmin_owner(factory, email="garmin-coalescing@example.test")
-    settings = Settings.model_validate({"garmin_enabled": True, "garmin_sync_lookback_days": 7})
+    owner_id = _connected_garmin_owner(
+        factory, email="garmin-coalescing@example.test", sync_lookback_days=7
+    )
+    settings = Settings.model_validate({"garmin_enabled": True})
     client = _SyntheticGarminClient()
     initial_start = NOW.date() - timedelta(days=6)
 
@@ -440,9 +447,8 @@ def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
         stored = session.get(Job, manual.job.id)
         assert stored is not None and stored.status is JobStatus.COMPLETED
 
-    # A successful broad read advances the checkpoint and narrows the next poll's
-    # overlap window. That narrower window is already covered, even after the manual
-    # cooldown has expired, so the scheduler must not perform a second same-day read.
+    # The completed provider read covers today's saved owner window, so the scheduler
+    # must not perform a second same-day read after the manual cooldown expires.
     with factory() as session, session.begin():
         schedule_garmin_sync(session, NOW + timedelta(minutes=31), settings=settings)
     with factory() as session:
@@ -459,7 +465,7 @@ def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
         }
     assert windows == {
         (initial_start.isoformat(), NOW.date().isoformat()),
-        ((NOW.date() - timedelta(days=2)).isoformat(), next_day.date().isoformat()),
+        ((next_day.date() - timedelta(days=6)).isoformat(), next_day.date().isoformat()),
     }
     with factory() as session:
         scheduled = session.scalar(

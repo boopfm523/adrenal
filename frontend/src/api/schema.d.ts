@@ -683,6 +683,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/garmin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Settings */
+        patch: operations["update_settings_api_v1_integrations_garmin_settings_patch"];
+        trace?: never;
+    };
     "/api/v1/integrations/garmin/sleep": {
         parameters: {
             query?: never;
@@ -2932,6 +2949,16 @@ export interface components {
             /** Records */
             records: components["schemas"]["GarminRecordOut"][];
         };
+        /** GarminSettingsIn */
+        GarminSettingsIn: {
+            /** Sync Lookback Days */
+            sync_lookback_days: number;
+        };
+        /** GarminSettingsOut */
+        GarminSettingsOut: {
+            /** Sync Lookback Days */
+            sync_lookback_days: number;
+        };
         /** GarminSleepIntervalOut */
         GarminSleepIntervalOut: {
             /**
@@ -2975,6 +3002,8 @@ export interface components {
             latest_sync_warning_codes?: string[];
             /** State */
             state: string;
+            /** Sync Lookback Days */
+            sync_lookback_days: number;
         };
         /**
          * GarminSyncDisposition
@@ -7022,6 +7051,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GarminRecordsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_settings_api_v1_integrations_garmin_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GarminSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GarminSettingsOut"];
                 };
             };
             /** @description Validation Error */

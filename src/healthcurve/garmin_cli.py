@@ -60,6 +60,7 @@ def connect() -> int:
                 owner_id=owner_id,
                 state=GarminConnectionState.CONNECTED,
                 connected_at=now,
+                sync_lookback_days=settings.garmin_sync_lookback_days,
                 capabilities={},
                 client_version=version("garminconnect"),
             )

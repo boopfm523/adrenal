@@ -58,6 +58,7 @@ class GarminStatusOut(BaseModel):
     configured: bool
     state: str
     automatic_sync_hour_local: int
+    sync_lookback_days: int
     last_success_at: datetime | None = None
     checkpoint_date: date | None = None
     capabilities: dict[str, str] = Field(default_factory=dict)
@@ -126,6 +127,14 @@ class GarminSyncRequestOut(BaseModel):
     cooldown_until: datetime | None = None
 
 
+class GarminSettingsIn(BaseModel):
+    sync_lookback_days: int = Field(ge=1, le=31)
+
+
+class GarminSettingsOut(BaseModel):
+    sync_lookback_days: int
+
+
 @router.get("/status", response_model=GarminStatusOut)
 def connection_status(
     session: DbSession, owner: CurrentOwner, settings: AppSettings
@@ -143,6 +152,11 @@ def connection_status(
         configured=settings.garmin_enabled,
         state="not_connected" if connection is None else connection.state.value,
         automatic_sync_hour_local=settings.garmin_sync_hour_local,
+        sync_lookback_days=(
+            settings.garmin_sync_lookback_days
+            if connection is None
+            else connection.sync_lookback_days
+        ),
         last_success_at=None if connection is None else connection.last_success_at,
         checkpoint_date=None if connection is None else connection.checkpoint_date,
         capabilities={} if connection is None else connection.capabilities,
@@ -152,6 +166,24 @@ def connection_status(
         latest_sync_origin=None if latest is None else latest.origin,
         latest_sync_warning_codes=[] if latest is None else latest.warning_codes,
     )
+
+
+@router.patch(
+    "/settings",
+    dependencies=[Depends(require_csrf)],
+    response_model=GarminSettingsOut,
+)
+def update_settings(
+    payload: GarminSettingsIn, session: DbSession, owner: CurrentOwner
+) -> GarminSettingsOut:
+    connection = session.scalar(
+        select(GarminConnection).where(GarminConnection.owner_id == owner.id).with_for_update()
+    )
+    if connection is None:
+        raise HTTPException(status_code=409, detail={"code": "garmin_connection_not_enabled"})
+    connection.sync_lookback_days = payload.sync_lookback_days
+    session.flush()
+    return GarminSettingsOut(sync_lookback_days=connection.sync_lookback_days)
 
 
 @router.post(
@@ -180,7 +212,7 @@ def request_sync(
         raise HTTPException(status_code=409, detail={"code": "garmin_connection_not_enabled"})
     local_today = datetime.now(ZoneInfo(owner.default_timezone)).date()
     end = date_to or local_today
-    start = date_from or (end - timedelta(days=settings.garmin_sync_lookback_days - 1))
+    start = date_from or (end - timedelta(days=connection.sync_lookback_days - 1))
     if end > local_today:
         raise HTTPException(status_code=422, detail={"code": "garmin_sync_future_window"})
     try:

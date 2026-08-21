@@ -34,7 +34,6 @@ from healthcurve.operations.worker import JobHandler
 
 GARMIN_SYNC_TASK = "garmin.connect.sync"
 GARMIN_DISCONNECT_TASK = "garmin.connect.disconnect"
-GARMIN_RECONCILIATION_OVERLAP_DAYS = 2
 GARMIN_COMPLETED_WINDOW_COOLDOWN = timedelta(minutes=30)
 
 
@@ -169,12 +168,7 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
         if local_now.time() < time(hour=settings.garmin_sync_hour_local):
             continue
         local_day = local_now.date()
-        first = local_day - timedelta(days=settings.garmin_sync_lookback_days - 1)
-        if connection.checkpoint_date is not None:
-            first = max(
-                first,
-                connection.checkpoint_date - timedelta(days=GARMIN_RECONCILIATION_OVERLAP_DAYS),
-            )
+        first = local_day - timedelta(days=connection.sync_lookback_days - 1)
         daily_key = f"scheduled:{owner.id}:{local_day.isoformat()}"
         already_scheduled = session.scalar(
             select(Job.id).where(

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Checkbox, Group, Paper, PasswordInput, Stack, Text, Title } from "@mantine/core";
+import { Alert, Button, Checkbox, Group, NumberInput, Paper, PasswordInput, Stack, Text, Title } from "@mantine/core";
 import { useRef, useState } from "react";
 
 import {
@@ -11,6 +11,7 @@ import {
   requestGarminSync,
   requestPrivateExport,
   revokeAllSessions,
+  updateGarminSettings,
   type GarminSyncRequest,
 } from "../api/client";
 import { sessionStore } from "../api/session";
@@ -69,6 +70,7 @@ interface GarminStatusPolling {
 function GarminControl(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [deleteData, setDeleteData] = useState(true);
+  const [syncLookbackDays, setSyncLookbackDays] = useState<number | null>(null);
   const [isStatusPolling, setIsStatusPolling] = useState(false);
   const statusPolling = useRef<GarminStatusPolling | null>(null);
   const status = useQuery({
@@ -102,6 +104,7 @@ function GarminControl(): React.JSX.Element {
       return GARMIN_STATUS_POLL_MS;
     },
   });
+  const effectiveSyncLookbackDays = syncLookbackDays ?? status.data?.sync_lookback_days ?? 3;
   const preview = useQuery({
     queryKey: ["garmin-disconnect-preview"],
     queryFn: getGarminDisconnectPreview,
@@ -120,6 +123,13 @@ function GarminControl(): React.JSX.Element {
         statusPolling.current = null;
         setIsStatusPolling(false);
       }
+      await queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
+    },
+  });
+  const saveSettings = useMutation({
+    mutationFn: () => updateGarminSettings(effectiveSyncLookbackDays),
+    onSuccess: async (result) => {
+      setSyncLookbackDays(result.sync_lookback_days);
       await queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
     },
   });
@@ -166,7 +176,23 @@ function GarminControl(): React.JSX.Element {
         <Button type="button" variant="outline" loading={status.isFetching} onClick={() => { void status.refetch(); }}>Check Garmin connection again</Button>
       </Stack>
     </Alert> : null}
-    <p>Automatic sync runs once per local day at or after {automaticHour}:00 in your local timezone, giving your watch time to sync with Garmin Connect first. Manual sync remains available anytime. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
+    <Stack gap="xs" mt="md">
+      <NumberInput
+        label="Garmin sync lookback (days)"
+        description="Used by automatic sync and Sync Garmin now. Temporarily increase it before a catch-up sync, then save your preferred value again afterward."
+        min={1}
+        max={31}
+        allowDecimal={false}
+        clampBehavior="strict"
+        value={effectiveSyncLookbackDays}
+        onChange={(value) => { if (typeof value === "number") setSyncLookbackDays(value); }}
+        w={220}
+      />
+      <Button type="button" variant="outline" loading={saveSettings.isPending} disabled={!canSync || effectiveSyncLookbackDays === status.data?.sync_lookback_days} onClick={() => { saveSettings.mutate(); }} w="fit-content">Save sync window</Button>
+      {saveSettings.isSuccess ? <Alert color="green" role="status">Garmin sync window saved as {saveSettings.data.sync_lookback_days} days.</Alert> : null}
+      {saveSettings.isError ? <Alert color="red" role="alert">The Garmin sync window was not saved. Enter 1 through 31 days.</Alert> : null}
+    </Stack>
+    <p>Automatic sync runs once per local day at or after {automaticHour}:00 in your local timezone, giving your watch time to sync with Garmin Connect first. Manual sync remains available anytime. The saved lookback includes today. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
     <Group mt="md">
       <Button type="button" loading={sync.isPending} disabled={!canSync} onClick={() => { sync.mutate(false); }}>Sync Garmin now</Button>
       <Button type="button" variant="outline" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</Button>

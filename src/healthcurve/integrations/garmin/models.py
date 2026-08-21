@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     LargeBinary,
     Numeric,
     String,
@@ -83,11 +84,20 @@ class GarminConnection(OpsBase):
     disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     checkpoint_date: Mapped[date | None] = mapped_column(Date)
+    sync_lookback_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default=text("3")
+    )
     capabilities: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False, default=dict)
     client_version: Mapped[str] = mapped_column(String(32), nullable=False)
     last_error_code: Mapped[str | None] = mapped_column(String(64))
 
-    __table_args__ = (OPS_SCHEMA,)
+    __table_args__ = (
+        CheckConstraint(
+            "sync_lookback_days >= 1 AND sync_lookback_days <= 31",
+            name="ck_garmin_connection_sync_lookback_days",
+        ),
+        OPS_SCHEMA,
+    )
 
 
 class GarminSyncRun(OpsBase):

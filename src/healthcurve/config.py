@@ -150,7 +150,7 @@ class Settings(BaseSettings):
     garmin_email: SecretStr | None = None
     garmin_password: SecretStr | None = None
     garmin_token_store: Path | None = None
-    garmin_sync_lookback_days: int = Field(default=7, ge=1, le=31)
+    garmin_sync_lookback_days: int = Field(default=3, ge=1, le=31)
     garmin_sync_hour_local: int = Field(default=9, ge=0, le=23)
 
     # --- Durable worker queue (ADR-0004) ---
