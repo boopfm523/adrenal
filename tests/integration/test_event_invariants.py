@@ -322,12 +322,14 @@ def test_a_revised_provider_record_is_a_separate_row(session: Session, owner_id:
 
 def test_provider_can_return_to_an_earlier_revision(session: Session, owner_id: uuid.UUID) -> None:
     """Provider state A -> B -> A remains a complete, linear correction history."""
+    first_recorded_at = datetime(2026, 1, 15, 10, 0, tzinfo=UTC)
     first = make_symptom(
         owner_id,
         source_type=SourceType.PROVIDER,
         confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
         provider_id="garmin-returned-state",
         source_revision="rev-a",
+        recorded_at=first_recorded_at,
     )
     session.add(first)
     session.flush()
@@ -339,6 +341,7 @@ def test_provider_can_return_to_an_earlier_revision(session: Session, owner_id: 
         provider_id="garmin-returned-state",
         source_revision="rev-b",
         supersedes_id=first.id,
+        recorded_at=first_recorded_at + timedelta(seconds=1),
     )
     session.add(second)
     session.flush()
@@ -350,6 +353,7 @@ def test_provider_can_return_to_an_earlier_revision(session: Session, owner_id: 
         provider_id="garmin-returned-state",
         source_revision="rev-a",
         supersedes_id=second.id,
+        recorded_at=first_recorded_at + timedelta(seconds=2),
     )
     session.add(third)
     session.flush()

@@ -492,14 +492,13 @@ def test_garmin_scheduler_waits_until_configured_owner_local_hour_across_dst(
     with factory() as session, session.begin():
         schedule_garmin_sync(session, before, settings=settings)
     with factory() as session:
-        assert session.scalar(select(Job).where(Job.task == GARMIN_SYNC_TASK)) is None
+        scheduled_key = f"scheduled:{owner_id}:2026-03-08"
+        assert session.scalar(select(Job).where(Job.idempotency_key == scheduled_key)) is None
 
     with factory() as session, session.begin():
         schedule_garmin_sync(session, at_hour, settings=settings)
     with factory() as session:
-        scheduled = session.scalar(
-            select(Job).where(Job.idempotency_key == f"scheduled:{owner_id}:2026-03-08")
-        )
+        scheduled = session.scalar(select(Job).where(Job.idempotency_key == scheduled_key))
         assert scheduled is not None
         assert scheduled.payload["timezone"] == "America/New_York"
 
