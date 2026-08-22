@@ -151,8 +151,8 @@ export function AnalyticsPage(): React.JSX.Element {
   const dayFilter = selectedHealthCurveDay(searchParams, profileTimezone);
   const [curveVisibility, setCurveVisibility] = useState<HealthCurveVisibility>({
     exposure: true,
-    stress: true,
-    heart_rate: false,
+    stress: false,
+    heart_rate: true,
     hrv: false,
     respiration_rate: false,
     steps: false,

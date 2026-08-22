@@ -84,7 +84,8 @@ describe("Analytics page", () => {
     expect(within(context).getByText("Exposure model").parentElement).toHaveTextContent("hc-exposure-v1");
     fireEvent.click(screen.getByText("HealthCurve context and limits"));
     expect(context).toHaveAttribute("open");
-    expect(screen.getByLabelText("Garmin stress")).toBeChecked();
+    expect(screen.getByLabelText("Heart rate")).toBeChecked();
+    expect(screen.getByLabelText("Garmin stress")).not.toBeChecked();
     const seriesSummary = screen.getByLabelText("Series sample counts");
     expect(within(seriesSummary).getByRole("heading", { name: /Garmin stress/ }).parentElement).toHaveTextContent("Stress: 28");
     expect(within(seriesSummary).getByRole("heading", { name: /Symptoms/ }).parentElement).toHaveTextContent("Dizzy · 7/10");
@@ -131,7 +132,7 @@ describe("Analytics page", () => {
 
     fireEvent.click(screen.getByLabelText("Garmin stress"));
     expect(within(seriesSummary).getByRole("heading", { name: /Garmin stress/ })).toBeVisible();
-    expect(document.querySelectorAll("[data-series='stress']")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-series='stress']")).toHaveLength(1);
 
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-07-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Calculate metrics" }));

@@ -110,8 +110,8 @@ const PRE_EVENT_WINDOW_MILLISECONDS = 60 * 60 * 1_000;
 
 const DEFAULT_VISIBLE: HealthCurveVisibility = {
   exposure: true,
-  stress: true,
-  heart_rate: false,
+  stress: false,
+  heart_rate: true,
   hrv: false,
   respiration_rate: false,
   steps: false,
@@ -1025,7 +1025,7 @@ export function DailyHealthCurve({
       <div className="healthcurve-context-content">
         <dl className="metric-metadata healthcurve-context-model"><div><dt>Exposure model</dt><dd>{exposureModelVersion(data.exposure)}</dd></div></dl>
         <aside className="association-caution"><strong>Association does not establish causation.</strong> These summaries describe the selected records. They do not determine why a symptom, dose, or episode occurred and are not medical advice.</aside>
-        <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin stress so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. {isWakeFreeCurve(data.exposure) ? "The modeled and wake-anchored reference cortisol series share one absolute serum-free-cortisol axis in nmol/L and are never independently normalized. Other enabled health series use a separate relative 0–100 display position." : "Every enabled series uses a relative 0–100 display scale."} Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
+        <aside className="association-caution"><strong>Focused comparison on one time axis.</strong> The graph starts with theoretical exposure and Garmin heart rate so the shape stays readable. Choose another focus below or opt into the deliberately busy all-series view. {isWakeFreeCurve(data.exposure) ? "The modeled and wake-anchored reference cortisol series share one absolute serum-free-cortisol axis in nmol/L and are never independently normalized. Other enabled health series use a separate relative 0–100 display position." : "Every enabled series uses a relative 0–100 display scale."} Exact values keep their original units in the hover tooltip and authoritative Timeline. Relative heights are not equivalent measurements, do not establish causation, do not measure cortisol, and do not determine medication need.</aside>
         <p className="curve-missingness"><strong>Missingness:</strong> Garmin cadence is observational, so expected missing counts are not invented. Lines connect only contiguous samples with an observed cadence. Unknown or interrupted intervals remain blank; no interpolated values are stored as facts.{missingWakeTiming ? " Garmin reported one or more awakenings without their exact times, so no intermediate wake markers are invented for those sessions." : ""}</p>
         {!isWakeFreeCurve(data.exposure) ? null : data.exposure.wake_reference.available && data.exposure.wake_reference.assumptions != null ? <div>
           <p><strong>Wake-anchored reference inputs:</strong> final wake {experiencedTime(data.exposure.wake_reference.assumptions.wake_at, data.exposure.timezone)}; sleep onset {experiencedTime(data.exposure.wake_reference.assumptions.sleep_onset_at, data.exposure.timezone)}.</p>

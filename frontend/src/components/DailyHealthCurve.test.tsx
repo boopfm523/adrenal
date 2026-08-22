@@ -270,6 +270,8 @@ describe("Daily HealthCurve", () => {
     expect(context).toHaveTextContent("Focused comparison on one time axis");
     expect(context).toHaveTextContent("Missingness: Garmin cadence is observational");
     expect(screen.getByText("Selected date")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Heart rate" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Garmin stress" })).not.toBeChecked();
     fireEvent.click(summary);
     expect(context).toHaveAttribute("open");
   });
@@ -287,8 +289,8 @@ describe("Daily HealthCurve", () => {
     expect(legend.nextElementSibling).toBe(mobileControls);
     expect(mobileControls.nextElementSibling).toBe(chart);
     expect(document.querySelectorAll("[data-series='exposure']")).toHaveLength(1);
-    expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Stress" })).toHaveAttribute("aria-pressed", "true");
+    expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Heart rate" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
     expect(document.querySelectorAll("[data-series='heart_rate']")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Heart rate" })).toHaveAttribute("aria-pressed", "true");
