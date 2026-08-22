@@ -69,7 +69,7 @@ describe("AppLayout responsive navigation", () => {
     expect(screen.queryByRole("button", { name: "Open navigation" })).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeVisible();
     expect(screen.getByRole("link", { name: "HealthCurve.ai home" })).toBeVisible();
-    expect(screen.getByRole("link", { name: /Sick-day plan/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Sick-day rules/ })).toHaveAttribute(
       "href",
       "/api/v1/private-documents/sick-day-plan",
     );
@@ -80,6 +80,6 @@ describe("AppLayout responsive navigation", () => {
     renderLayout();
 
     expect(screen.getByRole("button", { name: "Open navigation" })).toBeVisible();
-    expect(screen.getAllByRole("link", { name: /Sick-day plan/ })).not.toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: /Sick-day rules/ })).not.toHaveLength(0);
   });
 });

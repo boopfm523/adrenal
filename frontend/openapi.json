@@ -17753,8 +17753,8 @@
     },
     "/api/v1/private-documents/sick-day-plan": {
       "get": {
-        "description": "Open the owner's private sick-day reference PDF in the browser.",
-        "operationId": "view_sick_day_plan_api_v1_private_documents_sick_day_plan_get",
+        "description": "Open the owner's private sick-day rules page in the browser.",
+        "operationId": "view_sick_day_rules_api_v1_private_documents_sick_day_plan_get",
         "parameters": [
           {
             "in": "cookie",
@@ -17788,7 +17788,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "View Sick Day Plan",
+        "summary": "View Sick Day Rules",
         "tags": [
           "private documents"
         ]

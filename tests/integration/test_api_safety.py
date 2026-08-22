@@ -663,7 +663,7 @@ def test_health_data_requires_authentication(client: TestClient) -> None:
         assert client.get(path).status_code == 401, path
 
 
-def test_private_sick_day_plan_is_owner_only_and_not_cached(
+def test_private_sick_day_rules_are_owner_only_and_not_cached(
     client: TestClient,
     logged_in: dict[str, str],
     settings: Settings,
@@ -671,21 +671,23 @@ def test_private_sick_day_plan_is_owner_only_and_not_cached(
     del logged_in
     missing = client.get("/api/v1/private-documents/sick-day-plan")
     assert missing.status_code == 404
-    assert missing.json()["detail"]["code"] == "sick_day_plan_not_available"
+    assert missing.json()["detail"]["code"] == "sick_day_rules_not_available"
 
-    path = settings.uploads_dir / "reference" / "sick-day-plan.pdf"
+    path = settings.uploads_dir / "reference" / "sick-day-rules.html"
     path.parent.mkdir(parents=True, exist_ok=True)
-    synthetic_pdf = b"%PDF-1.4\n% synthetic private reference\n%%EOF\n"
-    path.write_bytes(synthetic_pdf)
+    synthetic_html = b"<!doctype html><title>Synthetic sick-day rules</title>"
+    path.write_bytes(synthetic_html)
 
     response = client.get("/api/v1/private-documents/sick-day-plan")
 
     assert response.status_code == 200
-    assert response.content == synthetic_pdf
-    assert response.headers["content-type"] == "application/pdf"
+    assert response.content == synthetic_html
+    assert response.headers["content-type"] == "text/html; charset=utf-8"
     assert response.headers["content-disposition"].startswith("inline;")
     assert response.headers["cache-control"] == "private, no-store"
-    assert response.headers["content-security-policy"] == "sandbox"
+    assert response.headers["content-security-policy"] == (
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+    )
     assert response.headers["x-content-type-options"] == "nosniff"
 
 

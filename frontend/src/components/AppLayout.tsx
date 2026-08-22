@@ -54,7 +54,7 @@ function SickDayLink(): React.JSX.Element {
       target="_blank"
       rel="noreferrer"
     >
-      <span aria-hidden="true">PDF</span> Sick-day plan
+      <span aria-hidden="true">RULES</span> Sick-day rules
     </a>
   );
 }

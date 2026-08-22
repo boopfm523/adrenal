@@ -1156,10 +1156,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * View Sick Day Plan
-         * @description Open the owner's private sick-day reference PDF in the browser.
+         * View Sick Day Rules
+         * @description Open the owner's private sick-day rules page in the browser.
          */
-        get: operations["view_sick_day_plan_api_v1_private_documents_sick_day_plan_get"];
+        get: operations["view_sick_day_rules_api_v1_private_documents_sick_day_plan_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8206,7 +8206,7 @@ export interface operations {
             };
         };
     };
-    view_sick_day_plan_api_v1_private_documents_sick_day_plan_get: {
+    view_sick_day_rules_api_v1_private_documents_sick_day_plan_get: {
         parameters: {
             query?: never;
             header?: never;
