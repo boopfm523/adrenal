@@ -17751,6 +17751,49 @@
         ]
       }
     },
+    "/api/v1/private-documents/sick-day-plan": {
+      "get": {
+        "description": "Open the owner's private sick-day reference PDF in the browser.",
+        "operationId": "view_sick_day_plan_api_v1_private_documents_sick_day_plan_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "View Sick Day Plan",
+        "tags": [
+          "private documents"
+        ]
+      }
+    },
     "/api/v1/regimens": {
       "get": {
         "operationId": "list_regimens_api_v1_regimens_get",
