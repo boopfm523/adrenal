@@ -328,6 +328,77 @@ def test_only_a_regular_dose_suppresses_the_reminder(
         )
 
 
+def test_wake_reminder_accepts_matching_generic_hydrocortisone_record(
+    factory: sessionmaker[Session],
+) -> None:
+    """The reported 06:59 dose satisfies a 07:30 wake slot across vocabulary rows."""
+    with factory() as session, session.begin():
+        owner, plan_medication, slots = _approved_plan(session, wake_reminder=time(7, 30))
+        plan_medication.name = "Hydrocortisone tablet"
+        plan_medication.normalized_name = "hydrocortisone tablet"
+        slots[0].amount = Decimal("15")
+        generic_medication = Medication(
+            owner_id=owner.id,
+            name="Hydrocortisone",
+            normalized_name="hydrocortisone",
+            default_unit=DoseUnit.MG,
+            default_route=Route.ORAL,
+        )
+        session.add(generic_medication)
+        session.flush()
+        events.create_event(
+            session,
+            DoseEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 8, 12, 6, 59),  # noqa: DTZ001
+                owner.default_timezone,
+            ),
+            source_type=SourceType.TELEGRAM,
+            confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+            medication_id=generic_medication.id,
+            amount=Decimal("15"),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            category=DoseCategory.SCHEDULED,
+        )
+
+        assert schedule_due_reminders(session, datetime(2026, 8, 12, 11, 30, tzinfo=UTC)) == 0
+
+
+@pytest.mark.parametrize(
+    ("amount", "unit", "route"),
+    (
+        (Decimal("5"), DoseUnit.MG, Route.ORAL),
+        (Decimal("10"), DoseUnit.ML, Route.ORAL),
+        (Decimal("10"), DoseUnit.MG, Route.INTRAVENOUS),
+    ),
+)
+def test_wake_reminder_rejects_nonmatching_dose_details(
+    factory: sessionmaker[Session], amount: Decimal, unit: DoseUnit, route: Route
+) -> None:
+    with factory() as session, session.begin():
+        owner, medication, _ = _approved_plan(session, wake_reminder=time(7, 30))
+        events.create_event(
+            session,
+            DoseEvent,
+            owner_id=owner.id,
+            event_time=resolve_event_time(
+                datetime(2026, 8, 12, 6, 59),  # noqa: DTZ001
+                owner.default_timezone,
+            ),
+            source_type=SourceType.TELEGRAM,
+            confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+            medication_id=medication.id,
+            amount=amount,
+            unit=unit,
+            route=route,
+            category=DoseCategory.SCHEDULED,
+        )
+
+        assert schedule_due_reminders(session, datetime(2026, 8, 12, 11, 30, tzinfo=UTC)) == 1
+
+
 def test_late_fact_satisfies_a_pending_reminder_without_sending(
     factory: sessionmaker[Session],
 ) -> None:

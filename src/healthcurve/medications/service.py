@@ -74,6 +74,31 @@ def normalize_name(name: str) -> str:
     return " ".join(name.strip().lower().split())
 
 
+def _medication_identity(name: str) -> str:
+    """Return the narrow active-medication identity used for plan matching.
+
+    Tablet strength is represented by separate medication vocabulary rows, while
+    Telegram may resolve a plain ``Hydrocortisone`` row.  Those rows describe the
+    same oral medication; formulation, route, unit, and amount are checked
+    separately by the caller.  Keep this mapping deliberately narrow so similarly
+    named medications are not silently treated as equivalent.
+    """
+    normalized = normalize_name(name)
+    if normalized in {"hydrocortisone", "hydrocortisone tablet"}:
+        return "hydrocortisone"
+    return normalized
+
+
+def _dose_exactly_matches_slot(dose: DoseEvent, slot: RegimenDoseSlot) -> bool:
+    """Match a recorded regular dose to a planned formulation-independent slot."""
+    return (
+        _medication_identity(dose.medication.name) == _medication_identity(slot.medication.name)
+        and dose.amount == slot.amount
+        and dose.unit is slot.unit
+        and dose.route is slot.route
+    )
+
+
 # ---------------------------------------------------------------------------
 # Regimen lifecycle
 # ---------------------------------------------------------------------------
@@ -767,7 +792,7 @@ def _match_wake_slots(
         candidates = [
             dose
             for dose in remaining
-            if dose.medication_id == slot.medication_id
+            if _dose_exactly_matches_slot(dose, slot)
             and (cutoff is None or _local_in_zone(dose, zone) < cutoff)
         ]
         if not candidates:
