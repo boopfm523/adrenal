@@ -921,6 +921,38 @@ describe("Daily HealthCurve", () => {
     expect(tooltip).toHaveTextContent("not supported by the selected exposure model");
   });
 
+  it("does not warn when fludrocortisone is intentionally outside the exposure model", () => {
+    const baseExposure = data().exposure;
+    renderWithTheme(<DailyHealthCurve data={data({ exposure: {
+      ...baseExposure,
+      supported_dose_count: 0,
+      excluded_dose_count: 1,
+      dose_markers: [{
+        dose_event_id: "90000000-0000-4000-8000-000000000051",
+        occurred_at: "2026-03-08T12:00:00Z",
+        local_time: "2026-03-08T08:00:00",
+        timezone: "America/New_York",
+        utc_offset_minutes: -240,
+        medication_name: "Fludrocortisone",
+        formulation: "conventional immediate-release tablet",
+        amount: "0.1",
+        unit: "mg",
+        route: "oral",
+        category: "scheduled",
+        source_type: "web",
+        confirmation_state: "direct",
+        supersedes_id: null,
+        supported: false,
+        exclusion_reason: "unsupported_medication",
+        carryover: false,
+        modeled_peak_at: null,
+      }],
+    } })} />);
+
+    expect(screen.queryByText(/recorded dose is shown but not modeled/)).not.toBeInTheDocument();
+    expect(document.querySelector(".healthcurve-unmodeled-dose")).not.toBeNull();
+  });
+
   it("renders empty context lanes and the true 23-hour DST axis without inventing data", () => {
     renderWithTheme(<DailyHealthCurve data={data()} />);
 

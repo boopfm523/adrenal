@@ -84,6 +84,15 @@ function doseExclusionReason(reason: SteroidExposureCurve["dose_markers"][number
   }
 }
 
+function shouldShowUnmodeledDoseWarning(
+  dose: SteroidExposureCurve["dose_markers"][number],
+): boolean {
+  // Fludrocortisone is intentionally outside the cortisol exposure model. It
+  // remains a recorded dose and chart marker, but that expected omission does
+  // not need an unsupported-dose warning.
+  return dose.medication_name.trim().toLowerCase() !== "fludrocortisone";
+}
+
 const WIDTH = 960;
 const HEIGHT = 430;
 const LEFT = 74;
@@ -878,7 +887,10 @@ export function DailyHealthCurve({
   });
   const unmodeledDoses = data.exposure.dose_markers.filter((dose) => {
     const occurredAt = Date.parse(dose.occurred_at);
-    return !dose.supported && occurredAt >= start && occurredAt < end;
+    return !dose.supported
+      && shouldShowUnmodeledDoseWarning(dose)
+      && occurredAt >= start
+      && occurredAt < end;
   });
   const cursorDoseObservations = visible.exposure
     ? nearbyTooltipObservations(doseObservations, cursorTime)
