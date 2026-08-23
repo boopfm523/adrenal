@@ -81,6 +81,7 @@ from healthcurve.medications.models import (
     DoseTimingMode,
     DoseUnit,
     Medication,
+    RegimenDoseSlot,
     Route,
 )
 from healthcurve.operations.rate_limit import (
@@ -147,6 +148,37 @@ _MEAL_SIZE_ALIASES: Final = {
     "extra-large": MealSize.XL,
     "xxl": MealSize.XXL,
 }
+_PLANNED_DOSE_PHRASE: Final = re.compile(
+    r"^(?:i\s+)?(?:just\s+)?(?:took|have\s+taken|had)\s+(?P<description>.+?)[.!]?$",
+    re.IGNORECASE,
+)
+_PLANNED_DOSE_TERMS: Final = re.compile(
+    r"\b(?:regular|scheduled|morning|afternoon|evening|night|dose|doses|meds?|"
+    r"medication|medicine|hydrocortisone|fludrocortisone|fludrocortidone|"
+    r"flugercortisone|florinef)\b",
+    re.IGNORECASE,
+)
+_PLANNED_DOSE_NEGATION: Final = re.compile(
+    r"\b(?:did\s+not|didn't|have\s+not|haven't|not\s+taken|forgot|missed)\b",
+    re.IGNORECASE,
+)
+_PLANNED_DOSE_EXPLICIT_AMOUNT: Final = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:mcg|ug|mg|g)\b",
+    re.IGNORECASE,
+)
+_PLANNED_DOSE_NON_SCHEDULED: Final = re.compile(
+    r"\b(?:stress(?:[-\s]?dose)?|up[-\s]?dose|emergency)\b",
+    re.IGNORECASE,
+)
+_PLAN_MEDICATION_ALIASES: Final[dict[str, tuple[str, ...]]] = {
+    "hydrocortisone": ("hydrocortisone",),
+    "fludrocortisone": (
+        "fludrocortisone",
+        "fludrocortidone",
+        "flugercortisone",
+        "florinef",
+    ),
+}
 _BEADS_LIST_PHRASE: Final = re.compile(
     r"^(?:please\s+)?(?:show|give|send|get|tell)\s+(?:me\s+)?(?:the\s+)?"
     r"(?:current\s+)?(?:bd|beads?)\s+(?:list|issues?|tasks?)[?.!]*$",
@@ -196,6 +228,9 @@ HealthCurve bot
 
 Just describe what happened and I'll show you a draft to confirm.
 Example: "Took 15mg hydrocortisone at 7:08, slept badly, mild nausea"
+For a scheduled dose, you can also say "I took my morning doses" or
+"I took my afternoon hydrocortisone." HealthCurve will fill in the exact
+medication and amount from the approved plan that applied when you sent it.
 
 Nothing is recorded until you confirm it.
 
@@ -345,7 +380,7 @@ def handle_message(
 
 
 def _is_conversational_shortcut(text: str) -> bool:
-    return any(
+    return _looks_like_planned_dose_shorthand(text) or any(
         pattern.fullmatch(text) is not None
         for pattern in (
             _EPISODE_END_PHRASE,
@@ -396,6 +431,10 @@ def _handle_conversational_shortcut(
             now=now,
             chat_id=chat_id,
         )
+
+    planned_dose = _planned_dose_draft(session, owner, text, now=now)
+    if planned_dose is not None:
+        return planned_dose
 
     explicit_weight = find_explicit_weight(text) if _WEIGHT_ONLY_PHRASE.fullmatch(text) else None
     if explicit_weight is not None:
@@ -476,6 +515,160 @@ def _handle_conversational_shortcut(
         )
         return _draft_reply(draft, [candidate])
     return None
+
+
+def _planned_dose_draft(
+    session: Session, owner: Owner, text: str, *, now: datetime
+) -> Reply | None:
+    """Resolve narrow completed-dose shorthand from the approved historical plan.
+
+    The Telegram provider timestamp is passed as ``now`` by dispatch. That makes a
+    delayed message resolve against the plan that was effective when the owner sent
+    it, not whichever plan happens to be active when a worker later processes it.
+    Amounts and routes come only from an approved plan and remain confirmation drafts.
+    """
+    match = _PLANNED_DOSE_PHRASE.fullmatch(text)
+    if match is None or not _looks_like_planned_dose_shorthand(text):
+        return None
+    description = match.group("description").strip()
+
+    local = _local_now(owner, now)
+    period = _planned_dose_period(description, local.time())
+    if period is None:
+        return Reply(
+            "I can use your approved plan, but I can't tell whether you mean the "
+            "morning, afternoon, or evening dose. Nothing was recorded; tell me which one."
+        )
+
+    version = meds.active_version_at(session, owner.id, now)
+    if version is None:
+        return Reply(
+            f"I couldn't find an approved medication plan in effect when this message was "
+            f"sent ({local:%Y-%m-%d %H:%M}). Nothing was recorded; include the medication "
+            "and amount explicitly."
+        )
+
+    slots = [slot for slot in version.slots if _slot_period(slot) == period]
+    named_medications = _named_plan_medications(description, slots)
+    if named_medications is not None:
+        slots = [slot for slot in slots if slot.medication_id in named_medications]
+    if not slots:
+        subject = "the named medication" if named_medications is not None else f"a {period} dose"
+        return Reply(
+            f"Your approved plan in effect when this was sent does not contain {subject}. "
+            "Nothing was recorded; include the medication and amount explicitly if needed."
+        )
+
+    conditional = [slot for slot in slots if slot.condition and slot.condition.strip()]
+    if conditional:
+        names = ", ".join(sorted({slot.medication.name for slot in conditional}))
+        return Reply(
+            f"The matching approved-plan slot for {names} has a condition, so I won't assume "
+            "it was due. Nothing was recorded; include the medication and amount explicitly."
+        )
+
+    by_medication: dict[uuid.UUID, list[RegimenDoseSlot]] = {}
+    for slot in slots:
+        by_medication.setdefault(slot.medication_id, []).append(slot)
+    ambiguous = [items for items in by_medication.values() if len(items) > 1]
+    if ambiguous:
+        names = ", ".join(sorted({items[0].medication.name for items in ambiguous}))
+        return Reply(
+            f"Your approved plan has more than one {period} slot for {names}, so I can't "
+            "tell which one you took. Nothing was recorded; include the time or amount."
+        )
+
+    candidates = [
+        ValidatedCandidate(
+            type=CandidateType.DOSE,
+            medication_id=slot.medication_id,
+            medication_name=slot.medication.name,
+            amount=slot.amount,
+            unit=slot.unit.value,
+            route=slot.route.value,
+            dose_category=DoseCategory.SCHEDULED,
+            local_time=local,
+            timezone=owner.default_timezone,
+            confidence=1.0,
+            flags=[FlagCode.ASSUMED_TIME],
+        )
+        for slot in sorted(slots, key=lambda item: (item.sort_order, item.medication.name, item.id))
+    ]
+    draft = _store_draft(
+        session,
+        owner,
+        candidates,
+        raw_text=text,
+        source="telegram_plan_shorthand",
+    )
+    return _draft_reply(draft, candidates)
+
+
+def _planned_dose_period(description: str, sent_local_time: time) -> str | None:
+    lowered = description.lower()
+    explicit = [
+        period
+        for period, terms in (
+            ("morning", ("morning",)),
+            ("afternoon", ("afternoon",)),
+            ("evening", ("evening", "night")),
+        )
+        if any(re.search(rf"\b{term}\b", lowered) for term in terms)
+    ]
+    if len(explicit) == 1:
+        return explicit[0]
+    if explicit:
+        return None
+    if sent_local_time < time(9, 30):
+        return "morning"
+    if time(12) <= sent_local_time < time(18):
+        return "afternoon"
+    if sent_local_time >= time(18):
+        return "evening"
+    return None
+
+
+def _looks_like_planned_dose_shorthand(text: str) -> bool:
+    match = _PLANNED_DOSE_PHRASE.fullmatch(text)
+    if match is None:
+        return False
+    description = match.group("description")
+    return (
+        _PLANNED_DOSE_NEGATION.search(description) is None
+        and _PLANNED_DOSE_EXPLICIT_AMOUNT.search(description) is None
+        and _PLANNED_DOSE_NON_SCHEDULED.search(description) is None
+        and _PLANNED_DOSE_TERMS.search(description) is not None
+    )
+
+
+def _slot_period(slot: RegimenDoseSlot) -> str:
+    if slot.timing_mode is DoseTimingMode.WAKE:
+        return "morning"
+    scheduled = slot.scheduled_local_time
+    assert scheduled is not None
+    if scheduled < time(12):
+        return "morning"
+    if scheduled < time(18):
+        return "afternoon"
+    return "evening"
+
+
+def _named_plan_medications(
+    description: str, slots: list[RegimenDoseSlot]
+) -> set[uuid.UUID] | None:
+    lowered = description.lower()
+    requested_families = {
+        family
+        for family, aliases in _PLAN_MEDICATION_ALIASES.items()
+        if any(re.search(rf"\b{re.escape(alias)}\b", lowered) for alias in aliases)
+    }
+    if not requested_families:
+        return None
+    return {
+        slot.medication_id
+        for slot in slots
+        if any(slot.medication.normalized_name.startswith(family) for family in requested_families)
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -2139,7 +2332,14 @@ def _pending_draft(session: Session, owner_id: uuid.UUID) -> ExtractionDraft | N
         select(ExtractionDraft)
         .where(
             ExtractionDraft.owner_id == owner_id,
-            ExtractionDraft.source.in_(("telegram", "telegram_command")),
+            ExtractionDraft.source.in_(
+                (
+                    "telegram",
+                    "telegram_command",
+                    "telegram_conversational",
+                    "telegram_plan_shorthand",
+                )
+            ),
             ExtractionDraft.state.in_((DraftState.PENDING, DraftState.EDITED)),
             ExtractionDraft.resolved_at.is_(None),
         )
