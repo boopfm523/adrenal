@@ -6972,6 +6972,29 @@
             ],
             "title": "Minutes From Scheduled"
           },
+          "minutes_from_wake": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes From Wake"
+          },
+          "observed_wake_local_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Wake Local Time"
+          },
           "planned_amount": {
             "anyOf": [
               {
@@ -7097,6 +7120,8 @@
           "planned_amount",
           "actual_amount",
           "actual_local_time",
+          "observed_wake_local_time",
+          "minutes_from_wake",
           "dose_id",
           "status",
           "minutes_from_scheduled",
@@ -9294,6 +9319,43 @@
             "minimum": 0.0,
             "title": "Unplanned",
             "type": "integer"
+          },
+          "wake_average_signed_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wake Average Signed Minutes"
+          },
+          "wake_matched_count": {
+            "minimum": 0.0,
+            "title": "Wake Matched Count",
+            "type": "integer"
+          },
+          "wake_missing_count": {
+            "minimum": 0.0,
+            "title": "Wake Missing Count",
+            "type": "integer"
+          },
+          "wake_sample_count": {
+            "minimum": 0.0,
+            "title": "Wake Sample Count",
+            "type": "integer"
+          },
+          "wake_total_signed_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wake Total Signed Minutes"
           }
         },
         "required": [
@@ -9308,6 +9370,11 @@
           "unplanned",
           "total_absolute_deviation_minutes",
           "average_absolute_deviation_minutes",
+          "wake_sample_count",
+          "wake_matched_count",
+          "wake_missing_count",
+          "wake_total_signed_minutes",
+          "wake_average_signed_minutes",
           "plan_periods"
         ],
         "title": "TimingMetric",

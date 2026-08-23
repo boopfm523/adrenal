@@ -829,6 +829,8 @@ class PlanComparisonSlot(ApiModel):
     planned_amount: Decimal | None
     actual_amount: Decimal | None
     actual_local_time: datetime | None
+    observed_wake_local_time: datetime | None
+    minutes_from_wake: int | None
     dose_id: uuid.UUID | None
     #: on_time | late | early | recorded | missing | unplanned | extra
     status: str
@@ -916,9 +918,19 @@ class TimingMetric(MetricBase):
     unplanned: int = Field(ge=0)
     total_absolute_deviation_minutes: Decimal | None
     average_absolute_deviation_minutes: Decimal | None
+    wake_sample_count: int = Field(ge=0)
+    wake_matched_count: int = Field(ge=0)
+    wake_missing_count: int = Field(ge=0)
+    wake_total_signed_minutes: Decimal | None
+    wake_average_signed_minutes: Decimal | None
     plan_periods: list[TimingPlanPeriod]
 
-    @field_serializer("total_absolute_deviation_minutes", "average_absolute_deviation_minutes")
+    @field_serializer(
+        "total_absolute_deviation_minutes",
+        "average_absolute_deviation_minutes",
+        "wake_total_signed_minutes",
+        "wake_average_signed_minutes",
+    )
     def _deviation(self, value: Decimal | None) -> str | None:
         return None if value is None else str(value)
 

@@ -17,6 +17,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from healthcurve.analytics.wake_reference_inputs import (
+    observed_sleep_timing_for_day,
+    signed_minutes_from_wake,
+)
 from healthcurve.episodes.models import StressEpisode
 from healthcurve.events import service as events
 from healthcurve.events.models import SymptomEvent
@@ -50,6 +54,8 @@ class TimingInput:
     regimen_version_label: str | None = None
     effective_from: datetime | None = None
     effective_to: datetime | None = None
+    timing_mode: str | None = None
+    minutes_from_wake: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +109,13 @@ def summarize(
         for timing in timing_inputs
         if timing.minutes_from_scheduled is not None
     ]
+    wake_inputs = [timing for timing in timing_inputs if timing.timing_mode == "wake"]
+    wake_values = [
+        Decimal(timing.minutes_from_wake)
+        for timing in wake_inputs
+        if timing.minutes_from_wake is not None
+    ]
+    wake_total = sum(wake_values, Decimal(0)) if wake_values else None
     period_groups: dict[
         tuple[uuid.UUID | None, str | None, datetime | None, datetime | None], list[TimingInput]
     ] = {}
@@ -204,6 +217,13 @@ def summarize(
             "average_absolute_deviation_minutes": (
                 sum(deviations, Decimal(0)) / len(deviations) if deviations else None
             ),
+            "wake_sample_count": len(wake_inputs),
+            "wake_matched_count": len(wake_values),
+            "wake_missing_count": len(wake_inputs) - len(wake_values),
+            "wake_total_signed_minutes": wake_total,
+            "wake_average_signed_minutes": (
+                wake_total / len(wake_values) if wake_total is not None else None
+            ),
             "plan_periods": plan_periods,
         },
         "episodes": {
@@ -250,6 +270,12 @@ def summary_for_owner(
             session, owner_id=owner_id, day=current_day, timezone=timezone
         )
         slots = comparison["slots"]
+        observed_wake, _ = observed_sleep_timing_for_day(
+            session,
+            owner_id=owner_id,
+            day=current_day,
+            timezone=timezone,
+        )
         statuses = tuple(slot.status for slot in slots)  # type: ignore[union-attr]
         timings = tuple(
             TimingInput(
@@ -259,6 +285,12 @@ def summary_for_owner(
                 regimen_version_label=slot.regimen_version_label,
                 effective_from=slot.regimen_effective_from,
                 effective_to=slot.regimen_effective_to,
+                timing_mode=slot.timing_mode,
+                minutes_from_wake=(
+                    signed_minutes_from_wake(observed_wake, slot.actual_local_time)
+                    if slot.timing_mode == "wake"
+                    else None
+                ),
             )
             for slot in slots  # type: ignore[union-attr]
         )

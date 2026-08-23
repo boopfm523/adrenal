@@ -191,3 +191,68 @@ def test_timing_deviation_excludes_missing_and_unplanned_and_groups_plan_history
     assert periods[0]["missing_count"] == 1
     assert periods[0]["unplanned"] == 1
     assert periods[1]["average_absolute_deviation_minutes"] == Decimal("15")
+
+
+def test_wake_timing_uses_signed_observed_wake_to_dose_minutes() -> None:
+    result = summarize(
+        date_from=date(2026, 8, 1),
+        date_to=date(2026, 8, 3),
+        timezone="America/New_York",
+        days=[
+            DayInput(
+                day=date(2026, 8, 1),
+                planned_total=Decimal("15"),
+                actual_total=Decimal("15"),
+                recorded_dose_count=1,
+                statuses=("on_time",),
+                timings=(
+                    TimingInput(
+                        status="on_time",
+                        minutes_from_scheduled=None,
+                        timing_mode="wake",
+                        minutes_from_wake=17,
+                    ),
+                ),
+            ),
+            DayInput(
+                day=date(2026, 8, 2),
+                planned_total=Decimal("15"),
+                actual_total=Decimal("15"),
+                recorded_dose_count=1,
+                statuses=("on_time",),
+                timings=(
+                    TimingInput(
+                        status="on_time",
+                        minutes_from_scheduled=None,
+                        timing_mode="wake",
+                        minutes_from_wake=-5,
+                    ),
+                ),
+            ),
+            DayInput(
+                day=date(2026, 8, 3),
+                planned_total=Decimal("15"),
+                actual_total=Decimal("0"),
+                recorded_dose_count=0,
+                statuses=("missing",),
+                timings=(
+                    TimingInput(
+                        status="missing",
+                        minutes_from_scheduled=None,
+                        timing_mode="wake",
+                        minutes_from_wake=None,
+                    ),
+                ),
+            ),
+        ],
+        episodes=[],
+        symptoms=[],
+    )
+
+    timing = result["timing"]
+    assert isinstance(timing, dict)
+    assert timing["wake_sample_count"] == 3
+    assert timing["wake_matched_count"] == 2
+    assert timing["wake_missing_count"] == 1
+    assert timing["wake_total_signed_minutes"] == Decimal("12")
+    assert timing["wake_average_signed_minutes"] == Decimal("6")

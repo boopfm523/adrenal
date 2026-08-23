@@ -6408,6 +6408,10 @@ def test_analytics_states_definitions_timezone_and_missingness(
     assert body["daily_doses"]["values"][0]["actual_total"] is None
     assert "No recorded doses is shown as missing" in body["daily_doses"]["definition"]
     assert "30 minutes" in body["timing"]["definition"]
+    assert body["timing"]["wake_sample_count"] == 0
+    assert body["timing"]["wake_matched_count"] == 0
+    assert body["timing"]["wake_missing_count"] == 0
+    assert body["timing"]["wake_average_signed_minutes"] is None
     assert body["episodes"]["definition"]
     assert body["symptoms"]["definition"]
     for metric_name in ("daily_doses", "timing", "episodes", "symptoms"):
@@ -8065,9 +8069,17 @@ def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(
     ).json()
 
     planned_slot = next(slot for slot in body["slots"] if slot["slot_id"] is not None)
-    assert set(planned_slot) >= {"medication_id", "unit", "route"}
+    assert set(planned_slot) >= {
+        "medication_id",
+        "unit",
+        "route",
+        "observed_wake_local_time",
+        "minutes_from_wake",
+    }
     assert planned_slot["unit"] == "mg"
     assert planned_slot["route"] == "oral"
+    assert planned_slot["observed_wake_local_time"] is None
+    assert planned_slot["minutes_from_wake"] is None
 
 
 # ---------------------------------------------------------------------------

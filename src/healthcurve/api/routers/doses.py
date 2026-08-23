@@ -7,6 +7,10 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from healthcurve.analytics.wake_reference_inputs import (
+    observed_sleep_timing_for_day,
+    signed_minutes_from_wake,
+)
 from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, paginate_current_facts
@@ -178,6 +182,12 @@ def plan_comparison(
     zone = timezone or owner.default_timezone
     try:
         result = meds.compare_day(session, owner_id=owner.id, day=day, timezone=zone)
+        observed_wake, _ = observed_sleep_timing_for_day(
+            session,
+            owner_id=owner.id,
+            day=day,
+            timezone=zone,
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"invalid timezone: {zone}"
@@ -208,6 +218,12 @@ def plan_comparison(
                 planned_amount=c.planned_amount,
                 actual_amount=c.actual_amount,
                 actual_local_time=c.actual_local_time,
+                observed_wake_local_time=(observed_wake if c.timing_mode == "wake" else None),
+                minutes_from_wake=(
+                    signed_minutes_from_wake(observed_wake, c.actual_local_time)
+                    if c.timing_mode == "wake"
+                    else None
+                ),
                 dose_id=c.dose_id,
                 status=c.status,
                 minutes_from_scheduled=c.minutes_from_scheduled,

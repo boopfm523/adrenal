@@ -38,6 +38,19 @@ function positivePage(value: string | null): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
+function wakeTimingDescription(slot: Slot): string | null {
+  if (slot.timing_mode !== "wake") return null;
+  if (slot.observed_wake_local_time === null) {
+    return "Wake-to-dose timing unavailable: no observed Garmin wake time.";
+  }
+  if (slot.minutes_from_wake === null) {
+    return "Wake-to-dose timing unavailable: no matching recorded dose.";
+  }
+  if (slot.minutes_from_wake === 0) return "Recorded at the observed Garmin wake time.";
+  const direction = slot.minutes_from_wake > 0 ? "after" : "before";
+  return `Recorded ${formatDecimal(Math.abs(slot.minutes_from_wake))} minutes ${direction} the observed Garmin wake time.`;
+}
+
 function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: string }): React.JSX.Element {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -62,6 +75,7 @@ function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: s
   const reminder = slot.timing_mode === "wake" && slot.reminder_local_time !== null
     ? `Reminder if unrecorded by ${displayTime(slot.reminder_local_time)}.`
     : null;
+  const wakeTiming = wakeTimingDescription(slot);
 
   return (
     <tr className={`dose-slot--${slot.status}`}>
@@ -78,6 +92,7 @@ function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: s
             Recorded fact: {formatMeasurement(slot.actual_amount, slot.unit)} at {displayTime(slot.actual_local_time)}.
           </Text>
         )}
+        {wakeTiming === null ? null : <Text className="status-explanation">{wakeTiming}</Text>}
       </Stack></td>
       <td data-label="Action">{slot.status === "missing" && slot.planned_amount !== null ? (
         <Button type="button" loading={mutation.isPending} onClick={() => { mutation.mutate(); }}>

@@ -67,9 +67,11 @@ function plannedSlot(overrides: Record<string, unknown> = {}): Record<string, un
     planned_amount: "10.0000",
     actual_amount: null,
     actual_local_time: null,
+    observed_wake_local_time: null,
     dose_id: null,
     status: "missing",
     minutes_from_scheduled: null,
+    minutes_from_wake: null,
     unit: "mg",
     route: "oral",
     ...overrides,
@@ -208,7 +210,17 @@ describe("Today page", () => {
       const url = requestUrl(input);
       if (url.includes("plan-comparison")) return Promise.resolve(jsonResponse(comparison({
         regimen_versions: [{ id: "44444444-4444-4444-8444-444444444444", version_label: "Synthetic approved regimen", effective_from: "2026-01-01T00:00:00", effective_to: null }],
-        slots: [plannedSlot({ timing_mode: "wake", scheduled_local_time: null, reminder_local_time: "07:30:00" })],
+        slots: [plannedSlot({
+          timing_mode: "wake",
+          scheduled_local_time: null,
+          reminder_local_time: "07:30:00",
+          observed_wake_local_time: "2026-08-09T07:00:00-04:00",
+          actual_amount: "10.0000",
+          actual_local_time: "2026-08-09T07:17:00-04:00",
+          dose_id: "55555555-5555-4555-8555-555555555555",
+          status: "on_time",
+          minutes_from_wake: 17,
+        })],
       })));
       if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse(episodePage([])));
       return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
@@ -218,7 +230,24 @@ describe("Today page", () => {
 
     expect(await screen.findByText("When I wake up")).toBeVisible();
     expect(screen.getByText("Reminder if unrecorded by 07:30.")).toBeVisible();
+    expect(screen.getByText("Recorded 17 minutes after the observed Garmin wake time.")).toBeVisible();
     expect(screen.queryByText("Time not recorded")).not.toBeInTheDocument();
+  });
+
+  it("keeps missing wake timing unavailable instead of treating it as zero", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("plan-comparison")) return Promise.resolve(jsonResponse(comparison({
+        regimen_versions: [{ id: "44444444-4444-4444-8444-444444444444", version_label: "Synthetic approved regimen", effective_from: "2026-01-01T00:00:00", effective_to: null }],
+        slots: [plannedSlot({ timing_mode: "wake", scheduled_local_time: null, reminder_local_time: "07:30:00" })],
+      })));
+      if (url.includes("stress-episodes")) return Promise.resolve(jsonResponse(episodePage([])));
+      return Promise.resolve(jsonResponse({ detail: "not found" }, 404));
+    });
+
+    renderToday();
+
+    expect(await screen.findByText("Wake-to-dose timing unavailable: no observed Garmin wake time.")).toBeVisible();
   });
 
   it("shows both historical plan periods when the approved plan changes during the day", async () => {

@@ -3942,6 +3942,10 @@ export interface components {
             medication_name: string;
             /** Minutes From Scheduled */
             minutes_from_scheduled: number | null;
+            /** Minutes From Wake */
+            minutes_from_wake: number | null;
+            /** Observed Wake Local Time */
+            observed_wake_local_time: string | null;
             /** Planned Amount */
             planned_amount: string | null;
             /** Regimen Effective From */
@@ -4716,6 +4720,16 @@ export interface components {
             total_absolute_deviation_minutes: string | null;
             /** Unplanned */
             unplanned: number;
+            /** Wake Average Signed Minutes */
+            wake_average_signed_minutes: string | null;
+            /** Wake Matched Count */
+            wake_matched_count: number;
+            /** Wake Missing Count */
+            wake_missing_count: number;
+            /** Wake Sample Count */
+            wake_sample_count: number;
+            /** Wake Total Signed Minutes */
+            wake_total_signed_minutes: string | null;
         };
         /** TimingPlanPeriod */
         TimingPlanPeriod: {

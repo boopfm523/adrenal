@@ -64,6 +64,10 @@ function Timing({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
       <div><dt>Matched doses</dt><dd>{formatDecimal(metric.matched_count)}</dd></div>
       <div><dt>Average absolute difference from plan</dt><dd>{metric.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatDecimal(metric.average_absolute_deviation_minutes)} minutes`}</dd></div>
       <div><dt>Total absolute difference from plan</dt><dd>{metric.total_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatDecimal(metric.total_absolute_deviation_minutes)} minutes`}</dd></div>
+      <div><dt>Wake-anchored slots</dt><dd>{formatDecimal(metric.wake_sample_count)}</dd></div>
+      <div><dt>Wake-anchored doses with observed wake and dose</dt><dd>{formatDecimal(metric.wake_matched_count)}</dd></div>
+      <div><dt>Average signed wake-to-dose timing</dt><dd>{metric.wake_average_signed_minutes === null ? "Missing—no observed wake-to-dose pairs" : `${formatDecimal(metric.wake_average_signed_minutes)} minutes`}</dd></div>
+      <div><dt>Wake-anchored slots missing wake or dose</dt><dd>{formatDecimal(metric.wake_missing_count)}</dd></div>
       <div><dt>On time</dt><dd>{formatDecimal(metric.on_time)}</dd></div><div><dt>Early</dt><dd>{formatDecimal(metric.early)}</dd></div><div><dt>Late</dt><dd>{formatDecimal(metric.late)}</dd></div><div><dt>Unplanned</dt><dd>{formatDecimal(metric.unplanned)}</dd></div><div><dt>Missing schedule matches</dt><dd>{formatDecimal(metric.missing_count)}</dd></div>
     </dl>
     <h3>Results by historical plan period</h3>

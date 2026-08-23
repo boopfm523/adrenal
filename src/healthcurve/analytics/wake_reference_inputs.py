@@ -20,6 +20,21 @@ from healthcurve.integrations.garmin.models import GarminSleepEvent
 MEAL_ROLES: Final = ("breakfast", "lunch", "dinner")
 
 
+def signed_minutes_from_wake(
+    wake_at: datetime | None,
+    dose_at: datetime | None,
+) -> int | None:
+    """Return signed whole minutes from observed wake to recorded dose.
+
+    Missing observations stay missing. In particular, callers must not pass a
+    plan reminder time as a substitute for either observed fact.
+    """
+
+    if wake_at is None or dose_at is None:
+        return None
+    return int((dose_at - wake_at).total_seconds() / 60)
+
+
 def observed_sleep_timing_for_day(
     session: Session,
     *,
