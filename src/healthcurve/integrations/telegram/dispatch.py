@@ -21,6 +21,9 @@ from healthcurve.ai.ollama import OllamaClient
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import dose_reminders, handlers
 from healthcurve.integrations.telegram.client import TelegramClient
+from healthcurve.integrations.telegram.confirmation_reminders import (
+    schedule_confirmation_reminder,
+)
 from healthcurve.integrations.telegram.models import TelegramUpdate
 from healthcurve.logging import get_logger
 from healthcurve.operations.rate_limit import RateLimiter, RateLimitPolicy
@@ -160,7 +163,13 @@ def process_update(
         model_policy=model_policy,
         now=provider_sent_at or processing_time,
     )
-    client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
+    delivered = client.send_message(chat_id, reply.text, reply_markup=reply.reply_markup)
+    if delivered and reply.draft_id is not None:
+        schedule_confirmation_reminder(
+            session,
+            draft_id=reply.draft_id,
+            confirmation_sent_at=processing_time,
+        )
     return UpdateOutcome.PROCESSED
 
 

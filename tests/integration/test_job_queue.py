@@ -37,6 +37,13 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncOrigin,
     GarminSyncRun,
 )
+from healthcurve.integrations.telegram.confirmation_reminders import (
+    CONFIRMATION_REMINDER_DELAY,
+    CONFIRMATION_REMINDER_TASK,
+    REMINDER_TEXT,
+    make_confirmation_reminder_handler,
+    schedule_confirmation_reminder,
+)
 from healthcurve.integrations.telegram.draft_jobs import (
     DRAFT_EXPIRY_TASK,
     draft_expiry_health,
@@ -60,6 +67,23 @@ from healthcurve.operations.worker import run_once
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 NOW = datetime(2026, 8, 9, 12, tzinfo=UTC)
+
+
+class _SyntheticTelegramClient:
+    def __init__(self, *, succeeds: bool = True) -> None:
+        self.succeeds = succeeds
+        self.messages: list[tuple[int, str]] = []
+
+    def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        reply_markup: dict[str, Any] | None = None,
+    ) -> bool:
+        del reply_markup
+        self.messages.append((chat_id, text))
+        return self.succeeds
 
 
 class _SyntheticGarminClient:
@@ -257,6 +281,153 @@ def test_scheduled_job_waits_until_due(factory: sessionmaker[Session]) -> None:
         assert claim(session, worker_id="worker-a", now=due - timedelta(microseconds=1)) is None
     with factory() as session, session.begin():
         assert claim(session, worker_id="worker-a", now=due) is not None
+
+
+def _confirmation_draft(
+    factory: sessionmaker[Session],
+    *,
+    state: DraftState = DraftState.PENDING,
+) -> uuid.UUID:
+    with factory() as session, session.begin():
+        draft = ExtractionDraft(
+            owner_id=uuid.uuid4(),
+            source="telegram",
+            provider_message_id=f"synthetic-confirmation-{uuid.uuid4()}",
+            raw_text="SYNTHETIC_TEST_DATA",
+            candidates=[],
+            state=state,
+            prompt_version="test-v1",
+            schema_version="test-v1",
+            created_at=NOW,
+            resolved_at=NOW if state not in {DraftState.PENDING, DraftState.EDITED} else None,
+        )
+        session.add(draft)
+        session.flush()
+        return draft.id
+
+
+def test_confirmation_reminder_waits_one_minute_and_sends_exactly_once(
+    factory: sessionmaker[Session],
+) -> None:
+    draft_id = _confirmation_draft(factory)
+    with factory() as session, session.begin():
+        first = schedule_confirmation_reminder(
+            session,
+            draft_id=draft_id,
+            confirmation_sent_at=NOW,
+        )
+        duplicate = schedule_confirmation_reminder(
+            session,
+            draft_id=draft_id,
+            confirmation_sent_at=NOW + timedelta(seconds=10),
+        )
+        assert duplicate.id == first.id
+        assert first.run_at == NOW + CONFIRMATION_REMINDER_DELAY
+        assert first.payload == {"draft_id": str(draft_id)}
+
+    with factory() as session, session.begin():
+        assert (
+            claim(
+                session,
+                worker_id="confirmation-reminder-early",
+                now=NOW + CONFIRMATION_REMINDER_DELAY - timedelta(microseconds=1),
+                tasks={CONFIRMATION_REMINDER_TASK},
+            )
+            is None
+        )
+
+    client = _SyntheticTelegramClient()
+    claimed = run_once(
+        factory,
+        {
+            CONFIRMATION_REMINDER_TASK: make_confirmation_reminder_handler(
+                client=client,  # type: ignore[arg-type]
+                chat_id=4242,
+            )
+        },
+        worker_id="confirmation-reminder-test",
+    )
+    assert claimed is not None and claimed.id == first.id
+    assert client.messages == [(4242, REMINDER_TEXT)]
+    assert "SYNTHETIC_TEST_DATA" not in REMINDER_TEXT
+    assert (
+        run_once(
+            factory,
+            {
+                CONFIRMATION_REMINDER_TASK: make_confirmation_reminder_handler(
+                    client=client,  # type: ignore[arg-type]
+                    chat_id=4242,
+                )
+            },
+            worker_id="confirmation-reminder-test",
+        )
+        is None
+    )
+    assert client.messages == [(4242, REMINDER_TEXT)]
+
+
+@pytest.mark.parametrize(
+    "state",
+    [DraftState.CONFIRMED, DraftState.CANCELLED, DraftState.EXPIRED],
+)
+def test_confirmation_reminder_is_suppressed_after_draft_resolution(
+    factory: sessionmaker[Session],
+    state: DraftState,
+) -> None:
+    draft_id = _confirmation_draft(factory, state=state)
+    with factory() as session, session.begin():
+        scheduled = schedule_confirmation_reminder(
+            session,
+            draft_id=draft_id,
+            confirmation_sent_at=NOW,
+        )
+
+    client = _SyntheticTelegramClient()
+    claimed = run_once(
+        factory,
+        {
+            CONFIRMATION_REMINDER_TASK: make_confirmation_reminder_handler(
+                client=client,  # type: ignore[arg-type]
+                chat_id=4242,
+            )
+        },
+        worker_id="confirmation-reminder-resolved-test",
+    )
+    assert claimed is not None and claimed.id == scheduled.id
+    assert client.messages == []
+    with factory() as session:
+        stored = session.get(Job, scheduled.id)
+        assert stored is not None and stored.status is JobStatus.COMPLETED
+
+
+def test_confirmation_reminder_send_failure_is_retried(
+    factory: sessionmaker[Session],
+) -> None:
+    draft_id = _confirmation_draft(factory)
+    with factory() as session, session.begin():
+        scheduled = schedule_confirmation_reminder(
+            session,
+            draft_id=draft_id,
+            confirmation_sent_at=NOW,
+        )
+
+    client = _SyntheticTelegramClient(succeeds=False)
+    claimed = run_once(
+        factory,
+        {
+            CONFIRMATION_REMINDER_TASK: make_confirmation_reminder_handler(
+                client=client,  # type: ignore[arg-type]
+                chat_id=4242,
+            )
+        },
+        worker_id="confirmation-reminder-failure-test",
+    )
+    assert claimed is not None and claimed.id == scheduled.id
+    with factory() as session:
+        stored = session.get(Job, scheduled.id)
+        assert stored is not None and stored.status is JobStatus.QUEUED
+        assert stored.attempt_count == 1
+        assert stored.last_error_code == "telegram_confirmation_reminder_send_failed"
 
 
 def test_bounded_backoff_ends_in_visible_dead_letter(factory: sessionmaker[Session]) -> None:

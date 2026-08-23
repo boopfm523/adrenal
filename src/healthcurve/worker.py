@@ -20,6 +20,10 @@ from healthcurve.config import Environment, Settings, TelegramMode, get_settings
 from healthcurve.db import get_ai_session_factory, get_session_factory
 from healthcurve.integrations.telegram import polling
 from healthcurve.integrations.telegram.client import TelegramClient
+from healthcurve.integrations.telegram.confirmation_reminders import (
+    CONFIRMATION_REMINDER_TASK,
+    make_confirmation_reminder_handler,
+)
 from healthcurve.integrations.telegram.dose_reminders import (
     DOSE_REMINDER_TASK,
     make_reminder_handler,
@@ -110,6 +114,10 @@ def main() -> int:
     ):
         assert settings.telegram_allowed_chat_id is not None
         handlers[DOSE_REMINDER_TASK] = make_reminder_handler(
+            client=TelegramClient(settings, token=telegram_secrets.bot_token),
+            chat_id=settings.telegram_allowed_chat_id,
+        )
+        handlers[CONFIRMATION_REMINDER_TASK] = make_confirmation_reminder_handler(
             client=TelegramClient(settings, token=telegram_secrets.bot_token),
             chat_id=settings.telegram_allowed_chat_id,
         )

@@ -24,11 +24,14 @@ SENT_TIME = datetime(2026, 8, 13, 12, 30, tzinfo=UTC)
 
 
 class FakeTelegramClient:
+    def __init__(self, *, succeeds: bool = True) -> None:
+        self.succeeds = succeeds
+
     def send_message(
         self, chat_id: int, text: str, *, reply_markup: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    ) -> bool:
         del chat_id, text, reply_markup
-        return {"ok": True}
+        return self.succeeds
 
 
 def _owner() -> Owner:
@@ -171,3 +174,134 @@ def test_no_time_command_uses_send_time_in_owner_timezone() -> None:
     draft = mocked.add.call_args.args[0]
     assert isinstance(draft, ExtractionDraft)
     assert draft.candidates[0]["local_time"] == "2026-08-13T08:30:00"
+
+
+def test_dispatch_schedules_reminder_only_after_confirmation_is_delivered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _owner()
+    draft_id = uuid.uuid4()
+    mocked = MagicMock(spec=Session)
+    mocked.scalar.side_effect = [None, owner]
+    scheduled: list[tuple[uuid.UUID, datetime]] = []
+
+    def fake_handle_message(*args: Any, **kwargs: Any) -> handlers.Reply:
+        del args, kwargs
+        return handlers.Reply("confirm", draft_id=draft_id)
+
+    def fake_schedule(
+        session: Session,
+        *,
+        draft_id: uuid.UUID,
+        confirmation_sent_at: datetime,
+    ) -> None:
+        del session
+        scheduled.append((draft_id, confirmation_sent_at))
+
+    monkeypatch.setattr(
+        handlers,
+        "handle_message",
+        fake_handle_message,
+    )
+    monkeypatch.setattr(
+        "healthcurve.integrations.telegram.dispatch.schedule_confirmation_reminder",
+        fake_schedule,
+    )
+
+    process_update(
+        cast(Session, mocked),
+        {
+            "update_id": 7003,
+            "message": {
+                "message_id": 9003,
+                "date": int(SENT_TIME.timestamp()),
+                "chat": {"id": 4242, "type": "private"},
+                "text": "/weight 180 lb",
+            },
+        },
+        allowed_chat_id=4242,
+        client=cast(TelegramClient, FakeTelegramClient()),
+        now=PROCESSING_TIME,
+    )
+
+    assert scheduled == [(draft_id, PROCESSING_TIME)]
+
+
+def test_dispatch_does_not_schedule_reminder_for_non_draft_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _owner()
+    mocked = MagicMock(spec=Session)
+    mocked.scalar.side_effect = [None, owner]
+    schedule = MagicMock()
+
+    def fake_handle_message(*args: Any, **kwargs: Any) -> handlers.Reply:
+        del args, kwargs
+        return handlers.Reply("ordinary response")
+
+    monkeypatch.setattr(
+        handlers,
+        "handle_message",
+        fake_handle_message,
+    )
+    monkeypatch.setattr(
+        "healthcurve.integrations.telegram.dispatch.schedule_confirmation_reminder",
+        schedule,
+    )
+
+    process_update(
+        cast(Session, mocked),
+        {
+            "update_id": 7004,
+            "message": {
+                "message_id": 9004,
+                "chat": {"id": 4242, "type": "private"},
+                "text": "/help",
+            },
+        },
+        allowed_chat_id=4242,
+        client=cast(TelegramClient, FakeTelegramClient()),
+        now=PROCESSING_TIME,
+    )
+
+    schedule.assert_not_called()
+
+
+def test_dispatch_does_not_schedule_reminder_when_confirmation_delivery_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _owner()
+    mocked = MagicMock(spec=Session)
+    mocked.scalar.side_effect = [None, owner]
+    schedule = MagicMock()
+
+    def fake_handle_message(*args: Any, **kwargs: Any) -> handlers.Reply:
+        del args, kwargs
+        return handlers.Reply("confirm", draft_id=uuid.uuid4())
+
+    monkeypatch.setattr(
+        handlers,
+        "handle_message",
+        fake_handle_message,
+    )
+    monkeypatch.setattr(
+        "healthcurve.integrations.telegram.dispatch.schedule_confirmation_reminder",
+        schedule,
+    )
+
+    process_update(
+        cast(Session, mocked),
+        {
+            "update_id": 7005,
+            "message": {
+                "message_id": 9005,
+                "chat": {"id": 4242, "type": "private"},
+                "text": "/weight 180 lb",
+            },
+        },
+        allowed_chat_id=4242,
+        client=cast(TelegramClient, FakeTelegramClient(succeeds=False)),
+        now=PROCESSING_TIME,
+    )
+
+    schedule.assert_not_called()
