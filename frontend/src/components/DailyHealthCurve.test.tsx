@@ -1098,6 +1098,7 @@ describe("Daily HealthCurve", () => {
       unit: "garmin_score",
     });
     const symptomAt = "2026-03-08T16:00:00Z";
+    const episodeAt = "2026-03-08T16:15:00Z";
     const stressDoseAt = "2026-03-08T18:00:00Z";
     renderWithTheme(<DailyHealthCurve data={data({
       garmin: [
@@ -1118,6 +1119,97 @@ describe("Daily HealthCurve", () => {
         time: { occurred_at: symptomAt, local_time: "2026-03-08T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 },
         provenance: { ...provenance, source_type: "web", confirmation_state: "direct" },
         episode_id: null,
+        notes: null,
+      }],
+      episodes: [{
+        id: "71500000-0000-4000-8000-000000000001",
+        category: "fact",
+        trigger: "Synthetic illness",
+        severity: "mild",
+        started_at: episodeAt,
+        ended_at: null,
+        timezone: "America/New_York",
+        highest_temperature_c: null,
+        illness_description: null,
+        notes: null,
+        status: "open",
+        outcome: null,
+        recovery_notes: null,
+        dose_count: 0,
+        symptom_count: 0,
+      }],
+      eventContextBloodPressure: [
+        {
+          id: "71600000-0000-4000-8000-000000000001",
+          category: "fact",
+          systolic_mmhg: 110,
+          diastolic_mmhg: 70,
+          pulse_bpm: null,
+          measurement_setting: "home",
+          body_position: null,
+          time: { occurred_at: "2026-03-08T15:29:00Z", local_time: "2026-03-08T11:29:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+          provenance,
+          notes: null,
+        },
+        {
+          id: "71600000-0000-4000-8000-000000000002",
+          category: "fact",
+          systolic_mmhg: 121,
+          diastolic_mmhg: 81,
+          pulse_bpm: 88,
+          measurement_setting: "home",
+          body_position: "sitting",
+          time: { occurred_at: "2026-03-08T15:30:00Z", local_time: "2026-03-08T11:30:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+          provenance,
+          notes: null,
+        },
+        {
+          id: "71600000-0000-4000-8000-000000000003",
+          category: "fact",
+          systolic_mmhg: 124,
+          diastolic_mmhg: 80,
+          pulse_bpm: null,
+          measurement_setting: "home",
+          body_position: null,
+          time: { occurred_at: "2026-03-08T16:10:00Z", local_time: "2026-03-08T12:10:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+          provenance,
+          notes: null,
+        },
+        {
+          id: "71600000-0000-4000-8000-000000000004",
+          category: "fact",
+          systolic_mmhg: 125,
+          diastolic_mmhg: 82,
+          pulse_bpm: null,
+          measurement_setting: "provider",
+          body_position: null,
+          time: { occurred_at: "2026-03-08T16:30:00Z", local_time: "2026-03-08T12:30:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+          provenance,
+          notes: null,
+        },
+        {
+          id: "71600000-0000-4000-8000-000000000005",
+          category: "fact",
+          systolic_mmhg: 130,
+          diastolic_mmhg: 85,
+          pulse_bpm: null,
+          measurement_setting: "home",
+          body_position: null,
+          time: { occurred_at: "2026-03-08T16:31:00Z", local_time: "2026-03-08T12:31:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+          provenance,
+          notes: null,
+        },
+      ],
+      eventContextTemperature: [{
+        id: "71700000-0000-4000-8000-000000000001",
+        category: "fact",
+        value: "98.6",
+        unit: "f",
+        normalized_c: "37.00",
+        display_f: "98.6",
+        display_c: "37.0",
+        time: { occurred_at: "2026-03-08T16:10:00Z", local_time: "2026-03-08T12:10:00", timezone: "America/New_York", utc_offset_minutes: -240 },
+        provenance,
         notes: null,
       }],
       exposure: {
@@ -1150,10 +1242,21 @@ describe("Daily HealthCurve", () => {
     expect(symptomSection).toHaveTextContent("Garmin stress30 score · 2 points");
     expect(symptomSection).toHaveTextContent("HRVUnavailable");
     expect(symptomSection).not.toHaveTextContent("99 score");
+    expect(symptomSection).toHaveTextContent("121/81 mmHg · pulse 88 bpm · 30 min before");
+    expect(symptomSection).toHaveTextContent("124/80 mmHg · 10 min after");
+    expect(symptomSection).toHaveTextContent("125/82 mmHg · 30 min after");
+    expect(symptomSection).not.toHaveTextContent("110/70 mmHg");
+    expect(symptomSection).not.toHaveTextContent("130/85 mmHg");
+    expect(symptomSection).toHaveTextContent("98.6 °F (37.0 °C) · 10 min after");
     const stressSection = screen.getByRole("heading", { name: "Recorded stress events" }).closest("section");
     expect(stressSection).not.toBeNull();
     expect(stressSection).toHaveTextContent("Stress dose — Hydrocortisone 5 mg");
+    expect(stressSection).toHaveTextContent("Episode started — Synthetic illness");
+    expect(stressSection).not.toHaveTextContent("121/81 mmHg · pulse 88 bpm · 45 min before");
+    expect(stressSection).toHaveTextContent("124/80 mmHg · 5 min before");
+    expect(stressSection).toHaveTextContent("125/82 mmHg · 15 min after");
+    expect(stressSection).toHaveTextContent("98.6 °F (37.0 °C) · 5 min before");
     expect(stressSection).toHaveTextContent("Garmin stressUnavailable");
-    expect(screen.getAllByLabelText("Observed metric averages during the previous hour")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Observed metrics around this event")).toHaveLength(3);
   });
 });

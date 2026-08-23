@@ -39,6 +39,10 @@ function MetricFrame({ title, metric, referenceDate, children }: MetricFrameProp
 
 type DoseDay = AnalyticsSummary["daily_doses"]["values"][number];
 
+function uniqueById<T extends { id: string }>(recordGroups: T[][]): T[] {
+  return [...new Map(recordGroups.flat().map((record) => [record.id, record])).values()];
+}
+
 function doseTotal(day: DoseDay, kind: "planned" | "actual"): string {
   if (day.incompatible_units) return "Unavailable—incompatible units";
   const value = kind === "planned" ? day.planned_total : day.actual_total;
@@ -166,15 +170,34 @@ export function AnalyticsPage(): React.JSX.Element {
   const dailyCurve = useQuery({
     queryKey: ["daily-healthcurve", dayFilter],
     queryFn: async () => {
-      const [exposure, garmin, symptoms, bloodPressure, temperature, episodes] = await Promise.all([
+      const previousDay = shiftIsoDate(dayFilter.day, -1);
+      const nextDay = shiftIsoDate(dayFilter.day, 1);
+      const [exposure, garmin, symptoms, bloodPressure, temperature, episodes, adjacentBloodPressure, adjacentTemperature] = await Promise.all([
         getSteroidExposure(dayFilter.day, dayFilter.timezone, dayFilter.model),
         getDailyGarminContext(dayFilter.day, dayFilter.timezone),
         getDailySymptoms(dayFilter.day, dayFilter.timezone),
         getDailyBloodPressure(dayFilter.day, dayFilter.timezone),
         getDailyTemperature(dayFilter.day, dayFilter.timezone),
         getDailyEpisodes(dayFilter.day, dayFilter.timezone),
+        Promise.all([
+          getDailyBloodPressure(previousDay, dayFilter.timezone),
+          getDailyBloodPressure(nextDay, dayFilter.timezone),
+        ]),
+        Promise.all([
+          getDailyTemperature(previousDay, dayFilter.timezone),
+          getDailyTemperature(nextDay, dayFilter.timezone),
+        ]),
       ]);
-      return { exposure, garmin, symptoms, bloodPressure, temperature, episodes };
+      return {
+        exposure,
+        garmin,
+        symptoms,
+        bloodPressure,
+        temperature,
+        eventContextBloodPressure: uniqueById([bloodPressure, ...adjacentBloodPressure]),
+        eventContextTemperature: uniqueById([temperature, ...adjacentTemperature]),
+        episodes,
+      };
     },
     refetchInterval: 60_000,
   });

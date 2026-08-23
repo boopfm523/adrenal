@@ -24,6 +24,8 @@ export interface DailyHealthCurveData {
   symptoms: Symptom[];
   bloodPressure: BloodPressure[];
   temperature: Temperature[];
+  eventContextBloodPressure?: BloodPressure[];
+  eventContextTemperature?: Temperature[];
   episodes: Episode[];
 }
 
@@ -71,6 +73,7 @@ interface PreEventMetricSummary {
   key: string;
   label: string;
   value: string | null;
+  values?: { key: string; text: string }[];
 }
 
 function doseExclusionReason(reason: SteroidExposureCurve["dose_markers"][number]["exclusion_reason"]): string {
@@ -107,6 +110,7 @@ const RESPIRATION_MEDIAN_RADIUS = 2;
 const TEMPERATURE_DISPLAY_MIN = 77;
 const TEMPERATURE_DISPLAY_MAX = 113;
 const PRE_EVENT_WINDOW_MILLISECONDS = 60 * 60 * 1_000;
+const NEARBY_VITAL_WINDOW_MILLISECONDS = 30 * 60 * 1_000;
 
 const DEFAULT_VISIBLE: HealthCurveVisibility = {
   exposure: true,
@@ -464,6 +468,18 @@ function inPreEventWindow(occurredAt: string, eventAt: number): boolean {
   return observationAt >= eventAt - PRE_EVENT_WINDOW_MILLISECONDS && observationAt < eventAt;
 }
 
+function inNearbyVitalWindow(occurredAt: string, eventAt: number): boolean {
+  const observationAt = Date.parse(occurredAt);
+  return observationAt >= eventAt - NEARBY_VITAL_WINDOW_MILLISECONDS
+    && observationAt <= eventAt + NEARBY_VITAL_WINDOW_MILLISECONDS;
+}
+
+function relativeEventTime(occurredAt: string, eventAt: number): string {
+  const minutes = Math.round((Date.parse(occurredAt) - eventAt) / 60_000);
+  if (minutes === 0) return "at event time";
+  return `${Math.abs(minutes).toString()} min ${minutes < 0 ? "before" : "after"}`;
+}
+
 function average(values: number[]): number | null {
   return values.length === 0
     ? null
@@ -480,20 +496,27 @@ function preEventMetricSummaries(data: DailyHealthCurveData, occurredAt: string)
     const value = numeric(record.value);
     return value === null ? [] : [value];
   });
-  const bloodPressure = data.bloodPressure.filter((record) => inPreEventWindow(record.time.occurred_at, eventAt));
-  const temperatures = data.temperature.filter((record) => inPreEventWindow(record.time.occurred_at, eventAt));
+  const priorBloodPressure = data.bloodPressure.filter((record) => inPreEventWindow(record.time.occurred_at, eventAt));
+  const nearbyBloodPressure = (data.eventContextBloodPressure ?? data.bloodPressure)
+    .filter((record) => inNearbyVitalWindow(record.time.occurred_at, eventAt))
+    .sort((left, right) => Date.parse(left.time.occurred_at) - Date.parse(right.time.occurred_at));
+  const nearbyTemperatures = (data.eventContextTemperature ?? data.temperature)
+    .filter((record) => inNearbyVitalWindow(record.time.occurred_at, eventAt))
+    .sort((left, right) => Date.parse(left.time.occurred_at) - Date.parse(right.time.occurred_at));
   const heartRateValues = [
     ...garminValues("heart_rate"),
-    ...bloodPressure.flatMap((record) => record.pulse_bpm == null ? [] : [record.pulse_bpm]),
+    ...priorBloodPressure.flatMap((record) => record.pulse_bpm == null ? [] : [record.pulse_bpm]),
   ];
-  const bloodPressureValue = bloodPressure.length === 0
-    ? null
-    : `${summaryNumber(average(bloodPressure.map((record) => record.systolic_mmhg)) ?? 0)}/${summaryNumber(average(bloodPressure.map((record) => record.diastolic_mmhg)) ?? 0)} mmHg · ${bloodPressure.length.toString()} ${bloodPressure.length === 1 ? "reading" : "readings"}`;
-  const temperatureFValues = temperatures.map((record) => Number(record.display_f)).filter((value) => Number.isFinite(value));
-  const temperatureCValues = temperatures.map((record) => Number(record.display_c)).filter((value) => Number.isFinite(value));
-  const temperatureValue = average(temperatureFValues) === null || average(temperatureCValues) === null
-    ? null
-    : `${summaryNumber(average(temperatureFValues) ?? 0)} °F (${summaryNumber(average(temperatureCValues) ?? 0)} °C) · ${temperatures.length.toString()} ${temperatures.length === 1 ? "reading" : "readings"}`;
+  const bloodPressureValues = nearbyBloodPressure.map((record) => ({
+    key: record.id,
+    text: `${summaryNumber(record.systolic_mmhg)}/${summaryNumber(record.diastolic_mmhg)} mmHg`
+      + (record.pulse_bpm == null ? "" : ` · pulse ${summaryNumber(record.pulse_bpm)} bpm`)
+      + ` · ${relativeEventTime(record.time.occurred_at, eventAt)}`,
+  }));
+  const temperatureValues = nearbyTemperatures.map((record) => ({
+    key: record.id,
+    text: `${record.display_f} °F (${record.display_c} °C) · ${relativeEventTime(record.time.occurred_at, eventAt)}`,
+  }));
   const metric = (key: string, label: string, values: number[], unit: string, digits = 1): PreEventMetricSummary => {
     const result = average(values);
     return {
@@ -510,17 +533,17 @@ function preEventMetricSummaries(data: DailyHealthCurveData, occurredAt: string)
     metric("hrv", "HRV", garminValues("hrv"), "ms"),
     metric("respiration", "Respiration", garminValues("respiration_rate"), "breaths/min"),
     metric("steps", "Steps", garminValues("steps"), "steps/sample", 0),
-    { key: "blood-pressure", label: "Blood pressure", value: bloodPressureValue },
-    { key: "temperature", label: "Temperature", value: temperatureValue },
+    { key: "blood-pressure", label: "Blood pressure (±30 min)", value: null, values: bloodPressureValues },
+    { key: "temperature", label: "Temperature (±30 min)", value: null, values: temperatureValues },
   ];
 }
 
 function PreEventMetricAverages({ data, occurredAt }: { data: DailyHealthCurveData; occurredAt: string }): React.JSX.Element {
   const summaries = preEventMetricSummaries(data, occurredAt);
-  return <section className="healthcurve-pre-event-summary" aria-label="Observed metric averages during the previous hour">
-    <h4>Previous-hour observed averages</h4>
-    <p>Timestamped readings from the 60 minutes before this event. Missing data remains unavailable.</p>
-    <dl>{summaries.map((summary) => <div key={summary.key}><dt>{summary.label}</dt><dd>{summary.value ?? "Unavailable"}</dd></div>)}</dl>
+  return <section className="healthcurve-pre-event-summary" aria-label="Observed metrics around this event">
+    <h4>Observed metrics around this event</h4>
+    <p>Garmin metrics are averages from the previous 60 minutes. Blood pressure and temperature are exact readings from 30 minutes before through 30 minutes after the event. Missing data remains unavailable.</p>
+    <dl>{summaries.map((summary) => <div key={summary.key}><dt>{summary.label}</dt><dd>{summary.values === undefined || summary.values.length === 0 ? summary.value ?? "Unavailable" : <ul>{summary.values.map((value) => <li key={value.key}>{value.text}</li>)}</ul>}</dd></div>)}</dl>
   </section>;
 }
 
