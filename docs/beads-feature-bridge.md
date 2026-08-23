@@ -98,13 +98,13 @@ Never put their values in Beads, logs, command arguments, or documentation.
 Run one drain manually from the repository root:
 
 ```bash
-uv run python scripts/beads_feature_bridge.py --once --repo /Users/jeff/Documents/adrenal
+uv run python scripts/beads_feature_bridge.py --once --repo "$HOME/Documents/adrenal"
 ```
 
 Run continuously:
 
 ```bash
-uv run python scripts/beads_feature_bridge.py --repo /Users/jeff/Documents/adrenal
+uv run python scripts/beads_feature_bridge.py --repo "$HOME/Documents/adrenal"
 ```
 
 The continuous bridge watches its loaded bridge and operation-schema source files.

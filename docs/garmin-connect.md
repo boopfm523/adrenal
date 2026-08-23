@@ -93,8 +93,8 @@ commit, Bead, screenshot, or chat.
 1. Create the external token directory:
 
    ```bash
-   mkdir -p /Users/jeff/.config/healthcurve/garmin
-   chmod 700 /Users/jeff/.config/healthcurve/garmin
+   mkdir -p "$HOME/.config/healthcurve/garmin"
+   chmod 700 "$HOME/.config/healthcurve/garmin"
    ```
 
 2. In the ignored `.env`, temporarily set:
@@ -103,7 +103,7 @@ commit, Bead, screenshot, or chat.
    HC_GARMIN_ENABLED=true
    HC_GARMIN_EMAIL=your-garmin-login-email
    HC_GARMIN_PASSWORD=your-garmin-password
-   HC_GARMIN_TOKEN_STORE_HOST=/Users/jeff/.config/healthcurve/garmin
+   HC_GARMIN_TOKEN_STORE_HOST=$HOME/.config/healthcurve/garmin
    HC_GARMIN_SYNC_LOOKBACK_DAYS=3
    ```
 

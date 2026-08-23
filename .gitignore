@@ -47,3 +47,4 @@ frontend/dist/
 *.swp
 .pyright/
 .audit-requirements.txt
+.claude/settings.local.json

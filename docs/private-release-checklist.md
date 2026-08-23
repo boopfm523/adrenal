@@ -7,7 +7,7 @@ does not turn HealthCurve into a public service. The owner-approved runtime may 
 `HC_ENVIRONMENT=dev`; debug must still be off and secrets must not be examples or test
 credentials.
 
-Run commands from `/Users/jeff/Documents/adrenal`. Stop on the first failure. Commands
+Run commands from `$HOME/Documents/adrenal`. Stop on the first failure. Commands
 below either print non-sensitive status or explicitly suppress secret-bearing output.
 Never paste `.env`, an unredacted Compose configuration, OAuth material, the backup
 recovery identity, or medical content into a release record.
@@ -89,7 +89,7 @@ docker compose \
   exec -T backup-worker python -m healthcurve.backup_status
 
 uv run python scripts/check_rclone_drive_config.py \
-  --config /Users/jeff/.config/healthcurve/rclone.conf
+  --config "$HOME/.config/healthcurve/rclone.conf"
 ```
 
 Pass when backup status is `healthy`, no reason codes or dead letter are present, the
@@ -101,7 +101,7 @@ upload alone does not prove recovery.
 
 ```bash
 uv run python scripts/run_restore_drill.py \
-  --config /Users/jeff/.config/healthcurve/rclone.conf \
+  --config "$HOME/.config/healthcurve/rclone.conf" \
   --prompt-identity
 ```
 

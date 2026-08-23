@@ -8,7 +8,7 @@ backlog is ordered the way it is.
 ## How to resume, from nothing
 
 ```bash
-cd /Users/jeff/Documents/adrenal
+cd "$HOME/Documents/adrenal"
 make up                 # start the stack
 bd ready                # what is claimable right now
 bd show <id>            # read one before starting it

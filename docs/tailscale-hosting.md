@@ -63,7 +63,7 @@ The repository-root `.env` is an acceptable secret store for this one-owner,
 same-machine deployment. It must remain outside Git and readable only by the owner:
 
 ```bash
-cd /Users/jeff/Documents/adrenal
+cd "$HOME/Documents/adrenal"
 chmod 600 .env
 stat -f '%Lp' .env
 git check-ignore -q .env
@@ -85,7 +85,7 @@ Use the overlays for the services that are actually configured. The Google Drive
 overlay is safe to include only after its private rclone file exists.
 
 ```bash
-cd /Users/jeff/Documents/adrenal
+cd "$HOME/Documents/adrenal"
 docker compose \
   -f docker-compose.yml \
   -f deploy/backup.compose.yml \
@@ -151,7 +151,7 @@ from Tailscale promptly and use **Settings → Sign out every session**.
 4. Recreate only the services that read the token:
 
    ```bash
-   cd /Users/jeff/Documents/adrenal
+   cd "$HOME/Documents/adrenal"
    docker compose \
      -f docker-compose.yml \
      -f deploy/backup.compose.yml \

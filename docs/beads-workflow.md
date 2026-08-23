@@ -13,7 +13,7 @@ illustrative; everything below was run against the installed binary.
 | Install method | `brew install beads` (formula `beads`, homepage `github.com/gastownhall/beads`) |
 | Backend | Dolt, embedded mode (SQLite backend removed upstream) |
 | Database / prefix | `hc` — issues are named `hc-<hash>` |
-| Repo root | `/Users/jeff/Documents/adrenal` |
+| Repo root | `$HOME/Documents/adrenal` |
 
 Verify with:
 

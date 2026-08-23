@@ -185,7 +185,7 @@ must be completed as the account that owns `HealthCurve Backups`.
 Stop the scheduled worker before changing the grant:
 
 ```bash
-cd /Users/jeff/Documents/adrenal
+cd "$HOME/Documents/adrenal"
 docker compose \
   -f docker-compose.yml \
   -f deploy/backup.compose.yml \
@@ -199,7 +199,7 @@ Run this in a private macOS Terminal window outside Codex, VS Code task capture,
 sharing, or recording: rclone may display a configuration summary while editing.
 
 ```bash
-rclone --config /Users/jeff/.config/healthcurve/rclone.conf config
+rclone --config "$HOME/.config/healthcurve/rclone.conf" config
 ```
 
 Choose **Edit existing remote**, then `healthcurve-drive`. Keep storage type `drive`,
@@ -214,7 +214,7 @@ client values, token, account identifier, or parser errors:
 
 ```bash
 uv run python scripts/check_rclone_drive_config.py \
-  --config /Users/jeff/.config/healthcurve/rclone.conf
+  --config "$HOME/.config/healthcurve/rclone.conf"
 ```
 
 It must report that an owner client, `drive.file` scope, refresh token, and mode-0600
@@ -231,7 +231,7 @@ rclone's former shared client. During this one-time cutover:
 
    ```bash
    rclone \
-     --config /Users/jeff/.config/healthcurve/rclone.conf \
+     --config "$HOME/.config/healthcurve/rclone.conf" \
      --log-level ERROR \
      mkdir "healthcurve-drive:HealthCurve Backups"
    ```
@@ -240,7 +240,7 @@ rclone's former shared client. During this one-time cutover:
 
 ```bash
 rclone \
-  --config /Users/jeff/.config/healthcurve/rclone.conf \
+  --config "$HOME/.config/healthcurve/rclone.conf" \
   --log-level ERROR \
   lsf "healthcurve-drive:HealthCurve Backups" \
   --max-depth 1 >/dev/null
@@ -255,7 +255,7 @@ Run the purpose-built encrypted synthetic round trip:
 
 ```bash
 uv run python scripts/verify_rclone_drive_roundtrip.py \
-  --config /Users/jeff/.config/healthcurve/rclone.conf
+  --config "$HOME/.config/healthcurve/rclone.conf"
 ```
 
 The verifier creates a disposable `age` identity in a mode-0700 temporary directory,
@@ -477,9 +477,9 @@ newest offsite set, verifies both remote checksum sidecars and the public envelo
 asks for the separately stored age recovery identity through a hidden terminal prompt:
 
 ```bash
-cd /Users/jeff/Documents/adrenal
+cd "$HOME/Documents/adrenal"
 uv run python scripts/run_restore_drill.py \
-  --config /Users/jeff/.config/healthcurve/rclone.conf \
+  --config "$HOME/.config/healthcurve/rclone.conf" \
   --prompt-identity
 ```
 
