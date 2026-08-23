@@ -26,7 +26,7 @@ def _owner() -> Owner:
     return Owner(
         id=uuid.uuid4(),
         email="plan-shorthand@example.test",
-        password_hash="synthetic-not-a-real-hash",
+        password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
         default_timezone="America/New_York",
     )
 
