@@ -492,7 +492,7 @@ circle.chart-series { fill: white; }
 .context-band-values, .wake-reference-values, .wake-coverage-features { margin-block: 1rem; }
 .context-band-values .table-scroll, .wake-reference-values .table-scroll, .wake-coverage-features .table-scroll { max-height: 24rem; }
 .healthcurve-episode { fill: rgb(199 121 45 / 18%); stroke: #8a4c0e; stroke-width: 1.2; stroke-dasharray: 4 3; }
-.healthcurve-future-region { fill: rgb(71 85 79 / 7%); pointer-events: none; }
+.healthcurve-future-region { fill: #fff; pointer-events: none; }
 .healthcurve-current-time-line { stroke: #174c3c; stroke-width: 2; stroke-dasharray: 4 3; pointer-events: none; }
 .healthcurve-current-time-label-bg { fill: #174c3c; pointer-events: none; }
 .healthcurve-current-time-label { fill: white; font-size: 10px; font-weight: 800; pointer-events: none; }
