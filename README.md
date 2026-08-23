@@ -1,5 +1,17 @@
 # HealthCurve
 
+## Screenshots
+
+[![Daily HealthCurve screenshot](docs/screenshots/curve.png)](docs/screenshots/README.md)
+
+<sub>Daily HealthCurve — modeled medication exposure, a healthy cortisol reference band, wearable signals, and recorded events on one timeline.</sub>
+
+[![HealthCurve symptom-context screenshot](docs/screenshots/curve-symptom.png)](docs/screenshots/README.md)
+
+<sub>Symptom context — review a recorded symptom with preceding wearable metrics and nearby blood-pressure or temperature readings.</sub>
+
+[View all screenshots, including Telegram entry and commands, the timeline, medication plan, manual entry, and reports.](docs/screenshots/README.md)
+
 A private personal health record and analysis application, focused on living without
 adrenal glands and managing adrenal insufficiency.
 
