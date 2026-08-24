@@ -151,7 +151,8 @@ class Settings(BaseSettings):
     garmin_password: SecretStr | None = None
     garmin_token_store: Path | None = None
     garmin_sync_lookback_days: int = Field(default=3, ge=1, le=31)
-    garmin_sync_hour_local: int = Field(default=9, ge=0, le=23)
+    garmin_sync_hour_local: int = Field(default=7, ge=0, le=23)
+    garmin_sync_interval_hours: int = Field(default=12, ge=1, le=24)
 
     # --- Durable worker queue (ADR-0004) ---
     job_poll_interval_s: float = Field(default=2.0, gt=0, le=60)
@@ -271,6 +272,8 @@ class Settings(BaseSettings):
         # CLI/worker require the path; if a process receives one, it must be absolute.
         if self.garmin_token_store is not None and not self.garmin_token_store.is_absolute():
             raise ValueError("HC_GARMIN_TOKEN_STORE must be an absolute non-repository path")
+        if 24 % self.garmin_sync_interval_hours != 0:
+            raise ValueError("HC_GARMIN_SYNC_INTERVAL_HOURS must divide evenly into 24")
         return self
 
     @model_validator(mode="after")

@@ -2401,6 +2401,8 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     status_response = client.get("/api/v1/integrations/garmin/status")
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "connected"
+    assert status_response.json()["automatic_sync_hour_local"] == 7
+    assert status_response.json()["automatic_sync_interval_hours"] == 12
     assert status_response.json()["sync_lookback_days"] == 3
     assert status_response.json()["last_success_at"] is not None
     assert status_response.json()["capabilities"]["hrv_daily_average"] == "unsupported"

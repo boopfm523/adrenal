@@ -151,7 +151,15 @@ function GarminControl(): React.JSX.Element {
   const warningCodes = status.data?.latest_sync_warning_codes ?? [];
   const canSync = status.data?.configured === true && status.data.state === "connected";
   const needsReauthentication = status.data?.state === "reauthentication_required";
-  const automaticHour = (status.data?.automatic_sync_hour_local ?? 9).toString().padStart(2, "0");
+  const automaticStartHour = status.data?.automatic_sync_hour_local ?? 7;
+  const automaticIntervalHours = status.data?.automatic_sync_interval_hours ?? 12;
+  const automaticHours = Array.from(
+    { length: Math.ceil(24 / automaticIntervalHours) },
+    (_, index) => (automaticStartHour + index * automaticIntervalHours) % 24,
+  ).sort((left, right) => left - right);
+  const automaticSchedule = automaticHours
+    .map((hour) => `${hour.toString().padStart(2, "0")}:00`)
+    .join(" and ");
 
   return <Paper component="article" className="settings-card" id="garmin-connection" withBorder radius="md" p="lg">
     <Title order={3}>Garmin Connect</Title>
@@ -192,7 +200,7 @@ function GarminControl(): React.JSX.Element {
       {saveSettings.isSuccess ? <Alert color="green" role="status">Garmin sync window saved as {saveSettings.data.sync_lookback_days} days.</Alert> : null}
       {saveSettings.isError ? <Alert color="red" role="alert">The Garmin sync window was not saved. Enter 1 through 31 days.</Alert> : null}
     </Stack>
-    <p>Automatic sync runs once per local day at or after {automaticHour}:00 in your local timezone, giving your watch time to sync with Garmin Connect first. Manual sync remains available anytime. The saved lookback includes today. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
+    <p>Automatic sync runs at or after {automaticSchedule} each day in your local timezone. Manual sync remains available anytime. The saved lookback includes today. Equivalent queued or running windows are shared, and a recently completed window has a 30-minute cooldown. The refresh control deliberately bypasses only that completed-window cooldown.</p>
     <Group mt="md">
       <Button type="button" loading={sync.isPending} disabled={!canSync} onClick={() => { sync.mutate(false); }}>Sync Garmin now</Button>
       <Button type="button" variant="outline" disabled={sync.isPending || !canSync} onClick={() => { sync.mutate(true); }}>Refresh recent Garmin window</Button>

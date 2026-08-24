@@ -165,15 +165,20 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
     for connection, owner in rows:
         owner_zone = ZoneInfo(owner.default_timezone)
         local_now = now.astimezone(owner_zone)
-        if local_now.time() < time(hour=settings.garmin_sync_hour_local):
+        due_hour = _latest_due_hour(
+            local_now,
+            start_hour=settings.garmin_sync_hour_local,
+            interval_hours=settings.garmin_sync_interval_hours,
+        )
+        if due_hour is None:
             continue
         local_day = local_now.date()
         first = local_day - timedelta(days=connection.sync_lookback_days - 1)
-        daily_key = f"scheduled:{owner.id}:{local_day.isoformat()}"
+        slot_key = f"scheduled:{owner.id}:{local_day.isoformat()}:{due_hour:02d}"
         already_scheduled = session.scalar(
             select(Job.id).where(
                 Job.task == GARMIN_SYNC_TASK,
-                Job.idempotency_key == daily_key,
+                Job.idempotency_key == slot_key,
             )
         )
         if already_scheduled is not None:
@@ -182,10 +187,12 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
         # A manual request can be the one durable job for today's exact scheduler
         # window. Once that job succeeds, its checkpoint narrows the next poll's
         # reconciliation window. The completed provider read still covers that
-        # narrower window, so do not create a second same-day read merely because the
-        # calculated start date changed. A run that does not cover the full required
-        # window (or that ended on an earlier local day) does not suppress scheduling.
-        local_midnight = datetime.combine(local_day, time.min, tzinfo=owner_zone).astimezone(UTC)
+        # narrower window, so do not create a second read for this schedule slot merely
+        # because the calculated start date changed. A run completed before this slot,
+        # or one that does not cover the required window, does not suppress it.
+        slot_started_at = datetime.combine(
+            local_day, time(hour=due_hour), tzinfo=owner_zone
+        ).astimezone(UTC)
         covering_run = session.scalar(
             select(GarminSyncRun.id)
             .where(
@@ -196,7 +203,7 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
                 GarminSyncRun.status.in_(
                     (GarminSyncStatus.COMPLETED, GarminSyncStatus.COMPLETED_WITH_WARNINGS)
                 ),
-                GarminSyncRun.finished_at >= local_midnight,
+                GarminSyncRun.finished_at >= slot_started_at,
             )
             .limit(1)
         )
@@ -208,10 +215,22 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
             start_date=first,
             end_date=local_day,
             timezone=owner.default_timezone,
-            idempotency_key=daily_key,
+            idempotency_key=slot_key,
             origin=GarminSyncOrigin.SCHEDULED,
             now=now,
         )
+
+
+def _latest_due_hour(local_now: datetime, *, start_hour: int, interval_hours: int) -> int | None:
+    """Return the latest owner-local schedule slot due today.
+
+    Settings validation guarantees an interval that divides the 24-hour wall clock.
+    Sorting the modulo-derived hours also handles a configured start whose later
+    interval wraps past midnight. Before today's first slot, no stale prior-day read
+    is added; the next due slot's lookback will reconcile recent Garmin corrections.
+    """
+    hours = sorted({(start_hour + offset) % 24 for offset in range(0, 24, interval_hours)})
+    return next((hour for hour in reversed(hours) if local_now.time() >= time(hour=hour)), None)
 
 
 def make_garmin_handler(

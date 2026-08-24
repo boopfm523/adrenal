@@ -163,10 +163,13 @@ the same current recorded facts.
 
 ## Scheduling and reconciliation
 
-The worker queues one bounded window per owner and local calendar day at or after the
-configured owner-local hour (`HC_GARMIN_SYNC_HOUR_LOCAL`, 09:00 by default), with a
-maximum of 31 days per job. This gives the watch and phone time to finish their own
-Garmin Connect sync; manual HealthCurve sync remains available before that hour. The
+The worker queues one bounded window per owner and owner-local schedule slot. By
+default, slots begin at 07:00 (`HC_GARMIN_SYNC_HOUR_LOCAL=7`) and repeat every 12 hours
+(`HC_GARMIN_SYNC_INTERVAL_HOURS=12`), producing 07:00 and 19:00 syncs. The interval
+must divide evenly into 24 so the wall-clock schedule remains deterministic across
+worker restarts and daylight-saving changes. Jobs run at or after their slot when the
+worker polls, with a maximum of 31 days per job. Manual HealthCurve sync remains
+available at any time. The
 owner-selected lookback defaults to three days and can be changed from 1 to 31 days on
 Settings. Both automatic sync and **Sync Garmin now** use that saved window. This lets
 an owner temporarily select seven days for a catch-up sync and then restore three days

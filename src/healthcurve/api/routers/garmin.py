@@ -58,6 +58,7 @@ class GarminStatusOut(BaseModel):
     configured: bool
     state: str
     automatic_sync_hour_local: int
+    automatic_sync_interval_hours: int
     sync_lookback_days: int
     last_success_at: datetime | None = None
     checkpoint_date: date | None = None
@@ -152,6 +153,7 @@ def connection_status(
         configured=settings.garmin_enabled,
         state="not_connected" if connection is None else connection.state.value,
         automatic_sync_hour_local=settings.garmin_sync_hour_local,
+        automatic_sync_interval_hours=settings.garmin_sync_interval_hours,
         sync_lookback_days=(
             settings.garmin_sync_lookback_days
             if connection is None

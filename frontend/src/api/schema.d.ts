@@ -3001,6 +3001,8 @@ export interface components {
         GarminStatusOut: {
             /** Automatic Sync Hour Local */
             automatic_sync_hour_local: number;
+            /** Automatic Sync Interval Hours */
+            automatic_sync_interval_hours: number;
             /** Capabilities */
             capabilities?: {
                 [key: string]: string;

@@ -640,10 +640,54 @@ def test_garmin_manual_and_scheduler_restart_share_one_provider_fetch(
     }
     with factory() as session:
         scheduled = session.scalar(
-            select(Job).where(Job.idempotency_key == f"scheduled:{owner_id}:{next_day.date()}")
+            select(Job).where(Job.idempotency_key == f"scheduled:{owner_id}:{next_day.date()}:07")
         )
         assert scheduled is not None
         assert scheduled.payload["origin"] == GarminSyncOrigin.SCHEDULED.value
+
+
+def test_garmin_scheduler_runs_at_7_and_19_owner_local_without_duplicate_slots(
+    factory: sessionmaker[Session],
+) -> None:
+    owner_id = _connected_garmin_owner(factory, email="garmin-twice-daily@example.test")
+    settings = Settings.model_validate({"garmin_enabled": True})
+
+    for instant in (
+        datetime(2026, 8, 9, 6, 59, tzinfo=UTC),
+        datetime(2026, 8, 9, 7, 0, tzinfo=UTC),
+        datetime(2026, 8, 9, 18, 59, tzinfo=UTC),
+    ):
+        with factory() as session, session.begin():
+            schedule_garmin_sync(session, instant, settings=settings)
+
+    with factory() as session, session.begin():
+        morning = claim(
+            session,
+            worker_id="garmin-twice-daily-test",
+            now=datetime(2026, 8, 9, 7, 1, tzinfo=UTC),
+        )
+        assert morning is not None
+        complete(session, morning, now=datetime(2026, 8, 9, 7, 2, tzinfo=UTC))
+
+    for instant in (
+        datetime(2026, 8, 9, 19, 0, tzinfo=UTC),
+        datetime(2026, 8, 9, 23, 59, tzinfo=UTC),
+    ):
+        with factory() as session, session.begin():
+            schedule_garmin_sync(session, instant, settings=settings)
+
+    with factory() as session:
+        keys = list(
+            session.scalars(
+                select(Job.idempotency_key)
+                .where(Job.task == GARMIN_SYNC_TASK)
+                .order_by(Job.idempotency_key)
+            )
+        )
+    assert keys == [
+        f"scheduled:{owner_id}:2026-08-09:07",
+        f"scheduled:{owner_id}:2026-08-09:19",
+    ]
 
 
 def test_garmin_scheduler_waits_until_configured_owner_local_hour_across_dst(
@@ -654,7 +698,13 @@ def test_garmin_scheduler_waits_until_configured_owner_local_hour_across_dst(
         email="garmin-local-hour@example.test",
         timezone="America/New_York",
     )
-    settings = Settings.model_validate({"garmin_enabled": True, "garmin_sync_hour_local": 9})
+    settings = Settings.model_validate(
+        {
+            "garmin_enabled": True,
+            "garmin_sync_hour_local": 9,
+            "garmin_sync_interval_hours": 12,
+        }
+    )
     # 2026-03-08 is the spring DST transition: 12:59 UTC is 08:59 EDT and
     # 13:00 UTC is 09:00 EDT. The gate follows the owner's wall clock.
     before = datetime(2026, 3, 8, 12, 59, tzinfo=UTC)
@@ -663,7 +713,7 @@ def test_garmin_scheduler_waits_until_configured_owner_local_hour_across_dst(
     with factory() as session, session.begin():
         schedule_garmin_sync(session, before, settings=settings)
     with factory() as session:
-        scheduled_key = f"scheduled:{owner_id}:2026-03-08"
+        scheduled_key = f"scheduled:{owner_id}:2026-03-08:09"
         assert session.scalar(select(Job).where(Job.idempotency_key == scheduled_key)) is None
 
     with factory() as session, session.begin():

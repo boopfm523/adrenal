@@ -97,6 +97,13 @@ def test_defaults_are_safe() -> None:
     assert settings.debug is False
     assert settings.environment is Environment.DEV
     assert settings.ollama_model == "qwen3:30b"
+    assert settings.garmin_sync_hour_local == 7
+    assert settings.garmin_sync_interval_hours == 12
+
+
+def test_garmin_sync_interval_must_divide_the_owner_local_day() -> None:
+    with pytest.raises(ValueError, match="must divide evenly into 24"):
+        _settings(garmin_sync_interval_hours=5)
 
 
 @pytest.mark.parametrize(
