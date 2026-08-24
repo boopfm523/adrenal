@@ -64,6 +64,17 @@ def test_base_compose_defaults_to_host_native_ollama() -> None:
         assert "host.docker.internal:11434" in endpoint
 
 
+def test_api_receives_the_same_garmin_schedule_defaults_as_the_isolated_worker() -> None:
+    root = Path(__file__).resolve().parents[2]
+    base = yaml.safe_load((root / "docker-compose.yml").read_text(encoding="utf-8"))
+    overlay = yaml.safe_load((root / "deploy/garmin.compose.yml").read_text(encoding="utf-8"))
+    api_environment = base["services"]["api"]["environment"]
+    worker_environment = overlay["services"]["garmin-worker"]["environment"]
+
+    for name in ("HC_GARMIN_SYNC_HOUR_LOCAL", "HC_GARMIN_SYNC_INTERVAL_HOURS"):
+        assert api_environment[name] == worker_environment[name]
+
+
 def test_base_topology_preserves_the_garmin_database_path_without_the_worker() -> None:
     config = _config(production=False)
     assert "garmin-worker" not in config["services"]
