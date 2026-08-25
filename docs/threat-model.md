@@ -1,7 +1,8 @@
 # HealthCurve Threat Model and Data Classification
 
 **Status:** normative. **Scope:** single-owner personal health record, self-hosted on a
-personal domain, with Telegram capture, Garmin import, and a private local LLM.
+private Tailscale service, with Telegram capture, Garmin import, a private local LLM,
+and the explicitly separate public static mirror authorized by ADR-0029.
 
 This document implements `docs/HealthCurve_Project_Plan.md` §12 and is referenced by
 `docs/safety-spec.md` (SAFE-29) and by the logging-redaction implementation.
@@ -37,6 +38,10 @@ Trust boundaries:
   from the application network. None is published to the host or the internet.
 - **TB3 — egress and storage-at-rest.** Backups leave the host encrypted; provider
   APIs are contacted outbound with encrypted-at-rest credentials.
+- **TB4 — public static mirror.** The anonymous site receives only an allow-listed,
+  generated HTML/CSS/JavaScript/JSON tree through a forced write-only deployment key.
+  It has no network path to the private application, database, queues, Ollama, or
+  provider integrations. Its published contents are public, not confidential.
 
 Owner assumption: exactly one human owner. There is no multi-tenant model, no
 clinician login, and no sharing feature. Adding any of these invalidates this
@@ -248,6 +253,43 @@ device backup of it. Structural, not fixable in HealthCurve; disclosed to the ow
 
 ---
 
+### T8 — Public static-mirror disclosure or replacement
+
+**Assets:** the integrity of the public curve; all real health facts deliberately
+published through ADR-0029; the separation from the private HealthCurve runtime.
+
+**Attacker capability:** anonymously copying, indexing, correlating, or archiving the
+published facts; requesting guessed dates or paths; exploiting browser dependencies;
+stealing the deployment key; replacing static files; or inducing a partial publish.
+
+**Mitigations:**
+
+- The owner explicitly authorizes only ADR-0029's public display allow-list and is
+  warned that public copies cannot be reliably recalled.
+- A versioned explicit projection excludes every private field by default. Synthetic
+  tests fail on forbidden keys and unexpected schema additions.
+- The public bundle contains no authentication, forms, private endpoints, secrets,
+  third-party scripts, telemetry, owner identifiers, notes, raw messages, or source
+  IDs. Its content-security policy permits only same-origin static resources.
+- Only dates in a validated manifest are fetchable through the UI. Eligibility is
+  fail-closed and requires day-end plus twelve hours and a successful covering Garmin
+  sync completed after that cutoff.
+- Candidate output is generated and validated separately, then deployed as a complete
+  tree. No partial candidate updates the manifest.
+- A dedicated Ed25519 key is forced through write-only `rrsync` to the exact static
+  directory with no shell, read, or delete capability. The private key and reviewed
+  host key remain outside Git and Beads.
+- The private application remains Tailscale-only under ADR-0007; the public host has
+  no API or network route back to it.
+
+**Residual risk:** published facts may be permanently retained or reidentified by
+third parties, and a compromised deploy key can deface the static directory until it
+is revoked and restored. The owner explicitly accepts the first risk for the reviewed
+allow-list; least privilege, integrity checks, monitoring, and host backups limit the
+second.
+
+---
+
 ## 3. Data classification
 
 `redaction_key` is the identifier the logging layer uses to decide redaction; the
@@ -270,6 +312,7 @@ implementation must cover every key marked `redact: always`.
 | **C12 Backups** | encrypted database dumps, artifact archives | **Critical** (contains everything) | 7 daily, 5 weekly, 12 monthly | **Encrypted before leaving the host**, key stored separately | Backup age, size, integrity result only | Not user-exportable; purged on schedule |
 | **C13 Audit** | actor, action, target, timestamp, correlation ID, change reference | Moderate; **integrity-critical** | 24 months minimum | Disk-level, append-only | Written as audit, not as application logs | Exported; **not** deletable by ordinary deletion flows |
 | **C14 Chat conversations** | owner questions, assistant answers, source manifests, bounded tool-execution metadata | **High** (may aggregate C2–C6 and C10) | Until the owner deletes; optional automatic expiry may be added | Disk-level | IDs, counts, state, latency, and versions only; bodies are `redact: always` | Included in complete private export; excluded from physician reports by default; deletable per conversation or in bulk |
+| **C15 Deliberately public curve projection** | ADR-0029 allow-listed curve samples, recorded display facts, daily metric summaries, and calendar dates | **Public by explicit owner authorization**; source rows remain C2/C5 | Static mirror until replaced or removed; third-party copies uncontrolled | TLS in transit; host storage controls | Dates, counts, byte counts, digests, and status only; never payload values | Public static download; removal prevents future serving but cannot recall external copies |
 
 ### Classification rules
 
@@ -280,21 +323,26 @@ implementation must cover every key marked `redact: always`.
    classes carry the highest class present.
 3. **Redaction is allow-list, not deny-list.** The logger emits only fields explicitly
    marked loggable. A new field is redacted until someone declares otherwise.
-4. **C8 never leaves the system.** Credentials are excluded from every export path,
+4. **Public classification is projection-specific.** A source C2 or C5 row remains
+   high sensitivity. Only fields explicitly projected and validated under ADR-0029
+   become C15; joins, notes, identifiers, and newly added fields remain private.
+5. **C8 never leaves the system.** Credentials are excluded from every export path,
    including the "complete export" required by plan §12 — the export states that
    credentials were intentionally omitted.
-5. **C13 survives deletion.** Account deletion removes C1–C11 and C14, revokes C8, and
+6. **C13 survives deletion.** Account deletion removes C1–C11 and C14, revokes C8, and
    schedules backup copies to age out, but audit entries recording *that* deletion
    persist. This is disclosed on the privacy page.
-6. **Deletion is real.** A user-initiated delete removes rows, not just a flag —
+7. **Deletion is real.** A user-initiated delete removes rows, not just a flag —
    except where SAFE-08 requires a superseded revision to remain, which is a
    correction, not a deletion. Backups age out on the retention schedule; the privacy
    page discloses that deleted data persists in backups until its copies expire.
 
 ## 4. Assumptions and re-evaluation triggers
 
-Assumptions: one owner; no clinician access; no sharing; self-hosted on infrastructure
-the owner controls; Ollama private and never public; no regulated clinical use.
+Assumptions: one owner; no clinician access; no private-application sharing;
+self-hosted on infrastructure the owner controls; Ollama and the application remain
+private and never public; the only anonymous surface is ADR-0029's inert static tree;
+no regulated clinical use.
 
 Re-evaluate this document before any of: adding a second user or clinician access;
 adding any sharing or export-link feature; hosting for anyone other than the owner;

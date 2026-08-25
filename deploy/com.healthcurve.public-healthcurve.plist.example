@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.healthcurve.public-healthcurve</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/jeff/Documents/adrenal/scripts/publish_public_healthcurve.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/jeff/Documents/adrenal</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>7200</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/jeff/Documents/adrenal/var/public-healthcurve/publisher.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jeff/Documents/adrenal/var/public-healthcurve/publisher-error.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

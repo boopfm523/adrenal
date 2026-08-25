@@ -48,3 +48,6 @@ frontend/dist/
 .pyright/
 .audit-requirements.txt
 .claude/settings.local.json
+# Generated real-data static publication trees (ADR-0029). Never commit these.
+var/public-healthcurve/
+frontend/dist-public-healthcurve/

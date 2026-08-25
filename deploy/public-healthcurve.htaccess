@@ -1,0 +1,20 @@
+Options -Indexes
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Permissions-Policy "camera=(), geolocation=(), microphone=()"
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  Header always set X-Frame-Options "DENY"
+
+  <FilesMatch "\.(?:html|json)$">
+    Header always set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(?:css|js|woff2?|png|svg)$">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType application/json .json
+</IfModule>

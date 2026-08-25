@@ -36,6 +36,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0026](0026-wake-anchored-free-cortisol-reference-and-meals.md) | Wake-anchored free-cortisol reference and observed meal context | Accepted |
 | [0027](0027-evidence-versioned-50mg-iv-push-hydrocortisone-model.md) | Evidence-versioned 50 mg and 100 mg IV-push hydrocortisone model | Accepted |
 | [0028](0028-full-cortisol-model-default.md) | Full cortisol model v4 as the Daily Review default | Accepted |
+| [0029](0029-public-static-healthcurve.md) | One-way public static HealthCurve mirror | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

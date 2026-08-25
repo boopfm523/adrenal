@@ -803,6 +803,7 @@ interface DailyHealthCurveProps {
   onNextDay?: () => void;
   nextDayDisabled?: boolean;
   currentTime?: Date;
+  showSourceFingerprint?: boolean;
 }
 
 export function DailyHealthCurve({
@@ -813,6 +814,7 @@ export function DailyHealthCurve({
   onNextDay,
   nextDayDisabled = false,
   currentTime,
+  showSourceFingerprint = true,
 }: DailyHealthCurveProps): React.JSX.Element {
   const [localVisible, setLocalVisible] = useState(DEFAULT_VISIBLE);
   const visible = controlledVisible ?? localVisible;
@@ -1264,7 +1266,7 @@ export function DailyHealthCurve({
         <p>{coverageFeatures.uncategorized_symptom_count === 0 ? "Every symptom in this analysis window has an owner-selected tracking category." : `${coverageFeatures.uncategorized_symptom_count.toString()} symptom ${coverageFeatures.uncategorized_symptom_count === 1 ? "has" : "have"} no tracking category; HealthCurve leaves ${coverageFeatures.uncategorized_symptom_count === 1 ? "it" : "them"} uncategorized rather than guessing.`}</p>
         {coverageFeatures.symptom_contexts.length === 0 ? <p>No recorded symptom had aligned modeled/reference context in this analysis window.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="Symptom cortisol timing context"><table><caption>Temporal context at recorded symptoms; categories are owner-selected context and proximity does not establish causation.</caption><thead><tr><th scope="col">Symptom and time</th><th scope="col">Tracking category</th><th scope="col">Time since supported dose</th><th scope="col">Modeled free</th><th scope="col">Reference P5–P95</th></tr></thead><tbody>{coverageFeatures.symptom_contexts.map((symptom) => <tr key={symptom.symptom_event_id}><td><strong>{symptom.name}</strong><br />{experiencedTime(symptom.occurred_at, data.exposure.timezone)}</td><td>{symptom.tracking_category == null ? "Not categorized" : symptom.tracking_category.replaceAll("_", " ")}</td><td>{symptom.minutes_since_previous_supported_dose == null ? "No previous supported dose" : `${formatDecimal(symptom.minutes_since_previous_supported_dose)} minutes`}</td><td>{formatMeasurement(symptom.modeled_free_cortisol_nmol_l, "nmol/L")}</td><td>{formatDecimal(symptom.reference_p5_nmol_l)}–{formatDecimal(symptom.reference_p95_nmol_l)} nmol/L</td></tr>)}</tbody></table></div>}
       </>}
-      <p className="muted">Feature version {coverageFeatures.feature_revision}; source fingerprint {coverageFeatures.source_revision_sha256.slice(0, 12)}…</p>
+      <p className="muted">Feature version {coverageFeatures.feature_revision}{showSourceFingerprint ? <>; source fingerprint {coverageFeatures.source_revision_sha256.slice(0, 12)}…</> : null}</p>
     </details>}
     {wakeReference === undefined ? null : <details className="metric-definition wake-reference-values">
       <summary>Wake-anchored healthy reference values and assumptions</summary>
