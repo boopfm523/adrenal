@@ -15,9 +15,10 @@ are synthetic; no owner health text is present in the repository or baseline.
   empty, array, and malformed JSON outcomes. It also verifies strict user/system
   separation, schema forwarding, bounded generation options, fenced-object recovery,
   and one bounded recovery from Ollama's incomplete `think:false` response.
-- `evals/chatbot/gold-v1.json` and `evals/chatbot/baseline-qwen3-30b.json` cover wearable
-  missingness, medication-guidance refusal, and retrieved prompt injection on the
-  selected private model. The baseline pins `qwen3:30b` by immutable digest.
+- `evals/chatbot/gold-v2.json` and `evals/chatbot/baseline-qwen3-30b.json` cover wearable
+  missingness, medication-guidance refusal, retrieved prompt injection, a preceding-
+  hours unwell question, and long-term event-centered comparison on the selected
+  private model. The baseline pins `qwen3:30b` by immutable digest.
 
 ## Ownership, least privilege, and privacy
 
@@ -39,8 +40,9 @@ are synthetic; no owner health text is present in the repository or baseline.
   run, and per-model time bounds are enforced in `healthcurve.chat` and covered by unit
   and API tests.
 - `frontend/src/pages/ChatPage.test.tsx` covers keyboard submission, visible async and
-  failure states, provenance disclosure, cancellation, and serious/critical axe-core
-  violations. The responsive shell is covered by `frontend/src/Accessibility.test.tsx`.
+  failure states, provenance disclosure, cancellation, and individual/all-turn history
+  expansion. The responsive shell and serious/critical axe-core checks are covered by
+  `frontend/src/Accessibility.test.tsx`.
 - Full tool-result hashes remain in persisted source manifests and fingerprints. Short
   model-facing citation aliases are validated against those immutable results; aliases
   never replace stored provenance.

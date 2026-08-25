@@ -101,11 +101,14 @@ authenticated owner and validates every argument. Initial tools are:
 5. `get_symptom_episode_context` — symptoms, stress episodes, and linked recorded facts.
 6. `get_wearable_context` — daily summaries and bounded intraday buckets; missing is
    never converted to zero.
-7. `get_lab_trends` — normalized lab trends with original values, units, ranges, and
+7. `get_preceding_health_context` — an explicit event-centered anchor with a bounded
+   preceding-hours window, modeled curve position, recorded weather and sleep context,
+   wearable comparisons, and bounded prior symptom or stress-episode anchors.
+8. `get_lab_trends` — normalized lab trends with original values, units, ranges, and
    source provenance.
-8. `compare_periods` — deterministic differences, counts, distributions, and supported
+9. `compare_periods` — deterministic differences, counts, distributions, and supported
    correlations with sample size, method, timezone, and missingness.
-9. `get_report_snapshot_context` — bounded metadata and deterministic contents of
+10. `get_report_snapshot_context` — bounded metadata and deterministic contents of
    owner-selected immutable report snapshots, excluding report artifacts and AI
    sections unless explicitly requested.
 
@@ -189,6 +192,10 @@ send/cancel/retry controls, progressive run status, and an optional sensitive-te
 toggle. Keyboard focus moves to the new answer or actionable error. Screen readers
 receive status through a polite live region. Touch targets meet the existing mobile
 standards, and message content is sanitized as untrusted text.
+
+Completed prior turns are condensed by default while the latest turn remains open.
+Native-button controls expand or collapse one prior turn or all prior turns, retain
+their state during the browser session, and expose `aria-expanded`/`aria-controls`.
 
 Each assistant answer is labeled **AI HealthCurve analysis**, includes the generation
 time, and carries the non-diagnostic/correlation boundary when relevant. Category is

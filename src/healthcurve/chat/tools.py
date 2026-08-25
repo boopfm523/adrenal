@@ -23,8 +23,9 @@ from pydantic_core import to_jsonable_python
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from healthcurve.analytics import day_analysis
+from healthcurve.analytics import day_analysis, injectable_pharmacokinetics, wake_reference_inputs
 from healthcurve.analytics import service as analytics_service
+from healthcurve.context.models import ContextEvent
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events import service as event_service
 from healthcurve.events.base import EventMixin
@@ -42,7 +43,7 @@ from healthcurve.medications.models import DoseEvent, RegimenStatus, RegimenVers
 from healthcurve.reports.models import ReportSnapshot
 from healthcurve.vitals.models import BloodPressureEvent, TemperatureEvent, WeightEvent
 
-CHAT_TOOL_CATALOG_VERSION: Final = "hc-chat-tools-v1"
+CHAT_TOOL_CATALOG_VERSION: Final = "hc-chat-tools-v2"
 MAX_RANGE_DAYS: Final = 366
 DEFAULT_RANGE_DAYS: Final = 30
 MAX_SPARSE_ROWS: Final = 200
@@ -147,6 +148,26 @@ class WearableArguments(DateRangeArguments):
         return self
 
 
+class PrecedingHealthContextArguments(ToolArguments):
+    anchor_at: datetime
+    timezone: str = Field(min_length=1, max_length=64)
+    lookback_hours: int = Field(default=6, ge=1, le=24)
+    history_days: int = Field(default=90, ge=7, le=366)
+    symptom_name: str | None = Field(default=None, min_length=1, max_length=200)
+    similar_limit: int = Field(default=8, ge=1, le=24)
+    include_stress_episode_anchors: bool = False
+
+    @model_validator(mode="after")
+    def valid_anchor(self) -> PrecedingHealthContextArguments:
+        if self.anchor_at.utcoffset() is None:
+            raise ValueError("anchor_at must include a UTC offset")
+        try:
+            ZoneInfo(self.timezone)
+        except Exception as exc:
+            raise ValueError("timezone must be a valid IANA timezone") from exc
+        return self
+
+
 class LabTrendArguments(DateRangeArguments):
     analytes: list[str] = Field(default_factory=list, max_length=20)
     limit: int = Field(default=DEFAULT_SPARSE_ROWS, ge=1, le=MAX_SPARSE_ROWS)
@@ -206,6 +227,7 @@ _ARGUMENT_MODELS: Final[dict[str, type[ToolArguments]]] = {
     "get_medication_context": MedicationContextArguments,
     "get_symptom_episode_context": SymptomEpisodeArguments,
     "get_wearable_context": WearableArguments,
+    "get_preceding_health_context": PrecedingHealthContextArguments,
     "get_lab_trends": LabTrendArguments,
     "compare_periods": ComparePeriodsArguments,
     "get_report_snapshot_context": ReportSnapshotArguments,
@@ -221,6 +243,10 @@ def tool_definitions() -> list[dict[str, object]]:
         "get_medication_context": "Read approved plans and actual recorded doses separately.",
         "get_symptom_episode_context": "Read current symptoms and overlapping stress episodes.",
         "get_wearable_context": "Read Garmin summaries and optionally bounded intraday buckets.",
+        "get_preceding_health_context": (
+            "Read a bounded preceding-hours view with modeled-curve position, recorded "
+            "events, weather, sleep, wearable comparisons, and prior symptom contexts."
+        ),
         "get_lab_trends": "Read bounded lab results preserving original units and ranges.",
         "compare_periods": "Compute deterministic descriptive metrics for two periods.",
         "get_report_snapshot_context": "Read one owner-selected immutable report snapshot.",
@@ -920,6 +946,654 @@ def _get_wearable_context(
     )
 
 
+def _nearest_sample(
+    samples: list[dict[str, object]], *, anchor_at: datetime
+) -> dict[str, object] | None:
+    if not samples:
+        return None
+    anchor = anchor_at.astimezone(UTC)
+    return min(
+        samples,
+        key=lambda sample: abs(
+            (cast(datetime, sample["occurred_at"]).astimezone(UTC) - anchor).total_seconds()
+        ),
+    )
+
+
+def _modeled_curve_position(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    anchor_at: datetime,
+    timezone: str,
+) -> tuple[dict[str, object], list[str]]:
+    zone = ZoneInfo(timezone)
+    day = anchor_at.astimezone(zone).date()
+    curve = injectable_pharmacokinetics.curve_for_owner(
+        session,
+        owner_id=owner_id,
+        day=day,
+        timezone=timezone,
+    )
+    curve_samples = cast(list[dict[str, object]], curve["samples"])
+    sample = _nearest_sample(curve_samples, anchor_at=anchor_at)
+    instants = [cast(datetime, item["occurred_at"]) for item in curve_samples]
+    reference = wake_reference_inputs.reference_from_observed_facts_for_owner(
+        session,
+        owner_id=owner_id,
+        day=day,
+        timezone=timezone,
+        sample_instants=instants,
+    )
+    reference_sample = _nearest_sample(
+        cast(list[dict[str, object]], reference.get("samples", [])),
+        anchor_at=anchor_at,
+    )
+    position: str | None = None
+    if sample is not None and reference_sample is not None:
+        modeled = cast(Decimal, sample["modeled_free_cortisol_nmol_l"])
+        p5 = cast(Decimal, reference_sample["serum_free_p5_nmol_l"])
+        p50 = cast(Decimal, reference_sample["serum_free_p50_nmol_l"])
+        p95 = cast(Decimal, reference_sample["serum_free_p95_nmol_l"])
+        if modeled < p5:
+            position = "below_recorded_reference_p5"
+        elif modeled < p50:
+            position = "between_recorded_reference_p5_and_p50"
+        elif modeled <= p95:
+            position = "between_recorded_reference_p50_and_p95"
+        else:
+            position = "above_recorded_reference_p95"
+    marker_ids = [
+        str(marker["dose_event_id"])
+        for marker in cast(list[dict[str, object]], curve["dose_markers"])
+    ]
+    return (
+        {
+            "model_id": injectable_pharmacokinetics.MODEL_ID,
+            "model_revision": injectable_pharmacokinetics.MODEL_REVISION,
+            "series_name": curve["series_name"],
+            "unit": curve["series_unit"],
+            "sample_at": None if sample is None else sample["occurred_at"],
+            "modeled_free_cortisol_nmol_l": (
+                None if sample is None else sample["modeled_free_cortisol_nmol_l"]
+            ),
+            "regular_modeled_free_cortisol_nmol_l": (
+                None if sample is None else sample["regular_modeled_free_cortisol_nmol_l"]
+            ),
+            "stress_modeled_free_cortisol_nmol_l": (
+                None if sample is None else sample["stress_modeled_free_cortisol_nmol_l"]
+            ),
+            "reference_p5_nmol_l": (
+                None if reference_sample is None else reference_sample["serum_free_p5_nmol_l"]
+            ),
+            "reference_p50_nmol_l": (
+                None if reference_sample is None else reference_sample["serum_free_p50_nmol_l"]
+            ),
+            "reference_p95_nmol_l": (
+                None if reference_sample is None else reference_sample["serum_free_p95_nmol_l"]
+            ),
+            "reference_position": position,
+            "reference_available": reference_sample is not None,
+            "safety_boundary": (
+                "Modeled population-parameter context, not a cortisol measurement, personal "
+                "target, medication-adequacy test, alert, or dosing guide."
+            ),
+        },
+        marker_ids,
+    )
+
+
+def _sleep_before(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    anchor_at: datetime,
+    history_start: datetime,
+) -> tuple[dict[str, object] | None, list[str]]:
+    anchor = anchor_at.astimezone(UTC)
+    rows = list(
+        session.scalars(
+            select(GarminSleepEvent)
+            .where(
+                GarminSleepEvent.owner_id == owner_id,
+                GarminSleepEvent.ended_at <= anchor,
+                GarminSleepEvent.ended_at >= history_start.astimezone(UTC),
+                event_service.current_fact_predicate(GarminSleepEvent, owner_id=owner_id),
+            )
+            .order_by(GarminSleepEvent.ended_at.desc(), GarminSleepEvent.id)
+            .limit(31)
+        )
+    )
+    if not rows:
+        return None, []
+    latest = rows[0]
+    baseline = rows[1:]
+    duration_hours = (
+        None
+        if latest.duration_seconds is None
+        else Decimal(latest.duration_seconds) / Decimal(3_600)
+    )
+    baseline_durations = [
+        Decimal(row.duration_seconds) / Decimal(3_600)
+        for row in baseline
+        if row.duration_seconds is not None
+    ]
+    baseline_scores = [
+        Decimal(row.overall_sleep_score) for row in baseline if row.overall_sleep_score is not None
+    ]
+    average_duration = (
+        sum(baseline_durations, Decimal(0)) / Decimal(len(baseline_durations))
+        if baseline_durations
+        else None
+    )
+    average_score = (
+        sum(baseline_scores, Decimal(0)) / Decimal(len(baseline_scores))
+        if baseline_scores
+        else None
+    )
+    return (
+        {
+            "started_at": latest.occurred_at,
+            "ended_at": latest.ended_at,
+            "duration_hours": duration_hours,
+            "overall_sleep_score": latest.overall_sleep_score,
+            "awakenings": latest.awakenings,
+            "baseline_session_count": len(baseline),
+            "baseline_average_duration_hours": average_duration,
+            "duration_difference_from_baseline_hours": (
+                None
+                if average_duration is None or duration_hours is None
+                else duration_hours - average_duration
+            ),
+            "baseline_average_sleep_score": average_score,
+            "sleep_score_difference_from_baseline": (
+                None
+                if average_score is None or latest.overall_sleep_score is None
+                else Decimal(latest.overall_sleep_score) - average_score
+            ),
+            "comparison_is_descriptive_not_a_quality_diagnosis": True,
+        },
+        [str(row.id) for row in rows],
+    )
+
+
+def _weather_before(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    anchor_at: datetime,
+    earliest_at: datetime,
+) -> tuple[dict[str, object] | None, list[str]]:
+    row = session.scalar(
+        select(ContextEvent)
+        .where(
+            ContextEvent.owner_id == owner_id,
+            ContextEvent.occurred_at <= anchor_at.astimezone(UTC),
+            ContextEvent.occurred_at >= earliest_at.astimezone(UTC),
+            ContextEvent.weather_provider.is_not(None),
+            event_service.current_fact_predicate(ContextEvent, owner_id=owner_id),
+        )
+        .order_by(ContextEvent.weather_observed_at.desc().nullslast(), ContextEvent.id)
+        .limit(1)
+    )
+    if row is None:
+        return None, []
+    return (
+        {
+            "observed_at": row.weather_observed_at,
+            "temperature": row.temperature,
+            "temperature_unit": row.temperature_unit,
+            "humidity_percent": row.humidity_percent,
+            "precipitation": row.precipitation,
+            "precipitation_unit": row.precipitation_unit,
+            "conditions": row.conditions,
+            "provider": row.weather_provider,
+        },
+        [str(row.id)],
+    )
+
+
+def _wearable_window_comparison(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+    timezone: str,
+    history_days: int,
+) -> tuple[list[dict[str, object]], list[str]]:
+    rows = list(
+        session.scalars(
+            select(GarminMetricEvent)
+            .where(
+                GarminMetricEvent.owner_id == owner_id,
+                GarminMetricEvent.aggregation == "provider_sample",
+                GarminMetricEvent.occurred_at >= start.astimezone(UTC),
+                GarminMetricEvent.occurred_at <= end.astimezone(UTC),
+                event_service.current_fact_predicate(GarminMetricEvent, owner_id=owner_id),
+            )
+            .order_by(GarminMetricEvent.occurred_at, GarminMetricEvent.id)
+        )
+    )
+    grouped: dict[tuple[GarminMetricType, str | None], list[GarminMetricEvent]] = {}
+    for row in rows:
+        grouped.setdefault((row.metric_type, row.unit), []).append(row)
+    anchor_day = end.astimezone(ZoneInfo(timezone)).date()
+    baseline_rows = list(
+        session.scalars(
+            select(WearableDailySummary)
+            .where(
+                WearableDailySummary.owner_id == owner_id,
+                WearableDailySummary.local_date >= anchor_day - timedelta(days=history_days),
+                WearableDailySummary.local_date < anchor_day,
+                WearableDailySummary.timezone == timezone,
+            )
+            .order_by(WearableDailySummary.local_date, WearableDailySummary.metric_type)
+        )
+    )
+    baselines: dict[tuple[GarminMetricType, str | None], list[WearableDailySummary]] = {}
+    for row in baseline_rows:
+        baselines.setdefault((row.metric_type, row.unit), []).append(row)
+    comparisons: list[dict[str, object]] = []
+    for key, samples in sorted(
+        grouped.items(), key=lambda item: (item[0][0].value, item[0][1] or "")
+    ):
+        values = [sample.value for sample in samples]
+        window_average = sum(values, Decimal(0)) / Decimal(len(values))
+        baseline = baselines.get(key, [])
+        baseline_averages = [row.average for row in baseline if row.average is not None]
+        baseline_minimum = min(baseline_averages) if baseline_averages else None
+        baseline_maximum = max(baseline_averages) if baseline_averages else None
+        comparison = "baseline_unavailable"
+        if baseline_minimum is not None and baseline_maximum is not None:
+            comparison = (
+                "outside_recorded_daily_average_range"
+                if window_average < baseline_minimum or window_average > baseline_maximum
+                else "within_recorded_daily_average_range"
+            )
+        comparisons.append(
+            {
+                "metric_type": key[0],
+                "unit": key[1],
+                "window_sample_count": len(samples),
+                "window_minimum": min(values),
+                "window_average": window_average,
+                "window_maximum": max(values),
+                "baseline_day_count": len(baseline_averages),
+                "baseline_daily_average_minimum": baseline_minimum,
+                "baseline_daily_average_maximum": baseline_maximum,
+                "descriptive_comparison": comparison,
+            }
+        )
+    return comparisons, [str(row.id) for row in [*rows, *baseline_rows]]
+
+
+def _overlapping_stress_episodes(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> list[StressEpisode]:
+    return list(
+        session.scalars(
+            select(StressEpisode)
+            .where(
+                StressEpisode.owner_id == owner_id,
+                StressEpisode.started_at <= end.astimezone(UTC),
+                or_(
+                    StressEpisode.ended_at.is_(None),
+                    StressEpisode.ended_at >= start.astimezone(UTC),
+                ),
+            )
+            .order_by(StressEpisode.started_at, StressEpisode.id)
+        )
+    )
+
+
+def _stress_episode_payload(row: StressEpisode) -> dict[str, object]:
+    return {
+        "id": row.id,
+        "trigger": row.trigger,
+        "status": row.status,
+        "severity": row.severity,
+        "started_at": row.started_at,
+        "ended_at": row.ended_at,
+        "highest_temperature_c": row.highest_temperature_c,
+        "outcome": row.outcome,
+    }
+
+
+def _cross_event_patterns(contexts: list[dict[str, object]]) -> dict[str, object]:
+    curve_positions: dict[str, int] = {}
+    event_types: dict[str, int] = {}
+    wearable_outside: dict[str, int] = {}
+    sleep_below_baseline = 0
+    sleep_comparable = 0
+    weather_available = 0
+    episode_overlap = 0
+    anchor_types: dict[str, int] = {}
+    for context in contexts:
+        anchor_type = str(context.get("anchor_type") or "symptom")
+        anchor_types[anchor_type] = anchor_types.get(anchor_type, 0) + 1
+        curve = cast(
+            dict[str, object],
+            context.get("modeled_curve_at_anchor") or context.get("modeled_curve_at_symptom") or {},
+        )
+        position = curve.get("reference_position")
+        if isinstance(position, str):
+            curve_positions[position] = curve_positions.get(position, 0) + 1
+        sleep = context.get("sleep_before_anchor") or context.get("sleep_before_symptom")
+        if isinstance(sleep, dict):
+            difference = sleep.get("duration_difference_from_baseline_hours")
+            if isinstance(difference, Decimal):
+                sleep_comparable += 1
+                if difference < 0:
+                    sleep_below_baseline += 1
+        if (
+            context.get("weather_before_anchor") is not None
+            or context.get("weather_before_symptom") is not None
+        ):
+            weather_available += 1
+        episodes = context.get("overlapping_stress_episodes")
+        if isinstance(episodes, list) and episodes:
+            episode_overlap += 1
+        events = context.get("preceding_recorded_events")
+        if isinstance(events, list):
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                record_type = event.get("record_type")
+                if isinstance(record_type, str):
+                    event_types[record_type] = event_types.get(record_type, 0) + 1
+        comparisons = context.get("wearable_window_comparisons")
+        if isinstance(comparisons, list):
+            for comparison in comparisons:
+                if not isinstance(comparison, dict):
+                    continue
+                if (
+                    comparison.get("descriptive_comparison")
+                    != "outside_recorded_daily_average_range"
+                ):
+                    continue
+                metric = comparison.get("metric_type")
+                metric_name = metric.value if isinstance(metric, GarminMetricType) else str(metric)
+                wearable_outside[metric_name] = wearable_outside.get(metric_name, 0) + 1
+    return {
+        "prior_event_count": len(contexts),
+        "anchor_type_counts": anchor_types,
+        "curve_reference_position_counts": curve_positions,
+        "events_in_preceding_windows_by_type": event_types,
+        "wearable_outside_recorded_range_counts": wearable_outside,
+        "sleep_below_own_baseline_count": sleep_below_baseline,
+        "sleep_comparable_event_count": sleep_comparable,
+        "weather_available_event_count": weather_available,
+        "stress_episode_overlap_count": episode_overlap,
+        "method": (
+            "Each prior symptom or selected stress episode is an event anchor. The same "
+            "preceding-hours window is applied around every anchor, then deterministic "
+            "category counts are compared."
+        ),
+        "caution": (
+            "Repeated temporal context is an association for review; it does not establish "
+            "cause, diagnosis, or medication need."
+        ),
+    }
+
+
+def _get_preceding_health_context(
+    session: Session,
+    owner_id: uuid.UUID,
+    args: PrecedingHealthContextArguments,
+) -> ChatToolResult:
+    anchor = args.anchor_at.astimezone(UTC)
+    start = anchor - timedelta(hours=args.lookback_hours)
+    history_start = anchor - timedelta(days=args.history_days)
+    event_models: tuple[type[EventMixin], ...] = (
+        DoseEvent,
+        SymptomEvent,
+        MealEvent,
+        BloodPressureEvent,
+        TemperatureEvent,
+        WeightEvent,
+        GarminActivityEvent,
+        EmergencyInjectionEvent,
+    )
+    event_rows = [
+        row
+        for model in event_models
+        for row in _current_rows(
+            session,
+            model,
+            owner_id=owner_id,
+            start=start,
+            end=anchor + timedelta(microseconds=1),
+            limit=50,
+        )
+    ]
+    event_rows.sort(key=lambda row: (row.occurred_at, row.id))
+    event_rows = event_rows[-50:]
+    current_episodes = _overlapping_stress_episodes(
+        session,
+        owner_id=owner_id,
+        start=start,
+        end=anchor,
+    )
+
+    curve, curve_ids = _modeled_curve_position(
+        session,
+        owner_id=owner_id,
+        anchor_at=anchor,
+        timezone=args.timezone,
+    )
+    sleep, sleep_ids = _sleep_before(
+        session,
+        owner_id=owner_id,
+        anchor_at=anchor,
+        history_start=history_start,
+    )
+    weather, weather_ids = _weather_before(
+        session,
+        owner_id=owner_id,
+        anchor_at=anchor,
+        earliest_at=start - timedelta(hours=6),
+    )
+    wearable, wearable_ids = _wearable_window_comparison(
+        session,
+        owner_id=owner_id,
+        start=start,
+        end=anchor,
+        timezone=args.timezone,
+        history_days=min(args.history_days, 30),
+    )
+
+    current_symptoms = [row for row in event_rows if isinstance(row, SymptomEvent)]
+    inferred_symptom_name = current_symptoms[-1].name if current_symptoms else None
+    symptom_filter = args.symptom_name or inferred_symptom_name
+    historical_end = (
+        start if inferred_symptom_name is not None and args.symptom_name is None else anchor
+    )
+    symptom_statement = select(SymptomEvent).where(
+        SymptomEvent.owner_id == owner_id,
+        SymptomEvent.occurred_at < historical_end,
+        SymptomEvent.occurred_at >= history_start,
+        event_service.current_fact_predicate(SymptomEvent, owner_id=owner_id),
+    )
+    if symptom_filter is not None:
+        symptom_statement = symptom_statement.where(
+            func.lower(SymptomEvent.name) == symptom_filter.casefold()
+        )
+    symptom_rows = list(
+        session.scalars(
+            symptom_statement.order_by(SymptomEvent.occurred_at.desc(), SymptomEvent.id).limit(
+                args.similar_limit
+            )
+        )
+    )
+    episode_rows: list[StressEpisode] = []
+    if args.include_stress_episode_anchors:
+        episode_rows = list(
+            session.scalars(
+                select(StressEpisode)
+                .where(
+                    StressEpisode.owner_id == owner_id,
+                    StressEpisode.started_at < start,
+                    StressEpisode.started_at >= history_start,
+                )
+                .order_by(StressEpisode.started_at.desc(), StressEpisode.id)
+                .limit(args.similar_limit)
+            )
+        )
+    anchors: list[tuple[datetime, str, SymptomEvent | StressEpisode]] = [
+        (row.occurred_at, "symptom", row) for row in symptom_rows
+    ]
+    anchors.extend((row.started_at, "stress_episode", row) for row in episode_rows)
+    anchors.sort(key=lambda item: (item[0], item[2].id), reverse=True)
+    anchors = anchors[: args.similar_limit]
+    similar: list[dict[str, object]] = []
+    similar_ids: list[str] = []
+    for anchor_at, anchor_type, anchor_row in anchors:
+        symptom = anchor_row if isinstance(anchor_row, SymptomEvent) else None
+        episode = anchor_row if isinstance(anchor_row, StressEpisode) else None
+        anchor_start = anchor_at - timedelta(hours=args.lookback_hours)
+        symptom_curve, symptom_curve_ids = _modeled_curve_position(
+            session,
+            owner_id=owner_id,
+            anchor_at=anchor_at,
+            timezone=args.timezone,
+        )
+        symptom_weather, symptom_weather_ids = _weather_before(
+            session,
+            owner_id=owner_id,
+            anchor_at=anchor_at,
+            earliest_at=anchor_at - timedelta(hours=12),
+        )
+        symptom_sleep, symptom_sleep_ids = _sleep_before(
+            session,
+            owner_id=owner_id,
+            anchor_at=anchor_at,
+            history_start=anchor_at - timedelta(days=30),
+        )
+        symptom_events = [
+            row
+            for model in event_models
+            for row in _current_rows(
+                session,
+                model,
+                owner_id=owner_id,
+                start=anchor_start,
+                end=anchor_at + timedelta(microseconds=1),
+                limit=30,
+            )
+            if symptom is None or row.id != symptom.id
+        ]
+        symptom_events.sort(key=lambda row: (row.occurred_at, row.id))
+        symptom_episodes = _overlapping_stress_episodes(
+            session,
+            owner_id=owner_id,
+            start=anchor_start,
+            end=anchor_at,
+        )
+        symptom_wearable, symptom_wearable_ids = _wearable_window_comparison(
+            session,
+            owner_id=owner_id,
+            start=anchor_start,
+            end=anchor_at,
+            timezone=args.timezone,
+            history_days=30,
+        )
+        similar.append(
+            {
+                "anchor_type": anchor_type,
+                "symptom": (
+                    _event_payload(symptom, include_sensitive=False)
+                    if symptom is not None
+                    else None
+                ),
+                "stress_episode": (
+                    _stress_episode_payload(episode) if episode is not None else None
+                ),
+                "window_started_at": anchor_start,
+                "preceding_recorded_events": [
+                    _event_payload(row, include_sensitive=False) for row in symptom_events[-30:]
+                ],
+                "overlapping_stress_episodes": [
+                    _stress_episode_payload(row) for row in symptom_episodes
+                ],
+                "modeled_curve_at_symptom": symptom_curve,
+                "modeled_curve_at_anchor": symptom_curve,
+                "weather_before_symptom": symptom_weather,
+                "weather_before_anchor": symptom_weather,
+                "sleep_before_symptom": symptom_sleep,
+                "sleep_before_anchor": symptom_sleep,
+                "wearable_window_comparisons": symptom_wearable,
+            }
+        )
+        similar_ids.extend(
+            [
+                str(anchor_row.id),
+                *(str(row.id) for row in symptom_events),
+                *(str(row.id) for row in symptom_episodes),
+                *symptom_curve_ids,
+                *symptom_weather_ids,
+                *symptom_sleep_ids,
+                *symptom_wearable_ids,
+            ]
+        )
+
+    source_ids = sorted(
+        {
+            *(str(row.id) for row in event_rows),
+            *(str(row.id) for row in current_episodes),
+            *curve_ids,
+            *sleep_ids,
+            *weather_ids,
+            *wearable_ids,
+            *similar_ids,
+        }
+    )
+    local_anchor = anchor.astimezone(ZoneInfo(args.timezone))
+    return _result(
+        name="get_preceding_health_context",
+        data={
+            "anchor_at": local_anchor,
+            "window_started_at": start.astimezone(ZoneInfo(args.timezone)),
+            "lookback_hours": args.lookback_hours,
+            "recorded_events": [_event_payload(row, include_sensitive=False) for row in event_rows],
+            "overlapping_stress_episodes": [
+                _stress_episode_payload(row) for row in current_episodes
+            ],
+            "modeled_curve_at_anchor": curve,
+            "weather_before_anchor": weather,
+            "sleep_before_anchor": sleep,
+            "wearable_window_comparisons": wearable,
+            "prior_symptom_contexts": [
+                context for context in similar if context["anchor_type"] == "symptom"
+            ],
+            "prior_event_contexts": similar,
+            "similar_symptom_filter": symptom_filter,
+            "cross_event_patterns": _cross_event_patterns(similar),
+            "interpretation_boundary": (
+                "All comparisons are descriptive context. They do not establish cause, "
+                "diagnosis, medication adequacy, or dosing guidance."
+            ),
+        },
+        missingness={
+            "no_recorded_events_in_window": not event_rows,
+            "weather_not_recorded": weather is None,
+            "sleep_not_recorded": sleep is None,
+            "no_wearable_samples_in_window": not wearable,
+            "no_prior_event_anchors_in_history": not similar,
+            "missing_is_never_zero": True,
+        },
+        source_manifest={"fact_and_deterministic_projection": source_ids},
+        timezone=args.timezone,
+        date_scope=_date_scope(
+            history_start.astimezone(ZoneInfo(args.timezone)).date(), local_anchor.date()
+        ),
+    )
+
+
 def _get_lab_trends(
     session: Session, owner_id: uuid.UUID, args: LabTrendArguments
 ) -> ChatToolResult:
@@ -1147,6 +1821,7 @@ _HANDLERS: Final[dict[str, Callable[[Session, uuid.UUID, Any], ChatToolResult]]]
     "get_medication_context": _get_medication_context,
     "get_symptom_episode_context": _get_symptom_episode_context,
     "get_wearable_context": _get_wearable_context,
+    "get_preceding_health_context": _get_preceding_health_context,
     "get_lab_trends": _get_lab_trends,
     "compare_periods": _compare_periods,
     "get_report_snapshot_context": _get_report_snapshot_context,

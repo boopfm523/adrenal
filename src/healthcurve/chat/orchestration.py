@@ -8,7 +8,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final, Literal
 
@@ -19,7 +19,7 @@ from healthcurve.chat.models import ChatMessageState
 from healthcurve.chat.service import BoundedConversationContext
 from healthcurve.chat.tools import ChatToolResult, ToolArguments, tool_definitions
 
-PROMPT_VERSION: Final = "healthcurve-chat-v4"
+PROMPT_VERSION: Final = "healthcurve-chat-v5"
 SCHEMA_VERSION: Final = "healthcurve-chat-answer-v3"
 DETERMINISTIC_GENERATOR_NAME: Final = "HealthCurve deterministic calculation"
 DETERMINISTIC_GENERATOR_DIGEST: Final = (
@@ -50,6 +50,10 @@ values such as stress, HRV, heart rate, respiration, sleep, and steps. Use
 search_timeline with record_types ["garmin_sleep"] for sleep sessions, bedtime,
 wake time, or awakenings. Use search_timeline for diary, symptom, dose, and other
 event questions, and get_symptom_episode_context for symptom counts or episodes. Use
+get_preceding_health_context for questions about what preceded feeling unwell, curve
+position, weather, sleep, unusual observations, similar symptom circumstances, or
+long-term patterns across symptom and stress-episode anchors. Supply an explicit
+timezone-aware anchor_at; use a bounded 1-24 hour lookback and 7-366 day history. Use
 get_data_availability only when the owner asks what data or coverage exists. Never
 repeat a tool call whose tool name and validated arguments already appear in supplied
 results. Return {"calls":[]} once supplied results are sufficient. Medication advice,
@@ -199,6 +203,7 @@ def run(
     observe_tool: ToolObserver = lambda _execution: None,
     now: Callable[[], float] = time.monotonic,
     current_local_date: date | None = None,
+    current_local_datetime: datetime | None = None,
     default_timezone: str | None = None,
 ) -> OrchestrationResult:
     """Run one bounded response without persisting prompts or raw tool bodies."""
@@ -212,6 +217,7 @@ def run(
     direct_call = _direct_aggregate_call(
         question,
         current_local_date=current_local_date,
+        current_local_datetime=current_local_datetime,
         default_timezone=default_timezone,
     )
     if direct_call is not None:
@@ -445,6 +451,26 @@ _SYMPTOM_COUNT: Final = re.compile(
     r"\bsymptoms?\b.{0,50}\b(?:count|how many|number of)\b",
     re.IGNORECASE,
 )
+_RETROSPECTIVE_CONTEXT: Final = re.compile(
+    r"\b(?:do not|don't|dont|didn't|did not)\s+feel\s+(?:well|good)\b|"
+    r"\b(?:feel|feeling|felt)\s+(?:unwell|ill|bad|off|poorly)\b|"
+    r"\b(?:preceding|previous|prior|last)\s+(?:few\s+)?hours?\b|"
+    r"\bwhat\s+happened\b.{0,60}\b(?:before|preceding|prior|hours?)\b|"
+    r"\b(?:where|position)\b.{0,50}\b(?:modeled\s+)?curve\b|"
+    r"\bhow\s+hot\b|\b(?:sleep|slept)\s+poorly\b|"
+    r"\b(?:data|reading|readings|metrics?)\b.{0,40}\bunusual\b|"
+    r"\bunusual\b.{0,40}\b(?:data|reading|readings|metrics?)\b|"
+    r"\bsimilar\b.{0,60}\b(?:symptom|episode|circumstance|pattern)s?\b|"
+    r"\b(?:symptom|episode)s?\b.{0,60}\bsimilar\b|"
+    r"\b(?:times?|points?)\b.{0,50}\b(?:felt|feeling|was|were)\s+off\b",
+    re.IGNORECASE,
+)
+_LONG_TERM_CONTEXT: Final = re.compile(
+    r"\b(?:long[- ]term|over\s+(?:the\s+)?(?:months|year)|histor(?:y|ical|ically)|"
+    r"across\s+(?:points|time|weeks|months)|repeated|recurring)\b|"
+    r"\b(?:times?|points?)\b.{0,50}\b(?:felt|feeling|was|were)\s+off\b",
+    re.IGNORECASE,
+)
 
 
 def _question_date_range(question: str, *, today: date) -> tuple[date, date] | None:
@@ -500,10 +526,52 @@ def _direct_aggregate_call(
     question: str,
     *,
     current_local_date: date | None,
+    current_local_datetime: datetime | None,
     default_timezone: str | None,
 ) -> PlannerToolCall | None:
     if current_local_date is None or default_timezone is None:
         return None
+    if _RETROSPECTIVE_CONTEXT.search(question) and current_local_datetime is not None:
+        if _EXPLICIT_DATE.search(question):
+            return None
+        anchor = current_local_datetime
+        lowered = question.casefold()
+        if "yesterday" in lowered:
+            anchor = (anchor - timedelta(days=1)).replace(hour=23, minute=59, second=59)
+        elif re.search(r"\b(?:two|2)\s+days?\s+ago\b", lowered):
+            anchor = (anchor - timedelta(days=2)).replace(hour=23, minute=59, second=59)
+        hours = 6
+        hour_match = re.search(
+            r"\b(?:preceding|previous|prior|last)\s+"
+            r"(\d+|one|two|three|four|six|eight|twelve|twenty[- ]four)\s+hours?\b",
+            lowered,
+        )
+        if hour_match:
+            number = hour_match.group(1)
+            hours = {
+                "one": 1,
+                "two": 2,
+                "three": 3,
+                "four": 4,
+                "six": 6,
+                "eight": 8,
+                "twelve": 12,
+                "twenty-four": 24,
+                "twenty four": 24,
+            }.get(number, int(number) if number.isdigit() else 6)
+        long_term = _LONG_TERM_CONTEXT.search(question) is not None
+        return PlannerToolCall(
+            call_id="deterministic-preceding-context",
+            tool_name="get_preceding_health_context",
+            arguments={
+                "anchor_at": anchor.isoformat(),
+                "timezone": default_timezone,
+                "lookback_hours": min(24, max(1, hours)),
+                "history_days": 366 if long_term else 90,
+                "similar_limit": 24 if long_term else 8,
+                "include_stress_episode_anchors": long_term,
+            },
+        )
     scope = _question_date_range(question, today=current_local_date)
     if scope is None:
         return None
@@ -536,7 +604,9 @@ def _direct_aggregate_result(execution: ExecutedTool) -> OrchestrationResult:
     date_to = str(date_scope.get("date_to") or execution.arguments.get("date_to") or "")
     scope = _display_date_scope(date_from, date_to)
 
-    if execution.call_id == "deterministic-wake-summary":
+    if execution.call_id == "deterministic-preceding-context":
+        body = _render_preceding_context(execution.result)
+    elif execution.call_id == "deterministic-wake-summary":
         summary = data.get("wake_time_summary")
         if isinstance(summary, dict):
             sample_count = summary.get("sample_count")
@@ -597,6 +667,214 @@ def _direct_aggregate_result(execution: ExecutedTool) -> OrchestrationResult:
         },
         source_fingerprint=fingerprint,
     )
+
+
+def _display_context_time(value: object, *, timezone: str | None) -> str:
+    if not isinstance(value, str):
+        return "an unrecorded time"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if timezone:
+            from zoneinfo import ZoneInfo
+
+            parsed = parsed.astimezone(ZoneInfo(timezone))
+        return parsed.strftime("%b %-d at %-I:%M %p")
+    except (ValueError, TypeError):
+        return value
+
+
+def _event_context_label(event: dict[str, object], *, timezone: str | None) -> str:
+    record_type = str(event.get("record_type", "record")).replace("_", " ")
+    at = _display_context_time(event.get("occurred_at"), timezone=timezone)
+    if record_type == "dose":
+        return (
+            f"{at}: recorded {event.get('dose_category', '')} dose — "
+            f"{event.get('medication_name', 'medication')} {event.get('amount', '')} "
+            f"{event.get('unit', '')}".strip()
+        )
+    if record_type == "symptom":
+        severity = event.get("severity_0_to_10")
+        suffix = "" if severity is None else f" ({severity}/10)"
+        return f"{at}: recorded symptom — {event.get('name', 'unnamed')}{suffix}"
+    if record_type == "blood pressure":
+        return (
+            f"{at}: blood pressure {event.get('systolic_mmhg', '?')}/"
+            f"{event.get('diastolic_mmhg', '?')} mmHg"
+        )
+    if record_type == "meal":
+        return f"{at}: recorded meal ({event.get('size') or 'size not recorded'})"
+    return f"{at}: recorded {record_type}"
+
+
+def _render_preceding_context(result: ChatToolResult) -> str:
+    data = result.data
+    missing = result.missingness
+    timezone = result.timezone
+    lines = [
+        "Here is the recorded context around that time:",
+        "",
+        (
+            f"Window: {_display_context_time(data.get('window_started_at'), timezone=timezone)} "
+            f"through {_display_context_time(data.get('anchor_at'), timezone=timezone)} "
+            f"({timezone or 'recorded timezone'})."
+        ),
+    ]
+    events = data.get("recorded_events")
+    lines.extend(["", "Recorded facts:"])
+    if isinstance(events, list) and events:
+        lines.extend(
+            f"- {_event_context_label(event, timezone=timezone)}"
+            for event in events
+            if isinstance(event, dict)
+        )
+    else:
+        lines.append(
+            "- No recorded doses, symptoms, meals, vitals, activities, or injections "
+            "were found in this window."
+        )
+    episodes = data.get("overlapping_stress_episodes")
+    if isinstance(episodes, list) and episodes:
+        lines.append(f"- {len(episodes)} recorded stress episode(s) overlapped the window.")
+
+    curve = data.get("modeled_curve_at_anchor")
+    lines.extend(["", "Modeled curve:"])
+    if isinstance(curve, dict) and curve.get("modeled_free_cortisol_nmol_l") is not None:
+        reference_position = str(
+            curve.get("reference_position") or "reference unavailable"
+        ).replace("_", " ")
+        lines.append(
+            "- At the anchor time, the modeled serum-free-cortisol scenario was "
+            f"{curve.get('modeled_free_cortisol_nmol_l')} {curve.get('unit', 'nmol/L')}; "
+            f"reference position: {reference_position}."
+        )
+        lines.append(f"- {curve.get('safety_boundary')}")
+    else:
+        lines.append(
+            "- A modeled value was unavailable. Missing model context is not treated as zero."
+        )
+
+    weather = data.get("weather_before_anchor")
+    lines.extend(["", "Weather:"])
+    if isinstance(weather, dict):
+        conditions = weather.get("conditions") or "conditions not recorded"
+        lines.append(
+            f"- The nearest recorded observation was {weather.get('temperature')}°"
+            f"{str(weather.get('temperature_unit', '')).upper()} with "
+            f"{weather.get('humidity_percent')}% humidity and {conditions}."
+        )
+    else:
+        lines.append("- Weather was not recorded near this window; it remains unknown, not zero.")
+
+    sleep = data.get("sleep_before_anchor")
+    lines.extend(["", "Sleep:"])
+    if isinstance(sleep, dict):
+        sleep_score = sleep.get("overall_sleep_score")
+        sleep_score = "not recorded" if sleep_score is None else sleep_score
+        awakenings = sleep.get("awakenings")
+        awakenings = "unknown" if awakenings is None else awakenings
+        lines.append(
+            f"- The preceding recorded sleep session was {sleep.get('duration_hours')} hours"
+            f" with score {sleep_score} and {awakenings} awakenings."
+        )
+        if sleep.get("duration_difference_from_baseline_hours") is not None:
+            lines.append(
+                f"- Duration differed from the prior {sleep.get('baseline_session_count')} "
+                "recorded sessions by "
+                f"{sleep.get('duration_difference_from_baseline_hours')} hours. This is a "
+                "descriptive comparison, not a sleep-quality diagnosis."
+            )
+    else:
+        lines.append("- No preceding sleep session was recorded; sleep quality cannot be inferred.")
+
+    comparisons = data.get("wearable_window_comparisons")
+    lines.extend(["", "Observed wearable data:"])
+    if isinstance(comparisons, list) and comparisons:
+        for comparison in comparisons:
+            if not isinstance(comparison, dict):
+                continue
+            descriptive = str(
+                comparison.get("descriptive_comparison", "baseline unavailable")
+            ).replace("_", " ")
+            lines.append(
+                f"- {str(comparison.get('metric_type', 'metric')).replace('_', ' ')}: "
+                f"window average {comparison.get('window_average')} {comparison.get('unit', '')} "
+                f"from {comparison.get('window_sample_count')} samples; "
+                f"{descriptive} "
+                f"across {comparison.get('baseline_day_count')} baseline days."
+            )
+    else:
+        lines.append(
+            "- No wearable samples were recorded in the window; missing data is not "
+            "treated as normal or zero."
+        )
+
+    similar = data.get("prior_event_contexts") or data.get("prior_symptom_contexts")
+    patterns = data.get("cross_event_patterns")
+    lines.extend(["", "Earlier event-centered comparisons:"])
+    if isinstance(similar, list) and similar:
+        symptom_filter = data.get("similar_symptom_filter")
+        filter_text = f" matching “{symptom_filter}”" if symptom_filter else ""
+        anchor_counts = patterns.get("anchor_type_counts") if isinstance(patterns, dict) else None
+        if isinstance(anchor_counts, dict) and anchor_counts:
+            anchor_text = ", ".join(
+                f"{name.replace('_', ' ')}: {count}" for name, count in anchor_counts.items()
+            )
+            found_text = f"prior recorded event anchor(s) ({anchor_text})"
+        else:
+            found_text = "prior recorded symptom event(s)"
+        lines.append(
+            f"- I found {len(similar)} {found_text}{filter_text}. Each was compared "
+            "using the same preceding-hours window."
+        )
+        if isinstance(patterns, dict):
+            lines.append(
+                "- Stress episodes overlapped "
+                f"{patterns.get('stress_episode_overlap_count')} event(s); sleep was shorter "
+                "than its own recorded baseline before "
+                f"{patterns.get('sleep_below_own_baseline_count')} "
+                f"of {patterns.get('sleep_comparable_event_count')} comparable event(s)."
+            )
+            outside = patterns.get("wearable_outside_recorded_range_counts")
+            if isinstance(outside, dict) and outside:
+                rendered = ", ".join(
+                    f"{name.replace('_', ' ')}: {count}" for name, count in outside.items()
+                )
+                lines.append(
+                    "- Wearable measures outside their recorded daily-average ranges "
+                    f"across those windows: {rendered}."
+                )
+            positions = patterns.get("curve_reference_position_counts")
+            if isinstance(positions, dict) and positions:
+                rendered = ", ".join(
+                    f"{name.replace('_', ' ')}: {count}" for name, count in positions.items()
+                )
+                lines.append(f"- Modeled reference positions at those symptom times: {rendered}.")
+    else:
+        lines.append(
+            "- No earlier recorded symptoms met the bounded comparison. That is "
+            "insufficient data, not evidence that the circumstance never occurred."
+        )
+
+    if (
+        missing.get("weather_not_recorded")
+        or missing.get("sleep_not_recorded")
+        or missing.get("no_wearable_samples_in_window")
+    ):
+        lines.extend(
+            [
+                "",
+                "Some context is missing; HealthCurve does not replace missing "
+                "observations with zero.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "These are temporal associations for review. They do not establish cause, "
+            "diagnosis, medication adequacy, or dosing guidance.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _display_date_scope(date_from: str, date_to: str) -> str:

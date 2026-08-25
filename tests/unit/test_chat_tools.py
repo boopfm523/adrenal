@@ -21,7 +21,7 @@ def valid_range() -> dict[str, object]:
     }
 
 
-def test_catalog_exposes_only_the_nine_approved_read_tools() -> None:
+def test_catalog_exposes_only_the_ten_approved_read_tools() -> None:
     definitions = tools.tool_definitions()
 
     assert {item["name"] for item in definitions} == {
@@ -31,6 +31,7 @@ def test_catalog_exposes_only_the_nine_approved_read_tools() -> None:
         "get_medication_context",
         "get_symptom_episode_context",
         "get_wearable_context",
+        "get_preceding_health_context",
         "get_lab_trends",
         "compare_periods",
         "get_report_snapshot_context",
@@ -58,6 +59,13 @@ def test_catalog_exposes_only_the_nine_approved_read_tools() -> None:
                 **valid_range(),
                 "include_intraday": True,
                 "bucket_minutes": 15,
+            },
+        ),
+        (
+            "get_preceding_health_context",
+            {
+                "anchor_at": "2026-08-16T12:00:00",
+                "timezone": "America/New_York",
             },
         ),
     ],

@@ -178,7 +178,8 @@ def make_chat_response_handler(
             if owner is None:
                 raise JobQueueError("chat_owner_missing")
             default_timezone = owner.default_timezone
-        current_local_date = datetime.now(ZoneInfo(default_timezone)).date()
+        current_local_datetime = datetime.now(ZoneInfo(default_timezone))
+        current_local_date = current_local_datetime.date()
 
         def observe_state(state: ChatMessageState) -> None:
             with factory() as state_session, state_session.begin():
@@ -233,6 +234,7 @@ def make_chat_response_handler(
                 observe_state=observe_state,
                 observe_tool=observe_tool,
                 current_local_date=current_local_date,
+                current_local_datetime=current_local_datetime,
                 default_timezone=default_timezone,
             )
         except _ChatCancelled:

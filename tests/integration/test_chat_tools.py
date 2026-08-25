@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import Engine, create_engine, text
@@ -16,6 +17,7 @@ from testcontainers.community.postgres import PostgresContainer
 import healthcurve.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from healthcurve.chat.tools import execute_chat_tool
 from healthcurve.db import SCHEMAS, Base
+from healthcurve.episodes.models import EpisodeStatus, StressEpisode
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import SymptomEvent
 from healthcurve.events.timekeeping import from_instant
@@ -79,6 +81,21 @@ def symptom(owner_id: uuid.UUID, *, name: str, hour: int) -> SymptomEvent:
         owner_id=owner_id,
         occurred_at=occurred,
         local_time=datetime(2026, 8, 10, hour - 4),  # noqa: DTZ001 - wall time is naive
+        timezone="America/New_York",
+        utc_offset_minutes=-240,
+        recorded_at=occurred,
+        source_type=SourceType.WEB,
+        confirmation_state=ConfirmationState.DIRECT,
+        name=name,
+    )
+
+
+def symptom_at(owner_id: uuid.UUID, *, name: str, occurred: datetime) -> SymptomEvent:
+    local = occurred.astimezone(ZoneInfo("America/New_York"))
+    return SymptomEvent(
+        owner_id=owner_id,
+        occurred_at=occurred,
+        local_time=local.replace(tzinfo=None),
         timezone="America/New_York",
         utc_offset_minutes=-240,
         recorded_at=occurred,
@@ -226,6 +243,104 @@ def test_recent_aggregate_summaries_are_owner_scoped(engine: Engine) -> None:
         "average_local_hour": 7,
         "average_local_minute": 0,
     }
+
+
+def test_preceding_context_compares_owner_scoped_symptom_windows(engine: Engine) -> None:
+    first = owner("chat-context-first@example.test")
+    second = owner("chat-context-second@example.test")
+    with Session(engine) as session, session.begin():
+        session.add_all([first, second])
+        session.flush()
+        sync_run = GarminSyncRun(
+            owner_id=first.id,
+            requested_start_date=date(2026, 8, 8),
+            requested_end_date=date(2026, 8, 12),
+            timezone="America/New_York",
+            origin=GarminSyncOrigin.MANUAL,
+            status=GarminSyncStatus.COMPLETED,
+            started_at=datetime(2026, 8, 12, 12, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 12, 12, 1, tzinfo=UTC),
+            counts={"sleep": 2},
+            warning_codes=[],
+            client_version="synthetic-test",
+        )
+        session.add(sync_run)
+        session.flush()
+        session.add_all(
+            [
+                symptom_at(
+                    first.id,
+                    name="synthetic dizziness",
+                    occurred=datetime(2026, 8, 10, 16, tzinfo=UTC),
+                ),
+                symptom_at(
+                    first.id,
+                    name="synthetic dizziness",
+                    occurred=datetime(2026, 8, 12, 15, 50, tzinfo=UTC),
+                ),
+                symptom_at(
+                    second.id,
+                    name="other owner symptom",
+                    occurred=datetime(2026, 8, 11, 16, tzinfo=UTC),
+                ),
+                sleep(
+                    first.id,
+                    sync_run_id=sync_run.id,
+                    provider_id="synthetic-context-sleep-1",
+                    ended_at=datetime(2026, 8, 10, 11, tzinfo=UTC),
+                ),
+                sleep(
+                    first.id,
+                    sync_run_id=sync_run.id,
+                    provider_id="synthetic-context-sleep-2",
+                    ended_at=datetime(2026, 8, 12, 11, tzinfo=UTC),
+                ),
+                StressEpisode(
+                    owner_id=first.id,
+                    trigger="synthetic heat stress",
+                    status=EpisodeStatus.RESOLVED,
+                    started_at=datetime(2026, 8, 11, 18, tzinfo=UTC),
+                    ended_at=datetime(2026, 8, 11, 20, tzinfo=UTC),
+                    timezone="America/New_York",
+                    recorded_at=datetime(2026, 8, 11, 20, tzinfo=UTC),
+                ),
+            ]
+        )
+        first_id = first.id
+
+    with Session(engine) as session:
+        result = execute_chat_tool(
+            session,
+            owner_id=first_id,
+            tool_name="get_preceding_health_context",
+            arguments={
+                "anchor_at": "2026-08-12T12:00:00-04:00",
+                "timezone": "America/New_York",
+                "lookback_hours": 6,
+                "history_days": 30,
+                "similar_limit": 5,
+                "include_stress_episode_anchors": True,
+            },
+        )
+
+    current = result.data["recorded_events"]
+    assert isinstance(current, list)
+    assert [item["name"] for item in current if item["record_type"] == "symptom"] == [
+        "synthetic dizziness"
+    ]
+    similar = result.data["prior_symptom_contexts"]
+    assert isinstance(similar, list)
+    assert len(similar) == 1
+    assert similar[0]["symptom"]["name"] == "synthetic dizziness"
+    patterns = result.data["cross_event_patterns"]
+    prior_events = result.data["prior_event_contexts"]
+    assert isinstance(prior_events, list)
+    assert {item["anchor_type"] for item in prior_events} == {"symptom", "stress_episode"}
+    assert patterns["prior_event_count"] == 2
+    assert patterns["anchor_type_counts"] == {"stress_episode": 1, "symptom": 1}
+    assert result.missingness["weather_not_recorded"] is True
+    serialized = str(result.data)
+    assert "other owner symptom" not in serialized
 
 
 def test_tool_transaction_is_enforced_read_only_by_postgresql(engine: Engine) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest import mock
@@ -151,6 +151,153 @@ def test_basic_symptom_count_uses_requested_recent_week_without_model_planning()
     assert arguments["timezone"] == "America/New_York"
     assert result.body is not None and "3 recorded symptom events" in result.body
     assert result.model_name == "HealthCurve deterministic calculation"
+
+
+def test_unwell_question_uses_event_centered_context_without_model_dependency() -> None:
+    seen: dict[str, object] = {}
+    result_source = ChatToolResult(
+        tool_name="get_preceding_health_context",
+        timezone="America/New_York",
+        date_scope={"date_from": "2026-05-17", "date_to": "2026-08-15"},
+        data={
+            "anchor_at": "2026-08-15T16:00:00-04:00",
+            "window_started_at": "2026-08-15T10:00:00-04:00",
+            "recorded_events": [
+                {
+                    "record_type": "symptom",
+                    "occurred_at": "2026-08-15T15:55:00-04:00",
+                    "name": "synthetic dizziness",
+                    "severity_0_to_10": 4,
+                }
+            ],
+            "overlapping_stress_episodes": [{"trigger": "synthetic illness"}],
+            "modeled_curve_at_anchor": {
+                "modeled_free_cortisol_nmol_l": "18.5",
+                "unit": "nmol/L",
+                "reference_position": "between_recorded_reference_p5_and_p50",
+                "safety_boundary": "Modeled context, not a measurement or dosing guide.",
+            },
+            "weather_before_anchor": {
+                "temperature": "31",
+                "temperature_unit": "c",
+                "humidity_percent": "70",
+                "conditions": "synthetic clear",
+            },
+            "sleep_before_anchor": {
+                "duration_hours": "5.5",
+                "overall_sleep_score": 58,
+                "awakenings": 4,
+                "baseline_session_count": 12,
+                "duration_difference_from_baseline_hours": "-1.4",
+            },
+            "wearable_window_comparisons": [
+                {
+                    "metric_type": "stress",
+                    "window_average": "62",
+                    "unit": "score",
+                    "window_sample_count": 20,
+                    "descriptive_comparison": "outside_recorded_daily_average_range",
+                    "baseline_day_count": 14,
+                }
+            ],
+            "prior_symptom_contexts": [{"symptom": {"name": "synthetic dizziness"}}],
+            "similar_symptom_filter": "synthetic dizziness",
+            "cross_event_patterns": {
+                "stress_episode_overlap_count": 1,
+                "sleep_below_own_baseline_count": 1,
+                "sleep_comparable_event_count": 1,
+                "wearable_outside_recorded_range_counts": {"stress": 1},
+                "curve_reference_position_counts": {"between_recorded_reference_p5_and_p50": 1},
+            },
+        },
+        missingness={
+            "weather_not_recorded": False,
+            "sleep_not_recorded": False,
+            "no_wearable_samples_in_window": False,
+        },
+        source_manifest={"fact_and_deterministic_projection": ["synthetic-source"]},
+        result_sha256="9" * 64,
+    )
+
+    def execute(name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.update(name=name, arguments=arguments)
+        return result_source
+
+    result = run(
+        question="I don't feel well. What happened during the preceding hours?",
+        context=_context(),
+        execute_tool=execute,
+        client=_client(),
+        current_local_date=date(2026, 8, 15),
+        current_local_datetime=datetime.fromisoformat("2026-08-15T16:00:00-04:00"),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert seen["name"] == "get_preceding_health_context"
+    arguments = cast(dict[str, object], seen["arguments"])
+    assert arguments["lookback_hours"] == 6
+    assert arguments["history_days"] == 90
+    assert arguments["include_stress_episode_anchors"] is False
+    assert result.model_name == "HealthCurve deterministic calculation"
+    assert result.body is not None
+    assert "synthetic dizziness" in result.body
+    assert "18.5 nmol/L" in result.body
+    assert "31°C" in result.body
+    assert "prior recorded symptom event" in result.body
+    assert "temporal associations" in result.body
+    assert "dosing guidance" in result.body
+
+
+def test_long_term_off_question_expands_the_event_comparison_horizon() -> None:
+    seen: dict[str, object] = {}
+    result_source = ChatToolResult(
+        tool_name="get_preceding_health_context",
+        timezone="America/New_York",
+        date_scope={"date_from": "2025-08-15", "date_to": "2026-08-15"},
+        data={
+            "anchor_at": "2026-08-15T16:00:00-04:00",
+            "window_started_at": "2026-08-15T10:00:00-04:00",
+            "recorded_events": [],
+            "overlapping_stress_episodes": [],
+            "modeled_curve_at_anchor": {},
+            "weather_before_anchor": None,
+            "sleep_before_anchor": None,
+            "wearable_window_comparisons": [],
+            "prior_symptom_contexts": [],
+            "similar_symptom_filter": None,
+            "cross_event_patterns": {"prior_event_count": 0},
+        },
+        missingness={
+            "weather_not_recorded": True,
+            "sleep_not_recorded": True,
+            "no_wearable_samples_in_window": True,
+        },
+        source_manifest={"fact_and_deterministic_projection": []},
+        result_sha256="8" * 64,
+    )
+
+    def execute(name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.update(name=name, arguments=arguments)
+        return result_source
+
+    result = run(
+        question="Across the long term, compare points in time where I felt off.",
+        context=_context(),
+        execute_tool=execute,
+        client=_client(),
+        current_local_date=date(2026, 8, 15),
+        current_local_datetime=datetime.fromisoformat("2026-08-15T16:00:00-04:00"),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert seen["name"] == "get_preceding_health_context"
+    arguments = cast(dict[str, object], seen["arguments"])
+    assert arguments["history_days"] == 366
+    assert arguments["similar_limit"] == 24
+    assert arguments["include_stress_episode_anchors"] is True
+    assert result.body is not None and "insufficient data" in result.body
 
 
 def test_basic_average_wake_question_defaults_to_latest_fourteen_local_dates() -> None:

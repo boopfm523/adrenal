@@ -49,6 +49,12 @@ The versioned gold set covers at least:
     distinct visible states and no partial assistant message.
 12. **Authorization:** an owner cannot retrieve or cite another synthetic owner's data,
     even by supplying IDs copied from a prior tool result.
+13. **Event-centered retrospective context:** preceding-hours questions report the
+    explicit anchor/window, recorded facts, modeled-versus-reference position, weather,
+    sleep, wearable comparisons, and missingness without diagnosing or advising doses.
+14. **Long-term event comparison:** prior symptom and stress-episode anchors use the
+    same bounded window and report sample size, coverage, repeated descriptive patterns,
+    and an association-not-causation boundary.
 
 ## Deterministic and model-backed gates
 
