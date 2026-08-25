@@ -58,7 +58,7 @@ services:
       # isolated one-shot connector and Garmin worker (deploy/garmin.compose.yml).
       HC_GARMIN_ENABLED: ${HC_GARMIN_ENABLED:-false}
       HC_GARMIN_SYNC_LOOKBACK_DAYS: ${HC_GARMIN_SYNC_LOOKBACK_DAYS:-3}
-      HC_GARMIN_SYNC_HOUR_LOCAL: ${HC_GARMIN_SYNC_HOUR_LOCAL:-7}
+      HC_GARMIN_SYNC_HOUR_LOCAL: ${HC_GARMIN_SYNC_HOUR_LOCAL:-12}
       HC_GARMIN_SYNC_INTERVAL_HOURS: ${HC_GARMIN_SYNC_INTERVAL_HOURS:-12}
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's
