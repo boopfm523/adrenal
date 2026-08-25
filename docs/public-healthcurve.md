@@ -85,9 +85,19 @@ curl --fail --silent --show-error --output /dev/null \
 
 The sample LaunchAgent runs every two hours and at login. It is safe to run more
 often than the eligibility window because the exporter independently enforces
-the cutoff and Garmin-completion rule.
+the cutoff and Garmin-completion rule. macOS blocks background agents from the
+interactive repository under `Documents`, so the agent uses a private runtime
+clone under `Library/Application Support`. The scheduled wrapper fast-forwards
+that clone from GitHub and refreshes frontend dependencies only when the lockfile
+changes.
 
 ```bash
+mkdir -p "/Users/jeff/Library/Application Support/HealthCurvePublisher"
+git clone https://github.com/boopfm523/adrenal.git \
+  "/Users/jeff/Library/Application Support/HealthCurvePublisher/repo"
+install -m 600 .env \
+  "/Users/jeff/Library/Application Support/HealthCurvePublisher/repo/.env"
+npm --prefix "/Users/jeff/Library/Application Support/HealthCurvePublisher/repo/frontend" ci
 install -m 600 deploy/com.healthcurve.public-healthcurve.plist.example \
   /Users/jeff/Library/LaunchAgents/com.healthcurve.public-healthcurve.plist
 launchctl bootstrap gui/$(id -u) \
@@ -99,8 +109,8 @@ Inspect status and privacy-safe logs:
 
 ```bash
 launchctl print gui/$(id -u)/com.healthcurve.public-healthcurve
-tail -n 100 var/public-healthcurve/publisher.log
-tail -n 100 var/public-healthcurve/publisher-error.log
+tail -n 100 "/Users/jeff/Library/Application Support/HealthCurvePublisher/publisher.log"
+tail -n 100 "/Users/jeff/Library/Application Support/HealthCurvePublisher/publisher-error.log"
 ```
 
 If Docker Desktop, the database, network, or remote host is unavailable, the run

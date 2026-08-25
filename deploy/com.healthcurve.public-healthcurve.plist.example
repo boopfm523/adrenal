@@ -7,10 +7,10 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/jeff/Documents/adrenal/scripts/publish_public_healthcurve.sh</string>
+    <string>/Users/jeff/Library/Application Support/HealthCurvePublisher/repo/scripts/scheduled_public_healthcurve.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/jeff/Documents/adrenal</string>
+  <string>/Users/jeff/Library/Application Support/HealthCurvePublisher/repo</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
@@ -21,9 +21,9 @@
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/jeff/Documents/adrenal/var/public-healthcurve/publisher.log</string>
+  <string>/Users/jeff/Library/Application Support/HealthCurvePublisher/publisher.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/jeff/Documents/adrenal/var/public-healthcurve/publisher-error.log</string>
+  <string>/Users/jeff/Library/Application Support/HealthCurvePublisher/publisher-error.log</string>
   <key>ProcessType</key>
   <string>Background</string>
 </dict>
