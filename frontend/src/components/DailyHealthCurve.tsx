@@ -804,6 +804,7 @@ interface DailyHealthCurveProps {
   nextDayDisabled?: boolean;
   currentTime?: Date;
   showSourceFingerprint?: boolean;
+  showIntroductorySafetyText?: boolean;
 }
 
 export function DailyHealthCurve({
@@ -815,6 +816,7 @@ export function DailyHealthCurve({
   nextDayDisabled = false,
   currentTime,
   showSourceFingerprint = true,
+  showIntroductorySafetyText = true,
 }: DailyHealthCurveProps): React.JSX.Element {
   const [localVisible, setLocalVisible] = useState(DEFAULT_VISIBLE);
   const visible = controlledVisible ?? localVisible;
@@ -1042,8 +1044,8 @@ export function DailyHealthCurve({
 
   return <Paper component="section" className="healthcurve-card" withBorder radius="lg" p={{ base: "md", sm: "lg" }} aria-labelledby="daily-healthcurve-title">
     <Title order={2} id="daily-healthcurve-title">Your daily HealthCurve</Title>
-    <Text mt="xs">{data.exposure.safety_label}</Text>
-    {isWakeFreeCurve(data.exposure) ? <Text size="sm" c="dimmed">The modeled and healthy-reference curves are estimates for review, not measurements, medication-adequacy tests, alerts, or dosing guidance. Recorded symptoms and physician-authored instructions take precedence.</Text> : null}
+    {showIntroductorySafetyText ? <Text mt="xs">{data.exposure.safety_label}</Text> : null}
+    {showIntroductorySafetyText && isWakeFreeCurve(data.exposure) ? <Text size="sm" c="dimmed">The modeled and healthy-reference curves are estimates for review, not measurements, medication-adequacy tests, alerts, or dosing guidance. Recorded symptoms and physician-authored instructions take precedence.</Text> : null}
     <dl className="metric-metadata"><div><dt>Selected date</dt><dd className="healthcurve-selected-day">{onPreviousDay === undefined ? null : <button type="button" className="button-secondary" aria-label="Review previous day" onClick={onPreviousDay}>←</button>}<span>{data.exposure.date}</span>{onNextDay === undefined || nextDayDisabled ? null : <button type="button" className="button-secondary" aria-label="Review next day" onClick={onNextDay}>→</button>}</dd></div><div><dt>Timezone</dt><dd>{timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}</dd></div><div><dt>Elapsed day</dt><dd>{formatDecimal(data.exposure.elapsed_hours)} hours</dd></div></dl>
     <details className="metric-definition healthcurve-context">
       <summary>HealthCurve context and limits</summary>

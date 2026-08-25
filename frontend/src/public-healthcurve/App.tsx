@@ -1,6 +1,7 @@
 import { Alert, Loader, Paper } from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
 
+import protectiveHorizonLogo from "../../../design/logo-concepts/healthcurve-protective-horizon-concept.png";
 import {
   DailyHealthCurve,
   type HealthCurveVisibility,
@@ -119,9 +120,8 @@ export function App(): React.JSX.Element {
   return <>
     <a className="skip-link" href="#public-healthcurve-main">Skip to the curve</a>
     <header className="public-header">
-      <div className="public-brand" aria-label="HealthCurve">
-        <span aria-hidden="true">H</span>
-        <strong>HealthCurve</strong>
+      <div className="public-brand">
+        <img className="brand-logo" src={protectiveHorizonLogo} alt="HealthCurve" />
       </div>
       <p>Public read-only daily curve</p>
     </header>
@@ -165,6 +165,7 @@ export function App(): React.JSX.Element {
         onNextDay={() => { move(1); }}
         nextDayDisabled={selectedIndex < 0 || selectedIndex >= (manifest?.dates.length ?? 0) - 1}
         showSourceFingerprint={false}
+        showIntroductorySafetyText={false}
       />}
     </main>
     <footer className="public-footer">

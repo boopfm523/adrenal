@@ -456,6 +456,19 @@ describe("Daily HealthCurve", () => {
     expect(methodology).toHaveTextContent("neither is independently normalized");
   });
 
+  it("can hide only the introductory safety copy for the public static presentation", () => {
+    const curve = wakeFreeData();
+    const { rerender } = renderWithTheme(<DailyHealthCurve data={curve} />);
+
+    expect(screen.getByText(curve.exposure.safety_label)).toBeVisible();
+    expect(screen.getByText(/The modeled and healthy-reference curves are estimates for review/)).toBeVisible();
+
+    rerender(<DailyHealthCurve data={curve} showIntroductorySafetyText={false} />);
+    expect(screen.queryByText(curve.exposure.safety_label)).not.toBeInTheDocument();
+    expect(screen.queryByText(/The modeled and healthy-reference curves are estimates for review/)).not.toBeInTheDocument();
+    expect(screen.getByText("HealthCurve context and limits")).toBeVisible();
+  });
+
   it("keeps missing wake-reference inputs visible and never invents a band", () => {
     renderWithTheme(<DailyHealthCurve data={wakeFreeData(false)} />);
 

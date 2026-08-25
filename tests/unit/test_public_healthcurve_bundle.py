@@ -49,6 +49,19 @@ def test_synthetic_static_bundle_passes(tmp_path: Path) -> None:
     assert len(digest) == 64
 
 
+def test_bundle_verifier_allows_bundled_png_assets(tmp_path: Path) -> None:
+    root = synthetic_bundle(tmp_path)
+    (root / "assets" / "healthcurve-logo.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n30000000-0000-4000-8000-000000000003"
+    )
+
+    count, size, digest = verify(root)
+
+    assert count == 6
+    assert size > 0
+    assert len(digest) == 64
+
+
 def test_bundle_verifier_rejects_non_public_directory_mode(tmp_path: Path) -> None:
     root = synthetic_bundle(tmp_path)
     (root / "data").chmod(0o700)

@@ -32,7 +32,10 @@ FORBIDDEN_KEYS: Final = frozenset(
         "recorded_at",
     }
 )
-ALLOWED_SUFFIXES: Final = frozenset({"", ".css", ".html", ".js", ".json", ".woff", ".woff2"})
+ALLOWED_SUFFIXES: Final = frozenset(
+    {"", ".css", ".html", ".js", ".json", ".png", ".woff", ".woff2"}
+)
+TEXT_SUFFIXES: Final = frozenset({"", ".css", ".html", ".js", ".json"})
 
 
 def keys(value: Any) -> Iterable[str]:
@@ -108,7 +111,7 @@ def verify(directory: Path) -> tuple[int, int, str]:
         total_bytes += len(content)
         digest.update(relative.as_posix().encode())
         digest.update(content)
-        if UUID.search(content) is not None:
+        if path.suffix in TEXT_SUFFIXES and UUID.search(content) is not None:
             raise ValueError(f"UUID-shaped private identifier found in {relative}")
         if path.suffix == ".json":
             value = read_json(path)
