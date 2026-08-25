@@ -151,7 +151,7 @@ function GarminControl(): React.JSX.Element {
   const warningCodes = status.data?.latest_sync_warning_codes ?? [];
   const canSync = status.data?.configured === true && status.data.state === "connected";
   const needsReauthentication = status.data?.state === "reauthentication_required";
-  const automaticStartHour = status.data?.automatic_sync_hour_local ?? 7;
+  const automaticStartHour = status.data?.automatic_sync_hour_local ?? 12;
   const automaticIntervalHours = status.data?.automatic_sync_interval_hours ?? 12;
   const automaticHours = Array.from(
     { length: Math.ceil(24 / automaticIntervalHours) },

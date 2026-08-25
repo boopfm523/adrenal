@@ -97,7 +97,7 @@ def test_defaults_are_safe() -> None:
     assert settings.debug is False
     assert settings.environment is Environment.DEV
     assert settings.ollama_model == "qwen3:30b"
-    assert settings.garmin_sync_hour_local == 7
+    assert settings.garmin_sync_hour_local == 12
     assert settings.garmin_sync_interval_hours == 12
 
 

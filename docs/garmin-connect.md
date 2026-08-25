@@ -164,8 +164,8 @@ the same current recorded facts.
 ## Scheduling and reconciliation
 
 The worker queues one bounded window per owner and owner-local schedule slot. By
-default, slots begin at 07:00 (`HC_GARMIN_SYNC_HOUR_LOCAL=7`) and repeat every 12 hours
-(`HC_GARMIN_SYNC_INTERVAL_HOURS=12`), producing 07:00 and 19:00 syncs. The interval
+default, slots begin at 12:00 (`HC_GARMIN_SYNC_HOUR_LOCAL=12`) and repeat every 12 hours
+(`HC_GARMIN_SYNC_INTERVAL_HOURS=12`), producing 00:00 and 12:00 syncs. The interval
 must divide evenly into 24 so the wall-clock schedule remains deterministic across
 worker restarts and daylight-saving changes. Jobs run at or after their slot when the
 worker polls, with a maximum of 31 days per job. Manual HealthCurve sync remains

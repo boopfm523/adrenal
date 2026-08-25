@@ -22,6 +22,11 @@ The exporter fails closed: an ineligible day is absent rather than partially
 published. The calendar is derived from the manifest and defaults to its newest
 published date.
 
+The default Garmin schedule runs at local noon and midnight. The noon run supplies
+the required post-cutoff provenance for the preceding day, so the next two-hour
+publisher run can normally publish it shortly after the twelve-hour cutoff. A delayed
+or failed Garmin run still keeps that day unpublished until a later successful run.
+
 ## One-time SSH setup
 
 The deployment account is `jellin2`, the hostname is `jeffellin.com`, and the
