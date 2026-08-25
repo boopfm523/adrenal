@@ -24,7 +24,5 @@
   <string>/Users/jeff/Library/Application Support/HealthCurvePublisher/publisher.log</string>
   <key>StandardErrorPath</key>
   <string>/Users/jeff/Library/Application Support/HealthCurvePublisher/publisher-error.log</string>
-  <key>ProcessType</key>
-  <string>Background</string>
 </dict>
 </plist>
