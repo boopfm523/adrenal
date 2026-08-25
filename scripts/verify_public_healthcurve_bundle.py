@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -17,6 +18,7 @@ UUID: Final = re.compile(
     rb"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
     re.IGNORECASE,
 )
+INLINE_SCRIPT: Final = re.compile(r"<script([^>]*)>(.*?)</script>", re.IGNORECASE | re.DOTALL)
 FORBIDDEN_KEYS: Final = frozenset(
     {
         "owner_id",
@@ -76,12 +78,22 @@ def verify(directory: Path) -> tuple[int, int, str]:
         "Content-Security-Policy",
         "form-action 'none'",
         "connect-src 'self'",
+        "https://*.google-analytics.com",
+        "https://*.analytics.google.com",
+        "https://www.googletagmanager.com/gtag/js?id=G-M7EL70V6DE",
+        "gtag('config', 'G-M7EL70V6DE')",
         '<div id="root"></div>',
     ):
         if required_text not in html:
             raise ValueError(f"index.html is missing required boundary: {required_text}")
     if "<form" in html.lower():
         raise ValueError("public index contains a form")
+    for attributes, body in INLINE_SCRIPT.findall(html):
+        if "src=" in attributes.lower() or not body.strip():
+            continue
+        digest = base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode("ascii")
+        if f"'sha256-{digest}'" not in html:
+            raise ValueError("public index contains an inline script without its CSP hash")
 
     manifest = read_json(manifest_path)
     dates = manifest.get("dates")

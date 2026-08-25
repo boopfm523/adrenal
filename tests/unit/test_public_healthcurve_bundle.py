@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,10 +13,18 @@ def synthetic_bundle(root: Path) -> Path:
     root.chmod(0o755)
     (root / "assets").mkdir(parents=True)
     (root / "data" / "days").mkdir(parents=True)
+    analytics = "gtag('config', 'G-M7EL70V6DE')"
+    analytics_hash = base64.b64encode(hashlib.sha256(analytics.encode()).digest()).decode()
     (root / "index.html").write_text(
-        """<!doctype html><meta http-equiv="Content-Security-Policy" "
-        "content="connect-src 'self'; form-action 'none'">"
-        "<div id="root"></div><script src="/healthcurve/assets/app.js"></script>""",
+        f"""<!doctype html>
+        <meta http-equiv="Content-Security-Policy"
+          content="script-src 'self'; script-src-elem 'self' 'sha256-{analytics_hash}' https://www.googletagmanager.com;
+          img-src 'self' https://*.google-analytics.com https://www.googletagmanager.com;
+          connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com
+          https://www.googletagmanager.com; form-action 'none'">
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-M7EL70V6DE"></script>
+        <script>{analytics}</script>
+        <div id="root"></div><script src="/healthcurve/assets/app.js"></script>""",
         encoding="utf-8",
     )
     (root / "assets" / "app.js").write_text("console.log('synthetic static app')", encoding="utf-8")
@@ -66,6 +76,33 @@ def test_bundle_verifier_rejects_non_public_directory_mode(tmp_path: Path) -> No
     root = synthetic_bundle(tmp_path)
     (root / "data").chmod(0o700)
     with pytest.raises(ValueError, match="not publicly traversable"):
+        verify(root)
+
+
+def test_bundle_verifier_requires_configured_google_analytics_tag(tmp_path: Path) -> None:
+    root = synthetic_bundle(tmp_path)
+    index = root / "index.html"
+    index.write_text(
+        index.read_text(encoding="utf-8").replace("G-M7EL70V6DE", "G-REMOVED"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"googletagmanager\.com/gtag/js"):
+        verify(root)
+
+
+def test_bundle_verifier_rejects_inline_script_hash_drift(tmp_path: Path) -> None:
+    root = synthetic_bundle(tmp_path)
+    index = root / "index.html"
+    index.write_text(
+        index.read_text(encoding="utf-8").replace(
+            "gtag('config', 'G-M7EL70V6DE')</script>",
+            "gtag('config', 'G-M7EL70V6DE');</script>",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="inline script without its CSP hash"):
         verify(root)
 
 
