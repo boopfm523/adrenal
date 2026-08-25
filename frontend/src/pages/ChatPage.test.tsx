@@ -128,6 +128,30 @@ describe("HealthCurve Chat page", () => {
     expect(within(restoredRail).getByRole("button", { name: "New chat" })).toBeVisible();
   });
 
+  it("condenses completed earlier turns while keeping the latest turn open", async () => {
+    renderChat([
+      message({ id: "00000000-0000-4000-8000-000000000010", role: "user", content_category: "owner_authored", state: "accepted", body: "What happened before my headache?", sequence: 1, generated_at: null }),
+      message({ id: "00000000-0000-4000-8000-000000000011", body: "Earlier contextual answer", sequence: 2 }),
+      message({ id: "00000000-0000-4000-8000-000000000012", role: "user", content_category: "owner_authored", state: "accepted", body: "Was the data unusual?", sequence: 3, generated_at: null }),
+      message({ id: "00000000-0000-4000-8000-000000000013", body: "Latest contextual answer", sequence: 4 }),
+    ]);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText("Latest contextual answer")).toBeVisible();
+    expect(screen.getByText("Earlier contextual answer")).not.toBeVisible();
+    const earlierToggle = screen.getByRole("button", { name: /What happened before my headache.*Expand/ });
+    expect(earlierToggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(earlierToggle);
+    expect(screen.getByText("Earlier contextual answer")).toBeVisible();
+    expect(earlierToggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(screen.getByRole("button", { name: "Collapse previous turns" }));
+    expect(screen.getByText("Earlier contextual answer")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Expand previous turns" }));
+    expect(screen.getByText("Earlier contextual answer")).toBeVisible();
+  });
+
   it("makes durable failures visible and offers retry", async () => {
     const userMessage = message({ id: "00000000-0000-4000-8000-000000000004", role: "user", content_category: "owner_authored", state: "accepted", body: "Summarize my day", sequence: 1, generated_at: null });
     renderChat([userMessage, message({ id: "00000000-0000-4000-8000-000000000005", state: "unavailable", body: null, error_code: "model_unavailable" })]);

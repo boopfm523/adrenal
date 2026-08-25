@@ -70,6 +70,38 @@ interface MessageCardProps {
   retrying: boolean;
 }
 
+interface ConversationTurn {
+  id: string;
+  messages: ChatMessage[];
+  user: ChatMessage | undefined;
+  assistant: ChatMessage | undefined;
+}
+
+function groupConversationTurns(messages: ChatMessage[]): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  for (const message of messages) {
+    const current = turns.at(-1);
+    if (message.role === "user" || current === undefined || current.assistant !== undefined) {
+      turns.push({
+        id: message.id,
+        messages: [message],
+        user: message.role === "user" ? message : undefined,
+        assistant: message.role === "assistant" ? message : undefined,
+      });
+      continue;
+    }
+    current.messages.push(message);
+    current.assistant = message;
+  }
+  return turns;
+}
+
+function turnSummary(turn: ConversationTurn): string {
+  const trimmedBody = turn.user?.body?.trim();
+  const body = trimmedBody === undefined || trimmedBody === "" ? "Earlier response" : trimmedBody;
+  return body.length > 96 ? `${body.slice(0, 93)}…` : body;
+}
+
 function MessageCard({ message, priorUserMessage, onCancel, onRetry, cancelling, retrying }: MessageCardProps): React.JSX.Element {
   const isAssistant = message.role === "assistant";
   const active = ACTIVE_STATES.has(message.state);
@@ -138,6 +170,10 @@ export function ChatPage(): React.JSX.Element {
     refetchInterval: (query) => query.state.data?.items.some((message) => ACTIVE_STATES.has(message.state)) === true ? 1500 : false,
   });
   const orderedMessages = useMemo(() => [...(messages.data?.items ?? [])].sort((a, b) => a.sequence - b.sequence), [messages.data]);
+  const turns = useMemo(() => groupConversationTurns(orderedMessages), [orderedMessages]);
+  const priorTurns = turns.slice(0, -1);
+  const [expandedPriorTurnIds, setExpandedPriorTurnIds] = useState<Set<string>>(() => new Set());
+  const expandedPriorTurnCount = priorTurns.filter((turn) => expandedPriorTurnIds.has(turn.id)).length;
   const activeAssistant = [...orderedMessages].reverse().find((message) => message.role === "assistant" && ACTIVE_STATES.has(message.state));
   const latestStateKey = orderedMessages.map((message) => `${message.id}:${message.state}`).join("|");
   useEffect(() => {
@@ -187,9 +223,60 @@ export function ChatPage(): React.JSX.Element {
                 {messages.isPending ? <p role="status">Loading conversation…</p> : null}
                 {messages.isError ? <Alert color="red" role="alert">This conversation could not be loaded.</Alert> : null}
                 {orderedMessages.length === 0 && !messages.isPending ? <div className="chat-welcome"><h3>What would you like to understand?</h3><p>For example: “What was happening around my symptoms yesterday?” or “Compare my stress and heart rate over the last week.”</p></div> : null}
-                {orderedMessages.map((message) => {
-                  const priorUser = message.role === "assistant" ? [...orderedMessages].reverse().find((candidate) => candidate.role === "user" && candidate.sequence < message.sequence) : undefined;
-                  return <MessageCard key={message.id} message={message} priorUserMessage={priorUser} onCancel={(id) => { cancel.mutate(id); }} onRetry={submit} cancelling={cancel.isPending && cancel.variables === message.id} retrying={send.isPending} />;
+                {priorTurns.length > 0 ? (
+                  <div className="chat-turn-controls">
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      onClick={() => {
+                        setExpandedPriorTurnIds((current) => {
+                          const next = new Set(current);
+                          for (const turn of priorTurns) {
+                            if (expandedPriorTurnCount === priorTurns.length) next.delete(turn.id);
+                            else next.add(turn.id);
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      {expandedPriorTurnCount === priorTurns.length ? "Collapse previous turns" : "Expand previous turns"}
+                    </Button>
+                    <span>{priorTurns.length} earlier {priorTurns.length === 1 ? "turn" : "turns"}</span>
+                  </div>
+                ) : null}
+                {turns.map((turn, turnIndex) => {
+                  const isLatest = turnIndex === turns.length - 1;
+                  const expanded = isLatest || expandedPriorTurnIds.has(turn.id);
+                  const panelId = `chat-turn-${turn.id}`;
+                  return (
+                    <section className={`chat-turn${expanded ? "" : " chat-turn--collapsed"}`} key={turn.id} aria-label={isLatest ? "Latest conversation turn" : "Earlier conversation turn"}>
+                      {isLatest ? null : (
+                        <button
+                          type="button"
+                          className="chat-turn__toggle"
+                          aria-expanded={expanded}
+                          aria-controls={panelId}
+                          onClick={() => {
+                            setExpandedPriorTurnIds((current) => {
+                              const next = new Set(current);
+                              if (next.has(turn.id)) next.delete(turn.id);
+                              else next.add(turn.id);
+                              return next;
+                            });
+                          }}
+                        >
+                          <span>{turnSummary(turn)}</span>
+                          <small>{expanded ? "Collapse" : "Expand"}</small>
+                        </button>
+                      )}
+                      <div id={panelId} hidden={!expanded} className="chat-turn__messages">
+                        {turn.messages.map((message) => {
+                          const priorUser = message.role === "assistant" ? turn.user : undefined;
+                          return <MessageCard key={message.id} message={message} priorUserMessage={priorUser} onCancel={(id) => { cancel.mutate(id); }} onRetry={submit} cancelling={cancel.isPending && cancel.variables === message.id} retrying={send.isPending} />;
+                        })}
+                      </div>
+                    </section>
+                  );
                 })}
                 <div ref={endRef} />
               </div>

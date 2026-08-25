@@ -120,6 +120,14 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .chat-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--hc-color-border); }
 .chat-panel__header h2 { margin: 0 0 0.25rem; }
 .chat-messages { display: flex; flex-direction: column; gap: 0.85rem; overflow-y: auto; padding: 1rem; scroll-behavior: smooth; }
+.chat-turn-controls { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--hc-color-border); padding-bottom: 0.65rem; color: var(--hc-color-text-muted); font-size: 0.82rem; }
+.chat-turn { display: grid; gap: 0.55rem; }
+.chat-turn--collapsed { border: 1px solid var(--hc-color-border); border-radius: var(--mantine-radius-md); background: var(--hc-color-surface-muted); }
+.chat-turn__toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: 2.75rem; border: 0; border-radius: inherit; padding: 0.55rem 0.75rem; background: transparent; color: var(--hc-color-text); text-align: left; }
+.chat-turn__toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-turn__toggle small { flex: 0 0 auto; color: var(--mantine-color-horizonTeal-8); font-family: "Rubik-SemiBold", sans-serif; }
+.chat-turn__messages { display: flex; flex-direction: column; gap: 0.85rem; }
+.chat-turn:not(.chat-turn--collapsed) > .chat-turn__toggle { border: 1px solid var(--hc-color-border); background: var(--hc-color-surface-muted); }
 .chat-message { width: fit-content; max-width: min(48rem, 88%); border-radius: 0.85rem; padding: 0.85rem 1rem; }
 .chat-message--user { align-self: flex-end; background: var(--mantine-color-horizonTeal-1); }
 .chat-message--assistant { align-self: flex-start; border: 1px dashed #684a76; background: #fff; }
@@ -678,6 +686,7 @@ circle.chart-series { fill: white; }
   .chat-conversation { flex: 0 0 14rem; }
   .chat-panel { min-height: 38rem; }
   .chat-panel__header { align-items: stretch; flex-direction: column; }
+  .chat-turn-controls { align-items: flex-start; flex-direction: column; }
   .chat-message { max-width: 94%; }
   .healthcurve-mobile-controls span { font-family: "Rubik-SemiBold", sans-serif; font-weight: 600; }
   .healthcurve-mobile-controls button { width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0; font-size: 1.25rem; }
