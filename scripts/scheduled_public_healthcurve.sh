@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HC_SCHEDULED_REPOSITORY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-HC_SCHEDULED_FRONTEND="$HC_SCHEDULED_REPOSITORY/frontend"
-HC_SCHEDULED_STATE="$HC_SCHEDULED_REPOSITORY/var/public-healthcurve"
-HC_SCHEDULED_LOCK_HASH="$HC_SCHEDULED_STATE/package-lock.sha256"
-mkdir -p "$HC_SCHEDULED_STATE"
+PUBLIC_SCHEDULE_REPOSITORY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+PUBLIC_SCHEDULE_FRONTEND="$PUBLIC_SCHEDULE_REPOSITORY/frontend"
+PUBLIC_SCHEDULE_STATE="$PUBLIC_SCHEDULE_REPOSITORY/var/public-healthcurve"
+PUBLIC_SCHEDULE_LOCK_HASH="$PUBLIC_SCHEDULE_STATE/package-lock.sha256"
+mkdir -p "$PUBLIC_SCHEDULE_STATE"
 
-git -C "$HC_SCHEDULED_REPOSITORY" pull --ff-only origin main
+git -C "$PUBLIC_SCHEDULE_REPOSITORY" pull --ff-only origin main
 
-HC_SCHEDULED_CURRENT_HASH="$(shasum -a 256 "$HC_SCHEDULED_FRONTEND/package-lock.json" | awk '{print $1}')"
-HC_SCHEDULED_INSTALLED_HASH=""
-if [[ -f "$HC_SCHEDULED_LOCK_HASH" ]]; then
-  HC_SCHEDULED_INSTALLED_HASH="$(<"$HC_SCHEDULED_LOCK_HASH")"
+PUBLIC_SCHEDULE_CURRENT_HASH="$(shasum -a 256 "$PUBLIC_SCHEDULE_FRONTEND/package-lock.json" | awk '{print $1}')"
+PUBLIC_SCHEDULE_INSTALLED_HASH=""
+if [[ -f "$PUBLIC_SCHEDULE_LOCK_HASH" ]]; then
+  PUBLIC_SCHEDULE_INSTALLED_HASH="$(<"$PUBLIC_SCHEDULE_LOCK_HASH")"
 fi
-if [[ ! -d "$HC_SCHEDULED_FRONTEND/node_modules" || "$HC_SCHEDULED_INSTALLED_HASH" != "$HC_SCHEDULED_CURRENT_HASH" ]]; then
-  npm --prefix "$HC_SCHEDULED_FRONTEND" ci
-  printf '%s\n' "$HC_SCHEDULED_CURRENT_HASH" > "$HC_SCHEDULED_LOCK_HASH"
+if [[ ! -d "$PUBLIC_SCHEDULE_FRONTEND/node_modules" || "$PUBLIC_SCHEDULE_INSTALLED_HASH" != "$PUBLIC_SCHEDULE_CURRENT_HASH" ]]; then
+  npm --prefix "$PUBLIC_SCHEDULE_FRONTEND" ci
+  printf '%s\n' "$PUBLIC_SCHEDULE_CURRENT_HASH" > "$PUBLIC_SCHEDULE_LOCK_HASH"
 fi
 
-exec "$HC_SCHEDULED_REPOSITORY/scripts/publish_public_healthcurve.sh"
+exec "$PUBLIC_SCHEDULE_REPOSITORY/scripts/publish_public_healthcurve.sh"
