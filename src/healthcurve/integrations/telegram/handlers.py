@@ -42,6 +42,8 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import (
     SYMPTOM_TRACKING_CATEGORY_REVISION,
     DiaryEvent,
+    LifeEvent,
+    LifeEventCategory,
     MealEvent,
     MealSize,
     SymptomEvent,
@@ -207,10 +209,12 @@ SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
         "bd-status",
         "bp",
         "dose",
+        "diary",
         "edit",
         "episode",
         "help",
         "injection",
+        "lifeevent",
         "location",
         "meal",
         "privacy",
@@ -241,6 +245,8 @@ Recording commands (these work even if the language model is offline):
 /temperature <value> <F|C> [HH:MM] - record body temperature
 /meal [XS|S|M|L|XL|XXL] [HH:MM] - record a meal (size is optional)
 /symptom <name> [0-10] [category=<category>] - record a symptom
+/diary <text> [--time=HH:MM] [--sensitive] - record a diary entry
+/lifeevent <category> <title> [--time=HH:MM] [--sensitive] - record a life event
 /injection <amount> - log an emergency injection
 /episode start <trigger> - open a stress episode
 /episode end - close the open episode
@@ -711,6 +717,10 @@ def _handle_command(
             return _cmd_temperature(session, owner, args, now=now)
         case "meal":
             return _cmd_meal(session, owner, args, now=now)
+        case "diary":
+            return _cmd_diary(session, owner, args, now=now)
+        case "lifeevent":
+            return _cmd_life_event(session, owner, args, now=now)
         case "bd-list":
             if raw_argument:
                 return Reply("Usage: /bd-list (no arguments)")
@@ -1051,6 +1061,93 @@ def _cmd_meal(session: Session, owner: Owner, args: list[str], *, now: datetime)
     candidate = ValidatedCandidate(
         type=CandidateType.MEAL,
         meal_size=size,
+        local_time=local,
+        timezone=owner.default_timezone,
+        confidence=1.0,
+        flags=[] if has_explicit_time else [FlagCode.ASSUMED_TIME],
+    )
+    draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
+    return _draft_reply(draft, [candidate])
+
+
+def _context_command_parts(
+    args: list[str], local_reference: datetime
+) -> tuple[list[str], datetime, bool, bool] | None:
+    content: list[str] = []
+    local = local_reference
+    sensitive = False
+    has_explicit_time = False
+    for argument in args:
+        if argument == "--sensitive":
+            if sensitive:
+                return None
+            sensitive = True
+            continue
+        if argument.startswith("--time="):
+            if has_explicit_time:
+                return None
+            parsed = _parse_time_token(argument.removeprefix("--time="), local_reference)
+            if parsed is None:
+                return None
+            local = parsed
+            has_explicit_time = True
+            continue
+        if argument.startswith("--"):
+            return None
+        content.append(argument)
+    return content, local, sensitive, has_explicit_time
+
+
+def _cmd_diary(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = (
+        "Usage: /diary <text> [--time=HH:MM] [--sensitive]\n"
+        "Example: /diary Slept poorly --time=07:30 --sensitive"
+    )
+    parsed = _context_command_parts(args, _local_now(owner, now))
+    if parsed is None:
+        return Reply(usage)
+    content, local, sensitive, has_explicit_time = parsed
+    entry = " ".join(content).strip()
+    if not entry:
+        return Reply(usage)
+    candidate = ValidatedCandidate(
+        type=CandidateType.DIARY,
+        text=entry,
+        is_sensitive=sensitive,
+        local_time=local,
+        timezone=owner.default_timezone,
+        confidence=1.0,
+        flags=[] if has_explicit_time else [FlagCode.ASSUMED_TIME],
+    )
+    draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
+    return _draft_reply(draft, [candidate])
+
+
+def _cmd_life_event(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
+    usage = (
+        "Usage: /lifeevent <category> <title> [--time=HH:MM] [--sensitive]\n"
+        "Categories: travel, illness, work, exercise, sleep_disruption, stress, "
+        "medical_appointment, other\n"
+        "Example: /lifeevent travel Overnight flight --time=22:15"
+    )
+    parsed = _context_command_parts(args, _local_now(owner, now))
+    if parsed is None:
+        return Reply(usage)
+    content, local, sensitive, has_explicit_time = parsed
+    if len(content) < 2:
+        return Reply(usage)
+    try:
+        category = LifeEventCategory(content[0].lower().replace("-", "_"))
+    except ValueError:
+        return Reply(usage)
+    title = " ".join(content[1:]).strip()
+    if not title:
+        return Reply(usage)
+    candidate = ValidatedCandidate(
+        type=CandidateType.LIFE_EVENT,
+        text=title,
+        is_sensitive=sensitive,
+        life_event_category=category,
         local_time=local,
         timezone=owner.default_timezone,
         confidence=1.0,
@@ -2056,9 +2153,14 @@ def _describe(candidate: ValidatedCandidate) -> str:
             )
             return f"Symptom: {candidate.symptom_name}{severity}{category} at {when}"
         case CandidateType.DIARY:
-            return f"Note: {(candidate.text or '')[:100]}"
+            privacy = " · sensitive" if candidate.is_sensitive else ""
+            return f"Diary: {(candidate.text or '')[:100]}{privacy} at {when}"
         case CandidateType.LIFE_EVENT:
-            return f"Life event: {(candidate.text or '')[:100]} at {when}"
+            category = candidate.life_event_category or LifeEventCategory.OTHER
+            privacy = " · sensitive" if candidate.is_sensitive else ""
+            return (
+                f"Life event ({category.value}): {(candidate.text or '')[:100]}{privacy} at {when}"
+            )
         case CandidateType.BLOOD_PRESSURE:
             reading = f"{candidate.systolic_mmhg or '?'}/{candidate.diastolic_mmhg or '?'} mmHg"
             pulse = f", pulse {candidate.pulse_bpm} bpm" if candidate.pulse_bpm is not None else ""
@@ -2207,7 +2309,7 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 ),
                 episode_id=open_episode.id if open_episode else None,
             )
-        case CandidateType.DIARY | CandidateType.LIFE_EVENT:
+        case CandidateType.DIARY:
             return events.create_event(
                 session,
                 DiaryEvent,
@@ -2216,6 +2318,20 @@ def _persist(session: Session, owner: Owner, candidate: ValidatedCandidate) -> A
                 source_type=SourceType.TELEGRAM,
                 confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
                 text=candidate.text or "",
+                is_sensitive=candidate.is_sensitive,
+            )
+        case CandidateType.LIFE_EVENT:
+            return events.create_event(
+                session,
+                LifeEvent,
+                owner_id=owner.id,
+                event_time=event_time,
+                source_type=SourceType.TELEGRAM,
+                confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+                title=candidate.text or "",
+                category=candidate.life_event_category or LifeEventCategory.OTHER,
+                description=None,
+                is_sensitive=candidate.is_sensitive,
             )
         case CandidateType.BLOOD_PRESSURE:
             if candidate.systolic_mmhg is None or candidate.diastolic_mmhg is None:

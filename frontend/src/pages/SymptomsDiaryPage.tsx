@@ -6,6 +6,8 @@ import { useSearchParams } from "react-router-dom";
 import {
   correctMeal,
   correctSymptom,
+  createDiaryEntry,
+  createLifeEvent,
   createMeal,
   createSymptom,
   deleteSymptom,
@@ -16,6 +18,8 @@ import {
   type Meal,
   type MealCorrectionInput,
   type MealInput,
+  type DiaryInput,
+  type LifeEventInput,
   type Symptom,
   type SymptomCorrectionInput,
   type SymptomInput,
@@ -208,6 +212,110 @@ const mealSizeOptions = [
   { value: "xxl", label: "XXL" },
 ];
 
+const lifeEventCategoryOptions = [
+  { value: "travel", label: "Travel" },
+  { value: "illness", label: "Illness" },
+  { value: "work", label: "Work" },
+  { value: "exercise", label: "Exercise" },
+  { value: "sleep_disruption", label: "Sleep disruption" },
+  { value: "stress", label: "Stress" },
+  { value: "medical_appointment", label: "Medical appointment" },
+  { value: "other", label: "Other" },
+];
+
+function DiaryCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const initial = { text: "", tags: "", localTime: nowLocal(), timezone, isSensitive: false };
+  const [form, setForm] = useState(initial);
+  const [validation, setValidation] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: (payload: DiaryInput) => createDiaryEntry(payload),
+    onSuccess: async () => {
+      setForm({ ...initial, localTime: nowLocal() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["diary"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-healthcurve"] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+      ]);
+    },
+  });
+
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const text = form.text.trim();
+    if (text === "") { setValidation("Enter the diary note you want to record."); return; }
+    setValidation(null);
+    mutation.mutate({
+      text,
+      is_sensitive: form.isSensitive,
+      tags: form.tags.trim() === "" ? null : form.tags.trim(),
+      time: { local_time: form.localTime, timezone: form.timezone, fold: null },
+    });
+  }
+
+  return <form aria-label="Record a diary entry" onSubmit={submit}><Paper className="aligned-form-grid correction-form" withBorder p="lg" radius="lg">
+    <Alert className="form-wide" color="blue"><strong>Record your own note.</strong> Diary text is a recorded fact and is never treated as a diagnosis or an instruction to HealthCurve.</Alert>
+    <Textarea className="form-wide" label="Diary entry" required aria-label="Diary entry" maxLength={10_000} minRows={3} value={form.text} onChange={(event) => { setForm({ ...form, text: event.target.value }); }} description="Write what you want to remember. HealthCurve renders this only as text." />
+    <TextInput label="Tags" maxLength={500} value={form.tags} onChange={(event) => { setForm({ ...form, tags: event.target.value }); }} placeholder="Optional, comma-separated" />
+    <Checkbox label="Mark this diary entry sensitive" checked={form.isSensitive} onChange={(event) => { setForm({ ...form, isSensitive: event.target.checked }); }} description="Sensitive entries are hidden from ordinary views, reports, and chat unless you explicitly reveal or include them." />
+    <TextInput label="Experienced local time" required aria-label="Diary experienced local time" type="datetime-local" step="1" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} />
+    <TextInput label="Diary IANA timezone" required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} />
+    {validation === null ? null : <Alert className="form-wide" color="red" role="alert">{validation}</Alert>}
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">The diary entry was not saved. Check the local time and IANA timezone; your text remains in the form.</Alert> : null}
+    {mutation.isSuccess ? <Alert className="form-wide" color="green" role="status">Diary entry recorded.</Alert> : null}
+    <Button loading={mutation.isPending} type="submit">Record diary entry</Button>
+  </Paper></form>;
+}
+
+function LifeEventCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const initial = { title: "", category: "other", description: "", localTime: nowLocal(), timezone, isSensitive: false };
+  const [form, setForm] = useState(initial);
+  const [validation, setValidation] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: (payload: LifeEventInput) => createLifeEvent(payload),
+    onSuccess: async () => {
+      setForm({ ...initial, localTime: nowLocal() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["life-events"] }),
+        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-healthcurve"] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+      ]);
+    },
+  });
+
+  function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const title = form.title.trim();
+    if (title === "") { setValidation("Enter a short title for the life event."); return; }
+    setValidation(null);
+    mutation.mutate({
+      title,
+      category: form.category as LifeEventInput["category"],
+      description: form.description.trim() === "" ? null : form.description.trim(),
+      time: { local_time: form.localTime, timezone: form.timezone, fold: null },
+      ended_at: null,
+      is_sensitive: form.isSensitive,
+    });
+  }
+
+  return <form aria-label="Record a life event" onSubmit={submit}><Paper className="aligned-form-grid correction-form" withBorder p="lg" radius="lg">
+    <Alert className="form-wide" color="blue"><strong>Add context, not a conclusion.</strong> A nearby life event may help with comparison, but HealthCurve does not claim that it caused a symptom or health change.</Alert>
+    <TextInput label="Life event title" required aria-label="Life event title" maxLength={200} value={form.title} onChange={(event) => { setForm({ ...form, title: event.target.value }); }} placeholder="For example: overnight travel" />
+    <NativeSelect label="Life event category" data={lifeEventCategoryOptions} value={form.category} onChange={(event) => { setForm({ ...form, category: event.target.value }); }} />
+    <Textarea className="form-wide" label="Description" value={form.description} onChange={(event) => { setForm({ ...form, description: event.target.value }); }} description="Optional context. Avoid implying that the event caused a health outcome." />
+    <Checkbox label="Mark this life event sensitive" checked={form.isSensitive} onChange={(event) => { setForm({ ...form, isSensitive: event.target.checked }); }} description="Sensitive events are hidden from ordinary views, reports, and chat unless you explicitly reveal or include them." />
+    <TextInput label="Experienced local time" required aria-label="Life event experienced local time" type="datetime-local" step="1" value={form.localTime} onChange={(event) => { setForm({ ...form, localTime: event.target.value }); }} />
+    <TextInput label="Life event IANA timezone" required value={form.timezone} onChange={(event) => { setForm({ ...form, timezone: event.target.value }); }} />
+    {validation === null ? null : <Alert className="form-wide" color="red" role="alert">{validation}</Alert>}
+    {mutation.isError ? <Alert className="form-wide" color="red" role="alert">The life event was not saved. Check the values, local time, and IANA timezone; your entries remain in the form.</Alert> : null}
+    {mutation.isSuccess ? <Alert className="form-wide" color="green" role="status">Life event recorded.</Alert> : null}
+    <Button loading={mutation.isPending} type="submit">Record life event</Button>
+  </Paper></form>;
+}
+
 function MealCreateForm({ timezone }: { timezone: string }): React.JSX.Element {
   const queryClient = useQueryClient();
   const initial = { size: "", localTime: nowLocal(), timezone, notes: "" };
@@ -351,12 +459,18 @@ export function SymptomsDiaryPage(): React.JSX.Element {
     </section>
 
     <section aria-labelledby="diary-heading"><h2 id="diary-heading">Diary</h2>
+      <h3>Record a diary entry</h3>
+      <DiaryCreateForm timezone={profileTimezone} />
+      <h3>Recorded diary entries</h3>
       {diary.data?.page.total_items === 0 ? <p>No {filters.includeSensitive ? "" : "non-sensitive "}diary entries match.</p> : null}
       {diary.data === undefined || diary.data.items.length === 0 ? null : <div className="table-scroll symptom-table-region" tabIndex={0} role="region" aria-label="Diary records table"><table className="symptom-records-table"><caption>Recorded diary facts. Sensitive text appears only when explicitly revealed.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Entry</th><th scope="col">Privacy and tags</th><th scope="col">Source and confirmation</th></tr></thead><tbody>{diary.data.items.map((item) => <tr key={item.id}><td data-label="Experienced time" className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th data-label="Entry" scope="row">{item.text}</th><td data-label="Privacy and tags">{item.is_sensitive ? "Sensitive" : "Not marked sensitive"}{item.tags === null || item.tags.length === 0 ? null : <span>{item.tags}</span>}</td><td data-label="Source and confirmation"><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span></td></tr>)}</tbody></table></div>}
       {diary.data === undefined ? null : <PaginationControls label="Diary records" metadata={diary.data.page} onPageChange={(diaryPage) => { setSearchParams(searchFromState({ ...view, diaryPage })); }} />}
     </section>
 
     <section aria-labelledby="life-heading"><h2 id="life-heading">Life events</h2>
+      <h3>Record a life event</h3>
+      <LifeEventCreateForm timezone={profileTimezone} />
+      <h3>Recorded life events</h3>
       {life.data?.page.total_items === 0 ? <p>No {filters.includeSensitive ? "" : "non-sensitive "}life events match.</p> : null}
       {life.data === undefined || life.data.items.length === 0 ? null : <div className="table-scroll symptom-table-region" tabIndex={0} role="region" aria-label="Life event records table"><table className="symptom-records-table"><caption>Recorded life-event facts. Sensitive text appears only when explicitly revealed.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Event</th><th scope="col">Category and description</th><th scope="col">Privacy, source, and confirmation</th></tr></thead><tbody>{life.data.items.map((item) => <tr key={item.id}><td data-label="Experienced time" className="timeline-time">{localTime(item.time.local_time)}<span>{timezoneAbbreviation(item.time.timezone, item.time.occurred_at)}</span></td><th data-label="Event" scope="row">{item.title}</th><td data-label="Category and description"><span>{words(item.life_category)}</span>{item.description === null ? <span className="missing-value">No description</span> : <span>{item.description}</span>}</td><td data-label="Privacy, source, and confirmation"><span>{item.is_sensitive ? "Sensitive" : "Not marked sensitive"}</span><span>{words(item.provenance.source_type)}</span><span>{words(item.provenance.confirmation_state)}</span></td></tr>)}</tbody></table></div>}
       {life.data === undefined ? null : <PaginationControls label="Life event records" metadata={life.data.page} onPageChange={(lifePage) => { setSearchParams(searchFromState({ ...view, lifePage })); }} />}

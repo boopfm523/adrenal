@@ -30,7 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
-from healthcurve.events.models import MealSize, SymptomTrackingCategory
+from healthcurve.events.models import LifeEventCategory, MealSize, SymptomTrackingCategory
 from healthcurve.events.timekeeping import (
     AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
@@ -45,7 +45,7 @@ from healthcurve.vitals.models import BodyPosition, MeasurementSetting, Temperat
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
 PROMPT_VERSION: Final = "extract-v7"
-SCHEMA_VERSION: Final = "candidates-v5"
+SCHEMA_VERSION: Final = "candidates-v6"
 
 #: Nothing plausible for adrenal replacement exceeds this. A larger number is a parse
 #: error until a human says otherwise.
@@ -314,6 +314,7 @@ class FlagCode(StrEnum):
     PROMPT_INJECTION_SUSPECTED = "prompt_injection_suspected"
     MISSING_VITAL_VALUE = "missing_vital_value"
     INVALID_VITAL_VALUE = "invalid_vital_value"
+    MISSING_EVENT_TEXT = "missing_event_text"
 
 
 BLOCKING_FLAGS: Final[frozenset[FlagCode]] = frozenset(
@@ -328,6 +329,7 @@ BLOCKING_FLAGS: Final[frozenset[FlagCode]] = frozenset(
         FlagCode.FUTURE_TIME,
         FlagCode.MISSING_VITAL_VALUE,
         FlagCode.INVALID_VITAL_VALUE,
+        FlagCode.MISSING_EVENT_TEXT,
     }
 )
 
@@ -346,6 +348,8 @@ class ValidatedCandidate(BaseModel):
     severity: int | None = None
     symptom_tracking_category: SymptomTrackingCategory | None = None
     text: str | None = None
+    is_sensitive: bool = False
+    life_event_category: LifeEventCategory | None = None
     systolic_mmhg: int | None = None
     diastolic_mmhg: int | None = None
     pulse_bpm: int | None = None
@@ -637,6 +641,11 @@ def _validate_candidate(
     if candidate.confidence < 0.6:
         flags.append(FlagCode.LOW_CONFIDENCE)
 
+    if candidate.type in {CandidateType.DIARY, CandidateType.LIFE_EVENT} and not (
+        candidate.text and candidate.text.strip()
+    ):
+        flags.append(FlagCode.MISSING_EVENT_TEXT)
+
     if (
         candidate.type is CandidateType.DOSE
         and medication is not None
@@ -663,6 +672,9 @@ def _validate_candidate(
             else None
         ),
         text=candidate.text,
+        life_event_category=(
+            LifeEventCategory.OTHER if candidate.type is CandidateType.LIFE_EVENT else None
+        ),
         systolic_mmhg=candidate.systolic_mmhg,
         diastolic_mmhg=candidate.diastolic_mmhg,
         pulse_bpm=candidate.pulse_bpm,

@@ -22,12 +22,14 @@ export type SymptomInput = components["schemas"]["SymptomIn"];
 export type SymptomCorrectionInput = components["schemas"]["SymptomCorrectionIn"];
 export type DiaryEntry = components["schemas"]["DiaryOut"];
 export type DiaryPage = components["schemas"]["DiaryPage"];
+export type DiaryInput = components["schemas"]["DiaryIn"];
 export type Meal = components["schemas"]["MealOut"];
 export type MealPage = components["schemas"]["MealPage"];
 export type MealInput = components["schemas"]["MealIn"];
 export type MealCorrectionInput = components["schemas"]["MealCorrectionIn"];
 export type LifeEvent = components["schemas"]["LifeEventOut"];
 export type LifeEventPage = components["schemas"]["LifeEventPage"];
+export type LifeEventInput = components["schemas"]["LifeEventIn"];
 export type RegimenVersion = components["schemas"]["RegimenVersionOut"];
 export type RegimenVersionPage = components["schemas"]["RegimenVersionPage"];
 export type RegimenInput = components["schemas"]["RegimenVersionIn"];
@@ -542,6 +544,10 @@ export function getDiaryEntries(filters: SymptomsDiaryFilters, page = 1): Promis
   return apiRequest<DiaryPage>(`/diary-events?${symptomsDiaryQuery(filters, page).toString()}`);
 }
 
+export function createDiaryEntry(payload: DiaryInput): Promise<DiaryEntry> {
+  return apiRequest<DiaryEntry>("/diary-events", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export function getMeals(filters: SymptomsDiaryFilters, page = 1): Promise<MealPage> {
   const params = symptomsDiaryQuery(filters, page);
   params.delete("include_sensitive");
@@ -558,6 +564,10 @@ export function correctMeal(id: string, payload: MealCorrectionInput): Promise<M
 
 export function getLifeEvents(filters: SymptomsDiaryFilters, page = 1): Promise<LifeEventPage> {
   return apiRequest<LifeEventPage>(`/life-events?${symptomsDiaryQuery(filters, page).toString()}`);
+}
+
+export function createLifeEvent(payload: LifeEventInput): Promise<LifeEvent> {
+  return apiRequest<LifeEvent>("/life-events", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function getRegimens(filters: RecordedHistoryFilters, page = 1): Promise<RegimenVersionPage> {

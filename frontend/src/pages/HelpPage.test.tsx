@@ -69,11 +69,13 @@ describe("Help page", () => {
     expect(within(doseCard).getByRole("status")).toHaveTextContent("Copied");
   });
 
-  it("labels API-only and implemented capabilities while documenting backlog capture", async () => {
+  it("labels implemented entry capabilities while documenting backlog capture", async () => {
     renderHelp();
     await screen.findByRole("heading", { name: "Help", level: 1 });
 
-    expect(screen.getByText("API only—no complete web create form yet")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Record a diary entry or life event" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open record a diary entry or life event" })).toHaveAttribute("href", "/symptoms-diary");
+    expect(screen.getByText("Authenticated API")).toBeVisible();
     expect(screen.getByText("Labs web page")).toBeVisible();
     expect(screen.getByText(/original PDF remains attachment-only/i)).toBeVisible();
     expect(screen.getByText(/permanent deletion first shows the exact linked drafts/i)).toBeVisible();

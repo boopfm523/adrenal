@@ -20,7 +20,15 @@ from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.context.models import ContextEvent, SavedCoarseLocation
 from healthcurve.db import SCHEMAS, Base
 from healthcurve.episodes.models import EpisodeStatus, StressEpisode
-from healthcurve.events.models import MealEvent, MealSize, SymptomEvent, SymptomTrackingCategory
+from healthcurve.events.models import (
+    DiaryEvent,
+    LifeEvent,
+    LifeEventCategory,
+    MealEvent,
+    MealSize,
+    SymptomEvent,
+    SymptomTrackingCategory,
+)
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import location
 from healthcurve.integrations.telegram.handlers import (
@@ -409,6 +417,72 @@ def test_meal_messages_create_confirmable_observed_facts_without_inventing_size(
         assert recorded.size is expected_size
         assert recorded.local_time == expected_time
         assert recorded.confirmation_state.value == "confirmed_from_draft"
+
+
+def test_diary_and_life_event_commands_confirm_into_separate_fact_tables(engine: Engine) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"context-entry-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    with Session(engine) as session, session.begin():
+        session.add(owner)
+        session.flush()
+
+        diary_reply = handle_message(
+            session,
+            owner,
+            text="/diary Synthetic private sleep note --time=07:30 --sensitive",
+            now=NOW,
+        )
+        assert diary_reply.draft_id is not None
+        assert "Diary: Synthetic private sleep note · sensitive at 07:30" in diary_reply.text
+        assert session.scalar(select(DiaryEvent).where(DiaryEvent.owner_id == owner.id)) is None
+        diary_draft = session.get(ExtractionDraft, diary_reply.draft_id)
+        assert diary_draft is not None
+        diary_candidate = ValidatedCandidate.model_validate(diary_draft.candidates[0])
+        assert diary_candidate.type is CandidateType.DIARY
+        assert diary_candidate.is_sensitive is True
+
+        confirm_draft(session, owner, diary_reply.draft_id)
+        session.flush()
+        diary = session.scalar(select(DiaryEvent).where(DiaryEvent.owner_id == owner.id))
+        assert diary is not None
+        assert diary.text == "Synthetic private sleep note"
+        assert diary.is_sensitive is True
+
+        life_reply = handle_message(
+            session,
+            owner,
+            text="/lifeevent travel Synthetic overnight flight --time=08:15 --sensitive",
+            now=NOW,
+        )
+        assert life_reply.draft_id is not None
+        assert (
+            "Life event (travel): Synthetic overnight flight · sensitive at 08:15"
+            in life_reply.text
+        )
+        assert session.scalar(select(LifeEvent).where(LifeEvent.owner_id == owner.id)) is None
+        life_draft = session.get(ExtractionDraft, life_reply.draft_id)
+        assert life_draft is not None
+        life_candidate = ValidatedCandidate.model_validate(life_draft.candidates[0])
+        assert life_candidate.type is CandidateType.LIFE_EVENT
+        assert life_candidate.life_event_category is LifeEventCategory.TRAVEL
+        assert life_candidate.is_sensitive is True
+
+        confirm_draft(session, owner, life_reply.draft_id)
+        session.flush()
+        life_event = session.scalar(select(LifeEvent).where(LifeEvent.owner_id == owner.id))
+        diary_count = len(
+            session.scalars(select(DiaryEvent).where(DiaryEvent.owner_id == owner.id)).all()
+        )
+        assert life_event is not None
+        assert life_event.title == "Synthetic overnight flight"
+        assert life_event.category is LifeEventCategory.TRAVEL
+        assert life_event.is_sensitive is True
+        assert life_event.confirmation_state.value == "confirmed_from_draft"
+        assert diary_count == 1
 
 
 def test_conversational_episode_shortcuts_allow_an_unspecified_trigger(engine: Engine) -> None:

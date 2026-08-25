@@ -17,10 +17,10 @@ does not depend on JavaScript.
 |---|---|
 | Record a planned dose taken now | Today in the web interface |
 | Record a dose | Web Doses or Telegram bot |
-| Record a symptom or note | Telegram bot |
+| Record a symptom, diary note, or life event | Web Symptoms & Meals or Telegram bot |
 | See today against your plan | Web Today, `/today` in Telegram, or `GET /api/v1/doses/plan-comparison` |
 | Review or correct a recorded dose | Web Doses; corrections preserve the prior value in revision history |
-| Review symptoms, diary, and life events | Web Symptoms & Meals; sensitive entries are hidden until explicitly revealed |
+| Record or review symptoms, diary, and life events | Web Symptoms & Meals; sensitive entries are hidden until explicitly revealed |
 | Create, review, approve, retire, or compare plan versions | Web Plan; approval is an explicit human action with clinician provenance |
 | Learn how to enter or import data | Web Help; examples are synthetic and distinguish immediate records from drafts |
 | Load your medications | `python -m healthcurve.cli load-medications` |
@@ -118,6 +118,8 @@ even when the language model is unavailable:
 |---|---|
 | `/dose` | `/dose 15 hydrocortisone` |
 | `/symptom` | `/symptom nausea 4` |
+| `/diary` | `/diary Slept poorly --time=07:30 --sensitive` |
+| `/lifeevent` | `/lifeevent travel Overnight flight --time=22:15` |
 | `/weight` | `/weight 180 lbs 08:15`; accepts `lb`, `lbs`, `kg`, or `kgs` |
 | `/injection` | logs an emergency injection |
 | `/episode` | `/episode start vomiting` / `/episode end` |
@@ -149,6 +151,19 @@ starting” opens an episode with an unspecified trigger, “the episode is over
 the current episode, and clear weight or symptom statements create confirmation
 drafts. Missing symptom or weight time is shown as assumed from the Telegram message
 time; it is never silently hidden, and the draft still must be confirmed.
+
+The deterministic `/diary` and `/lifeevent` commands also create confirmation drafts.
+Use `--time=HH:MM` for an earlier clock time and `--sensitive` when ordinary views,
+reports, and chat context should hide the text by default. A life event requires one of
+these explicit categories: `travel`, `illness`, `work`, `exercise`,
+`sleep_disruption`, `stress`, `medical_appointment`, or `other`. The confirmation
+preview shows the category and privacy choice before recording it.
+
+The **Symptoms & Meals** web page has separate direct-entry forms for Diary and Life
+events. Both require an experienced local time and IANA timezone. Diary entries accept
+optional comma-separated tags. Life events require a short title and category, with an
+optional description. Marking either record sensitive hides it from ordinary views by
+default; use the page's explicit reveal control when you intend to see it.
 
 Free text goes to the model: *"Took 15mg hydrocortisone at 7:08, slept badly"*. You get
 a draft with **Confirm** / **Cancel**. Nothing becomes a record until you confirm it.

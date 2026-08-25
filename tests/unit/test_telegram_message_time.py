@@ -176,6 +176,32 @@ def test_no_time_command_uses_send_time_in_owner_timezone() -> None:
     assert draft.candidates[0]["local_time"] == "2026-08-13T08:30:00"
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/diary",
+        "/diary Synthetic note --time=25:00",
+        "/diary Synthetic note --unknown",
+        "/lifeevent travel",
+        "/lifeevent unsupported Synthetic event",
+        "/lifeevent travel Synthetic event --time=25:00",
+    ],
+)
+def test_invalid_diary_and_life_event_commands_create_nothing(text: str) -> None:
+    owner = _owner()
+    mocked = MagicMock(spec=Session)
+
+    reply = handlers.handle_message(
+        cast(Session, mocked),
+        owner,
+        text=text,
+        now=SENT_TIME,
+    )
+
+    assert reply.text.startswith("Usage:")
+    mocked.add.assert_not_called()
+
+
 def test_dispatch_schedules_reminder_only_after_confirmation_is_delivered(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

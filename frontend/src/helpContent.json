@@ -41,6 +41,22 @@
       "confirmation": "Review the symptom, severity, and time, then press Confirm. Nothing is recorded before confirmation."
     },
     {
+      "command": "/diary",
+      "syntax": "/diary <text> [--time=HH:MM] [--sensitive]",
+      "example": "/diary Synthetic note about poor sleep --time=07:30 --sensitive",
+      "purpose": "Prepare a diary entry without using the language model. The optional sensitive flag keeps it out of ordinary views, reports, and chat context.",
+      "result": "Recorded-fact draft",
+      "confirmation": "Review the note, privacy label, and experienced time, then press Confirm. Nothing is recorded before confirmation."
+    },
+    {
+      "command": "/lifeevent",
+      "syntax": "/lifeevent <category> <title> [--time=HH:MM] [--sensitive]",
+      "example": "/lifeevent travel Synthetic overnight flight --time=22:15",
+      "purpose": "Prepare a contextual life-event fact without using the language model. Categories are travel, illness, work, exercise, sleep_disruption, stress, medical_appointment, and other.",
+      "result": "Recorded-fact draft",
+      "confirmation": "Review the title, category, privacy label, and experienced time, then press Confirm. A nearby event is context, not proof of cause."
+    },
+    {
       "command": "/meal",
       "syntax": "/meal [XS|S|M|L|XL|XXL] [HH:MM]",
       "example": "/meal L 12:30",
@@ -224,9 +240,23 @@
       "endpoints": [{ "method": "POST", "path": "/api/v1/context-events" }]
     },
     {
+      "id": "diary-life-entry",
+      "title": "Record a diary entry or life event",
+      "availability": "Web page",
+      "webPath": "/symptoms-diary",
+      "instructions": "Use the separate Diary or Life event form. Enter the experienced local time and IANA timezone, and deliberately mark sensitive text when ordinary views should hide it.",
+      "example": "Synthetic example: record a private diary note about poor sleep, or a travel event titled “Synthetic overnight flight.”",
+      "result": "Immediate recorded fact",
+      "confirmation": "Web submission records exactly the entered fact. Life events add context but do not establish that they caused a symptom or health change.",
+      "endpoints": [
+        { "method": "POST", "path": "/api/v1/diary-events" },
+        { "method": "POST", "path": "/api/v1/life-events" }
+      ]
+    },
+    {
       "id": "direct-fact-api",
       "title": "Add facts through the authenticated API",
-      "availability": "API only—no complete web create form yet",
+      "availability": "Authenticated API",
       "instructions": "Authenticate first and include the in-memory CSRF token on writes. Use explicit local time and IANA timezone.",
       "example": "Synthetic symptom body: {\"name\":\"nausea\",\"severity\":4,\"time\":{\"local_time\":\"2026-08-01T08:30:00\",\"timezone\":\"America/New_York\"}}",
       "result": "Immediate recorded facts",

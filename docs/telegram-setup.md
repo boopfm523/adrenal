@@ -227,6 +227,8 @@ Message your bot:
 | `/help` | The command list |
 | `/today` | Today's doses against your approved plan |
 | `/dose 15 hydrocortisone` | A draft with **Confirm** / **Cancel** buttons |
+| `/diary Synthetic note --time=07:30 --sensitive` | A sensitive diary draft with the entered time |
+| `/lifeevent travel Synthetic overnight flight --time=22:15` | A categorized life-event draft |
 | `/bd-list` | Queue the fixed host `bd list` operation, then receive its bounded output |
 | `/bd-status` | Queue the fixed host `bd status` operation, then receive its bounded output |
 | `/bd-add add hydration tracking` | A locally evaluated proposal queue ID, then an existing or new `hc-*` issue ID |
