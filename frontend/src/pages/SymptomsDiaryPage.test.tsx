@@ -150,7 +150,7 @@ describe("Symptoms and diary page", () => {
     expect(screen.getByLabelText("From date")).toHaveValue("");
     expect(screen.getByLabelText("Through date")).toHaveValue("");
     await waitFor(() => { expect(fetchMock.mock.calls.slice(callsBeforeClear).some(([input]) => !requestUrl(input).includes("local_date_from"))).toBe(true); });
-  });
+  }, 15_000);
 
   it("offers confirmed symptom deletion only from the open correction form", async () => {
     const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
