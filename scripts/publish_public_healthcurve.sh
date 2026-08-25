@@ -56,6 +56,7 @@ docker compose \
 "$HC_PUBLISH_RSYNC" -a "$HC_PUBLISH_FRONTEND/dist-public-healthcurve/" "$HC_PUBLISH_STAGE/"
 "$HC_PUBLISH_RSYNC" -a "$HC_PUBLISH_DATA/" "$HC_PUBLISH_STAGE/data/"
 cp "$HC_PUBLISH_REPOSITORY/deploy/public-healthcurve.htaccess" "$HC_PUBLISH_STAGE/.htaccess"
+chmod -R a+rX "$HC_PUBLISH_STAGE"
 
 UV_CACHE_DIR="$HC_PUBLISH_GENERATED/uv-cache" uv run python \
   "$HC_PUBLISH_REPOSITORY/scripts/verify_public_healthcurve_bundle.py" \

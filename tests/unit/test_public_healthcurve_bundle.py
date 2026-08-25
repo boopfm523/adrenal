@@ -8,6 +8,7 @@ from scripts.verify_public_healthcurve_bundle import SCHEMA_VERSION, verify
 
 
 def synthetic_bundle(root: Path) -> Path:
+    root.chmod(0o755)
     (root / "assets").mkdir(parents=True)
     (root / "data" / "days").mkdir(parents=True)
     (root / "index.html").write_text(
@@ -46,6 +47,13 @@ def test_synthetic_static_bundle_passes(tmp_path: Path) -> None:
     assert count == 5
     assert size > 0
     assert len(digest) == 64
+
+
+def test_bundle_verifier_rejects_non_public_directory_mode(tmp_path: Path) -> None:
+    root = synthetic_bundle(tmp_path)
+    (root / "data").chmod(0o700)
+    with pytest.raises(ValueError, match="not publicly traversable"):
+        verify(root)
 
 
 @pytest.mark.parametrize(

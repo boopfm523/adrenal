@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import re
+import stat
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Final
@@ -53,6 +54,13 @@ def read_json(path: Path) -> dict[str, Any]:
 
 def verify(directory: Path) -> tuple[int, int, str]:
     root = directory.resolve(strict=True)
+    for path in (root, *root.rglob("*")):
+        mode = path.stat().st_mode
+        if path.is_dir() and not mode & stat.S_IXOTH:
+            relative = path.relative_to(root)
+            raise ValueError(f"static directory is not publicly traversable: {relative}")
+        if path.is_file() and not mode & stat.S_IROTH:
+            raise ValueError(f"static file is not publicly readable: {path.relative_to(root)}")
     index = root / "index.html"
     manifest_path = root / "data" / "manifest.json"
     publication_path = root / "data" / "publication.json"
