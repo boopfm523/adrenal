@@ -29,7 +29,7 @@ const statusText: Record<ChatMessage["state"], string> = {
   cancelled: "Response cancelled.",
   unavailable: "The private model is unavailable right now. Your message is still saved.",
   timed_out: "The private model did not finish in time. Your message is still saved.",
-  invalid: "The private model returned an answer HealthCurve could not safely validate.",
+  invalid: "The private model returned an answer that did not pass HealthCurve’s source and format checks. This is not a privacy block.",
   failed: "HealthCurve could not complete this answer. Your records were not changed.",
 };
 

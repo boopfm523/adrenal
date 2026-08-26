@@ -22,9 +22,12 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
+from healthcurve.chat.tools import execute_chat_tool
 from healthcurve.config import get_settings
+from healthcurve.identity.models import Owner
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -330,18 +333,20 @@ def test_cortisol_pk_assumptions_are_not_writable_by_ai_or_backup(
 ) -> None:
     table = "ops.cortisol_pk_parameter_revision"
     with owner_engine.connect() as conn:
-        assert not conn.scalar(
-            text("SELECT has_table_privilege(:role, :table, 'INSERT')"),
+        assert conn.scalar(
+            text("SELECT has_table_privilege(:role, :table, 'SELECT')"),
             {"role": "healthcurve_ai", "table": table},
         )
         assert conn.scalar(
             text("SELECT has_table_privilege(:role, :table, 'SELECT')"),
             {"role": "healthcurve_backup", "table": table},
         )
-        assert not conn.scalar(
-            text("SELECT has_table_privilege(:role, :table, 'INSERT')"),
-            {"role": "healthcurve_backup", "table": table},
-        )
+        for role in ("healthcurve_ai", "healthcurve_backup"):
+            for privilege in ("INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+                assert not conn.scalar(
+                    text("SELECT has_table_privilege(:role, :table, :privilege)"),
+                    {"role": role, "table": table, "privilege": privilege},
+                )
 
     with pytest.raises(ProgrammingError, match="permission denied"):
         with ai_engine.begin() as conn:
@@ -355,6 +360,40 @@ def test_cortisol_pk_assumptions_are_not_writable_by_ai_or_backup(
                 ),
                 {"id": uuid.uuid4(), "owner_id": uuid.uuid4()},
             )
+
+
+@pytest.mark.safety("SAFE-15")
+def test_restricted_chat_role_can_build_preceding_curve_context(
+    owner_engine: Engine,
+    ai_engine: Engine,
+) -> None:
+    account = Owner(
+        email=f"chat-parameter-read-{uuid.uuid4()}@example.test",
+        password_hash="synthetic-not-a-login-hash",
+        default_timezone="America/New_York",
+    )
+    with Session(owner_engine) as session, session.begin():
+        session.add(account)
+        session.flush()
+        owner_id = account.id
+
+    with Session(ai_engine) as session:
+        result = execute_chat_tool(
+            session,
+            owner_id=owner_id,
+            tool_name="get_preceding_health_context",
+            arguments={
+                "anchor_at": "2026-08-15T13:00:00-04:00",
+                "timezone": "America/New_York",
+                "lookback_hours": 6,
+                "history_days": 30,
+                "similar_limit": 5,
+                "include_stress_episode_anchors": False,
+            },
+        )
+
+    assert result.tool_name == "get_preceding_health_context"
+    assert isinstance(result.data["modeled_curve_at_anchor"], dict)
 
 
 @pytest.mark.safety("SAFE-15")

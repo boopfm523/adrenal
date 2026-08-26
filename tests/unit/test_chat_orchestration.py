@@ -300,6 +300,94 @@ def test_long_term_off_question_expands_the_event_comparison_horizon() -> None:
     assert result.body is not None and "insufficient data" in result.body
 
 
+def test_owner_reported_naps_compare_same_clock_context_across_days() -> None:
+    seen: list[dict[str, object]] = []
+
+    def execute(name: str, arguments: dict[str, object]) -> ChatToolResult:
+        seen.append({"name": name, "arguments": arguments})
+        anchor = str(arguments["anchor_at"])
+        day = anchor[:10]
+        return ChatToolResult(
+            tool_name="get_preceding_health_context",
+            timezone="America/New_York",
+            date_scope={"date_from": "2026-05-27", "date_to": day},
+            data={
+                "anchor_at": anchor,
+                "window_started_at": f"{day}T07:00:00-04:00",
+                "recorded_events": [
+                    {
+                        "record_type": "meal",
+                        "occurred_at": f"{day}T12:00:00-04:00",
+                        "size": "synthetic medium",
+                    }
+                ],
+                "overlapping_stress_episodes": [],
+                "modeled_curve_at_anchor": {
+                    "modeled_free_cortisol_nmol_l": "12.5",
+                    "unit": "nmol/L",
+                    "reference_position": "within_recorded_reference_range",
+                },
+                "weather_before_anchor": {
+                    "temperature": "26",
+                    "temperature_unit": "c",
+                    "humidity_percent": "60",
+                    "conditions": "synthetic clear",
+                },
+                "sleep_before_anchor": {
+                    "duration_hours": "6.0",
+                    "overall_sleep_score": 65,
+                    "awakenings": 3,
+                    "duration_difference_from_baseline_hours": "-1.0",
+                },
+                "wearable_window_comparisons": [
+                    {
+                        "metric_type": "stress",
+                        "window_average": "45",
+                        "unit": "score",
+                        "descriptive_comparison": "within_recorded_daily_average_range",
+                    }
+                ],
+            },
+            missingness={},
+            source_manifest={"fact_and_deterministic_projection": [f"synthetic-{day}"]},
+            result_sha256=("1" if day.endswith("16") else "2") * 64,
+        )
+
+    result = run(
+        question=(
+            "The past two days, I've taken a nap around 1pm because I've been tired. "
+            "Does anything look consistent across those days?"
+        ),
+        context=_context(),
+        execute_tool=execute,
+        client=_client(),
+        current_local_date=date(2026, 8, 17),
+        current_local_datetime=datetime.fromisoformat("2026-08-17T20:57:00-04:00"),
+        default_timezone="America/New_York",
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert result.model_name == "HealthCurve deterministic calculation"
+    assert len(seen) == 2
+    assert [entry["name"] for entry in seen] == [
+        "get_preceding_health_context",
+        "get_preceding_health_context",
+    ]
+    assert [cast(dict[str, object], entry["arguments"])["anchor_at"] for entry in seen] == [
+        "2026-08-16T13:00:00-04:00",
+        "2026-08-17T13:00:00-04:00",
+    ]
+    assert result.body is not None
+    assert "1:00 PM times you described" in result.body
+    assert "below its own recorded baseline before 2 of 2" in result.body
+    assert "same descriptive result on each day" in result.body
+    assert "Preceding sleep: 6.0 hours" in result.body
+    assert "Modeled curve at the anchor: 12.5 nmol/L" in result.body
+    assert "preceding-window average 45.0 score" in result.body
+    assert "not causation" in result.body
+    assert result.source_manifest is not None and len(result.source_manifest) == 2
+
+
 def test_basic_average_wake_question_defaults_to_latest_fourteen_local_dates() -> None:
     seen: dict[str, object] = {}
     result_source = ChatToolResult(
@@ -483,10 +571,30 @@ def test_unsupported_numeric_claim_is_rejected() -> None:
             _ok(_plan()),
             _ok({"calls": []}),
             _ok(_answer(text="Average stress was 99.", numeric=["99"])),
+            _ok(_answer(text="Average stress was 99.", numeric=["99"])),
         ),
     )
     assert result.state is ChatMessageState.INVALID
-    assert result.error_code == "chat_answer_invalid"
+    assert result.error_code == "chat_answer_invalid_unsupported_numeric"
+
+
+def test_benign_answer_gets_one_format_repair_attempt() -> None:
+    result = run(
+        question="What was my stress?",
+        context=_context(),
+        execute_tool=lambda _name, _arguments: _tool_result(),
+        client=_client(
+            _ok(_plan()),
+            _ok({"calls": []}),
+            _ok(_answer(text="Average stress was 31.", numeric=[])),
+            _ok(_answer()),
+        ),
+    )
+
+    assert result.state is ChatMessageState.COMPLETED
+    assert result.body is not None and "31" in result.body
+    assert result.source_scope is not None
+    assert result.source_scope["answer_validation_repair"] == "numeric_declarations"
 
 
 def test_unknown_tool_is_rejected_and_duplicate_read_completes_without_second_read() -> None:
@@ -553,10 +661,15 @@ def test_model_unavailable_and_malformed_answer_are_visible_terminal_states() ->
         question="What was my stress?",
         context=_context(),
         execute_tool=lambda _name, _arguments: _tool_result(),
-        client=_client(_ok(_plan()), _ok({"calls": []}), _ok({"claims": "not-a-list"})),
+        client=_client(
+            _ok(_plan()),
+            _ok({"calls": []}),
+            _ok({"claims": "not-a-list"}),
+            _ok({"claims": "not-a-list"}),
+        ),
     )
     assert malformed_answer.state is ChatMessageState.INVALID
-    assert malformed_answer.error_code == "chat_answer_invalid"
+    assert malformed_answer.error_code == "chat_answer_invalid_schema"
 
 
 def test_injected_retrieved_text_cannot_add_guidance_or_uncited_values() -> None:
@@ -607,11 +720,16 @@ def test_injected_retrieved_text_cannot_add_guidance_or_uncited_values() -> None
         question="Summarize my diary.",
         context=_context(),
         execute_tool=lambda _name, _arguments: injected,
-        client=_client(_ok(plan), _ok({"calls": []}), _ok(unsafe_answer)),
+        client=_client(
+            _ok(plan),
+            _ok({"calls": []}),
+            _ok(unsafe_answer),
+            _ok(unsafe_answer),
+        ),
     )
 
     assert result.state is ChatMessageState.INVALID
-    assert result.error_code == "chat_answer_invalid"
+    assert result.error_code == "chat_answer_invalid_medication_guidance"
 
 
 def test_source_staleness_replays_bounded_read_and_detects_changed_fingerprint() -> None:

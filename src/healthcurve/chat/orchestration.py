@@ -9,8 +9,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from datetime import time as datetime_time
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final, Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -127,6 +129,14 @@ class AnswerResponse(BaseModel):
         return self
 
 
+class AnswerValidationError(ValueError):
+    """A content-free reason an answer failed deterministic validation."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 PLANNER_SCHEMA: Final[dict[str, Any]] = PlannerResponse.model_json_schema()
 ANSWER_SCHEMA: Final[dict[str, Any]] = AnswerResponse.model_json_schema()
 # Ollama's grammar compiler does not support every JSON Schema annotation emitted by
@@ -213,6 +223,31 @@ def run(
     planning_complete = False
     model_name: str | None = None
     model_digest: str | None = None
+
+    comparison_calls = _direct_multi_anchor_calls(
+        question,
+        current_local_date=current_local_date,
+        current_local_datetime=current_local_datetime,
+        default_timezone=default_timezone,
+    )
+    if comparison_calls:
+        observe_state(ChatMessageState.READING)
+        for call in comparison_calls:
+            tool_started = now()
+            try:
+                result = execute_tool(call.tool_name, call.arguments)
+            except Exception:
+                return _failure(ChatMessageState.FAILED, "chat_tool_failed")
+            execution = ExecutedTool(
+                call_id=call.call_id,
+                arguments=call.arguments,
+                result=result,
+                duration_ms=max(0, int((now() - tool_started) * 1_000)),
+            )
+            executions.append(execution)
+            observe_tool(execution)
+        observe_state(ChatMessageState.GENERATING)
+        return _direct_multi_anchor_result(executions)
 
     direct_call = _direct_aggregate_call(
         question,
@@ -341,6 +376,34 @@ def run(
         )
     if not answer.ok:
         return _model_failure(answer.outcome, "answer")
+    validation_repair_code: str | None = None
+    try:
+        response = _parsed_answer(answer.data, executions)
+    except AnswerValidationError as exc:
+        validation_repair_code = exc.code
+        answer = client.generate_json(
+            system_prompt=(
+                ANSWER_PROMPT
+                + "\nThe previous structured answer failed deterministic validation with "
+                f"reason code {exc.code}. Rebuild it from the supplied sources. Do not add "
+                "unsupported numbers or medication guidance."
+            ),
+            user_content=_answer_content(question, context, executions),
+            json_schema=ANSWER_GENERATION_SCHEMA,
+            temperature=0.0,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            context_window=CONTEXT_WINDOW,
+            read_timeout_s=_remaining_timeout(started, now),
+        )
+        if not answer.ok:
+            return _model_failure(answer.outcome, "answer")
+        try:
+            response = _parsed_answer(answer.data, executions)
+        except AnswerValidationError as retry_exc:
+            return _failure(
+                ChatMessageState.INVALID,
+                f"chat_answer_invalid_{retry_exc.code}",
+            )
     model_name = answer.model_name or model_name
     model_digest = answer.model_digest or model_digest
     if model_name and not model_digest:
@@ -349,12 +412,6 @@ def run(
             model_digest = identity.digest
     if not model_name or not model_digest:
         return _failure(ChatMessageState.INVALID, "chat_model_identity_missing")
-    try:
-        response = AnswerResponse.model_validate(answer.data)
-        _validate_answer(response, executions)
-    except (ValidationError, ValueError):
-        return _failure(ChatMessageState.INVALID, "chat_answer_invalid")
-
     manifest = [_manifest_entry(item) for item in executions]
     fingerprint = _canonical_sha(
         [
@@ -379,6 +436,11 @@ def run(
             "date_scopes": [
                 item.result.date_scope for item in executions if item.result.date_scope is not None
             ],
+            **(
+                {"answer_validation_repair": validation_repair_code}
+                if validation_repair_code is not None
+                else {}
+            ),
         },
         source_fingerprint=fingerprint,
     )
@@ -471,6 +533,19 @@ _LONG_TERM_CONTEXT: Final = re.compile(
     r"\b(?:times?|points?)\b.{0,50}\b(?:felt|feeling|was|were)\s+off\b",
     re.IGNORECASE,
 )
+_CROSS_DAY_CONTEXT: Final = re.compile(
+    r"\b(?:consistent|common|same|similar|compare|pattern)\b.{0,80}\b(?:days|both)\b|"
+    r"\bacross\s+(?:those|these|the|multiple|several|both)\s+days\b",
+    re.IGNORECASE,
+)
+_OWNER_STATE_CONTEXT: Final = re.compile(
+    r"\b(?:nap|napped|tired|fatigue|fatigued|unwell|ill|bad|off|poorly|symptom|episode)\b",
+    re.IGNORECASE,
+)
+_CLOCK_TIME: Final = re.compile(
+    r"\b(?:around|about|at)?\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b",
+    re.IGNORECASE,
+)
 
 
 def _question_date_range(question: str, *, today: date) -> tuple[date, date] | None:
@@ -520,6 +595,67 @@ def _normalize_date_range_arguments(
     if default_timezone is not None and not re.search(r"\b[A-Za-z_]+/[A-Za-z_]+\b", question):
         normalized["timezone"] = default_timezone
     return normalized
+
+
+def _direct_multi_anchor_calls(
+    question: str,
+    *,
+    current_local_date: date | None,
+    current_local_datetime: datetime | None,
+    default_timezone: str | None,
+) -> list[PlannerToolCall]:
+    """Build same-clock event-centered reads for a bounded cross-day question."""
+    if (
+        current_local_date is None
+        or current_local_datetime is None
+        or default_timezone is None
+        or _CROSS_DAY_CONTEXT.search(question) is None
+        or _OWNER_STATE_CONTEXT.search(question) is None
+        or _EXPLICIT_DATE.search(question)
+    ):
+        return []
+    scope = _question_date_range(question, today=current_local_date)
+    if scope is None:
+        return []
+    day_count = (scope[1] - scope[0]).days + 1
+    if day_count < 2 or day_count > 7:
+        return []
+
+    clock_match = _CLOCK_TIME.search(question)
+    if clock_match:
+        hour = int(clock_match.group(1))
+        minute = int(clock_match.group(2) or 0)
+        if not 1 <= hour <= 12 or minute > 59:
+            return []
+        if clock_match.group(3).casefold() == "p" and hour != 12:
+            hour += 12
+        elif clock_match.group(3).casefold() == "a" and hour == 12:
+            hour = 0
+        anchor_clock = datetime_time(hour, minute)
+    else:
+        anchor_clock = current_local_datetime.timetz().replace(tzinfo=None)
+
+    zone = ZoneInfo(default_timezone)
+    calls: list[PlannerToolCall] = []
+    selected_day = scope[0]
+    while selected_day <= scope[1]:
+        anchor = datetime.combine(selected_day, anchor_clock, tzinfo=zone)
+        calls.append(
+            PlannerToolCall(
+                call_id=f"deterministic-day-context-{selected_day.isoformat()}",
+                tool_name="get_preceding_health_context",
+                arguments={
+                    "anchor_at": anchor.isoformat(),
+                    "timezone": default_timezone,
+                    "lookback_hours": 6,
+                    "history_days": 90,
+                    "similar_limit": 8,
+                    "include_stress_episode_anchors": False,
+                },
+            )
+        )
+        selected_day += timedelta(days=1)
+    return calls
 
 
 def _direct_aggregate_call(
@@ -667,6 +803,205 @@ def _direct_aggregate_result(execution: ExecutedTool) -> OrchestrationResult:
         },
         source_fingerprint=fingerprint,
     )
+
+
+def _direct_multi_anchor_result(executions: list[ExecutedTool]) -> OrchestrationResult:
+    """Render a factual same-clock comparison without a fragile model formatting pass."""
+    body = _render_multi_anchor_context([item.result for item in executions])
+    manifest = [_manifest_entry(item) for item in executions]
+    fingerprint = _canonical_sha(
+        [
+            {
+                "tool": item.result.tool_name,
+                "version": item.result.tool_version,
+                "arguments": item.arguments,
+                "result": item.result.result_sha256,
+            }
+            for item in executions
+        ]
+    )
+    return OrchestrationResult(
+        state=ChatMessageState.COMPLETED,
+        body=body,
+        model_name=DETERMINISTIC_GENERATOR_NAME,
+        model_digest=DETERMINISTIC_GENERATOR_DIGEST,
+        tool_versions={item.result.tool_name: item.result.tool_version for item in executions},
+        source_manifest=manifest,
+        source_scope={
+            "tool_references": [item.reference for item in executions],
+            "date_scopes": [
+                item.result.date_scope for item in executions if item.result.date_scope is not None
+            ],
+        },
+        source_fingerprint=fingerprint,
+    )
+
+
+def _render_multi_anchor_context(results: list[ChatToolResult]) -> str:
+    first_anchor = results[0].data.get("anchor_at") if results else None
+    anchor_clock = _display_context_time(
+        first_anchor,
+        timezone=results[0].timezone if results else None,
+    ).split(" at ")[-1]
+    lines = [
+        f"I used the {anchor_clock} times you described as comparison anchors. "
+        "Your description supplies the anchor; the details below come from recorded data.",
+        "",
+        "Day-by-day context:",
+    ]
+    event_type_sets: list[set[str]] = []
+    sleep_below_baseline = 0
+    comparable_sleep = 0
+    wearable_descriptions: dict[str, list[str]] = {}
+    curve_positions: list[str] = []
+
+    for result in results:
+        data = result.data
+        anchor = _display_context_time(data.get("anchor_at"), timezone=result.timezone)
+        lines.append(f"- {anchor}:")
+        events = data.get("recorded_events")
+        typed_events = (
+            [item for item in events if isinstance(item, dict)] if isinstance(events, list) else []
+        )
+        event_type_sets.append({str(item.get("record_type", "record")) for item in typed_events})
+        if typed_events:
+            labels = "; ".join(
+                _event_context_label(item, timezone=result.timezone) for item in typed_events
+            )
+            lines.append(f"  - Recorded facts in the preceding 6 hours: {labels}.")
+        else:
+            lines.append("  - No recorded facts were found in the preceding 6 hours.")
+
+        sleep = data.get("sleep_before_anchor")
+        if isinstance(sleep, dict):
+            score = sleep.get("overall_sleep_score")
+            score_text = "score not recorded" if score is None else f"score {score}"
+            lines.append(
+                "  - Preceding sleep: "
+                f"{_display_measurement(sleep.get('duration_hours'), decimal_places=1)} hours, "
+                f"{score_text}, "
+                f"{sleep.get('awakenings', 'unknown')} awakenings."
+            )
+            difference = sleep.get("duration_difference_from_baseline_hours")
+            if difference is not None:
+                comparable_sleep += 1
+                try:
+                    if Decimal(str(difference)) < 0:
+                        sleep_below_baseline += 1
+                except (InvalidOperation, TypeError, ValueError):
+                    pass
+        else:
+            lines.append("  - No preceding sleep session was recorded.")
+
+        weather = data.get("weather_before_anchor")
+        if isinstance(weather, dict):
+            lines.append(
+                "  - Weather: "
+                f"{_display_measurement(weather.get('temperature'), decimal_places=1)}°"
+                f"{str(weather.get('temperature_unit', '')).upper()}, "
+                f"{_display_measurement(weather.get('humidity_percent'), decimal_places=0)}% "
+                "humidity, "
+                f"{weather.get('conditions') or 'conditions not recorded'}."
+            )
+        else:
+            lines.append("  - Weather was not recorded near this anchor.")
+
+        curve = data.get("modeled_curve_at_anchor")
+        if isinstance(curve, dict) and curve.get("modeled_free_cortisol_nmol_l") is not None:
+            position = str(curve.get("reference_position") or "reference unavailable").replace(
+                "_", " "
+            )
+            curve_positions.append(position)
+            modeled_value = _display_measurement(
+                curve.get("modeled_free_cortisol_nmol_l"), decimal_places=1
+            )
+            lines.append(
+                "  - Modeled curve at the anchor: "
+                f"{modeled_value} "
+                f"{curve.get('unit', 'nmol/L')}; {position}."
+            )
+        else:
+            lines.append("  - Modeled curve context was unavailable.")
+
+        comparisons = data.get("wearable_window_comparisons")
+        if isinstance(comparisons, list) and comparisons:
+            for comparison in comparisons:
+                if not isinstance(comparison, dict):
+                    continue
+                metric = str(comparison.get("metric_type", "metric")).replace("_", " ")
+                description = str(
+                    comparison.get("descriptive_comparison", "baseline unavailable")
+                ).replace("_", " ")
+                wearable_descriptions.setdefault(metric, []).append(description)
+                decimal_places = 0 if metric == "steps" else 1
+                window_average = _display_measurement(
+                    comparison.get("window_average"), decimal_places=decimal_places
+                )
+                lines.append(
+                    f"  - {metric}: preceding-window average "
+                    f"{window_average} "
+                    f"{comparison.get('unit', '')}; "
+                    f"{description}."
+                )
+        else:
+            lines.append("  - No wearable samples were recorded in the preceding window.")
+
+    lines.extend(["", "What looks consistent:"])
+    common_events = set.intersection(*event_type_sets) if event_type_sets else set()
+    if common_events:
+        lines.append(
+            "- Recorded fact types present before every anchor: "
+            + ", ".join(sorted(name.replace("_", " ") for name in common_events))
+            + "."
+        )
+    if comparable_sleep:
+        lines.append(
+            f"- Sleep duration was below its own recorded baseline before "
+            f"{sleep_below_baseline} of {comparable_sleep} comparable anchors."
+        )
+    repeated_wearables = {
+        metric: descriptions[0]
+        for metric, descriptions in wearable_descriptions.items()
+        if len(descriptions) == len(results) and len(set(descriptions)) == 1
+    }
+    for metric, description in repeated_wearables.items():
+        lines.append(f"- {metric} had the same descriptive result on each day: {description}.")
+    if len(curve_positions) == len(results) and len(set(curve_positions)) == 1:
+        lines.append(
+            f"- The modeled reference position was the same on each day: {curve_positions[0]}."
+        )
+    if (
+        not common_events
+        and not comparable_sleep
+        and not repeated_wearables
+        and not curve_positions
+    ):
+        lines.append(
+            "- The available records do not establish a repeated feature across the anchors."
+        )
+
+    lines.extend(
+        [
+            "",
+            "This comparison does not treat your naps or tiredness as recorded facts unless "
+            "they were separately entered or captured. Missing observations remain unknown, "
+            "not normal or zero.",
+            "These are descriptive temporal associations, not causation, diagnosis, medication "
+            "adequacy, or dosing guidance.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _display_measurement(value: object, *, decimal_places: int) -> str:
+    """Keep deterministic health comparisons readable without changing source values."""
+    if value is None:
+        return "not recorded"
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return str(value)
+    return f"{number:.{decimal_places}f}"
 
 
 def _display_context_time(value: object, *, timezone: str | None) -> str:
@@ -948,6 +1283,15 @@ def _model_tool_result(
     return result
 
 
+def _parsed_answer(data: object, executions: list[ExecutedTool]) -> AnswerResponse:
+    try:
+        response = AnswerResponse.model_validate(data)
+    except ValidationError as exc:
+        raise AnswerValidationError("schema") from exc
+    _validate_answer(response, executions)
+    return response
+
+
 def _validate_answer(
     response: AnswerResponse,
     executions: list[ExecutedTool],
@@ -957,22 +1301,22 @@ def _validate_answer(
     by_reference = {f"source_{index}": item for index, item in enumerate(executions, start=1)}
     for claim in response.claims:
         if len(claim.source_references) != len(set(claim.source_references)):
-            raise ValueError("duplicate source reference")
+            raise AnswerValidationError("duplicate_source")
         cited = [by_reference.get(reference) for reference in claim.source_references]
         if any(item is None for item in cited):
-            raise ValueError("unknown source reference")
+            raise AnswerValidationError("unknown_source")
         if _GUIDANCE.search(claim.text):
-            raise ValueError("medication guidance")
+            raise AnswerValidationError("medication_guidance")
         mentioned = {_decimal_token(token) for token in _NUMBER.findall(claim.text)}
         declared = {_decimal_token(token) for token in claim.numeric_values}
         if None in mentioned or None in declared or mentioned != declared:
-            raise ValueError("numeric declarations incomplete")
+            raise AnswerValidationError("numeric_declarations")
         allowed: set[str] = set()
         for item in cited:
             assert item is not None
             allowed.update(_numeric_tokens(_model_tool_result(item)))
         if not mentioned <= allowed:
-            raise ValueError("unsupported numeric claim")
+            raise AnswerValidationError("unsupported_numeric")
 
 
 def _canonical_missingness(executions: list[ExecutedTool]) -> str:
