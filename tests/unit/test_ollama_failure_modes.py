@@ -209,6 +209,7 @@ def test_schema_is_sent_to_constrain_decoding(monkeypatch: pytest.MonkeyPatch) -
     _call(_client())
     assert seen["format"] == SCHEMA
     assert seen["options"]["temperature"] == 0.0
+    assert seen["options"]["num_ctx"] == 24_576
     assert seen["stream"] is False
 
 

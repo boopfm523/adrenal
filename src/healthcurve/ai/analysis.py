@@ -120,7 +120,27 @@ class AnalysisResponse(BaseModel):
         return self
 
 
-ANALYSIS_SCHEMA: Final[dict[str, Any]] = AnalysisResponse.model_json_schema()
+def _require_all_object_fields(schema: dict[str, Any]) -> dict[str, Any]:
+    """Make structured decoding honor every field later checked by validation.
+
+    Pydantic defaults are useful for application-owned construction, but its JSON
+    schema otherwise tells the model that those keys may be omitted. Requiring each
+    object property closes that mismatch while preserving nullable values.
+    """
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        schema["required"] = list(properties)
+    definitions = schema.get("$defs")
+    if isinstance(definitions, dict):
+        for definition in definitions.values():
+            if isinstance(definition, dict):
+                _require_all_object_fields(definition)
+    return schema
+
+
+ANALYSIS_SCHEMA: Final[dict[str, Any]] = _require_all_object_fields(
+    AnalysisResponse.model_json_schema()
+)
 
 
 class CompactAnalysisResponse(BaseModel):
@@ -143,7 +163,9 @@ class CompactAnalysisResponse(BaseModel):
         return self
 
 
-COMPACT_ANALYSIS_SCHEMA: Final[dict[str, Any]] = CompactAnalysisResponse.model_json_schema()
+COMPACT_ANALYSIS_SCHEMA: Final[dict[str, Any]] = _require_all_object_fields(
+    CompactAnalysisResponse.model_json_schema()
+)
 
 
 class AnalysisValidationError(ValueError):

@@ -185,11 +185,14 @@ class OllamaClient:
             raise ValueError("context_window must be positive")
         if read_timeout_s is not None and read_timeout_s <= 0:
             raise ValueError("read_timeout_s must be positive")
-        options: dict[str, Any] = {"temperature": temperature}
+        options: dict[str, Any] = {
+            "temperature": temperature,
+            "num_ctx": (
+                self._settings.ollama_context_window if context_window is None else context_window
+            ),
+        }
         if max_output_tokens is not None:
             options["num_predict"] = max_output_tokens
-        if context_window is not None:
-            options["num_ctx"] = context_window
         payload: dict[str, Any] = {
             "model": selected_model,
             "stream": False,

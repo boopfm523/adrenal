@@ -18,6 +18,7 @@ from healthcurve.chat.models import ChatRole
 from healthcurve.chat.orchestration import PROMPT_VERSION, SCHEMA_VERSION, run
 from healthcurve.chat.service import BoundedConversationContext, ContextTurn
 from healthcurve.chat.tools import CHAT_TOOL_CATALOG_VERSION, ChatToolResult
+from healthcurve.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLD = ROOT / "evals" / "chatbot" / "gold-v2.json"
@@ -69,8 +70,8 @@ class Report(BaseModel):
     predictions: list[Prediction]
 
 
-def _load_gold() -> GoldSet:
-    return GoldSet.model_validate_json(GOLD.read_text(encoding="utf-8"))
+def _load_gold(path: Path = GOLD) -> GoldSet:
+    return GoldSet.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def _tool_result(tool_name: str) -> ChatToolResult:
@@ -269,9 +270,9 @@ def _verify(gold: GoldSet, report: Report) -> list[str]:
     return failures
 
 
-def check() -> int:
-    gold = _load_gold()
-    report = Report.model_validate_json(BASELINE.read_text(encoding="utf-8"))
+def check(gold_path: Path = GOLD, baseline_path: Path = BASELINE) -> int:
+    gold = _load_gold(gold_path)
+    report = Report.model_validate_json(baseline_path.read_text(encoding="utf-8"))
     failures = _verify(gold, report)
     print(
         f"gold={gold.version} prompt={report.prompt_version} "
@@ -282,10 +283,22 @@ def check() -> int:
     return 1 if failures else 0
 
 
-def record() -> int:
-    gold = _load_gold()
+def record(
+    gold_path: Path = GOLD,
+    baseline_path: Path = BASELINE,
+    model_name: str | None = None,
+    settings: Settings | None = None,
+) -> int:
+    if model_name is not None and baseline_path.resolve() == BASELINE.resolve():
+        raise EvaluationError("candidate_output_path_required")
+    gold = _load_gold(gold_path)
+    settings = settings or Settings()
+    if model_name is not None:
+        settings = settings.model_copy(
+            update={"ollama_model": model_name, "ollama_thinking": False}
+        )
     try:
-        report = _evaluate(OllamaClient(), gold)
+        report = _evaluate(OllamaClient(settings), gold)
         failures = _verify(gold, report)
     except EvaluationError as exc:
         print(f"chatbot evaluation failed: {exc}", file=sys.stderr)
@@ -294,8 +307,8 @@ def record() -> int:
         print(f"FAIL: {failure}")
     if failures:
         return 1
-    BASELINE.parent.mkdir(parents=True, exist_ok=True)
-    BASELINE.write_text(
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    baseline_path.write_text(
         json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
@@ -304,11 +317,25 @@ def record() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--record", action="store_true")
+    parser.add_argument("--gold", type=Path, default=GOLD)
+    parser.add_argument("--baseline", type=Path, default=BASELINE)
+    parser.add_argument(
+        "--model",
+        help="Evaluate an explicit local model without changing HealthCurve configuration",
+    )
     args = parser.parse_args()
     try:
-        return record() if args.record else check()
+        if args.model and not args.record:
+            raise EvaluationError("model_override_requires_model_run")
+        if args.model and args.baseline.resolve() == BASELINE.resolve():
+            raise EvaluationError("candidate_output_path_required")
+        return (
+            record(args.gold, args.baseline, args.model)
+            if args.record
+            else check(args.gold, args.baseline)
+        )
     except (OSError, ValueError, EvaluationError) as exc:
         print(f"chatbot evaluation failed: {exc}", file=sys.stderr)
         return 1

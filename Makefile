@@ -1,7 +1,10 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help setup fmt lint types imports env-check pagination-check test test-fast test-pg eval audit secrets frontend-generate frontend-check check up down logs migrate ready
+.PHONY: help setup fmt lint types imports env-check pagination-check test test-fast test-pg eval audit secrets frontend-generate frontend-check check up down logs migrate ready qwen38-preflight qwen38-qualify qwen38-activate qwen3-rollback
+
+QWEN38_MODEL := qwen3.8:27b-q8_0
+QWEN38_QUALIFICATION := evals/candidates/qwen3.8-27b-q8_0/qualification.json
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -47,6 +50,23 @@ eval: ## Verify the checked-in local-model extraction regression baseline
 	uv run python scripts/evaluate_vision.py
 	uv run python scripts/evaluate_analysis.py
 	uv run python scripts/evaluate_chatbot.py
+
+qwen38-preflight: ## Check the non-default Qwen3.8 Q8 candidate locally
+	uv run python scripts/preflight_ollama_candidate.py --model $(QWEN38_MODEL)
+
+qwen38-qualify: ## Run all synthetic gates against Qwen3.8 Q8 without selecting it
+	uv run python scripts/qualify_ollama_candidate.py --model $(QWEN38_MODEL)
+
+qwen38-activate: ## Activate the qualified Qwen3.8 text model (owner approval required)
+	uv run python scripts/select_ollama_model.py activate \
+		--qualification $(QWEN38_QUALIFICATION)
+	docker compose -f docker-compose.yml -f deploy/credentials.compose.yml \
+		up -d --force-recreate api worker
+
+qwen3-rollback: ## Restore qwen3:30b and recreate model-using services
+	uv run python scripts/select_ollama_model.py rollback
+	docker compose -f docker-compose.yml -f deploy/credentials.compose.yml \
+		up -d --force-recreate api worker
 
 audit: ## Dependency vulnerability scan (threat model T6)
 	@# Audit the lockfile, not the installed environment: pip-audit cannot resolve

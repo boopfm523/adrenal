@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from healthcurve.ai.analysis import (
+    ANALYSIS_SCHEMA,
     COMPACT_ANALYSIS_SCHEMA,
     AnalysisOutcome,
     AnalysisResponse,
@@ -34,6 +35,13 @@ ROOT = Path(__file__).resolve().parents[2]
 GOLD = ROOT / "evals" / "analysis" / "gold-v1.json"
 BASELINE = ROOT / "evals" / "analysis" / "baseline-synthetic-validator.json"
 SOURCE = "00000000-0000-4000-8000-000000000201"
+
+
+def test_model_schemas_require_every_validator_critical_field() -> None:
+    assert set(ANALYSIS_SCHEMA["required"]) == set(ANALYSIS_SCHEMA["properties"])
+    claim_schema = ANALYSIS_SCHEMA["$defs"]["AnalysisClaim"]
+    assert set(claim_schema["required"]) == set(claim_schema["properties"])
+    assert set(COMPACT_ANALYSIS_SCHEMA["required"]) == set(COMPACT_ANALYSIS_SCHEMA["properties"])
 
 
 def response(*, text: str = "The synthetic total was 15 mg.") -> AnalysisResponse:

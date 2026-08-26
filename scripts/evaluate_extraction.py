@@ -21,22 +21,40 @@ from healthcurve.ai.evaluation import (
 )
 from healthcurve.ai.extraction import (
     CANDIDATE_JSON_SCHEMA,
+    EXTRACTION_READ_TIMEOUT_SECONDS,
     PROMPT_VERSION,
     SYSTEM_PROMPT,
     build_user_content,
 )
 from healthcurve.ai.ollama import OllamaClient
+from healthcurve.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_GOLD = ROOT / "evals" / "extraction" / "gold-v1.json"
 DEFAULT_BASELINE = ROOT / "evals" / "extraction" / "baseline-qwen3-30b.json"
 
 
-def record(gold_path: Path, baseline_path: Path) -> int:
+def _client_for_model(model_name: str | None, settings: Settings | None = None) -> OllamaClient:
+    settings = settings or Settings()
+    if model_name is not None:
+        settings = settings.model_copy(
+            update={"ollama_model": model_name, "ollama_thinking": False}
+        )
+    return OllamaClient(settings)
+
+
+def record(
+    gold_path: Path,
+    baseline_path: Path,
+    model_name: str | None = None,
+    settings: Settings | None = None,
+) -> int:
+    if model_name is not None and baseline_path.resolve() == DEFAULT_BASELINE.resolve():
+        raise EvaluationError("candidate_output_path_required")
     gold = load_gold_set(gold_path)
     if gold.prompt_version != PROMPT_VERSION:
         raise EvaluationError("prompt_version_mismatch")
-    client = OllamaClient()
+    client = _client_for_model(model_name, settings)
     identity = client.identity()
     if identity is None:
         raise EvaluationError("model_identity_unavailable")
@@ -51,9 +69,16 @@ def record(gold_path: Path, baseline_path: Path) -> int:
         predictions=predictions,
     )
     summary = verify_report(gold, report)
-    baseline_path.write_text(render_report(report), encoding="utf-8")
     _print_summary(report, summary.scores, summary.failures)
-    return 0 if summary.passed else 1
+    if model_name is not None:
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(render_report(report), encoding="utf-8")
+    if not summary.passed:
+        return 1
+    if model_name is None:
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(render_report(report), encoding="utf-8")
+    return 0
 
 
 def run_model(gold: GoldSet, client: OllamaClient) -> list[CasePrediction]:
@@ -66,6 +91,7 @@ def run_model(gold: GoldSet, client: OllamaClient) -> list[CasePrediction]:
                 case.message, gold.known_medications, case.timezone, case.now
             ),
             json_schema=CANDIDATE_JSON_SCHEMA,
+            read_timeout_s=EXTRACTION_READ_TIMEOUT_SECONDS,
         )
         if not result.ok or result.data is None:
             raise EvaluationError(f"model_run_failed:{case.id}:{result.outcome.value}")
@@ -74,13 +100,18 @@ def run_model(gold: GoldSet, client: OllamaClient) -> list[CasePrediction]:
     return predictions
 
 
-def stability(gold_path: Path, runs: int) -> int:
+def stability(
+    gold_path: Path,
+    runs: int,
+    model_name: str | None = None,
+    settings: Settings | None = None,
+) -> int:
     if runs < 2:
         raise EvaluationError("stability_runs_insufficient")
     gold = load_gold_set(gold_path)
     if gold.prompt_version != PROMPT_VERSION:
         raise EvaluationError("prompt_version_mismatch")
-    client = OllamaClient()
+    client = _client_for_model(model_name, settings)
     identity = client.identity()
     if identity is None:
         raise EvaluationError("model_identity_unavailable")
@@ -119,6 +150,10 @@ def main() -> int:
         "--record", action="store_true", help="Run local Ollama and replace baseline"
     )
     parser.add_argument(
+        "--model",
+        help="Evaluate an explicit local model without changing HealthCurve configuration",
+    )
+    parser.add_argument(
         "--stability-runs",
         type=int,
         default=0,
@@ -128,9 +163,17 @@ def main() -> int:
     try:
         if args.record and args.stability_runs:
             raise EvaluationError("evaluation_mode_conflict")
+        if args.model and not (args.record or args.stability_runs):
+            raise EvaluationError("model_override_requires_model_run")
+        if args.model and args.baseline.resolve() == DEFAULT_BASELINE.resolve():
+            raise EvaluationError("candidate_output_path_required")
         if args.stability_runs:
-            return stability(args.gold, args.stability_runs)
-        return record(args.gold, args.baseline) if args.record else check(args.gold, args.baseline)
+            return stability(args.gold, args.stability_runs, args.model)
+        return (
+            record(args.gold, args.baseline, args.model)
+            if args.record
+            else check(args.gold, args.baseline)
+        )
     except (EvaluationError, OSError, ValueError) as exc:
         print(f"evaluation failed: {exc}", file=sys.stderr)
         return 2

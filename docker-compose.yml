@@ -51,6 +51,7 @@ services:
       HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
       HC_OLLAMA_READ_TIMEOUT_S: ${HC_OLLAMA_READ_TIMEOUT_S:-60}
       HC_OLLAMA_MAX_RETRIES: ${HC_OLLAMA_MAX_RETRIES:-2}
+      HC_OLLAMA_CONTEXT_WINDOW: ${HC_OLLAMA_CONTEXT_WINDOW:-24576}
       HC_OLLAMA_THINKING: ${HC_OLLAMA_THINKING:-false}
       HC_REDIS_URL: redis://redis:6379/0
       # The API receives only the non-secret feature flag/lookback so it can expose
@@ -137,6 +138,7 @@ services:
       HC_OLLAMA_CONNECT_TIMEOUT_S: ${HC_OLLAMA_CONNECT_TIMEOUT_S:-5}
       HC_OLLAMA_READ_TIMEOUT_S: ${HC_OLLAMA_READ_TIMEOUT_S:-60}
       HC_OLLAMA_MAX_RETRIES: ${HC_OLLAMA_MAX_RETRIES:-2}
+      HC_OLLAMA_CONTEXT_WINDOW: ${HC_OLLAMA_CONTEXT_WINDOW:-24576}
       HC_OLLAMA_THINKING: ${HC_OLLAMA_THINKING:-false}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via

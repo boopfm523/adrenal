@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     ollama_connect_timeout_s: float = Field(default=5.0, gt=0)
     ollama_read_timeout_s: float = Field(default=60.0, gt=0)
     ollama_max_retries: int = Field(default=2, ge=0)
+    #: Bound text-model memory even when a caller does not need a specialized window.
+    #: Qwen3.8 otherwise asks Ollama for its full 262,144-token context and reserves
+    #: substantially more unified memory for short extraction requests.
+    ollama_context_window: int = Field(default=24_576, gt=0)
     #: Reasoning models "think" before answering. Extraction is a parsing task with a
     #: fixed output schema, and measurement showed the reasoning phase cost 15x the
     #: latency with no accuracy gain, so it is off by default. Set true to compare.

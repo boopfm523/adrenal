@@ -42,6 +42,8 @@ from healthcurve.medications.models import DoseCategory, DoseEvent, Medication
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import BodyPosition, MeasurementSetting, TemperatureUnit, WeightUnit
 
+EXTRACTION_READ_TIMEOUT_SECONDS: Final = 120.0
+
 #: Bump when the prompt changes. Stored on every draft so a model or prompt change is
 #: visible in the record and can gate regression evaluation (SAFE-05).
 PROMPT_VERSION: Final = "extract-v7"
@@ -480,6 +482,7 @@ def extract(
         system_prompt=SYSTEM_PROMPT,
         user_content=build_user_content(message, [m.name for m in medications], timezone, now),
         json_schema=CANDIDATE_JSON_SCHEMA,
+        read_timeout_s=EXTRACTION_READ_TIMEOUT_SECONDS,
     )
     if not result.ok:
         return ExtractionResult(
