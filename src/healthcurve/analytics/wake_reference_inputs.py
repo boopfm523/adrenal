@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Final
 from zoneinfo import ZoneInfo
 
@@ -23,6 +23,8 @@ MEAL_ROLES: Final = ("breakfast", "lunch", "dinner")
 def signed_minutes_from_wake(
     wake_at: datetime | None,
     dose_at: datetime | None,
+    *,
+    timezone: str,
 ) -> int | None:
     """Return signed whole minutes from observed wake to recorded dose.
 
@@ -32,7 +34,17 @@ def signed_minutes_from_wake(
 
     if wake_at is None or dose_at is None:
         return None
-    return int((dose_at - wake_at).total_seconds() / 60)
+    zone = ZoneInfo(timezone)
+
+    def instant(value: datetime) -> datetime:
+        # Medication comparison deliberately exposes wall-clock local times as
+        # naive datetimes. Garmin observations are timezone-aware instants. Put
+        # both on the requested local timeline, then compare UTC instants so DST
+        # transitions retain their real elapsed duration.
+        local = value.replace(tzinfo=zone) if value.tzinfo is None else value.astimezone(zone)
+        return local.astimezone(UTC)
+
+    return int((instant(dose_at) - instant(wake_at)).total_seconds() / 60)
 
 
 def observed_sleep_timing_for_day(

@@ -220,7 +220,11 @@ def plan_comparison(
                 actual_local_time=c.actual_local_time,
                 observed_wake_local_time=(observed_wake if c.timing_mode == "wake" else None),
                 minutes_from_wake=(
-                    signed_minutes_from_wake(observed_wake, c.actual_local_time)
+                    signed_minutes_from_wake(
+                        observed_wake,
+                        c.actual_local_time,
+                        timezone=zone,
+                    )
                     if c.timing_mode == "wake"
                     else None
                 ),

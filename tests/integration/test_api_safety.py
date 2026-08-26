@@ -8084,6 +8084,116 @@ def test_comparison_exposes_plan_fields_needed_for_explicit_dose_capture(
     assert planned_slot["minutes_from_wake"] is None
 
 
+def test_wake_plan_comparison_and_analytics_accept_imported_wake_instant(
+    client: TestClient,
+    logged_in: dict[str, str],
+    engine: Engine,
+) -> None:
+    medication_id = _a_medication(client, logged_in)
+    version = client.post(
+        "/api/v1/regimens",
+        json={
+            "version_label": "synthetic wake comparison plan",
+            "effective_from": "2025-01-15T00:00:00",
+            "effective_to": "2025-01-16T00:00:00",
+            "slots": [
+                {
+                    "medication_id": medication_id,
+                    "timing_mode": "wake",
+                    "reminder_local_time": "07:30:00",
+                    "amount": "10",
+                    "unit": "mg",
+                    "route": "oral",
+                }
+            ],
+            "instructions": [],
+        },
+        headers=logged_in,
+    )
+    assert version.status_code == 201, version.text
+    approved = client.post(
+        f"/api/v1/regimens/{version.json()['id']}/approve",
+        json={"approved_by": "Dr Synthetic", "approval_source": "synthetic fixture"},
+        headers=logged_in,
+    )
+    assert approved.status_code == 200, approved.text
+    dose = client.post(
+        "/api/v1/doses",
+        json={
+            "medication_id": medication_id,
+            "amount": "10",
+            "unit": "mg",
+            "route": "oral",
+            "category": "scheduled",
+            "time": {"local_time": "2025-01-15T06:45:00", "timezone": "UTC"},
+        },
+        headers=logged_in,
+    )
+    assert dose.status_code == 201, dose.text
+
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        sync_run = GarminSyncRun(
+            owner_id=owner_id,
+            requested_start_date=date(2025, 1, 15),
+            requested_end_date=date(2025, 1, 15),
+            timezone="UTC",
+            origin=GarminSyncOrigin.MANUAL,
+            status=GarminSyncStatus.COMPLETED,
+            started_at=datetime(2025, 1, 16, 8, tzinfo=UTC),
+            finished_at=datetime(2025, 1, 16, 8, 1, tzinfo=UTC),
+            counts={"sleep": 1},
+            warning_codes=[],
+            client_version="synthetic-test",
+        )
+        session.add(sync_run)
+        session.flush()
+        sleep = GarminSleepEvent(
+            owner_id=owner_id,
+            recorded_at=datetime(2025, 1, 16, 8, 1, tzinfo=UTC),
+            source_type=SourceType.PROVIDER,
+            provider_id="synthetic-wake-comparison-sleep",
+            source_revision="synthetic-v1",
+            import_batch_id=None,
+            confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+            supersedes_id=None,
+            correction_reason=None,
+            notes=None,
+            garmin_import_batch_id=None,
+            garmin_sync_run_id=sync_run.id,
+            garmin_source_member="synthetic-wake-comparison-sleep",
+            garmin_manufacturer="Garmin",
+            garmin_product_name="Synthetic Test Device",
+            garmin_device_serial_hash=None,
+            ended_at=datetime(2025, 1, 15, 6, 30, tzinfo=UTC),
+            overall_sleep_score=80,
+            stage_count=0,
+            duration_seconds=27_000,
+            garmin_duration_source="provider",
+            awakenings=0,
+        )
+        sleep.apply_event_time(from_instant(datetime(2025, 1, 14, 23, tzinfo=UTC), "UTC"))
+        session.add(sleep)
+
+    comparison = client.get(
+        "/api/v1/doses/plan-comparison",
+        params={"day": "2025-01-15", "timezone": "UTC"},
+    )
+    assert comparison.status_code == 200, comparison.text
+    wake_slot = next(slot for slot in comparison.json()["slots"] if slot["timing_mode"] == "wake")
+    assert wake_slot["minutes_from_wake"] == 15
+    assert wake_slot["observed_wake_local_time"] == "2025-01-15T06:30:00Z"
+
+    summary = client.get(
+        "/api/v1/analytics/summary",
+        params={"date_from": "2025-01-15", "date_to": "2025-01-15", "timezone": "UTC"},
+    )
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["timing"]["wake_matched_count"] == 1
+    assert summary.json()["timing"]["wake_average_signed_minutes"] == "15"
+
+
 # ---------------------------------------------------------------------------
 # Development bootstrap recovery
 # ---------------------------------------------------------------------------

@@ -287,7 +287,11 @@ def summary_for_owner(
                 effective_to=slot.regimen_effective_to,
                 timing_mode=slot.timing_mode,
                 minutes_from_wake=(
-                    signed_minutes_from_wake(observed_wake, slot.actual_local_time)
+                    signed_minutes_from_wake(
+                        observed_wake,
+                        slot.actual_local_time,
+                        timezone=timezone,
+                    )
                     if slot.timing_mode == "wake"
                     else None
                 ),
