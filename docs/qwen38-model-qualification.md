@@ -1,6 +1,6 @@
 # Qwen3.8-27B Q8 qualification and reversible cutover
 
-This runbook implements proposed ADR-0030 and Beads epic `hc-th29`. It evaluates the
+This runbook implements accepted ADR-0030 and Beads epic `hc-th29`. It evaluates the
 text model only. It does not select Qwen3.8, merge its branch, deploy production, or
 change the separate `qwen3-vl:30b` image/PDF model.
 
@@ -49,7 +49,8 @@ threshold or add real health data to make it pass.
 ## 4. Review and owner decision
 
 Review `qualification.json` plus each synthetic suite report. The owner-decision Bead
-is `hc-xtnt`. Until that decision is explicit:
+is `hc-xtnt`. Before the owner accepted the cutover on 2026-08-27, the following gates
+remained in force:
 
 - `HC_OLLAMA_MODEL` remains `qwen3:30b`;
 - the candidate branch remains unmerged;
@@ -110,7 +111,7 @@ cold-load delay between sporadic requests, but it cannot remove the dense model'
 weight, and explicit-dose statements therefore use deterministic validation and the
 same confirmation-draft contract before model fallback.
 
-This is a technical **PASS**, not an activation decision. The candidate was accurate
-on the fixed synthetic gates but is materially slower than the current sparse
-`qwen3:30b` model. Keep `hc-xtnt` open and leave the current model selected until the
-owner explicitly accepts that responsiveness tradeoff and approves the branch merge.
+The qualification was a technical **PASS**. After live private-runtime acceptance
+testing, the owner explicitly accepted the candidate's slower model-backed responses
+on 2026-08-27 and approved the guarded cutover and branch merge. `qwen3:30b` remains
+installed as the one-command rollback model.

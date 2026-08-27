@@ -1,6 +1,6 @@
 # ADR-0030: Qualification-gated Qwen3.8 text-model candidate
 
-**Status:** Proposed — 2026-08-26
+**Status:** Accepted — 2026-08-27
 
 ## Context
 
@@ -20,12 +20,12 @@ A blind tag replacement is inappropriate. HealthCurve depends on immutable model
 identity, `think:false`, JSON-schema-constrained output, Pydantic validation, safe
 failure states, and all-synthetic extraction, chatbot, and analysis gates.
 
-## Proposed decision
+## Decision
 
-Evaluate `qwen3.8:27b-q8_0` through the existing native Ollama adapter as a non-default
-candidate. Recommend Ollama 0.33.0 and require at least the candidate artifact's
-declared minimum (0.32.12), one loaded model at a time, thinking off,
-and the existing bounded 24,576-token maximum chat context during qualification.
+Adopt `qwen3.8:27b-q8_0` as HealthCurve's private text model after evaluating it
+through the existing native Ollama adapter as a non-default candidate. Require at
+least the candidate artifact's declared Ollama minimum (0.32.12), one loaded model at
+a time, thinking off, and the existing bounded 24,576-token maximum chat context.
 
 Qualification must:
 
@@ -37,10 +37,10 @@ Qualification must:
 4. record per-suite wall time and candidate provenance in a separate report; and
 5. leave `qwen3:30b` as the repository and runtime default.
 
-A later explicit owner decision is required to change this ADR to Accepted, merge the
-candidate branch, or activate the model. Activation is an atomic `.env` selection
-guarded by the qualified digest; rollback restores `qwen3:30b`. The vision selection
-remains `qwen3-vl:30b` and image/PDF redesign is separate work.
+The owner explicitly accepted the measured latency tradeoff after live private-runtime
+testing on 2026-08-27. Activation is an atomic `.env` selection guarded by the
+qualified digest; rollback restores `qwen3:30b`. The vision selection remains
+`qwen3-vl:30b`, and image/PDF redesign is separate work.
 
 ## Consequences
 
@@ -66,8 +66,9 @@ passed extraction, chatbot, and generated-analysis gates for digest
 `8f5fb6b71ea00052cbe8545738c55ce61112c4e571cb60ca4dad00b131766039`.
 The candidate required a 24,576-token default context bound to avoid a 45 GB
 full-context allocation and took roughly 35–37 seconds for ordinary extraction cases.
-Therefore this ADR remains Proposed pending an explicit owner decision about the
-latency tradeoff.
+The owner accepted that cost after live testing. Deterministic confirmation-draft
+paths cover common single Telegram facts, while ambiguous or compound input retains
+the validated model path.
 
 ## Alternatives considered
 
