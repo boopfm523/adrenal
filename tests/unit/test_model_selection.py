@@ -22,6 +22,8 @@ from healthcurve.ai.model_selection import (
 from healthcurve.ai.ollama import ModelIdentity
 from healthcurve.config import Settings
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _report(*, passed: bool = True) -> CandidateQualificationReport:
     return CandidateQualificationReport(
@@ -160,3 +162,15 @@ def test_rollback_requires_installed_default(
             settings=Settings(ollama_base_url="http://ollama:11434"),
         )
     assert env.read_text(encoding="utf-8") == "HC_OLLAMA_MODEL=qwen3.8:27b-q8_0\n"
+
+
+def test_model_switch_make_targets_use_the_default_compose_topology() -> None:
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+    activation = makefile.split("qwen38-activate:", maxsplit=1)[1].split(
+        "qwen3-rollback:", maxsplit=1
+    )[0]
+    rollback = makefile.split("qwen3-rollback:", maxsplit=1)[1].split("audit:", maxsplit=1)[0]
+
+    for target in (activation, rollback):
+        assert "docker compose up -d --force-recreate api worker" in target
+        assert "deploy/credentials.compose.yml" not in target

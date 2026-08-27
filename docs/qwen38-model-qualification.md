@@ -65,7 +65,9 @@ make qwen38-activate
 The command refuses to proceed unless every recorded suite passed and the currently
 installed candidate digest exactly matches the qualified digest. It atomically changes
 only `HC_OLLAMA_MODEL` in `.env`, preserves every other value and the file mode, then
-recreates only the API and worker services. Vision remains `qwen3-vl:30b`.
+recreates only the API and worker services through the default Compose topology used by
+the private runtime. Opt-in Compose overlays are not required. Vision remains
+`qwen3-vl:30b`.
 
 After activation, verify `/health/ready`, one synthetic Telegram extraction, and the
 chatbot's ordinary and failure paths before relying on it. Keep real owner text out of

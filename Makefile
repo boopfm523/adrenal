@@ -60,13 +60,11 @@ qwen38-qualify: ## Run all synthetic gates against Qwen3.8 Q8 without selecting 
 qwen38-activate: ## Activate the qualified Qwen3.8 text model (owner approval required)
 	uv run python scripts/select_ollama_model.py activate \
 		--qualification $(QWEN38_QUALIFICATION)
-	docker compose -f docker-compose.yml -f deploy/credentials.compose.yml \
-		up -d --force-recreate api worker
+	docker compose up -d --force-recreate api worker
 
 qwen3-rollback: ## Restore qwen3:30b and recreate model-using services
 	uv run python scripts/select_ollama_model.py rollback
-	docker compose -f docker-compose.yml -f deploy/credentials.compose.yml \
-		up -d --force-recreate api worker
+	docker compose up -d --force-recreate api worker
 
 audit: ## Dependency vulnerability scan (threat model T6)
 	@# Audit the lockfile, not the installed environment: pip-audit cannot resolve
