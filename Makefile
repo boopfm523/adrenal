@@ -48,6 +48,7 @@ test-pg: ## Only the tests that need real PostgreSQL constraints
 eval: ## Verify the checked-in local-model extraction regression baseline
 	uv run python scripts/evaluate_extraction.py
 	uv run python scripts/evaluate_vision.py
+	uv run python scripts/evaluate_multimodal_workflow.py
 	uv run python scripts/evaluate_analysis.py
 	uv run python scripts/evaluate_chatbot.py
 

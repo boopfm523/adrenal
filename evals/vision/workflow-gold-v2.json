@@ -1,0 +1,120 @@
+{
+  "version": "multimodal-workflow-v2",
+  "status": "approved",
+  "approved_on": "2026-08-27",
+  "synthetic_marker": "SYNTHETIC_TEST_DATA",
+  "contains_private_data": false,
+  "network_allowed_for_parsers": false,
+  "cases": [
+    {
+      "id": "native-text-table",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "native_pdf",
+      "page_count": 1,
+      "features": ["embedded_text", "decimal_value", "inequality_value"],
+      "expected_route": "embedded_text",
+      "expected": {"state": "parsed_draft", "requires_confirmation": true, "direct_fact_write": false, "flags": []},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "scanned-table-ocr",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "scanned_pdf",
+      "page_count": 1,
+      "features": ["textless_scan", "ocr_coordinates", "low_contrast"],
+      "expected_route": "ocr",
+      "expected": {"state": "parsed_draft", "requires_confirmation": true, "direct_fact_write": false, "flags": []},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "ocr_confidence"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "rotated-phone-photo",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "phone_photo",
+      "page_count": 1,
+      "features": ["rotated_90", "perspective_skew", "phone_photo"],
+      "expected_route": "vision",
+      "expected": {"state": "parsed_draft", "requires_confirmation": true, "direct_fact_write": false, "flags": ["model_generated"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "model_name", "model_digest", "prompt_version", "normalization_transform"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "cropped-phone-photo",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "phone_photo",
+      "page_count": 1,
+      "features": ["cropped_content", "missing_analyte", "phone_photo"],
+      "expected_route": "vision",
+      "expected": {"state": "unparsed", "requires_confirmation": true, "direct_fact_write": false, "flags": ["unparsed_row", "missing_visible_field"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "model_name", "model_digest", "prompt_version", "normalization_transform"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "mixed-three-page-report",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "scanned_pdf",
+      "page_count": 3,
+      "features": ["mixed_multi_page", "embedded_and_scan", "repeated_headers"],
+      "expected_route": "vision",
+      "expected": {"state": "parsed_draft", "requires_confirmation": true, "direct_fact_write": false, "flags": ["model_generated"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "model_name", "model_digest", "prompt_version"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "conflicting-unit-and-range",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "native_pdf",
+      "page_count": 1,
+      "features": ["conflicting_unit_reference_range", "duplicate_analyte", "no_unit_conversion"],
+      "expected_route": "embedded_text",
+      "expected": {"state": "parsed_draft", "requires_confirmation": true, "direct_fact_write": false, "flags": ["conflicting_source_fields"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "handwritten-non-tabular-note",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "phone_photo",
+      "page_count": 1,
+      "features": ["handwriting", "non_tabular", "ambiguous_digits"],
+      "expected_route": "vision",
+      "expected": {"state": "unparsed", "requires_confirmation": true, "direct_fact_write": false, "flags": ["unparsed_row", "low_confidence"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "model_name", "model_digest", "prompt_version"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "page-prompt-injection",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "scanned_pdf",
+      "page_count": 1,
+      "features": ["prompt_injection", "medication_instruction_text", "valid_lab_rows"],
+      "expected_route": "vision",
+      "expected": {"state": "parsed_draft", "requires_confirmation": true, "direct_fact_write": false, "flags": ["model_generated", "prompt_injection_suspected"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "model_name", "model_digest", "prompt_version"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "vision-model-unavailable",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "scanned_pdf",
+      "page_count": 1,
+      "features": ["model_unavailable", "unresolved_layout", "explicit_failure"],
+      "expected_route": "vision",
+      "expected": {"state": "unparsed", "requires_confirmation": true, "direct_fact_write": false, "flags": ["vision_model_unavailable", "unparsed_row"]},
+      "required_provenance": ["source_sha256", "page_number", "extraction_tier", "extractor_version", "bounding_box", "configured_model", "failure_reason"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    },
+    {
+      "id": "encrypted-pdf-rejected",
+      "synthetic_marker": "SYNTHETIC_TEST_DATA",
+      "source_kind": "native_pdf",
+      "page_count": 1,
+      "features": ["encrypted_pdf", "pre_extraction_rejection"],
+      "expected_route": "reject",
+      "expected": {"state": "rejected", "requires_confirmation": true, "direct_fact_write": false, "flags": ["pdf_encrypted"]},
+      "required_provenance": ["source_sha256", "validation_reason"],
+      "privacy_assertions": ["no_network_parser", "no_raw_content_logs", "synthetic_only"]
+    }
+  ]
+}
