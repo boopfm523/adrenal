@@ -136,10 +136,21 @@ _MEASUREMENT_PLACE_FRAGMENT: Final = (
 # These patterns intentionally recognize complete, single-event utterances only.
 # Anything with extra clauses falls through to schema-constrained model extraction.
 _DETERMINISTIC_BLOOD_PRESSURE_PATTERN: Final = re.compile(
-    rf"^(?:my\s+)?(?:blood\s+pressure|bp)\s*(?:(?:is|was|of)\s*)?"
+    rf"^(?:my\s+)?(?:blood\s+pressure|bp)(?:\s+reading)?\s*"
+    rf"(?:(?:is|was|of)\s*)?"
     rf"(?P<systolic>\d{{1,3}})\s*(?:/|\bover\b)\s*(?P<diastolic>\d{{1,3}})"
     rf"(?:\s*(?:,|and|with)?\s*(?:a\s+)?pulse(?:\s+(?:of|is|was))?\s*"
     rf"(?P<pulse>\d{{1,3}}))?"
+    rf"(?:\s*(?:,|and)?\s*(?P<position>lying|supine|sitting|seated|standing))?"
+    rf"(?:\s*(?:,|and)?\s*(?:measured\s+|taken\s+)?(?:at|from)\s+"
+    rf"(?P<setting>{_MEASUREMENT_PLACE_FRAGMENT}))?"
+    rf"(?:\s*(?:,|and)?\s*at\s+(?P<time>{_CLOCK_FRAGMENT}))?\s*[.!]?$",
+    re.IGNORECASE,
+)
+_DETERMINISTIC_BARE_BLOOD_PRESSURE_PATTERN: Final = re.compile(
+    rf"^(?P<systolic>\d{{1,3}})\s*(?:/|\bover\b)\s*"
+    rf"(?P<diastolic>\d{{1,3}})\s*(?:,|and|with)\s*"
+    rf"(?:a\s+)?pulse(?:\s+(?:of|is|was))?\s*(?P<pulse>\d{{1,3}})"
     rf"(?:\s*(?:,|and)?\s*(?P<position>lying|supine|sitting|seated|standing))?"
     rf"(?:\s*(?:,|and)?\s*(?:measured\s+|taken\s+)?(?:at|from)\s+"
     rf"(?P<setting>{_MEASUREMENT_PLACE_FRAGMENT}))?"
@@ -475,6 +486,7 @@ def looks_like_deterministic_health_entry(message: str) -> bool:
         pattern.fullmatch(text) is not None
         for pattern in (
             _DETERMINISTIC_BLOOD_PRESSURE_PATTERN,
+            _DETERMINISTIC_BARE_BLOOD_PRESSURE_PATTERN,
             _DETERMINISTIC_TEMPERATURE_PATTERN,
             _DETERMINISTIC_WEIGHT_PATTERN,
         )
@@ -514,7 +526,9 @@ def extract_deterministically(
     if not looks_like_deterministic_health_entry(text):
         return None
 
-    match = _DETERMINISTIC_BLOOD_PRESSURE_PATTERN.fullmatch(text)
+    match = _DETERMINISTIC_BLOOD_PRESSURE_PATTERN.fullmatch(
+        text
+    ) or _DETERMINISTIC_BARE_BLOOD_PRESSURE_PATTERN.fullmatch(text)
     if match is not None:
         candidate = ExtractedCandidate(
             type=CandidateType.BLOOD_PRESSURE,

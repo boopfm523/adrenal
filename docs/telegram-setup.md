@@ -238,7 +238,7 @@ Message your bot:
 | `Add a body weight of 179.6 lbs` | A confirmable home weight draft; `lb`, `lbs`, `kg`, and `kgs` are accepted |
 | `182.3 lbs. measured at home` | The same confirmable weight draft without invoking the language model |
 | `My temperature was 98.6` | A confirmable temperature draft; the non-overlapping value range infers °F and shows that inference |
-| `Blood pressure of 120/80 with pulse 62 at home` | A confirmable blood-pressure draft without invoking the language model |
+| `Blood pressure of 120/80 with pulse 62 at home`, `Blood pressure reading of 120/80`, or `120/80 with a pulse of 62` | A confirmable blood-pressure draft without invoking the language model; a bare slash reading requires pulse context |
 | `I took 5 mg hydrocortisone at 15:00` | A confirmable dose draft when the medication name resolves uniquely |
 | `I just had a symptom of dizziness at 14:30` | A confirmable symptom draft; without a time the confirmation visibly uses message time |
 | `Took 15mg hydrocortisone at 7:08, slept badly` | A draft listing a dose *and* a symptom |
