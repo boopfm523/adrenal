@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import Session
 
+from healthcurve.ai.extraction import FlagCode, ValidatedCandidate
 from healthcurve.ai.models import ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.identity.models import Owner
@@ -226,8 +227,8 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
                     },
                     {
                         "type": "temperature",
-                        "temperature_value": "38",
-                        "temperature_unit": "c",
+                        "temperature_value": "98.6",
+                        "temperature_unit": None,
                         "local_time": "2026-08-09T08:25:00",
                         "negated": False,
                         "hypothetical": False,
@@ -243,7 +244,7 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
         _owner(),
         text=(
             f"{SYNTHETIC_MARKER}: blood pressure 40/250 pulse 1, weight 180 lb, "
-            "and temperature 38 C"
+            "and temperature 98.6"
         ),
         client=client,
         now=NOW,
@@ -253,10 +254,17 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
     assert "Nothing is recorded yet" in reply.text
     assert "Blood pressure: 40/250 mmHg, pulse 1 bpm" in reply.text
     assert "Weight: 180.0 lb" in reply.text
-    assert "Temperature: 100.4 °F (38.0 °C)" in reply.text
+    assert "Temperature: 98.6 °F (37.0 °C) · F inferred from value" in reply.text
+    assert "you omitted the temperature unit" in reply.text
     privileged.add.assert_not_called()
     stored = restricted.add.call_args.args[0]
     assert isinstance(stored, ExtractionDraft)
+    stored_temperature = next(
+        ValidatedCandidate.model_validate(candidate)
+        for candidate in stored.candidates
+        if candidate["type"] == "temperature"
+    )
+    assert FlagCode.INFERRED_TEMPERATURE_UNIT in stored_temperature.flags
     assert {candidate["type"] for candidate in stored.candidates} == {
         "blood_pressure",
         "temperature",

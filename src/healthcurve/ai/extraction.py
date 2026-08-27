@@ -314,6 +314,9 @@ class FlagCode(StrEnum):
     PROMPT_INJECTION_SUSPECTED = "prompt_injection_suspected"
     MISSING_VITAL_VALUE = "missing_vital_value"
     INVALID_VITAL_VALUE = "invalid_vital_value"
+    #: Deterministic validation resolved a missing unit from one non-overlapping
+    #: structural range. Confirmation keeps that inference visible to the owner.
+    INFERRED_TEMPERATURE_UNIT = "inferred_temperature_unit"
     MISSING_EVENT_TEXT = "missing_event_text"
 
 
@@ -621,18 +624,27 @@ def _validate_candidate(
     elif candidate.type is CandidateType.TEMPERATURE:
         raw_temperature = candidate.temperature_value or candidate.amount
         raw_unit = candidate.temperature_unit or candidate.unit
-        if raw_temperature is None or raw_unit is None:
+        if raw_temperature is None:
             flags.append(FlagCode.MISSING_VITAL_VALUE)
         else:
             temperature_value = normalise_amount(raw_temperature)
-            try:
-                temperature_unit = TemperatureUnit(raw_unit.lower().replace("°", ""))
-            except ValueError:
+            if temperature_value is None:
                 flags.append(FlagCode.INVALID_VITAL_VALUE)
+            elif raw_unit is None:
+                temperature_unit = vitals.infer_temperature_unit(temperature_value)
+                if temperature_unit is None:
+                    flags.append(FlagCode.INVALID_VITAL_VALUE)
+                else:
+                    flags.append(FlagCode.INFERRED_TEMPERATURE_UNIT)
+            else:
+                try:
+                    temperature_unit = TemperatureUnit(raw_unit.lower().replace("°", ""))
+                except ValueError:
+                    flags.append(FlagCode.INVALID_VITAL_VALUE)
             if (
-                temperature_value is None
-                or temperature_unit is None
-                or not vitals.temperature_in_range(temperature_value, temperature_unit)
+                temperature_value is not None
+                and temperature_unit is not None
+                and not vitals.temperature_in_range(temperature_value, temperature_unit)
             ):
                 flags.append(FlagCode.INVALID_VITAL_VALUE)
 

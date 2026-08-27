@@ -204,6 +204,11 @@ half up to `0.1` degree. The API accepts the broad structural human-measurement 
 and HealthCurve does not diagnose or interpret the reading. Corrections create a new
 fact and retain the original value, unit, time, source, and correction reason.
 
+In Telegram, the unit may be omitted. HealthCurve deterministically infers Celsius for
+values in `25–45` and Fahrenheit for values in `77–113`, labels that inference in the
+draft, and still requires confirmation. An explicit `F` or `C` always takes precedence.
+The authenticated web/API contract continues to require an explicit unit.
+
 ## The HTTP API
 
 Everything is behind Caddy on `http://localhost:8080`, and every API route is

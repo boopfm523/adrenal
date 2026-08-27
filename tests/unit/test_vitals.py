@@ -11,6 +11,7 @@ from healthcurve.vitals.service import (
     display_temperature_c,
     display_temperature_f,
     display_weight_lb,
+    infer_temperature_unit,
     normalize_temperature_c,
     normalize_weight_kg,
     temperature_in_range,
@@ -123,6 +124,27 @@ def test_temperature_bounds_are_structural_not_diagnostic(
     value: Decimal, unit: TemperatureUnit, expected: bool
 ) -> None:
     assert temperature_in_range(value, unit) is expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Decimal("25"), TemperatureUnit.CELSIUS),
+        (Decimal("37"), TemperatureUnit.CELSIUS),
+        (Decimal("45"), TemperatureUnit.CELSIUS),
+        (Decimal("77"), TemperatureUnit.FAHRENHEIT),
+        (Decimal("98.6"), TemperatureUnit.FAHRENHEIT),
+        (Decimal("113"), TemperatureUnit.FAHRENHEIT),
+        (Decimal("60"), None),
+        (Decimal("114"), None),
+        (Decimal("NaN"), None),
+        (Decimal("Infinity"), None),
+    ],
+)
+def test_temperature_unit_is_inferred_only_from_one_supported_range(
+    value: Decimal, expected: TemperatureUnit | None
+) -> None:
+    assert infer_temperature_unit(value) is expected
 
 
 def test_temperature_schema_requires_explicit_unit() -> None:

@@ -65,7 +65,7 @@ While you're still in BotFather, harden the bot:
   symptom - Record a symptom: /symptom nausea 4
   bp - Record blood pressure: /bp 120/80 62 08:15
   weight - Record body weight: /weight 180 lbs 08:15
-  temperature - Record body temperature: /temperature 98.6 F 08:15
+  temperature - Record body temperature: /temperature 98.6 08:15
   injection - Log an emergency injection
   episode - /episode start <trigger> or /episode end
   today - What's recorded today vs your plan

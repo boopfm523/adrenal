@@ -45,4 +45,13 @@ def display_temperature_c(value: Decimal, unit: TemperatureUnit) -> Decimal:
 
 def temperature_in_range(value: Decimal, unit: TemperatureUnit) -> bool:
     """Accept a broad structural human-measurement range without diagnosis."""
-    return Decimal("25") <= normalize_temperature_c(value, unit) <= Decimal("45")
+    if not value.is_finite():
+        return False
+    normalized = normalize_temperature_c(value, unit)
+    return normalized.is_finite() and Decimal("25") <= normalized <= Decimal("45")
+
+
+def infer_temperature_unit(value: Decimal) -> TemperatureUnit | None:
+    """Infer a unit only when exactly one supported structural range accepts it."""
+    matching_units = [unit for unit in TemperatureUnit if temperature_in_range(value, unit)]
+    return matching_units[0] if len(matching_units) == 1 else None
