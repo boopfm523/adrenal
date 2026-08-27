@@ -254,7 +254,10 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         temperature_reply = handle_message(session, owner, text="/temperature 38 C 08:30", now=NOW)
         assert temperature_reply.draft_id is not None
         assert "Temperature: 100.4 °F (38.0 °C)" in temperature_reply.text
-        assert session.scalar(select(TemperatureEvent)) is None
+        assert (
+            session.scalar(select(TemperatureEvent).where(TemperatureEvent.owner_id == owner.id))
+            is None
+        )
         temperature_confirmed = confirm_draft(session, owner, temperature_reply.draft_id)
         session.flush()
         temperature = session.scalar(
@@ -275,6 +278,76 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         invalid_reply = handle_message(session, owner, text="/temperature 60", now=NOW)
         assert invalid_reply.draft_id is None
         assert "between 25 and 45 °C (77 and 113 °F)" in invalid_reply.text
+
+
+def test_simple_natural_language_fast_path_still_requires_confirmation(engine: Engine) -> None:
+    owner = Owner(
+        id=uuid.uuid4(),
+        email=f"fast-path-{uuid.uuid4()}@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="UTC",
+    )
+    medication = Medication(
+        owner_id=owner.id,
+        name="Synthetic hydrocortisone",
+        normalized_name="synthetic hydrocortisone",
+        default_unit=DoseUnit.MG,
+        default_route=Route.ORAL,
+    )
+    client = MagicMock(spec=OllamaClient)
+
+    with Session(engine) as session, session.begin():
+        session.add_all((owner, medication))
+        session.flush()
+
+        temperature_reply = handle_message(
+            session,
+            owner,
+            text="My temperature was 98.6 at 08:31",
+            message_id="synthetic-fast-temperature",
+            client=client,
+            now=NOW,
+        )
+        assert temperature_reply.draft_id is not None
+        assert (
+            session.scalar(select(TemperatureEvent).where(TemperatureEvent.owner_id == owner.id))
+            is None
+        )
+        temperature_draft = session.get(ExtractionDraft, temperature_reply.draft_id)
+        assert temperature_draft is not None
+        assert temperature_draft.source == "telegram_fast"
+        assert temperature_draft.model_name is None
+        assert temperature_draft.raw_text == "My temperature was 98.6 at 08:31"
+
+        confirm_draft(session, owner, temperature_reply.draft_id)
+        session.flush()
+        temperature = session.scalar(
+            select(TemperatureEvent).where(TemperatureEvent.owner_id == owner.id)
+        )
+        assert temperature is not None
+        assert temperature.value == Decimal("98.60")
+        assert temperature.unit.value == "f"
+        assert temperature.confirmation_state.value == "confirmed_from_draft"
+        assert temperature_draft.raw_text is None
+
+        dose_reply = handle_message(
+            session,
+            owner,
+            text="I took 5 mg synthetic hydrocortisone at 08:32",
+            message_id="synthetic-fast-dose",
+            client=client,
+            now=NOW,
+        )
+        assert dose_reply.draft_id is not None
+        assert session.scalar(select(DoseEvent).where(DoseEvent.owner_id == owner.id)) is None
+
+        confirm_draft(session, owner, dose_reply.draft_id)
+        session.flush()
+        dose = session.scalar(select(DoseEvent).where(DoseEvent.owner_id == owner.id))
+        assert dose is not None
+        assert dose.amount == Decimal("5.0000")
+        assert dose.confirmation_state.value == "confirmed_from_draft"
+        client.generate_json.assert_not_called()
 
 
 def test_explicit_symptom_category_is_confirmed_and_editable(engine: Engine) -> None:

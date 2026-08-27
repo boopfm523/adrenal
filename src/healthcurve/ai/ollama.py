@@ -205,6 +205,10 @@ class OllamaClient:
                 user_message,
             ],
         }
+        if selected_model == self._settings.ollama_model and not images:
+            # This controls host-native Ollama residency only. It does not start a
+            # model container or alter the separate vision model lifecycle.
+            payload["keep_alive"] = self._settings.ollama_keep_alive_s
         if not self._settings.ollama_thinking:
             # Measured on qwen3:30b-a3b: 29.1s with reasoning, 1.9s without, for the
             # same extraction. Accuracy did not drop -- amounts, ISO times, negation

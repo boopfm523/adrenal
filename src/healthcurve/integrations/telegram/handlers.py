@@ -16,6 +16,7 @@ import re
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from time import monotonic
 from typing import Any, Final, cast
 
 from sqlalchemy import select
@@ -29,8 +30,10 @@ from healthcurve.ai.extraction import (
     explicit_body_position,
     explicit_measurement_setting,
     extract,
+    extract_deterministically,
     find_explicit_weight,
     find_time_expression,
+    looks_like_deterministic_health_entry,
 )
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
@@ -76,6 +79,7 @@ from healthcurve.integrations.telegram.feature_requests import (
     validate_request,
 )
 from healthcurve.integrations.telegram.models import DoseReminderState, TelegramDoseReminder
+from healthcurve.logging import get_logger
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import (
     DoseCategory,
@@ -102,6 +106,8 @@ from healthcurve.vitals.models import (
     WeightEvent,
     WeightUnit,
 )
+
+log = get_logger(__name__)
 
 #: A draft the owner never answers is purged rather than left to be confirmed days
 #: later against a time nobody remembers.
@@ -437,6 +443,35 @@ def _handle_conversational_shortcut(
             now=now,
             chat_id=chat_id,
         )
+
+    if looks_like_deterministic_health_entry(text):
+        fast_started = monotonic()
+        deterministic = extract_deterministically(
+            session,
+            owner_id=owner.id,
+            message=text,
+            timezone=owner.default_timezone,
+            now=now,
+        )
+        if deterministic is not None:
+            if chat_id is not None:
+                conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+            draft = _store_draft(
+                session,
+                owner,
+                deterministic.candidates,
+                raw_text=text,
+                source="telegram_fast",
+                message_id=message_id,
+            )
+            log.info(
+                "telegram message routed",
+                integration="telegram",
+                route=deterministic.route,
+                outcome="draft",
+                latency_ms=int((monotonic() - fast_started) * 1000),
+            )
+            return _draft_reply(draft, deterministic.candidates)
 
     planned_dose = _planned_dose_draft(session, owner, text, now=now)
     if planned_dose is not None:
@@ -1907,6 +1942,7 @@ def _handle_free_text(
                 )
             case "none":
                 pass
+    model_started = monotonic()
     result = extract(
         session,
         owner_id=owner.id,
@@ -1914,6 +1950,14 @@ def _handle_free_text(
         timezone=owner.default_timezone,
         now=now,
         client=client,
+    )
+    log.info(
+        "telegram message routed",
+        integration="telegram",
+        route="telegram_model_extraction",
+        outcome=result.outcome.value,
+        latency_ms=int((monotonic() - model_started) * 1000),
+        model_name=result.model_name,
     )
 
     if result.outcome is not ModelOutcome.OK:

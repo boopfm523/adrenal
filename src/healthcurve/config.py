@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     #: Qwen3.8 otherwise asks Ollama for its full 262,144-token context and reserves
     #: substantially more unified memory for short extraction requests.
     ollama_context_window: int = Field(default=24_576, gt=0)
+    #: Per-request text-model residency. Ollama defaults to five minutes; this bounded
+    #: override can reduce cold starts for sporadic Telegram/chat use without pinning
+    #: a roughly 30 GB model indefinitely. Vision keeps Ollama's separate default.
+    ollama_keep_alive_s: int = Field(default=300, ge=0, le=3600)
     #: Reasoning models "think" before answering. Extraction is a parsing task with a
     #: fixed output schema, and measurement showed the reasoning phase cost 15x the
     #: latency with no accuracy gain, so it is off by default. Set true to compare.

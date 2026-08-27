@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -122,6 +123,72 @@ _BODY_POSITION_PATTERNS: Final = {
 _SYMPTOM_CATEGORY_PATTERN: Final = re.compile(
     r"\b(?:category|track(?:ed)?(?:\s+\w+){0,4}\s+as)\s*[:=-]?\s*"
     r"(?P<category>glucocorticoid|mineralocorticoid|postural|other)\b",
+    re.IGNORECASE,
+)
+
+_DECIMAL_FRAGMENT: Final = r"(?:\d+(?:\.\d+)?|\.\d+)"
+_CLOCK_FRAGMENT: Final = r"\d{1,2}[:.]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?"
+_MEASUREMENT_PLACE_FRAGMENT: Final = (
+    r"(?:home|(?:the\s+)?doctor(?:'s)?(?:\s+office)?|(?:the\s+)?clinic|"
+    r"(?:the\s+)?hospital|(?:the\s+)?medical\s+office)"
+)
+
+# These patterns intentionally recognize complete, single-event utterances only.
+# Anything with extra clauses falls through to schema-constrained model extraction.
+_DETERMINISTIC_BLOOD_PRESSURE_PATTERN: Final = re.compile(
+    rf"^(?:my\s+)?(?:blood\s+pressure|bp)\s*(?:(?:is|was|of)\s*)?"
+    rf"(?P<systolic>\d{{1,3}})\s*(?:/|\bover\b)\s*(?P<diastolic>\d{{1,3}})"
+    rf"(?:\s*(?:,|and|with)?\s*(?:a\s+)?pulse(?:\s+(?:of|is|was))?\s*"
+    rf"(?P<pulse>\d{{1,3}}))?"
+    rf"(?:\s*(?:,|and)?\s*(?P<position>lying|supine|sitting|seated|standing))?"
+    rf"(?:\s*(?:,|and)?\s*(?:measured\s+|taken\s+)?(?:at|from)\s+"
+    rf"(?P<setting>{_MEASUREMENT_PLACE_FRAGMENT}))?"
+    rf"(?:\s*(?:,|and)?\s*at\s+(?P<time>{_CLOCK_FRAGMENT}))?\s*[.!]?$",
+    re.IGNORECASE,
+)
+_DETERMINISTIC_TEMPERATURE_PATTERN: Final = re.compile(
+    rf"^(?:(?:my\s+)?(?:temperature|temp)(?:\s+(?:is|was))?|"
+    rf"i\s+(?:just\s+)?(?:had|measured|recorded)\s+(?:a\s+)?"
+    rf"(?:temperature|temp)(?:\s+of)?)\s+"
+    rf"(?P<value>{_DECIMAL_FRAGMENT})\s*°?\s*"
+    rf"(?P<unit>f|c|fahrenheit|celsius)?"
+    rf"(?:\s*(?:,|and)?\s*(?:measured\s+)?(?:at|from)\s+"
+    rf"{_MEASUREMENT_PLACE_FRAGMENT})?"
+    rf"(?:\s*(?:,|and)?\s*at\s+(?P<time>{_CLOCK_FRAGMENT}))?\s*[.!]?$",
+    re.IGNORECASE,
+)
+_DETERMINISTIC_WEIGHT_PATTERN: Final = re.compile(
+    rf"^(?:(?:please\s+)?(?:add\s+(?:a\s+)?(?:body\s+)?weight\s+(?:of\s+)?|"
+    rf"(?:my\s+)?(?:body\s+)?weight(?:\s+(?:is|was|of))?|"
+    rf"i\s+(?:weigh|weighed))\s+)?"
+    rf"(?P<value>{_DECIMAL_FRAGMENT})\s*"
+    rf"(?P<unit>lbs?|pounds?|kgs?|kilograms?)"
+    rf"(?:\s*[.,]?\s*(?:and\s+)?(?:measured\s+)?(?:at|from)\s+"
+    rf"(?P<setting>{_MEASUREMENT_PLACE_FRAGMENT}))?"
+    rf"(?:\s*(?:,|and)?\s*at\s+(?P<time>{_CLOCK_FRAGMENT}))?\s*[.!]?$",
+    re.IGNORECASE,
+)
+_DETERMINISTIC_DOSE_AMOUNT_FIRST_PATTERN: Final = re.compile(
+    rf"^(?:i\s+)?(?:just\s+)?(?:took|have\s+taken|had)\s+"
+    rf"(?:(?:a\s+)?(?:regular|scheduled|stress|up[-\s]?dose)\s+"
+    rf"(?:daily\s+)?dose\s+of\s+)?"
+    rf"(?P<amount>{_DECIMAL_FRAGMENT})\s*"
+    rf"(?P<unit>mg|mcg|ml|tablets?)\s+(?:of\s+)?"
+    rf"(?P<medication>[a-z][a-z0-9' -]{{0,100}}?)"
+    rf"(?:\s+at\s+(?P<time>{_CLOCK_FRAGMENT}))?"
+    rf"(?:[.!]?\s*(?:this\s+was\s+)?(?:part\s+of\s+)?(?:my\s+)?"
+    rf"(?:regular|scheduled|stress|up[-\s]?dose)(?:\s+daily)?\s+"
+    rf"(?:dose|dosage))?\s*[.!]?$",
+    re.IGNORECASE,
+)
+_DETERMINISTIC_DOSE_MEDICATION_FIRST_PATTERN: Final = re.compile(
+    rf"^(?:i\s+)?(?:just\s+)?(?:took|have\s+taken|had)\s+(?:my\s+)?"
+    rf"(?P<medication>[a-z][a-z0-9' -]{{0,100}}?)\s+"
+    rf"(?P<amount>{_DECIMAL_FRAGMENT})\s*(?P<unit>mg|mcg|ml|tablets?)"
+    rf"(?:\s+at\s+(?P<time>{_CLOCK_FRAGMENT}))?"
+    rf"(?:[.!]?\s*(?:this\s+was\s+)?(?:part\s+of\s+)?(?:my\s+)?"
+    rf"(?:regular|scheduled|stress|up[-\s]?dose)(?:\s+daily)?\s+"
+    rf"(?:dose|dosage))?\s*[.!]?$",
     re.IGNORECASE,
 )
 
@@ -388,6 +455,198 @@ class ExtractionResult(BaseModel):
     @property
     def usable(self) -> bool:
         return self.outcome is ModelOutcome.OK and bool(self.candidates)
+
+
+@dataclass(frozen=True)
+class DeterministicExtraction:
+    """A high-confidence single-event parse that did not call a model."""
+
+    route: str
+    candidates: list[ValidatedCandidate]
+
+
+def looks_like_deterministic_health_entry(message: str) -> bool:
+    """Whether ``message`` has one of the deliberately narrow fast-path shapes."""
+
+    text = message.strip()
+    if looks_like_prompt_injection(text) or has_negation(text) or is_hypothetical(text):
+        return False
+    if any(
+        pattern.fullmatch(text) is not None
+        for pattern in (
+            _DETERMINISTIC_BLOOD_PRESSURE_PATTERN,
+            _DETERMINISTIC_TEMPERATURE_PATTERN,
+            _DETERMINISTIC_WEIGHT_PATTERN,
+        )
+    ):
+        return True
+    for pattern in (
+        _DETERMINISTIC_DOSE_AMOUNT_FIRST_PATTERN,
+        _DETERMINISTIC_DOSE_MEDICATION_FIRST_PATTERN,
+    ):
+        match = pattern.fullmatch(text)
+        if match is not None:
+            # The generic medication capture must not swallow a second event. Known
+            # medication resolution below is another guard, but rejecting connector
+            # clauses here also keeps conversation routing honest.
+            return re.search(r"\b(?:and|also|then|but)\b", match.group("medication")) is None
+    return False
+
+
+def extract_deterministically(
+    session: Session,
+    *,
+    owner_id: uuid.UUID,
+    message: str,
+    timezone: str,
+    now: datetime,
+) -> DeterministicExtraction | None:
+    """Parse complete simple facts without paying model latency.
+
+    This is an optimization over the normal extraction path, not a second trust
+    model. It emits :class:`ExtractedCandidate` objects and runs the same deterministic
+    validator used for model output. The result remains a confirmation-required draft.
+    Any extra clause, unknown medication, negation, hypothetical, or prompt-like text
+    falls through to the existing schema-constrained model path.
+    """
+
+    text = message.strip()
+    if not looks_like_deterministic_health_entry(text):
+        return None
+
+    match = _DETERMINISTIC_BLOOD_PRESSURE_PATTERN.fullmatch(text)
+    if match is not None:
+        candidate = ExtractedCandidate(
+            type=CandidateType.BLOOD_PRESSURE,
+            systolic_mmhg=int(match.group("systolic")),
+            diastolic_mmhg=int(match.group("diastolic")),
+            pulse_bpm=int(match.group("pulse")) if match.group("pulse") else None,
+            local_time=_normalized_clock(match.group("time")),
+            confidence=1.0,
+        )
+        return DeterministicExtraction(
+            route="telegram_fast_blood_pressure",
+            candidates=[
+                _validate_candidate(
+                    session,
+                    candidate,
+                    message=text,
+                    known={},
+                    timezone=timezone,
+                    now=now,
+                    owner_id=owner_id,
+                )
+            ],
+        )
+
+    match = _DETERMINISTIC_TEMPERATURE_PATTERN.fullmatch(text)
+    if match is not None:
+        unit = match.group("unit")
+        normalized_unit = (
+            "f" if unit and unit.lower() in {"f", "fahrenheit"} else "c" if unit else None
+        )
+        candidate = ExtractedCandidate(
+            type=CandidateType.TEMPERATURE,
+            temperature_value=_normalized_decimal(match.group("value")),
+            temperature_unit=normalized_unit,
+            local_time=_normalized_clock(match.group("time")),
+            confidence=1.0,
+        )
+        return DeterministicExtraction(
+            route="telegram_fast_temperature",
+            candidates=[
+                _validate_candidate(
+                    session,
+                    candidate,
+                    message=text,
+                    known={},
+                    timezone=timezone,
+                    now=now,
+                    owner_id=owner_id,
+                )
+            ],
+        )
+
+    match = _DETERMINISTIC_WEIGHT_PATTERN.fullmatch(text)
+    if match is not None:
+        candidate = ExtractedCandidate(
+            type=CandidateType.WEIGHT,
+            weight_value=_normalized_decimal(match.group("value")),
+            weight_unit=_WEIGHT_UNIT_ALIASES[match.group("unit").lower()].value,
+            local_time=_normalized_clock(match.group("time")),
+            confidence=1.0,
+        )
+        return DeterministicExtraction(
+            route="telegram_fast_weight",
+            candidates=[
+                _validate_candidate(
+                    session,
+                    candidate,
+                    message=text,
+                    known={},
+                    timezone=timezone,
+                    now=now,
+                    owner_id=owner_id,
+                )
+            ],
+        )
+
+    match = _DETERMINISTIC_DOSE_AMOUNT_FIRST_PATTERN.fullmatch(
+        text
+    ) or _DETERMINISTIC_DOSE_MEDICATION_FIRST_PATTERN.fullmatch(text)
+    if match is None:  # pragma: no cover - guarded by the shape check above
+        return None
+
+    medications = list(session.scalars(select(Medication).where(Medication.owner_id == owner_id)))
+    known = {medication.normalized_name: medication for medication in medications}
+    medication = _resolve_known_medication(match.group("medication"), medications)
+    if medication is None:
+        return None
+    raw_unit = match.group("unit").lower()
+    unit = "tablet" if raw_unit in {"tablet", "tablets"} else raw_unit
+    candidate = ExtractedCandidate(
+        type=CandidateType.DOSE,
+        medication_name=medication.normalized_name,
+        amount=_normalized_decimal(match.group("amount")),
+        unit=unit,
+        route=medication.default_route.value,
+        dose_category=explicit_dose_category(text),
+        local_time=_normalized_clock(match.group("time")),
+        confidence=1.0,
+    )
+    return DeterministicExtraction(
+        route="telegram_fast_dose",
+        candidates=[
+            _validate_candidate(
+                session,
+                candidate,
+                message=text,
+                known=known,
+                timezone=timezone,
+                now=now,
+                owner_id=owner_id,
+            )
+        ],
+    )
+
+
+def _normalized_decimal(value: str) -> str:
+    return f"0{value}" if value.startswith(".") else value
+
+
+def _normalized_clock(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return re.sub(r"([ap])\.?m\.?", r"\1m", value, flags=re.IGNORECASE)
+
+
+def _resolve_known_medication(raw_name: str, medications: list[Medication]) -> Medication | None:
+    normalized = " ".join(raw_name.lower().split())
+    exact = [item for item in medications if item.normalized_name == normalized]
+    if len(exact) == 1:
+        return exact[0]
+    prefixes = [item for item in medications if item.normalized_name.startswith(f"{normalized} ")]
+    return prefixes[0] if len(prefixes) == 1 else None
 
 
 def looks_like_prompt_injection(text: str) -> bool:

@@ -62,6 +62,9 @@ def test_base_compose_defaults_to_host_native_ollama() -> None:
     for name in ("api", "worker"):
         endpoint = services[name]["environment"]["HC_OLLAMA_BASE_URL"]
         assert "host.docker.internal:11434" in endpoint
+        assert services[name]["environment"]["HC_OLLAMA_KEEP_ALIVE_S"] == (
+            "${HC_OLLAMA_KEEP_ALIVE_S:-300}"
+        )
 
 
 def test_api_receives_the_same_garmin_schedule_defaults_as_the_isolated_worker() -> None:

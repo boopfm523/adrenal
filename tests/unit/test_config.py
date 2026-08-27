@@ -97,8 +97,15 @@ def test_defaults_are_safe() -> None:
     assert settings.debug is False
     assert settings.environment is Environment.DEV
     assert settings.ollama_model == "qwen3:30b"
+    assert settings.ollama_keep_alive_s == 300
     assert settings.garmin_sync_hour_local == 12
     assert settings.garmin_sync_interval_hours == 12
+
+
+@pytest.mark.parametrize("seconds", [-1, 3601])
+def test_ollama_keep_alive_is_bounded(seconds: int) -> None:
+    with pytest.raises(ValueError):
+        _settings(ollama_keep_alive_s=seconds)
 
 
 def test_garmin_sync_interval_must_divide_the_owner_local_day() -> None:

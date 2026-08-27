@@ -101,6 +101,15 @@ the full 262,144-token context and approximately 45 GB. The checked-in context b
 prevents that. A multi-event extraction took 61.968 seconds, so extraction now has a
 hard 120-second read ceiling; ordinary extraction cases were generally 34–36 seconds.
 
+For owner acceptance testing, `HC_OLLAMA_KEEP_ALIVE_S` may be raised from its
+five-minute default to at most 3600 seconds. HealthCurve sends this bounded value only
+on text-model API requests to host-native Ollama; it does not start the optional
+Compose Ollama service and does not pin the separate vision model. This can remove a
+cold-load delay between sporadic requests, but it cannot remove the dense model's
+34–36 second generation cost. Clear single Telegram temperature, blood-pressure,
+weight, and explicit-dose statements therefore use deterministic validation and the
+same confirmation-draft contract before model fallback.
+
 This is a technical **PASS**, not an activation decision. The candidate was accurate
 on the fixed synthetic gates but is materially slower than the current sparse
 `qwen3:30b` model. Keep `hc-xtnt` open and leave the current model selected until the

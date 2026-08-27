@@ -236,6 +236,10 @@ Message your bot:
 | `Add a Bead for hydration tracking` | Use the same locally evaluated, bounded feature-request queue as `/bd-add` |
 | `Episode starting` / `The episode is over` | Open an episode with an unspecified trigger, or close the current episode |
 | `Add a body weight of 179.6 lbs` | A confirmable home weight draft; `lb`, `lbs`, `kg`, and `kgs` are accepted |
+| `182.3 lbs. measured at home` | The same confirmable weight draft without invoking the language model |
+| `My temperature was 98.6` | A confirmable temperature draft; the non-overlapping value range infers °F and shows that inference |
+| `Blood pressure of 120/80 with pulse 62 at home` | A confirmable blood-pressure draft without invoking the language model |
+| `I took 5 mg hydrocortisone at 15:00` | A confirmable dose draft when the medication name resolves uniquely |
 | `I just had a symptom of dizziness at 14:30` | A confirmable symptom draft; without a time the confirmation visibly uses message time |
 | `Took 15mg hydrocortisone at 7:08, slept badly` | A draft listing a dose *and* a symptom |
 
@@ -304,6 +308,16 @@ side, and the poller will keep retrying with backoff until it can.
 Expected. The poller holds a 25-second connection open; a message arriving mid-window
 is picked up immediately, but a reply can lag slightly. This is the trade for needing
 no public endpoint.
+
+Clear single temperature, blood-pressure, weight, and explicit-dose statements take a
+deterministic confirmation-draft path and do not call Ollama. Compound, negated,
+hypothetical, unknown-medication, or otherwise unsupported wording intentionally falls
+through to schema-constrained extraction. Route and latency are logged without message
+text or health values. `HC_OLLAMA_KEEP_ALIVE_S` controls how long only the host-native
+text model remains resident after a model-backed request (default 300 seconds, allowed
+range 0–3600). A longer value reduces cold starts but keeps roughly 30 GB allocated;
+it neither starts the optional Compose Ollama service nor changes vision-model
+residency.
 
 **Nothing arrives while the machine is asleep.**
 Also expected, and the main practical cost of polling. Telegram holds updates for about

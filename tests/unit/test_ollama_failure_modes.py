@@ -26,7 +26,9 @@ SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 
 
 def _client() -> OllamaClient:
-    return OllamaClient(Settings(ollama_base_url="http://ollama:11434"))
+    return OllamaClient(
+        Settings(_env_file=None, ollama_base_url="http://ollama:11434")  # type: ignore[call-arg]
+    )
 
 
 def _call(client: OllamaClient) -> Any:
@@ -211,6 +213,23 @@ def test_schema_is_sent_to_constrain_decoding(monkeypatch: pytest.MonkeyPatch) -
     assert seen["options"]["temperature"] == 0.0
     assert seen["options"]["num_ctx"] == 24_576
     assert seen["stream"] is False
+    assert seen["keep_alive"] == 300
+
+
+def test_text_model_keep_alive_is_bounded_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "{}"}})
+
+    _patch_transport(monkeypatch, handler)
+    client = OllamaClient(Settings(ollama_base_url="http://ollama:11434", ollama_keep_alive_s=1800))
+    _call(client)
+
+    assert seen["keep_alive"] == 1800
 
 
 def test_generation_limits_are_forwarded_as_ollama_options(
@@ -283,6 +302,7 @@ def test_vision_image_is_data_on_the_selected_private_model(
     assert seen["model"] == "qwen3-vl:30b"
     assert b64decode(seen["messages"][1]["images"][0]) == image
     assert "images" not in seen["messages"][0]
+    assert "keep_alive" not in seen
 
 
 # ---------------------------------------------------------------------------
