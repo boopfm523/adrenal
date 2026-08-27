@@ -242,7 +242,7 @@ Recording commands (these work even if the language model is offline):
 /dose <amount> <medication> [HH:MM] - record a dose
 /bp <systolic>/<diastolic> [pulse] [lying|sitting|standing] [HH:MM] - record blood pressure
 /weight <value> <lb|lbs|kg|kgs> [HH:MM] - record body weight
-/temperature <value> <F|C> [HH:MM] - record body temperature
+/temperature <value> [F|C] [HH:MM] - record body temperature (unit inferred when omitted)
 /meal [XS|S|M|L|XL|XXL] [HH:MM] - record a meal (size is optional)
 /symptom <name> [0-10] [category=<category>] - record a symptom
 /diary <text> [--time=HH:MM] [--sensitive] - record a diary entry
@@ -1266,19 +1266,35 @@ def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetim
 
 
 def _cmd_temperature(session: Session, owner: Owner, args: list[str], *, now: datetime) -> Reply:
-    usage = "Usage: /temperature <value> <F|C> [HH:MM]\nExample: /temperature 98.6 F 08:15"
-    if len(args) < 2:
+    usage = "Usage: /temperature <value> [F|C] [HH:MM]\nExample: /temperature 98.6 08:15"
+    if not args or len(args) > 3:
         return Reply(usage)
     try:
         value = Decimal(args[0])
-        unit = TemperatureUnit(args[1].lower().replace("°", ""))
-    except (InvalidOperation, ValueError):
+    except InvalidOperation:
         return Reply(usage)
+
+    remaining = args[1:]
+    unit: TemperatureUnit | None = None
+    inferred_unit = False
+    if remaining:
+        try:
+            unit = TemperatureUnit(remaining[0].lower().replace("°", ""))
+        except ValueError:
+            pass
+        else:
+            remaining = remaining[1:]
+    if unit is None:
+        unit = vitals.infer_temperature_unit(value)
+        inferred_unit = unit is not None
+
+    if unit is None:
+        return Reply("Temperature must be between 25 and 45 °C (77 and 113 °F).")
     if not vitals.temperature_in_range(value, unit):
         return Reply("Temperature must be between 25 and 45 °C (77 and 113 °F).")
-    if len(args) > 3:
+    if len(remaining) > 1:
         return Reply(usage)
-    time_token = args[2] if len(args) == 3 else None
+    time_token = remaining[0] if remaining else None
     local = _local_now(owner, now)
     if time_token:
         parsed = _parse_time_token(time_token, local)
@@ -1292,6 +1308,7 @@ def _cmd_temperature(session: Session, owner: Owner, args: list[str], *, now: da
         local_time=local,
         timezone=owner.default_timezone,
         confidence=1.0,
+        flags=[FlagCode.INFERRED_TEMPERATURE_UNIT] if inferred_unit else [],
     )
     draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
     return _draft_reply(draft, [candidate])
@@ -1678,6 +1695,10 @@ def _edit_vital_candidate(
             except InvalidOperation:
                 return Reply("I couldn't read that temperature. Example: /edit 1 value 98.6")
             unit = candidate.temperature_unit
+            if FlagCode.INFERRED_TEMPERATURE_UNIT in candidate.flags:
+                unit = vitals.infer_temperature_unit(amount)
+                if unit is not None:
+                    changes["temperature_unit"] = unit
             if unit is None or not vitals.temperature_in_range(amount, unit):
                 return Reply("Temperature must be between 25 and 45 °C (77 and 113 °F).")
             changes["temperature_value"] = amount
@@ -1695,6 +1716,8 @@ def _edit_vital_candidate(
 
     edited = ValidatedCandidate.model_validate({**candidate.model_dump(mode="python"), **changes})
     flags = list(edited.flags)
+    if edited.type is CandidateType.TEMPERATURE and field == "unit":
+        _remove_flags(flags, FlagCode.INFERRED_TEMPERATURE_UNIT)
     _remove_flags(
         flags,
         FlagCode.MISSING_VITAL_VALUE,
@@ -1986,6 +2009,9 @@ _FLAG_EXPLANATIONS: Final[dict[FlagCode, str]] = {
         "a required blood-pressure, weight, or temperature value is missing"
     ),
     FlagCode.INVALID_VITAL_VALUE: "a blood-pressure, weight, or temperature value needs correction",
+    FlagCode.INFERRED_TEMPERATURE_UNIT: (
+        "you omitted the temperature unit, so it was inferred from the value; confirm it"
+    ),
 }
 
 
@@ -2188,7 +2214,12 @@ def _describe(candidate: ValidatedCandidate) -> str:
             celsius = vitals.display_temperature_c(
                 candidate.temperature_value, candidate.temperature_unit
             )
-            return f"Temperature: {fahrenheit} °F ({celsius} °C) at {when}"
+            inferred = (
+                f" · {candidate.temperature_unit.value.upper()} inferred from value"
+                if FlagCode.INFERRED_TEMPERATURE_UNIT in candidate.flags
+                else ""
+            )
+            return f"Temperature: {fahrenheit} °F ({celsius} °C){inferred} at {when}"
         case CandidateType.MEAL:
             size = f" · size {candidate.meal_size.value.upper()}" if candidate.meal_size else ""
             return f"Meal{size} at {when}"

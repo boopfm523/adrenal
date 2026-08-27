@@ -267,6 +267,15 @@ def test_vital_commands_remain_drafts_until_confirmed_and_support_safe_edits(
         assert temperature.confirmation_state.value == "confirmed_from_draft"
         assert temperature_confirmed.text.startswith("Recorded:")
 
+        inferred_reply = handle_message(session, owner, text="/temperature 98.6 08:31", now=NOW)
+        assert inferred_reply.draft_id is not None
+        assert "Temperature: 98.6 °F (37.0 °C) · F inferred from value" in inferred_reply.text
+        assert "you omitted the temperature unit" in inferred_reply.text
+
+        invalid_reply = handle_message(session, owner, text="/temperature 60", now=NOW)
+        assert invalid_reply.draft_id is None
+        assert "between 25 and 45 °C (77 and 113 °F)" in invalid_reply.text
+
 
 def test_explicit_symptom_category_is_confirmed_and_editable(engine: Engine) -> None:
     owner = Owner(

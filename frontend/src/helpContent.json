@@ -82,11 +82,11 @@
     },
     {
       "command": "/temperature",
-      "syntax": "/temperature <value> <F|C> [HH:MM]",
-      "example": "/temperature 98.6 F 08:15",
-      "purpose": "Prepare a measured body-temperature fact while preserving whether you entered Fahrenheit or Celsius.",
+      "syntax": "/temperature <value> [F|C] [HH:MM]",
+      "example": "/temperature 98.6 08:15",
+      "purpose": "Prepare a measured body-temperature fact. If you omit the unit, HealthCurve infers Celsius for 25–45 and Fahrenheit for 77–113 and labels the inference in the draft.",
       "result": "Recorded-fact draft",
-      "confirmation": "Review the value, unit, and experienced time, then press Confirm. HealthCurve displays Fahrenheit first with Celsius in parentheses and does not diagnose fever."
+      "confirmation": "Review the value, inferred or explicit unit, and experienced time, then press Confirm. HealthCurve displays Fahrenheit first with Celsius in parentheses and does not diagnose fever."
     },
     {
       "command": "/bd-list",
