@@ -2,34 +2,34 @@
   "candidate": {
     "base_url": "http://127.0.0.1:11434",
     "context_window": 24576,
-    "generated_at": "2026-08-26T22:11:37.665690Z",
-    "latency_ms": 1025,
+    "generated_at": "2026-08-27T01:09:38.587170Z",
+    "latency_ms": 1002,
     "minimum_ollama_version": "0.32.12",
     "model_digest": "8f5fb6b71ea00052cbe8545738c55ce61112c4e571cb60ca4dad00b131766039",
     "model_name": "qwen3.8:27b-q8_0",
-    "ollama_version": "0.32.15",
+    "ollama_version": "0.33.1",
     "structured_output": true,
     "thinking_enabled": false
   },
-  "generated_at": "2026-08-26T22:24:28.177046Z",
+  "generated_at": "2026-08-27T01:22:26.454338Z",
   "passed": true,
   "suites": [
     {
-      "duration_ms": 579489,
+      "duration_ms": 559725,
       "failure_detail": null,
       "name": "extraction",
       "passed": true,
       "report_path": "evals/candidates/qwen3.8-27b-q8_0/extraction.json"
     },
     {
-      "duration_ms": 111784,
+      "duration_ms": 129174,
       "failure_detail": null,
       "name": "chatbot",
       "passed": true,
       "report_path": "evals/candidates/qwen3.8-27b-q8_0/chatbot.json"
     },
     {
-      "duration_ms": 79273,
+      "duration_ms": 78963,
       "failure_detail": null,
       "name": "analysis",
       "passed": true,

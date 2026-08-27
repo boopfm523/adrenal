@@ -87,17 +87,17 @@ The local Q8 artifact passed all synthetic HealthCurve gates with thinking disab
 
 - model: `qwen3.8:27b-q8_0`
 - immutable digest: `8f5fb6b71ea00052cbe8545738c55ce61112c4e571cb60ca4dad00b131766039`
-- evaluated runtime: Ollama 0.32.15 (artifact-declared minimum 0.32.12)
+- evaluated runtime: Ollama 0.33.1 (artifact-declared minimum 0.32.12)
 - bounded context: 24,576 tokens, approximately 30 GB resident and 100% GPU in
   `ollama ps`
-- extraction: pass, all field scores 1.000, 15 cases in 579.489 seconds
-- chatbot: pass, 5 cases in 111.784 seconds
-- generated analysis: pass, 4 cases in 79.273 seconds
+- extraction: pass, all field scores 1.000, 15 cases in 559.725 seconds
+- chatbot: pass, 5 cases in 129.174 seconds
+- generated analysis: pass, 4 cases in 78.963 seconds
 
 The unbounded Qwen3.8 default was also measured during investigation: Ollama allocated
 the full 262,144-token context and approximately 45 GB. The checked-in context bound
-prevents that. A multi-event extraction took 61.858 seconds, so extraction now has a
-hard 120-second read ceiling; ordinary extraction cases were generally 35–37 seconds.
+prevents that. A multi-event extraction took 61.968 seconds, so extraction now has a
+hard 120-second read ceiling; ordinary extraction cases were generally 34–36 seconds.
 
 This is a technical **PASS**, not an activation decision. The candidate was accurate
 on the fixed synthetic gates but is materially slower than the current sparse

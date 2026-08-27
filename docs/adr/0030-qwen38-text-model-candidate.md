@@ -61,8 +61,9 @@ Negative:
   appear after qualification.
 - Qualification does not improve the existing image/PDF workflow.
 
-The 2026-08-26 qualification passed extraction, chatbot, and generated-analysis gates
-for digest `8f5fb6b71ea00052cbe8545738c55ce61112c4e571cb60ca4dad00b131766039`.
+The 2026-08-26 qualification, repeated after upgrading the runtime to Ollama 0.33.1,
+passed extraction, chatbot, and generated-analysis gates for digest
+`8f5fb6b71ea00052cbe8545738c55ce61112c4e571cb60ca4dad00b131766039`.
 The candidate required a 24,576-token default context bound to avoid a 45 GB
 full-context allocation and took roughly 35–37 seconds for ordinary extraction cases.
 Therefore this ADR remains Proposed pending an explicit owner decision about the
