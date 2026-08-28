@@ -154,7 +154,7 @@ describe("Health data page", () => {
     expect(within(garminTable).getByText("Untimed aggregate · waking period")).toBeVisible();
     expect(within(garminTable).queryByText(/garmin_score/)).not.toBeInTheDocument();
     expect(within(garminTable).getByRole("cell", { name: /Sleep score: 82/ })).toBeVisible();
-    expect(within(garminTable).getByRole("cell", { name: /Distance: 3\.1 mi/ })).toBeVisible();
+    expect(within(garminTable).getByRole("cell", { name: /Distance: 3\.10 mi/ })).toBeVisible();
     expect(within(garminTable).getByText(/Garmin provider-imported recorded facts/)).toBeVisible();
     expect(within(garminTable).queryByRole("columnheader", { name: "Source and provenance" })).not.toBeInTheDocument();
     expect(within(garminTable).queryByText("Garmin recorded observation")).not.toBeInTheDocument();

@@ -13,6 +13,7 @@ import type {
 } from "../api/client";
 import {
   formatDecimal,
+  formatDistanceMiles,
   formatMeasurement,
   garminMetricLabel,
 } from "../format";
@@ -867,7 +868,7 @@ function activityIntervals(records: GarminRecord[]): ActivityInterval[] {
       label: activityLabel(record.activity_type, family),
       family,
       duration: activityDuration(durationSeconds),
-      distance: record.distance_miles == null ? null : `${formatDecimal(record.distance_miles)} mi`,
+      distance: record.distance_miles == null ? null : `${formatDistanceMiles(record.distance_miles)} mi`,
       location: record.activity_location_name ?? null,
       weather: activityWeather(record),
       source: `Garmin ${record.provenance.confirmation_state.replaceAll("_", " ")}`,

@@ -9,6 +9,7 @@ from datetime import date
 import pdfplumber
 
 from healthcurve.reports.models import ReportSnapshot
+from healthcurve.reports.presentation import presentation
 from healthcurve.reports.rendering import render, render_csv, render_html, render_json
 from healthcurve.reports.service import canonical_payload, checksum
 
@@ -162,3 +163,31 @@ def test_dense_wearable_samples_are_summarized_instead_of_printed_one_per_row() 
     assert "3,000" in text
     assert "avg 79.5; low 60; high 99" in text
     assert "garmin-2999" not in text
+
+
+def test_activity_distance_is_presented_with_two_decimal_places() -> None:
+    payload = {
+        "snapshot_content": {
+            "fact": [
+                {
+                    "record_type": "garmin_activity",
+                    "local_time": "2026-08-09T12:00:00",
+                    "sport": "walking",
+                    "title": "Synthetic walk",
+                    "distance_miles": "1.2555",
+                    "elapsed_seconds": 2235,
+                }
+            ],
+            "plan": [],
+            "patient_note": [],
+            "ai": [],
+        },
+        "metric_values": {},
+        "selected_sections": ["wearables"],
+    }
+
+    rendered = presentation(payload)
+    activity_table = next(
+        table for table in rendered["tables"] if table["title"] == "Garmin activities"
+    )
+    assert activity_table["rows"][0][3] == "1.26 mi; 2235"

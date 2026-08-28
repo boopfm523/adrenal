@@ -835,11 +835,11 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll(".healthcurve-activity-band")).toHaveLength(1);
     expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Recorded activity interval");
     expect(screen.getByRole("img")).toHaveAccessibleName(/1 recorded activity/);
-    expect(screen.getByRole("img")).toHaveTextContent(/Walking; 37m 15s · 1\.2555 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F/);
+    expect(screen.getByRole("img")).toHaveTextContent(/Walking; 37m 15s · 1\.26 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F/);
     const activitySection = screen.getByRole("heading", { name: "Recorded activities" }).closest("section");
-    expect(activitySection).toHaveTextContent("Walking — 37m 15s · 1.2555 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F · 65% humidity · 0.0 mm precipitation · 12 km/h wind · Cloudy · Garmin provider imported");
+    expect(activitySection).toHaveTextContent("Walking — 37m 15s · 1.26 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F · 65% humidity · 0.0 mm precipitation · 12 km/h wind · Cloudy · Garmin provider imported");
     expect(activitySection).not.toHaveTextContent("Cycling");
-    expect(hoverAt(75).tooltip).toHaveTextContent("Walking: 37m 15s · 1.2555 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F");
+    expect(hoverAt(75).tooltip).toHaveTextContent("Walking: 37m 15s · 1.26 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F");
     expect(hoverAt(98).tooltip).not.toHaveTextContent("Walking:");
   });
 

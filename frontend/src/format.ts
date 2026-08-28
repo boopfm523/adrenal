@@ -49,6 +49,32 @@ export function formatDecimal(value: NumericDisplayValue, missing = "Unavailable
   return `${sign}${integer}${fraction === "" ? "" : `.${fraction}`}`;
 }
 
+/**
+ * Format recorded miles with the two fractional digits used by activity views.
+ * Rounding is performed on the decimal string so API values never pass through
+ * IEEE-754 before presentation.
+ */
+export function formatDistanceMiles(value: NumericDisplayValue, missing = "Unavailable"): string {
+  if (value == null) return missing;
+  if (typeof value === "number" && !Number.isFinite(value)) return missing;
+  const raw = expandScientificNotation(String(value).trim());
+  const match = /^([+-]?)(\d+)(?:\.(\d*))?$/.exec(raw);
+  if (match === null) return raw;
+
+  const integer = (match[2] ?? "0").replace(/^0+(?=\d)/, "");
+  const fraction = match[3] ?? "";
+  const keptFraction = fraction.padEnd(2, "0").slice(0, 2);
+  const roundUp = (fraction[2] ?? "0") >= "5";
+  let hundredths = BigInt(`${integer}${keptFraction}`);
+  if (roundUp) hundredths += 1n;
+
+  const digits = hundredths.toString().padStart(3, "0");
+  const whole = digits.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const roundedFraction = digits.slice(-2);
+  const sign = hundredths === 0n ? "" : match[1] === "-" ? "-" : "";
+  return `${sign}${whole}.${roundedFraction}`;
+}
+
 export function humanizeUnit(unit: string | null | undefined): string {
   if (unit == null || unit.trim() === "") return "unit not recorded";
   const normalized = unit.trim();
@@ -86,7 +112,7 @@ export function formatGarminDailyValue(metricType: string | null | undefined, va
 export function formatQuantitativeText(value: string): string {
   return value.replace(
     /(-?\d+(?:\.\d+)?)\s+(breaths\/min|mg|mcg|ml|mL|tablets?|lb|kg|mmHg|bpm|steps|mi|ms)\b/g,
-    (_match, number: string, unit: string) => `${formatDecimal(number)} ${humanizeUnit(unit)}`,
+    (_match, number: string, unit: string) => `${unit === "mi" ? formatDistanceMiles(number) : formatDecimal(number)} ${humanizeUnit(unit)}`,
   );
 }
 

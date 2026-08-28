@@ -43,6 +43,29 @@ def _hours(seconds: object) -> str:
     return f"{_value(rounded)} hours"
 
 
+def _distance_miles(value: object) -> str | None:
+    if value is None or value == "":
+        return None
+    try:
+        rounded = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        return f"{value} mi"
+    return f"{rounded:.2f} mi"
+
+
+def _activity_details(record: dict[str, Any]) -> str:
+    details = []
+    distance = _distance_miles(record.get("distance_miles"))
+    if distance is not None:
+        details.append(distance)
+    details.extend(
+        _value(record.get(key))
+        for key in ("elapsed_seconds", "average_heart_rate", "maximum_heart_rate")
+        if record.get(key) not in {None, ""}
+    )
+    return "; ".join(details)
+
+
 def _table(
     title: str, headers: list[str], rows: list[list[str]], empty: str, section: str
 ) -> dict[str, Any]:
@@ -328,13 +351,7 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
             _time(record),
             _value(record.get("sport")).title(),
             _value(record.get("title")),
-            _notes(
-                record,
-                "distance_miles",
-                "elapsed_seconds",
-                "average_heart_rate",
-                "maximum_heart_rate",
-            ),
+            _activity_details(record),
         ]
         for record in by_type["garmin_activity"]
     ]
