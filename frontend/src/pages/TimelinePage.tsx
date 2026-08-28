@@ -24,6 +24,9 @@ const eventTypes = [
   ["blood_pressure", "Blood pressure"],
   ["weight", "Weight"],
   ["temperature", "Body temperature"],
+  ["garmin_activity", "Garmin activities"],
+  ["garmin_sleep", "Garmin sleep"],
+  ["garmin_daily", "Garmin daily summaries"],
 ] as const;
 
 function localTime(value: string): string {

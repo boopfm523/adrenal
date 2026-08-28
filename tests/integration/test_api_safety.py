@@ -2425,7 +2425,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         "Average sleeping respiration: 12.8 breaths/min",
         "Lowest respiration: 10.1 breaths/min",
         "Highest respiration: 19.2 breaths/min",
-        "Activity: Walking; 1.0000 mi",
+        "Activity: Walking; 30m; 1.0000 mi",
     }
     assert all(
         item["provenance"]["source_type"] == "provider" for item in garmin_timeline.json()["items"]

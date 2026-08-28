@@ -158,8 +158,10 @@ commit, Bead, screenshot, or chat.
 The Settings page shows safe connection state, last success, capability availability,
 latest warning codes, a manual-sync button, and an impact preview. Health data shows a
 compact table in experienced-time order with Garmin attribution and explicit
-missingness. The Timeline, export, data-quality page, and wearable report section use
-the same current recorded facts.
+missingness. The Timeline shows imported activities with their provider activity type,
+start time, elapsed duration, and optional distance, and offers separate Garmin
+activity, sleep, and daily-summary filters. Exports, the data-quality page, and the
+wearable report section use the same current recorded facts.
 
 ## Scheduling and reconciliation
 

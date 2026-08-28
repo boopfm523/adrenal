@@ -77,6 +77,25 @@ describe("Timeline page", () => {
     expect(within(timeline).queryByText(/garmin_score/)).not.toBeInTheDocument();
   });
 
+  it("offers Garmin record filters and applies the activity filter", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      timezone: "America/New_York",
+      page: { page: 1, page_size: 25, total_items: 0, total_pages: 1 },
+      items: [],
+    }), { headers: { "Content-Type": "application/json" } }));
+
+    renderPage();
+
+    expect(screen.getByRole("option", { name: "Garmin activities" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Garmin sleep" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Garmin daily summaries" })).toBeVisible();
+    await userEvent.selectOptions(screen.getByLabelText("Record type"), "garmin_activity");
+    await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => requestUrl(input).includes("types=garmin_activity"))).toBe(true);
+    });
+  });
+
   it("shows provenance and only requests sensitive entries after explicit reveal", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       timezone: "America/New_York",

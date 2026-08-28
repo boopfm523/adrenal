@@ -706,11 +706,30 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             return f"Sleep: {duration_text}; {score_text}"
         case "garmin_activity":
             sport = row.sport.replace("_", " ").title()  # type: ignore[attr-defined]
+            elapsed = row.elapsed_seconds  # type: ignore[attr-defined]
+            duration_seconds = (
+                int(elapsed)
+                if elapsed is not None
+                else max(0, int((row.ended_at - row.occurred_at).total_seconds()))  # type: ignore[attr-defined]
+            )
             distance = row.distance_miles  # type: ignore[attr-defined]
             distance_text = "distance unavailable" if distance is None else f"{distance} mi"
-            return f"Activity: {sport}; {distance_text}"
+            return f"Activity: {sport}; {_duration_text(duration_seconds)}; {distance_text}"
         case _:  # pragma: no cover
             return type_name
+
+
+def _duration_text(total_seconds: int) -> str:
+    hours, remainder = divmod(max(0, total_seconds), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts: list[str] = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds or not parts:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 
 def _owned_symptom(session: DbSession, owner_id: uuid.UUID, event_id: uuid.UUID) -> SymptomEvent:
