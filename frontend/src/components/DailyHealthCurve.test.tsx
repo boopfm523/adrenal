@@ -803,6 +803,20 @@ describe("Daily HealthCurve", () => {
       ended_at: "2026-03-08T06:37:15Z",
       duration_seconds: 2235,
       activity_type: "walking",
+      activity_environment: "outdoor",
+      activity_location_name: "Synthetic City, ST",
+      activity_weather: {
+        observed_at: "2026-03-08T06:00:00Z",
+        interval_ended_at: "2026-03-08T06:37:15Z",
+        temperature_c: "31.00",
+        apparent_temperature_c: "36.00",
+        humidity_percent: "65.00",
+        precipitation_mm: "0.00",
+        conditions: "Cloudy",
+        wind_speed_kph: "12.00",
+        wind_gust_kph: "20.00",
+        provider: "open-meteo",
+      },
       distance_miles: "1.2555",
       metric_type: null,
       value: null,
@@ -821,11 +835,11 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll(".healthcurve-activity-band")).toHaveLength(1);
     expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Recorded activity interval");
     expect(screen.getByRole("img")).toHaveAccessibleName(/1 recorded activity/);
-    expect(screen.getByRole("img")).toHaveTextContent(/Walking; 37m 15s · 1\.2555 mi/);
+    expect(screen.getByRole("img")).toHaveTextContent(/Walking; 37m 15s · 1\.2555 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F/);
     const activitySection = screen.getByRole("heading", { name: "Recorded activities" }).closest("section");
-    expect(activitySection).toHaveTextContent("Walking — 37m 15s · 1.2555 mi · Garmin provider imported");
+    expect(activitySection).toHaveTextContent("Walking — 37m 15s · 1.2555 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F · 65% humidity · 0.0 mm precipitation · 12 km/h wind · Cloudy · Garmin provider imported");
     expect(activitySection).not.toHaveTextContent("Cycling");
-    expect(hoverAt(75).tooltip).toHaveTextContent("Walking: 37m 15s · 1.2555 mi");
+    expect(hoverAt(75).tooltip).toHaveTextContent("Walking: 37m 15s · 1.2555 mi · Synthetic City, ST · Very hot · 88°F · feels like 97°F");
     expect(hoverAt(98).tooltip).not.toHaveTextContent("Walking:");
   });
 

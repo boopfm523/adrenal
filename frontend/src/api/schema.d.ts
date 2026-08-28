@@ -2122,6 +2122,8 @@ export interface components {
         };
         /** ContextIn */
         ContextIn: {
+            /** Apparent Temperature */
+            apparent_temperature?: number | string | null;
             /** Coarse Location Label */
             coarse_location_label?: string | null;
             /** Conditions */
@@ -2153,15 +2155,23 @@ export interface components {
             time: components["schemas"]["EventTimeIn"];
             /** Weather Confidence */
             weather_confidence?: number | string | null;
+            /** Weather Interval Ended At */
+            weather_interval_ended_at?: string | null;
             /** Weather Observation Id */
             weather_observation_id?: string | null;
             /** Weather Observed At */
             weather_observed_at?: string | null;
             /** Weather Provider */
             weather_provider?: string | null;
+            /** Wind Gust Kph */
+            wind_gust_kph?: number | string | null;
+            /** Wind Speed Kph */
+            wind_speed_kph?: number | string | null;
         };
         /** ContextOut */
         ContextOut: {
+            /** Apparent Temperature */
+            apparent_temperature?: string | null;
             /**
              * Category
              * @default fact
@@ -2205,12 +2215,18 @@ export interface components {
             time: components["schemas"]["EventTimeOut"];
             /** Weather Confidence */
             weather_confidence?: string | null;
+            /** Weather Interval Ended At */
+            weather_interval_ended_at?: string | null;
             /** Weather Observation Id */
             weather_observation_id?: string | null;
             /** Weather Observed At */
             weather_observed_at?: string | null;
             /** Weather Provider */
             weather_provider?: string | null;
+            /** Wind Gust Kph */
+            wind_gust_kph?: string | null;
+            /** Wind Speed Kph */
+            wind_speed_kph?: string | null;
         };
         /** ContextPage */
         ContextPage: {
@@ -2883,6 +2899,32 @@ export interface components {
             /** Utc Offset Minutes */
             utc_offset_minutes: number;
         };
+        /** GarminActivityWeatherOut */
+        GarminActivityWeatherOut: {
+            /** Apparent Temperature C */
+            apparent_temperature_c?: string | null;
+            /** Conditions */
+            conditions?: string | null;
+            /** Humidity Percent */
+            humidity_percent?: string | null;
+            /** Interval Ended At */
+            interval_ended_at?: string | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Precipitation Mm */
+            precipitation_mm?: string | null;
+            /** Provider */
+            provider: string;
+            /** Temperature C */
+            temperature_c?: string | null;
+            /** Wind Gust Kph */
+            wind_gust_kph?: string | null;
+            /** Wind Speed Kph */
+            wind_speed_kph?: string | null;
+        };
         /** GarminDisconnectPreviewOut */
         GarminDisconnectPreviewOut: {
             /** Automatic Fact Rows */
@@ -2911,8 +2953,13 @@ export interface components {
         GarminMetricType: "heart_rate" | "resting_heart_rate" | "hrv" | "respiration_rate" | "stress" | "body_battery" | "steps" | "moderate_intensity_minutes" | "vigorous_intensity_minutes";
         /** GarminRecordOut */
         GarminRecordOut: {
+            /** Activity Environment */
+            activity_environment?: string | null;
+            /** Activity Location Name */
+            activity_location_name?: string | null;
             /** Activity Type */
             activity_type?: string | null;
+            activity_weather?: components["schemas"]["GarminActivityWeatherOut"] | null;
             /** Aggregation */
             aggregation?: string | null;
             /** Awakenings */

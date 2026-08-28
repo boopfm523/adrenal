@@ -35,7 +35,12 @@ from healthcurve.integrations.telegram.draft_jobs import (
     schedule_draft_expiry,
 )
 from healthcurve.integrations.telegram.secrets import TelegramSecrets, load_telegram_secrets
-from healthcurve.integrations.weather.jobs import WEATHER_ENRICHMENT_TASK, make_weather_handler
+from healthcurve.integrations.weather.jobs import (
+    GARMIN_ACTIVITY_WEATHER_TASK,
+    WEATHER_ENRICHMENT_TASK,
+    make_activity_weather_handler,
+    make_weather_handler,
+)
 from healthcurve.logging import configure_logging, get_logger
 from healthcurve.operations import worker as queue_worker
 
@@ -106,6 +111,7 @@ def main() -> int:
         ),
         DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
         WEATHER_ENRICHMENT_TASK: make_weather_handler(),
+        GARMIN_ACTIVITY_WEATHER_TASK: make_activity_weather_handler(),
     }
     schedulers = [schedule_draft_expiry]
     if dose_reminders_enabled(

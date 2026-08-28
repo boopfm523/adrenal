@@ -1,11 +1,12 @@
-"""Privacy-minimized Open-Meteo current-weather adapter."""
+"""Privacy-minimized Open-Meteo current and historical-weather adapter."""
 
 from __future__ import annotations
 
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Final
 
@@ -16,6 +17,7 @@ from healthcurve.operations.jobs import JobQueueError
 
 PROVIDER: Final = "open-meteo"
 ENDPOINT: Final = "https://api.open-meteo.com/v1/forecast"
+HISTORICAL_ENDPOINT: Final = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 CURRENT_FIELDS: Final = (
     "temperature_2m",
     "relative_humidity_2m",
@@ -24,6 +26,18 @@ CURRENT_FIELDS: Final = (
     "weather_code",
 )
 REQUEST_KEYS: Final = frozenset({"latitude", "longitude", "current", "timezone", "timeformat"})
+HISTORICAL_FIELDS: Final = (
+    "temperature_2m",
+    "apparent_temperature",
+    "relative_humidity_2m",
+    "precipitation",
+    "weather_code",
+    "wind_speed_10m",
+    "wind_gusts_10m",
+)
+HISTORICAL_REQUEST_KEYS: Final = frozenset(
+    {"latitude", "longitude", "hourly", "start_date", "end_date", "timezone", "timeformat"}
+)
 TIMEOUT: Final = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
 
 
@@ -46,6 +60,27 @@ class _Response(BaseModel):
     current: _Current
 
 
+class _Hourly(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    time: list[int]
+    temperature_2m: list[Decimal | None]
+    apparent_temperature: list[Decimal | None]
+    relative_humidity_2m: list[Decimal | None]
+    precipitation: list[Decimal | None]
+    weather_code: list[int | None]
+    wind_speed_10m: list[Decimal | None]
+    wind_gusts_10m: list[Decimal | None]
+
+
+class _HistoricalResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timezone: str = Field(min_length=1, max_length=64)
+    hourly_units: dict[str, str]
+    hourly: _Hourly
+
+
 @dataclass(frozen=True, slots=True)
 class WeatherObservation:
     observed_at: datetime
@@ -55,6 +90,21 @@ class WeatherObservation:
     humidity_percent: Decimal | None
     precipitation_mm: Decimal | None
     conditions: str | None
+    confidence: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalWeatherObservation:
+    observed_at: datetime
+    interval_ended_at: datetime
+    timezone: str
+    temperature_c: Decimal | None
+    apparent_temperature_c: Decimal | None
+    humidity_percent: Decimal | None
+    precipitation_mm: Decimal | None
+    conditions: str | None
+    wind_speed_kph: Decimal | None
+    wind_gust_kph: Decimal | None
     confidence: Decimal | None = None
 
 
@@ -78,6 +128,26 @@ def request_parameters(latitude: Decimal, longitude: Decimal) -> dict[str, str]:
         "timeformat": "unixtime",
     }
     if parameters.keys() != REQUEST_KEYS:
+        raise JobQueueError("weather_request_fields_invalid")
+    return parameters
+
+
+def historical_request_parameters(
+    latitude: Decimal, longitude: Decimal, *, started_at: datetime, ended_at: datetime
+) -> dict[str, str]:
+    if started_at.utcoffset() is None or ended_at.utcoffset() is None or ended_at <= started_at:
+        raise JobQueueError("weather_interval_invalid")
+    location = request_parameters(latitude, longitude)
+    parameters = {
+        "latitude": location["latitude"],
+        "longitude": location["longitude"],
+        "hourly": ",".join(HISTORICAL_FIELDS),
+        "start_date": started_at.astimezone(UTC).date().isoformat(),
+        "end_date": ended_at.astimezone(UTC).date().isoformat(),
+        "timezone": "UTC",
+        "timeformat": "unixtime",
+    }
+    if parameters.keys() != HISTORICAL_REQUEST_KEYS:
         raise JobQueueError("weather_request_fields_invalid")
     return parameters
 
@@ -143,6 +213,91 @@ def _parse(response: httpx.Response) -> WeatherObservation:
     )
 
 
+def _average(values: list[Decimal]) -> Decimal | None:
+    return None if not values else sum(values, Decimal(0)) / Decimal(len(values))
+
+
+def _parse_historical(
+    response: httpx.Response, *, started_at: datetime, ended_at: datetime
+) -> HistoricalWeatherObservation:
+    try:
+        body = _HistoricalResponse.model_validate(response.json())
+    except (ValidationError, ValueError) as exc:
+        raise JobQueueError("weather_response_invalid") from exc
+    hourly = body.hourly
+    lengths = {
+        len(hourly.time),
+        len(hourly.temperature_2m),
+        len(hourly.apparent_temperature),
+        len(hourly.relative_humidity_2m),
+        len(hourly.precipitation),
+        len(hourly.weather_code),
+        len(hourly.wind_speed_10m),
+        len(hourly.wind_gusts_10m),
+    }
+    if len(lengths) != 1:
+        raise JobQueueError("weather_response_invalid")
+    expected_units = {
+        "temperature_2m": "°C",
+        "apparent_temperature": "°C",
+        "relative_humidity_2m": "%",
+        "precipitation": "mm",
+        "wind_speed_10m": "km/h",
+        "wind_gusts_10m": "km/h",
+    }
+    for field, expected in expected_units.items():
+        if body.hourly_units.get(field) != expected:
+            raise JobQueueError("weather_units_invalid")
+    start_utc = started_at.astimezone(UTC)
+    end_utc = ended_at.astimezone(UTC)
+    floor_start = start_utc.replace(minute=0, second=0, microsecond=0)
+    ceil_end = end_utc.replace(minute=0, second=0, microsecond=0)
+    if ceil_end < end_utc:
+        ceil_end += timedelta(hours=1)
+    indexes: list[int] = []
+    for index, timestamp in enumerate(hourly.time):
+        try:
+            observed = datetime.fromtimestamp(timestamp, tz=UTC)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise JobQueueError("weather_time_invalid") from exc
+        if floor_start <= observed <= ceil_end:
+            indexes.append(index)
+    if not indexes:
+        raise JobQueueError("weather_data_missing")
+
+    def decimals(values: list[Decimal | None]) -> list[Decimal]:
+        return [value for index in indexes if (value := values[index]) is not None]
+
+    temperatures = decimals(hourly.temperature_2m)
+    apparent = decimals(hourly.apparent_temperature)
+    humidity = decimals(hourly.relative_humidity_2m)
+    precipitation = decimals(hourly.precipitation)
+    wind = decimals(hourly.wind_speed_10m)
+    gusts = decimals(hourly.wind_gusts_10m)
+    codes = [
+        hourly.weather_code[index] for index in indexes if hourly.weather_code[index] is not None
+    ]
+    if not any((temperatures, apparent, humidity, precipitation, wind, gusts, codes)):
+        raise JobQueueError("weather_data_missing")
+    dominant_code = None
+    if codes:
+        counts = Counter(codes)
+        dominant_code = min(counts, key=lambda code: (-counts[code], code))
+    return HistoricalWeatherObservation(
+        observed_at=start_utc,
+        interval_ended_at=end_utc,
+        timezone=body.timezone,
+        temperature_c=_average(temperatures),
+        apparent_temperature_c=(max(apparent) if apparent else None),
+        humidity_percent=_average(humidity),
+        precipitation_mm=(sum(precipitation, Decimal(0)) if precipitation else None),
+        conditions=_condition(dominant_code),
+        wind_speed_kph=_average(wind),
+        wind_gust_kph=(max(gusts) if gusts else None),
+        confidence=None,
+    )
+
+
 def fetch_current(
     latitude: Decimal,
     longitude: Decimal,
@@ -172,4 +327,40 @@ def fetch_current(
         if response.is_error:
             raise JobQueueError("weather_request_rejected")
         return _parse(response)
+    raise JobQueueError("weather_provider_unavailable")  # pragma: no cover
+
+
+def fetch_historical_interval(
+    latitude: Decimal,
+    longitude: Decimal,
+    *,
+    started_at: datetime,
+    ended_at: datetime,
+    transport: httpx.BaseTransport | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    max_attempts: int = 3,
+) -> HistoricalWeatherObservation:
+    """Fetch hourly weather covering one activity interval with bounded retries."""
+    if not 1 <= max_attempts <= 3:
+        raise JobQueueError("weather_retry_policy_invalid")
+    parameters = historical_request_parameters(
+        latitude, longitude, started_at=started_at, ended_at=ended_at
+    )
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with httpx.Client(timeout=TIMEOUT, transport=transport) as client:
+                response = client.get(HISTORICAL_ENDPOINT, params=parameters)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            if attempt == max_attempts:
+                raise JobQueueError("weather_provider_unavailable") from exc
+            sleep(0.25 * (2 ** (attempt - 1)))
+            continue
+        if response.status_code == 429 or response.status_code >= 500:
+            if attempt == max_attempts:
+                raise JobQueueError("weather_provider_unavailable")
+            sleep(0.25 * (2 ** (attempt - 1)))
+            continue
+        if response.is_error:
+            raise JobQueueError("weather_request_rejected")
+        return _parse_historical(response, started_at=started_at, ended_at=ended_at)
     raise JobQueueError("weather_provider_unavailable")  # pragma: no cover

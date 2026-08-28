@@ -22,6 +22,7 @@ from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_c
 from healthcurve.api.pagination import Pagination, page_metadata, paginate_current_facts
 from healthcurve.api.routers.events import provenance_out, time_out
 from healthcurve.api.schemas import EventTimeOut, PageMetadata, ProvenanceOut
+from healthcurve.context.models import ContextEvent
 from healthcurve.integrations.garmin.connect_jobs import GarminSyncDisposition, enqueue_sync
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -76,6 +77,19 @@ class GarminSleepIntervalOut(BaseModel):
     ended_at: datetime
 
 
+class GarminActivityWeatherOut(BaseModel):
+    observed_at: datetime
+    interval_ended_at: datetime | None = None
+    temperature_c: str | None = None
+    apparent_temperature_c: str | None = None
+    humidity_percent: str | None = None
+    precipitation_mm: str | None = None
+    conditions: str | None = None
+    wind_speed_kph: str | None = None
+    wind_gust_kph: str | None = None
+    provider: str
+
+
 class GarminRecordOut(BaseModel):
     id: uuid.UUID
     kind: Literal["daily", "sample", "sleep", "activity"]
@@ -97,6 +111,9 @@ class GarminRecordOut(BaseModel):
     sleep_score: int | None = None
     sleep_intervals: list[GarminSleepIntervalOut] = Field(default_factory=list)
     activity_type: str | None = None
+    activity_environment: str | None = None
+    activity_location_name: str | None = None
+    activity_weather: GarminActivityWeatherOut | None = None
     distance_miles: str | None = None
 
 
@@ -296,7 +313,7 @@ def records(
     records_by_key: dict[tuple[str, uuid.UUID], GarminRecordOut] = {}
     for kind, model in models:
         for row in session.scalars(select(model).where(model.id.in_(ids_by_kind[kind]))):
-            records_by_key[(kind, row.id)] = _garmin_record_out(row)
+            records_by_key[(kind, row.id)] = _garmin_record_out(row, session=session)
     return GarminRecordsOut(
         records=[records_by_key[(row.kind, row.id)] for row in visible],
         page=metadata,
@@ -376,6 +393,8 @@ def list_sleep_records(
 
 def _garmin_record_out(
     row: GarminMetricEvent | GarminSleepEvent | GarminActivityEvent,
+    *,
+    session: DbSession | None = None,
 ) -> GarminRecordOut:
     if isinstance(row, GarminMetricEvent):
         label = measurement_label(row.metric_type, row.garmin_field_name)
@@ -424,6 +443,7 @@ def _garmin_record_out(
                 for interval in row.stage_intervals
             ],
         )
+    weather = None if session is None else _activity_weather(session, row)
     return GarminRecordOut(
         id=row.id,
         kind="activity",
@@ -433,7 +453,41 @@ def _garmin_record_out(
         ended_at=row.ended_at,
         duration_seconds=None if row.elapsed_seconds is None else int(row.elapsed_seconds),
         activity_type=row.sport,
+        activity_environment=row.environment,
+        activity_location_name=row.location_name,
+        activity_weather=weather,
         distance_miles=None if row.distance_miles is None else str(row.distance_miles),
+    )
+
+
+def _activity_weather(
+    session: DbSession, activity: GarminActivityEvent
+) -> GarminActivityWeatherOut | None:
+    row = session.scalar(
+        select(ContextEvent)
+        .where(
+            ContextEvent.owner_id == activity.owner_id,
+            ContextEvent.provider_id == f"open-meteo:garmin-activity:{activity.id}",
+            ContextEvent.weather_provider == "open-meteo",
+        )
+        .order_by(ContextEvent.recorded_at.desc(), ContextEvent.id.desc())
+        .limit(1)
+    )
+    if row is None or row.weather_observed_at is None or row.weather_provider is None:
+        return None
+    return GarminActivityWeatherOut(
+        observed_at=row.weather_observed_at,
+        interval_ended_at=row.weather_interval_ended_at,
+        temperature_c=None if row.temperature is None else str(row.temperature),
+        apparent_temperature_c=(
+            None if row.apparent_temperature is None else str(row.apparent_temperature)
+        ),
+        humidity_percent=None if row.humidity_percent is None else str(row.humidity_percent),
+        precipitation_mm=None if row.precipitation is None else str(row.precipitation),
+        conditions=row.conditions,
+        wind_speed_kph=None if row.wind_speed_kph is None else str(row.wind_speed_kph),
+        wind_gust_kph=None if row.wind_gust_kph is None else str(row.wind_gust_kph),
+        provider=row.weather_provider,
     )
 
 

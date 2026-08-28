@@ -415,16 +415,17 @@ filter fields remain labeled as IANA timezone inputs because abbreviations are a
 and are not safe identifiers.
 
 Location privacy is explicit. `none` stores no location; `coarse` requires a label
-such as a city or region and forbids coordinates; `exact` requires a latitude,
+such as a city or region and permits only coordinates rounded to 0.1 degrees; `exact` requires a latitude,
 longitude, and `exact_location_consent=true`. Those rules are enforced by both the API
 and PostgreSQL. Context is a separate fact type, so password-confirmed
 `DELETE /api/v1/context-events/{id}` removes its complete correction chain without
 deleting doses, symptoms, diary entries, or other medical facts.
 
-Weather values always carry an observation time, provider, and explicit units. Only
-the `manual` provider is accepted today. HealthCurve makes no external weather or
-geocoding request in this implementation; provider-based enrichment remains blocked
-until the owner chooses a service and explicitly approves transmitting location.
+Weather values always carry an observation time, provider, and explicit units. Direct
+web entries accept the `manual` provider. The owner-approved Open-Meteo flows use only
+coarse coordinates for a deliberately shared Telegram location or eligible Garmin
+outdoor activity; HealthCurve performs no geocoding. See
+[weather-enrichment.md](weather-enrichment.md).
 
 The **Settings & privacy** page provides the owner workflow: coarse-by-default entry,
 per-record exact-coordinate consent, optional manual weather, retained-context review,
@@ -458,7 +459,12 @@ dosing advice. See [ADR-0013](adr/0013-theoretical-steroid-exposure-model.md).
 
 The selected-day HealthCurve overlays the actual-dose exposure shape, Garmin stress/
 HRV/respiration/heart rate, blood pressure, body temperature, discrete symptom markers, dose markers,
-stress-episode windows, and Garmin sleep sessions on one local-time graph. Sleep start
+stress-episode windows, Garmin sleep sessions, and supported Garmin walking/running/
+rowing activity intervals on one local-time graph. Private outdoor walking/running
+intervals can also show Garmin's location label and Open-Meteo historical temperature,
+apparent temperature, humidity, precipitation, conditions, and wind. Exact routes are
+not retained; indoor/treadmill/rowing activities never request weather. Activity
+location and weather stay out of the public static export. Sleep start
 and wake/end use labeled vertical markers; explicitly timed awake intervals use a
 distinct amber background. Overnight sessions appear on every selected local day they
 overlap. A reported awakening count without interval timestamps is labeled unavailable
@@ -962,11 +968,11 @@ So you don't go looking for it:
   Follow [backup-runbook.md](backup-runbook.md); the next quarterly drill is tracked in
   Beads. This owner-approved layout is not strict 3-2-1 because there is no external
   local drive.
-- **No official Garmin Health API or automatic weather enrichment.** Isolated
-  read-only personal Garmin Connect sync, reviewed Garmin FIT/CSV/ZIP import, and
-  manual context recording are implemented. Official Garmin Developer API access
-  remains gated by vendor approval, and external weather requires an owner-approved
-  provider and location-sharing decision.
+- **No official Garmin Health API.** Isolated read-only personal Garmin Connect sync,
+  reviewed Garmin FIT/CSV/ZIP import, manual context recording, and owner-approved
+  private Open-Meteo enrichment are implemented. Official Garmin Developer API access
+  remains gated by vendor approval, and any new external weather flow requires an
+  owner-approved provider and location-sharing decision.
 - **Deletion is available from Settings & privacy.** Eligible individual records,
   integration data, and the complete account use password-confirmed physical deletion;
   correction-linked facts require account deletion so history cannot be made partial.

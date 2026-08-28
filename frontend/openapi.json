@@ -1282,6 +1282,21 @@
       "ContextIn": {
         "additionalProperties": false,
         "properties": {
+          "apparent_temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,4}|(?=[\\d.]{1,7}0*$)\\d{0,4}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apparent Temperature"
+          },
           "coarse_location_label": {
             "anyOf": [
               {
@@ -1476,6 +1491,18 @@
             ],
             "title": "Weather Confidence"
           },
+          "weather_interval_ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Interval Ended At"
+          },
           "weather_observation_id": {
             "anyOf": [
               {
@@ -1512,6 +1539,38 @@
               }
             ],
             "title": "Weather Provider"
+          },
+          "wind_gust_kph": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,5}|(?=[\\d.]{1,8}0*$)\\d{0,5}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Gust Kph"
+          },
+          "wind_speed_kph": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,5}|(?=[\\d.]{1,8}0*$)\\d{0,5}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Speed Kph"
           }
         },
         "required": [
@@ -1523,6 +1582,18 @@
       "ContextOut": {
         "additionalProperties": false,
         "properties": {
+          "apparent_temperature": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,4}|(?=[\\d.]{1,7}0*$)\\d{0,4}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apparent Temperature"
+          },
           "category": {
             "const": "fact",
             "default": "fact",
@@ -1700,6 +1771,18 @@
             ],
             "title": "Weather Confidence"
           },
+          "weather_interval_ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Interval Ended At"
+          },
           "weather_observation_id": {
             "anyOf": [
               {
@@ -1736,6 +1819,30 @@
               }
             ],
             "title": "Weather Provider"
+          },
+          "wind_gust_kph": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,5}|(?=[\\d.]{1,8}0*$)\\d{0,5}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Gust Kph"
+          },
+          "wind_speed_kph": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,5}|(?=[\\d.]{1,8}0*$)\\d{0,5}\\.\\d{0,2}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Speed Kph"
           }
         },
         "required": [
@@ -3785,6 +3892,114 @@
         "title": "EventTimeOut",
         "type": "object"
       },
+      "GarminActivityWeatherOut": {
+        "properties": {
+          "apparent_temperature_c": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apparent Temperature C"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "humidity_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Percent"
+          },
+          "interval_ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Ended At"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "precipitation_mm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precipitation Mm"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "temperature_c": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature C"
+          },
+          "wind_gust_kph": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Gust Kph"
+          },
+          "wind_speed_kph": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Speed Kph"
+          }
+        },
+        "required": [
+          "observed_at",
+          "provider"
+        ],
+        "title": "GarminActivityWeatherOut",
+        "type": "object"
+      },
       "GarminDisconnectPreviewOut": {
         "properties": {
           "automatic_fact_rows": {
@@ -3840,6 +4055,28 @@
       },
       "GarminRecordOut": {
         "properties": {
+          "activity_environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Environment"
+          },
+          "activity_location_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Location Name"
+          },
           "activity_type": {
             "anyOf": [
               {
@@ -3850,6 +4087,16 @@
               }
             ],
             "title": "Activity Type"
+          },
+          "activity_weather": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GarminActivityWeatherOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "aggregation": {
             "anyOf": [

@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -58,6 +58,10 @@ class ActivityObservation:
     title: str | None
     elapsed_seconds: Decimal | None
     distance_miles: Decimal | None
+    environment: str
+    location_name: str | None
+    latitude: Decimal | None
+    longitude: Decimal | None
     provider_id: str
     revision: str
 
@@ -133,23 +137,35 @@ def map_activities(
         distance_miles = None if distance_m is None else distance_m / METERS_PER_MILE
         ended_at = start_gmt + timedelta(seconds=float(elapsed))
         event_time = _provider_event_time(start_gmt, start_local, raw, timezone, warnings)
+        normalized_sport = _slug(str(sport))
+        environment = _activity_environment(normalized_sport)
+        latitude, longitude = _coarse_activity_coordinates(raw, warnings)
+        location_name = _text(raw.get("locationName"), 120)
         selected = {
             "activityId": str(provider_value),
             "startTimeGMT": start_gmt.isoformat(),
             "startTimeLocal": start_local.isoformat(),
-            "sport": str(sport),
+            "sport": normalized_sport,
             "title": _text(raw.get("activityName"), 300),
             "elapsed": str(elapsed),
             "distance_miles": None if distance_miles is None else str(distance_miles),
+            "environment": environment,
+            "location_name": location_name,
+            "latitude": None if latitude is None else str(latitude),
+            "longitude": None if longitude is None else str(longitude),
         }
         observations.append(
             ActivityObservation(
                 event_time=event_time,
                 ended_at=ended_at,
-                sport=_slug(str(sport)),
+                sport=normalized_sport,
                 title=_text(raw.get("activityName"), 300),
                 elapsed_seconds=elapsed,
                 distance_miles=distance_miles,
+                environment=environment,
+                location_name=location_name,
+                latitude=latitude,
+                longitude=longitude,
                 provider_id=f"activity:{provider_value}",
                 revision=_revision(selected),
             )
@@ -363,6 +379,43 @@ def _bounded_decimal(value: Any, minimum: Decimal, maximum: Decimal) -> Decimal 
     except (InvalidOperation, ValueError):
         return None
     return parsed if parsed.is_finite() and minimum <= parsed <= maximum else None
+
+
+def _activity_environment(sport: str) -> str:
+    if sport in {
+        "indoor_walking",
+        "treadmill_walking",
+        "indoor_running",
+        "treadmill_running",
+        "treadmill",
+        "rowing",
+        "indoor_rowing",
+        "rowing_machine",
+        "indoor_rowing_machine",
+    }:
+        return "indoor"
+    if sport in {"walking", "running"}:
+        return "outdoor"
+    return "unknown"
+
+
+def _coarse_activity_coordinates(
+    payload: dict[str, Any], warnings: list[str]
+) -> tuple[Decimal | None, Decimal | None]:
+    raw_latitude = payload.get("startLatitude")
+    raw_longitude = payload.get("startLongitude")
+    if raw_latitude is None and raw_longitude is None:
+        return None, None
+    latitude = _bounded_decimal(raw_latitude, Decimal("-90"), Decimal("90"))
+    longitude = _bounded_decimal(raw_longitude, Decimal("-180"), Decimal("180"))
+    if latitude is None or longitude is None:
+        warnings.append("activity_location_invalid")
+        return None, None
+    precision = Decimal("0.1")
+    return (
+        latitude.quantize(precision, rounding=ROUND_HALF_UP),
+        longitude.quantize(precision, rounding=ROUND_HALF_UP),
+    )
 
 
 def _bounded_int(value: Any, minimum: int, maximum: int) -> int | None:

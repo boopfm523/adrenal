@@ -47,7 +47,9 @@ class ContextFields(ApiModel):
     weather_provider: str | None = Field(default=None, min_length=1, max_length=64)
     weather_observation_id: str | None = Field(default=None, max_length=255)
     weather_observed_at: datetime | None = None
+    weather_interval_ended_at: datetime | None = None
     temperature: Decimal | None = Field(default=None, max_digits=6, decimal_places=2)
+    apparent_temperature: Decimal | None = Field(default=None, max_digits=6, decimal_places=2)
     temperature_unit: TemperatureUnit | None = None
     pressure: Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
     pressure_unit: PressureUnit | None = None
@@ -57,6 +59,8 @@ class ContextFields(ApiModel):
     precipitation: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
     precipitation_unit: PrecipitationUnit | None = None
     conditions: str | None = Field(default=None, max_length=200)
+    wind_speed_kph: Decimal | None = Field(default=None, ge=0, max_digits=7, decimal_places=2)
+    wind_gust_kph: Decimal | None = Field(default=None, ge=0, max_digits=7, decimal_places=2)
     weather_confidence: Decimal | None = Field(
         default=None, ge=0, le=1, max_digits=4, decimal_places=3
     )
@@ -94,12 +98,17 @@ class ContextFields(ApiModel):
         ):
             if (value is None) != (unit is None):
                 raise ValueError(f"{name} value and unit must be supplied together")
+        if self.apparent_temperature is not None and self.temperature_unit is None:
+            raise ValueError("apparent temperature requires a temperature unit")
         weather_values = (
             self.temperature,
+            self.apparent_temperature,
             self.pressure,
             self.humidity_percent,
             self.precipitation,
             self.conditions,
+            self.wind_speed_kph,
+            self.wind_gust_kph,
             self.weather_observation_id,
             self.weather_confidence,
         )
@@ -110,8 +119,14 @@ class ContextFields(ApiModel):
             raise ValueError("weather values require provider and observation time")
         if self.weather_observed_at is not None and self.weather_observed_at.utcoffset() is None:
             raise ValueError("weather observation time must include a UTC offset")
-        if self.weather_provider is not None and self.weather_provider != "manual":
-            raise ValueError("only manual weather provenance is enabled")
+        if self.weather_interval_ended_at is not None:
+            if self.weather_interval_ended_at.utcoffset() is None:
+                raise ValueError("weather interval end must include a UTC offset")
+            if (
+                self.weather_observed_at is None
+                or self.weather_interval_ended_at < self.weather_observed_at
+            ):
+                raise ValueError("weather interval end must follow the observation time")
         return self
 
 
@@ -167,6 +182,8 @@ def _owned(session: DbSession, owner_id: uuid.UUID, event_id: uuid.UUID) -> Cont
     dependencies=[Depends(require_csrf)],
 )
 def create_context(payload: ContextIn, session: DbSession, owner: CurrentOwner) -> ContextOut:
+    if payload.weather_provider not in {None, "manual"}:
+        raise HTTPException(status_code=422, detail="only manual weather provenance is enabled")
     row = events.create_event(
         session,
         ContextEvent,
@@ -225,6 +242,8 @@ def correct_context(
     session: DbSession,
     owner: CurrentOwner,
 ) -> ContextOut:
+    if payload.replacement.weather_provider not in {None, "manual"}:
+        raise HTTPException(status_code=422, detail="only manual weather provenance is enabled")
     original = _owned(session, owner.id, event_id)
     try:
         row = events.correct_event(

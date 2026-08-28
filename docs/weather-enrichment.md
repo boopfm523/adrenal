@@ -31,3 +31,22 @@ errors receive bounded retries and then become a visible dead-letter job.
 
 The Settings & privacy page can delete Open-Meteo-derived rows independently. This does
 not delete the underlying coarse location or any health record.
+
+## Garmin outdoor activity intervals
+
+The owner separately approved private historical weather for supported Garmin outdoor
+walking and running activities on 2026-08-28. HealthCurve uses Garmin's start
+coordinates directly after rounding both values to 0.1 degrees; it does not reverse
+geocode them, retain route geometry, send an activity title, or put coordinates in a
+job payload. Garmin's private `locationName` is retained only as the display label.
+
+Explicit indoor/treadmill walking or running and rowing-machine activities are
+classified as indoor before the job is queued and never call Open-Meteo. Missing or
+invalid coordinates remain missing. Eligible jobs request only fixed historical
+hourly temperature, apparent temperature, humidity, precipitation, weather-code,
+wind-speed, and wind-gust fields for the UTC dates covering the activity interval.
+The resulting interval summary is a separate provider context fact with provenance.
+
+Activity location and weather are available to the authenticated curve, timeline,
+and private chat/cross-event analysis. They remain excluded from the public static
+site's allow-list under [ADR-0033](adr/0033-private-garmin-activity-weather.md).

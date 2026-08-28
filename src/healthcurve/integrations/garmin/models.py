@@ -395,6 +395,12 @@ class GarminActivityEvent(GarminSourceMixin, EventMixin, FactBase):
     average_heart_rate: Mapped[int | None] = mapped_column()
     maximum_heart_rate: Mapped[int | None] = mapped_column()
     source_notes: Mapped[str | None] = mapped_column(Text)
+    environment: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unknown", server_default=text("'unknown'")
+    )
+    location_name: Mapped[str | None] = mapped_column(String(120))
+    location_latitude: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+    location_longitude: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
 
     __table_args__ = (
         CheckConstraint("ended_at >= occurred_at", name="activity_interval_ordered"),
@@ -412,6 +418,22 @@ class GarminActivityEvent(GarminSourceMixin, EventMixin, FactBase):
         CheckConstraint(
             "maximum_heart_rate IS NULL OR maximum_heart_rate BETWEEN 20 AND 260",
             name="maximum_hr_plausible",
+        ),
+        CheckConstraint(
+            "environment IN ('indoor', 'outdoor', 'unknown')",
+            name="activity_environment_valid",
+        ),
+        CheckConstraint(
+            "(location_latitude IS NULL) = (location_longitude IS NULL)",
+            name="activity_location_coordinate_pair",
+        ),
+        CheckConstraint(
+            "location_latitude IS NULL OR location_latitude BETWEEN -90 AND 90",
+            name="activity_location_latitude_range",
+        ),
+        CheckConstraint(
+            "location_longitude IS NULL OR location_longitude BETWEEN -180 AND 180",
+            name="activity_location_longitude_range",
         ),
         Index("ix_garmin_activity_sport_time", "sport", "occurred_at"),
         CheckConstraint(

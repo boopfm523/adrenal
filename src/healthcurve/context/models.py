@@ -65,7 +65,9 @@ class ContextEvent(EventMixin, FactBase):
     weather_provider: Mapped[str | None] = mapped_column(String(64))
     weather_observation_id: Mapped[str | None] = mapped_column(String(255))
     weather_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    weather_interval_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     temperature: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    apparent_temperature: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     temperature_unit: Mapped[TemperatureUnit | None] = mapped_column(
         StrEnumType(TemperatureUnit, 8)
     )
@@ -77,6 +79,8 @@ class ContextEvent(EventMixin, FactBase):
         StrEnumType(PrecipitationUnit, 8)
     )
     conditions: Mapped[str | None] = mapped_column(String(200))
+    wind_speed_kph: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    wind_gust_kph: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
     weather_confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
 
     __table_args__ = (
@@ -103,6 +107,10 @@ class ContextEvent(EventMixin, FactBase):
             "(temperature IS NULL) = (temperature_unit IS NULL)",
             name="temperature_has_unit",
         ),
+        CheckConstraint(
+            "apparent_temperature IS NULL OR temperature_unit IS NOT NULL",
+            name="apparent_temperature_has_unit",
+        ),
         CheckConstraint("(pressure IS NULL) = (pressure_unit IS NULL)", name="pressure_has_unit"),
         CheckConstraint(
             "(precipitation IS NULL) = (precipitation_unit IS NULL)",
@@ -115,15 +123,25 @@ class ContextEvent(EventMixin, FactBase):
         CheckConstraint(
             "precipitation IS NULL OR precipitation >= 0", name="precipitation_nonnegative"
         ),
+        CheckConstraint("wind_speed_kph IS NULL OR wind_speed_kph >= 0", name="wind_nonnegative"),
+        CheckConstraint(
+            "wind_gust_kph IS NULL OR wind_gust_kph >= 0", name="wind_gust_nonnegative"
+        ),
+        CheckConstraint(
+            "weather_interval_ended_at IS NULL OR weather_interval_ended_at >= weather_observed_at",
+            name="weather_interval_ordered",
+        ),
         CheckConstraint(
             "weather_confidence IS NULL OR weather_confidence BETWEEN 0 AND 1",
             name="weather_confidence_range",
         ),
         CheckConstraint(
             "(temperature IS NULL AND pressure IS NULL AND humidity_percent IS NULL "
-            "AND precipitation IS NULL AND conditions IS NULL "
+            "AND apparent_temperature IS NULL AND precipitation IS NULL AND conditions IS NULL "
+            "AND wind_speed_kph IS NULL AND wind_gust_kph IS NULL "
             "AND weather_provider IS NULL AND weather_observation_id IS NULL "
-            "AND weather_observed_at IS NULL AND weather_confidence IS NULL) OR "
+            "AND weather_observed_at IS NULL AND weather_interval_ended_at IS NULL "
+            "AND weather_confidence IS NULL) OR "
             "(weather_provider IS NOT NULL AND weather_observed_at IS NOT NULL)",
             name="weather_has_provenance",
         ),

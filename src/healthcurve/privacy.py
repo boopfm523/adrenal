@@ -261,6 +261,13 @@ def delete_integration(
     if delete_data and provider == "garmin":
         data_rows += _delete_count(
             session,
+            delete(ContextEvent).where(
+                ContextEvent.owner_id == owner_id,
+                ContextEvent.provider_id.like("open-meteo:garmin-activity:%"),
+            ),
+        )
+        data_rows += _delete_count(
+            session,
             delete(WearableDailySummary).where(WearableDailySummary.owner_id == owner_id),
         )
         data_rows += (

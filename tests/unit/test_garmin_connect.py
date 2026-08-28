@@ -156,6 +156,9 @@ def test_activity_contract_covers_miles_unknown_types_and_missing_distance() -> 
                 "timeZoneId": "Europe/London",
                 "elapsedDuration": 1_800,
                 "distance": 1_609.344,
+                "locationName": "Synthetic City, ST",
+                "startLatitude": 39.2904,
+                "startLongitude": -76.6122,
             },
             {
                 "activityId": 2,
@@ -189,9 +192,49 @@ def test_activity_contract_covers_miles_unknown_types_and_missing_distance() -> 
     assert len(activities) == 3
     assert activities[0].distance_miles == 1
     assert activities[0].event_time.timezone == "Europe/London"
+    assert activities[0].environment == "outdoor"
+    assert activities[0].location_name == "Synthetic City, ST"
+    assert activities[0].latitude == Decimal("39.3")
+    assert activities[0].longitude == Decimal("-76.6")
     assert activities[1].distance_miles is None
+    assert activities[1].environment == "unknown"
     assert activities[2].sport == "snow_shoe_other"
     assert "activity_duration_invalid" in warnings
+
+
+def test_activity_environment_blocks_indoor_weather_and_preserves_missingness() -> None:
+    activities, warnings = map_activities(
+        [
+            {
+                "activityId": 10,
+                "activityType": {"typeKey": "treadmill_running"},
+                "activityName": "Synthetic treadmill",
+                "startTimeGMT": "2026-07-01T12:00:00Z",
+                "startTimeLocal": "2026-07-01T08:00:00",
+                "elapsedDuration": 1_200,
+                "startLatitude": 39.29,
+                "startLongitude": -76.61,
+            },
+            {
+                "activityId": 11,
+                "activityType": {"typeKey": "walking"},
+                "activityName": "Synthetic location-missing walk",
+                "startTimeGMT": "2026-07-01T14:00:00Z",
+                "startTimeLocal": "2026-07-01T10:00:00",
+                "elapsedDuration": 1_200,
+                "startLatitude": "not-a-coordinate",
+                "startLongitude": -76.61,
+            },
+        ],
+        timezone="America/New_York",
+    )
+
+    assert activities[0].environment == "indoor"
+    assert activities[0].latitude == Decimal("39.3")
+    assert activities[1].environment == "outdoor"
+    assert activities[1].latitude is None
+    assert activities[1].longitude is None
+    assert "activity_location_invalid" in warnings
 
 
 class _SyntheticClient:

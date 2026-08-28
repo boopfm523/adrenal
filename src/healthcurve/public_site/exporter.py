@@ -451,7 +451,8 @@ def _provenance(value: BaseModel) -> dict[str, Any]:
     }
 
 
-def _garmin_record(record: Any, ids: PublicIds) -> dict[str, Any]:
+def public_garmin_record(record: Any, ids: PublicIds) -> dict[str, Any]:
+    """Project one private Garmin API record through the static-site allow-list."""
     return {
         "id": ids.map(record.id, "garmin"),
         "kind": record.kind,
@@ -691,7 +692,7 @@ def build_public_day(session: Session, *, owner: Owner, day: date) -> dict[str, 
         "date": day.isoformat(),
         "timezone": owner.default_timezone,
         "curve": project_public(curve, PUBLIC_CURVE_PROJECTION, ids),
-        "garmin": [_garmin_record(record, ids) for record in garmin_rows],
+        "garmin": [public_garmin_record(record, ids) for record in garmin_rows],
         "symptoms": [_symptom(record, ids) for record in symptoms],
         "blood_pressure": [_blood_pressure(record, ids) for record in pressure],
         "temperature": [_temperature(record, ids) for record in temperature],

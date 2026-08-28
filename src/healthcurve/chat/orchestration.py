@@ -895,13 +895,30 @@ def _render_multi_anchor_context(results: list[ChatToolResult]) -> str:
 
         weather = data.get("weather_before_anchor")
         if isinstance(weather, dict):
+            apparent = weather.get("apparent_temperature")
+            wind = weather.get("wind_speed_kph")
+            apparent_text = (
+                ""
+                if apparent is None
+                else f"feels like {_display_measurement(apparent, decimal_places=1)}°C, "
+            )
+            wind_text = (
+                ""
+                if wind is None
+                else f", wind {_display_measurement(wind, decimal_places=1)} km/h"
+            )
+            location_text = (
+                "" if weather.get("location") is None else f", near {weather.get('location')}"
+            )
             lines.append(
                 "  - Weather: "
                 f"{_display_measurement(weather.get('temperature'), decimal_places=1)}°"
                 f"{str(weather.get('temperature_unit', '')).upper()}, "
+                f"{apparent_text}"
                 f"{_display_measurement(weather.get('humidity_percent'), decimal_places=0)}% "
                 "humidity, "
-                f"{weather.get('conditions') or 'conditions not recorded'}."
+                f"{weather.get('conditions') or 'conditions not recorded'}"
+                f"{wind_text}{location_text}."
             )
         else:
             lines.append("  - Weather was not recorded near this anchor.")
@@ -1092,10 +1109,16 @@ def _render_preceding_context(result: ChatToolResult) -> str:
     lines.extend(["", "Weather:"])
     if isinstance(weather, dict):
         conditions = weather.get("conditions") or "conditions not recorded"
+        apparent = weather.get("apparent_temperature")
+        wind = weather.get("wind_speed_kph")
         lines.append(
             f"- The nearest recorded observation was {weather.get('temperature')}°"
             f"{str(weather.get('temperature_unit', '')).upper()} with "
-            f"{weather.get('humidity_percent')}% humidity and {conditions}."
+            f"{weather.get('humidity_percent')}% humidity and {conditions}"
+            f"{'' if apparent is None else f'; apparent temperature {apparent}°C'}"
+            f"{'' if wind is None else f'; wind {wind} km/h'}"
+            f"{'' if weather.get('location') is None else f'; near {weather.get("location")}'}"
+            "."
         )
     else:
         lines.append("- Weather was not recorded near this window; it remains unknown, not zero.")

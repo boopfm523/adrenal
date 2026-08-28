@@ -669,7 +669,16 @@ def _summarize(row: EventMixin, type_name: str) -> str:
                     f"{timezone_abbreviation(context.timezone, context.occurred_at)}"  # type: ignore[attr-defined]
                 )
             conditions = context.conditions  # type: ignore[attr-defined]
-            return f"{location} · {conditions}" if conditions else location
+            temperature = context.temperature  # type: ignore[attr-defined]
+            apparent = context.apparent_temperature  # type: ignore[attr-defined]
+            weather = []
+            if conditions:
+                weather.append(conditions)
+            if temperature is not None:
+                weather.append(f"{temperature} °C")
+            if apparent is not None:
+                weather.append(f"feels like {apparent} °C")
+            return f"{location} · {'; '.join(weather)}" if weather else location
         case "blood_pressure":
             pulse = f"; pulse {row.pulse_bpm} bpm" if row.pulse_bpm is not None else ""  # type: ignore[attr-defined]
             reading = f"Blood pressure {row.systolic_mmhg}/{row.diastolic_mmhg} mmHg"  # type: ignore[attr-defined]
@@ -714,7 +723,12 @@ def _summarize(row: EventMixin, type_name: str) -> str:
             )
             distance = row.distance_miles  # type: ignore[attr-defined]
             distance_text = "distance unavailable" if distance is None else f"{distance} mi"
-            return f"Activity: {sport}; {_duration_text(duration_seconds)}; {distance_text}"
+            location = row.location_name  # type: ignore[attr-defined]
+            location_text = "" if location is None else f"; {location}"
+            return (
+                f"Activity: {sport}; {_duration_text(duration_seconds)}; "
+                f"{distance_text}{location_text}"
+            )
         case _:  # pragma: no cover
             return type_name
 

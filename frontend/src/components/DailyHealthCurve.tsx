@@ -77,6 +77,8 @@ interface ActivityInterval {
   family: "walking" | "running" | "rowing";
   duration: string;
   distance: string | null;
+  location: string | null;
+  weather: string | null;
   source: string;
 }
 
@@ -813,6 +815,43 @@ function activityDuration(totalSeconds: number): string {
   return parts.join(" ");
 }
 
+
+function thermalDescription(celsius: number): string {
+  if (celsius < 0) return "Freezing";
+  if (celsius < 10) return "Cold";
+  if (celsius < 18) return "Cool";
+  if (celsius < 27) return "Mild";
+  if (celsius < 32) return "Hot";
+  return "Very hot";
+}
+
+
+function celsiusToFahrenheit(celsius: number): number {
+  return celsius * 9 / 5 + 32;
+}
+
+
+function activityWeather(record: GarminRecord): string | null {
+  const weather = record.activity_weather;
+  if (weather == null) return null;
+  const temperature = numeric(weather.temperature_c);
+  const apparent = numeric(weather.apparent_temperature_c);
+  const humidity = numeric(weather.humidity_percent);
+  const precipitation = numeric(weather.precipitation_mm);
+  const wind = numeric(weather.wind_speed_kph);
+  const thermal = apparent ?? temperature;
+  const parts = [
+    ...(thermal == null ? [] : [thermalDescription(thermal)]),
+    ...(temperature == null ? [] : [`${celsiusToFahrenheit(temperature).toFixed(0)}°F`]),
+    ...(apparent == null ? [] : [`feels like ${celsiusToFahrenheit(apparent).toFixed(0)}°F`]),
+    ...(humidity == null ? [] : [`${humidity.toFixed(0)}% humidity`]),
+    ...(precipitation == null ? [] : [`${precipitation.toFixed(1)} mm precipitation`]),
+    ...(wind == null ? [] : [`${wind.toFixed(0)} km/h wind`]),
+    ...(weather.conditions == null ? [] : [weather.conditions]),
+  ];
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
 function activityIntervals(records: GarminRecord[]): ActivityInterval[] {
   return records.flatMap((record) => {
     if (record.kind !== "activity" || record.ended_at == null) return [];
@@ -829,13 +868,15 @@ function activityIntervals(records: GarminRecord[]): ActivityInterval[] {
       family,
       duration: activityDuration(durationSeconds),
       distance: record.distance_miles == null ? null : `${formatDecimal(record.distance_miles)} mi`,
+      location: record.activity_location_name ?? null,
+      weather: activityWeather(record),
       source: `Garmin ${record.provenance.confirmation_state.replaceAll("_", " ")}`,
     }];
   }).sort((left, right) => left.startedAt - right.startedAt || left.endedAt - right.endedAt || left.id.localeCompare(right.id));
 }
 
 function activityDetails(activity: ActivityInterval, timezone: string): string {
-  return `${activity.duration}${activity.distance === null ? "" : ` · ${activity.distance}`} · ${localClockTime(activity.startedAt, timezone)}–${localClockTime(activity.endedAt, timezone)} local`;
+  return `${activity.duration}${activity.distance === null ? "" : ` · ${activity.distance}`}${activity.location === null ? "" : ` · ${activity.location}`}${activity.weather === null ? "" : ` · ${activity.weather}`} · ${localClockTime(activity.startedAt, timezone)}–${localClockTime(activity.endedAt, timezone)} local`;
 }
 
 function doseTooltipObservations(
@@ -1296,7 +1337,7 @@ export function DailyHealthCurve({
       <h3 id="healthcurve-recorded-activities-title">Recorded activities</h3>
       <p>Garmin activity intervals are recorded facts on the shared time axis. They do not alter the modeled curve or establish a cause, medication need, or dosing guidance.</p>
       <ul className="healthcurve-recorded-event-list">{activities.map((activity) => <li key={activity.id}>
-        <time dateTime={new Date(activity.startedAt).toISOString()}>{experiencedTime(new Date(activity.startedAt).toISOString(), data.exposure.timezone)}</time>–<time dateTime={new Date(activity.endedAt).toISOString()}>{localClockTime(activity.endedAt, data.exposure.timezone)}</time>: <strong>{activity.label}</strong> — {activity.duration}{activity.distance === null ? "" : ` · ${activity.distance}`} · {activity.source}
+        <time dateTime={new Date(activity.startedAt).toISOString()}>{experiencedTime(new Date(activity.startedAt).toISOString(), data.exposure.timezone)}</time>–<time dateTime={new Date(activity.endedAt).toISOString()}>{localClockTime(activity.endedAt, data.exposure.timezone)}</time>: <strong>{activity.label}</strong> — {activity.duration}{activity.distance === null ? "" : ` · ${activity.distance}`}{activity.location === null ? "" : ` · ${activity.location}`}{activity.weather === null ? "" : ` · ${activity.weather}`} · {activity.source}
       </li>)}</ul>
     </section>}
     {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title">

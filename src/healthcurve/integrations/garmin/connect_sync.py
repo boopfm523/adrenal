@@ -41,6 +41,7 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncRun,
     GarminSyncStatus,
 )
+from healthcurve.integrations.weather.jobs import enqueue_activity_weather_enrichment
 from healthcurve.operations import audit
 
 MAX_SYNC_DAYS: Final = 31
@@ -340,8 +341,12 @@ def _upsert_activity(
         "average_heart_rate": None,
         "maximum_heart_rate": None,
         "source_notes": None,
+        "environment": value.environment,
+        "location_name": value.location_name,
+        "location_latitude": value.latitude,
+        "location_longitude": value.longitude,
     }
-    return _upsert_event(
+    outcome, row = _upsert_event(
         session,
         GarminActivityEvent,
         owner_id,
@@ -349,7 +354,10 @@ def _upsert_activity(
         value.revision,
         value.event_time,
         fields,
-    )[0]
+    )
+    session.flush([row])
+    enqueue_activity_weather_enrichment(session, row)
+    return outcome
 
 
 def _upsert_event[E: EventMixin](
