@@ -22,6 +22,12 @@ The exporter fails closed: an ineligible day is absent rather than partially
 published. The calendar is derived from the manifest and defaults to its newest
 published date.
 
+Beginning with the 2026-08-28 local day, eligible static days include recorded Garmin
+walking, running/treadmill, and indoor-rowing intervals on the chart. Activity titles
+and provider identifiers are not published, and earlier static days are not
+backfilled. The first eligible activity day therefore appears only after its normal
+day-end-plus-12-hours gate and a qualifying Garmin sync.
+
 The default Garmin schedule runs at local noon and midnight. The noon run supplies
 the required post-cutoff provenance for the preceding day, so the next two-hour
 publisher run can normally publish it shortly after the twelve-hour cutoff. A delayed

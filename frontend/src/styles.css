@@ -419,6 +419,7 @@ circle.chart-series { fill: white; }
 .healthcurve-key--symptoms { border-color: #bd2f6b; border-top-style: dotted; }
 .healthcurve-key--sleep { border-color: #315b8a; border-top-style: solid; }
 .healthcurve-key--awake { border-color: #d17d23; border-top-style: solid; }
+.healthcurve-key--activity { height: 0.7rem; border: 1px solid #087f6b; background: rgb(8 127 107 / 22%); }
 .healthcurve-key--context-band { width: 1.6rem; height: 0.7rem; border: 1px solid #8b918e; background: rgb(139 145 142 / 28%); }
 .healthcurve-key--wake-reference { width: 1.6rem; height: 0.7rem; border: 1px solid #5f7ca8; background: rgb(116 154 209 / 28%); }
 .healthcurve-key--current-time { border-color: #174c3c; border-top-style: dashed; }
@@ -453,6 +454,13 @@ circle.chart-series { fill: white; }
 .healthcurve-sleep-marker { stroke: #315b8a; stroke-width: 2; stroke-dasharray: 5 3; }
 .healthcurve-sleep-marker--end { stroke: #5e3f83; }
 .healthcurve-sleep-label { fill: #274869; font-size: 11px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 3px; stroke-linejoin: round; }
+.healthcurve-activity-window { fill: rgb(8 127 107 / 8%); stroke: rgb(8 127 107 / 38%); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.healthcurve-activity-band { fill: rgb(8 127 107 / 68%); stroke: #075f52; stroke-width: 1; pointer-events: none; }
+.healthcurve-activity--running .healthcurve-activity-window { fill: rgb(173 91 20 / 8%); stroke: rgb(173 91 20 / 42%); }
+.healthcurve-activity--running .healthcurve-activity-band { fill: rgb(173 91 20 / 70%); stroke: #7d3e08; }
+.healthcurve-activity--rowing .healthcurve-activity-window { fill: rgb(107 63 130 / 8%); stroke: rgb(107 63 130 / 42%); }
+.healthcurve-activity--rowing .healthcurve-activity-band { fill: rgb(107 63 130 / 70%); stroke: #56316b; }
+.healthcurve-activity-label { fill: white; font-size: 9px; font-weight: 800; pointer-events: none; }
 .healthcurve-point { fill: #174c3c; stroke: white; stroke-width: 1; }
 .healthcurve-point--stress { fill: #a14c12; }
 .healthcurve-point--heart_rate { fill: #a32038; }
@@ -467,12 +475,16 @@ circle.chart-series { fill: white; }
 .healthcurve-blood-pressure-label { fill: #123f2d; font-size: 12px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 3px; stroke-linejoin: round; }
 .healthcurve-point--symptoms { fill: #bd2f6b; }
 .healthcurve-recorded-symptoms,
-.healthcurve-recorded-stress-events { margin: 0.8rem 0; padding: 0.75rem 1rem; border: 1px solid #d5a5bb; border-radius: 0.45rem; background: #fff5f9; }
+.healthcurve-recorded-stress-events,
+.healthcurve-recorded-activities { margin: 0.8rem 0; padding: 0.75rem 1rem; border: 1px solid #d5a5bb; border-radius: 0.45rem; background: #fff5f9; }
 .healthcurve-recorded-stress-events { border-color: #d8b78d; background: #fffaf2; }
+.healthcurve-recorded-activities { border-color: #7ebbb0; background: #f2fbf8; }
 .healthcurve-recorded-symptoms h3,
-.healthcurve-recorded-stress-events h3 { margin: 0; }
+.healthcurve-recorded-stress-events h3,
+.healthcurve-recorded-activities h3 { margin: 0; }
 .healthcurve-recorded-symptoms > p,
-.healthcurve-recorded-stress-events > p { margin-block: 0.35rem; }
+.healthcurve-recorded-stress-events > p,
+.healthcurve-recorded-activities > p { margin-block: 0.35rem; }
 .healthcurve-recorded-event-list { display: grid; gap: 0.75rem; margin-block: 0.5rem 0; padding-left: 1.25rem; }
 .healthcurve-recorded-event-list > li { padding-bottom: 0.75rem; border-bottom: 1px solid rgb(85 100 92 / 18%); }
 .healthcurve-recorded-event-list > li:last-child { padding-bottom: 0; border-bottom: 0; }

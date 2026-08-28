@@ -65,7 +65,7 @@ describe("central API client", () => {
     }));
   });
 
-  it("collects paginated daily Garmin summaries with intraday samples and sleep", async () => {
+  it("collects paginated daily Garmin summaries, activities, intraday samples, and sleep", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.includes("/integrations/garmin/samples")) {
@@ -80,6 +80,7 @@ describe("central API client", () => {
           ? [{ id: "daily-2", kind: "daily", time: { occurred_at: "2026-08-10T05:00:00Z" } }]
           : [
               { id: "daily-1", kind: "daily", time: { occurred_at: "2026-08-10T04:00:00Z" } },
+              { id: "activity", kind: "activity", time: { occurred_at: "2026-08-10T14:00:00Z" } },
               { id: "sleep", kind: "sleep", time: { occurred_at: "2026-08-10T06:00:00Z" } },
             ],
         page: { total_pages: 2 },
@@ -87,6 +88,6 @@ describe("central API client", () => {
     });
 
     const records = await getDailyGarminContext("2026-08-10", "America/New_York");
-    expect(records.map((record) => record.id)).toEqual(["sleep", "daily-1", "daily-2", "sample"]);
+    expect(records.map((record) => record.id)).toEqual(["sleep", "daily-1", "daily-2", "sample", "activity"]);
   });
 });

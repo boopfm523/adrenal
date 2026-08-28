@@ -69,6 +69,17 @@ interface AwakeInterval {
   endedAt: number;
 }
 
+interface ActivityInterval {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  label: string;
+  family: "walking" | "running" | "rowing";
+  duration: string;
+  distance: string | null;
+  source: string;
+}
+
 interface PreEventMetricSummary {
   key: string;
   label: string;
@@ -771,6 +782,62 @@ function explicitAwakeIntervals(records: GarminRecord[]): AwakeInterval[] {
   }, []);
 }
 
+function normalizedActivityType(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function activityFamily(value: string | null | undefined): ActivityInterval["family"] | null {
+  const normalized = normalizedActivityType(value);
+  if (["walking", "indoor_walking", "treadmill_walking"].includes(normalized)) return "walking";
+  if (["running", "indoor_running", "treadmill_running", "treadmill"].includes(normalized)) return "running";
+  if (["rowing", "indoor_rowing", "rowing_machine", "indoor_rowing_machine"].includes(normalized)) return "rowing";
+  return null;
+}
+
+function activityLabel(value: string | null | undefined, family: ActivityInterval["family"]): string {
+  const normalized = normalizedActivityType(value);
+  if (normalized === "") return family.charAt(0).toUpperCase() + family.slice(1);
+  return normalized.split("_").map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`).join(" ");
+}
+
+function activityDuration(totalSeconds: number): string {
+  const bounded = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(bounded / 3600);
+  const minutes = Math.floor((bounded % 3600) / 60);
+  const seconds = bounded % 60;
+  const parts = [
+    ...(hours === 0 ? [] : [`${hours.toString()}h`]),
+    ...(minutes === 0 ? [] : [`${minutes.toString()}m`]),
+    ...(seconds === 0 && (hours > 0 || minutes > 0) ? [] : [`${seconds.toString()}s`]),
+  ];
+  return parts.join(" ");
+}
+
+function activityIntervals(records: GarminRecord[]): ActivityInterval[] {
+  return records.flatMap((record) => {
+    if (record.kind !== "activity" || record.ended_at == null) return [];
+    const family = activityFamily(record.activity_type);
+    const startedAt = Date.parse(record.time.occurred_at);
+    const endedAt = Date.parse(record.ended_at);
+    if (family === null || !Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt <= startedAt) return [];
+    const durationSeconds = record.duration_seconds ?? (endedAt - startedAt) / 1000;
+    return [{
+      id: record.id,
+      startedAt,
+      endedAt,
+      label: activityLabel(record.activity_type, family),
+      family,
+      duration: activityDuration(durationSeconds),
+      distance: record.distance_miles == null ? null : `${formatDecimal(record.distance_miles)} mi`,
+      source: `Garmin ${record.provenance.confirmation_state.replaceAll("_", " ")}`,
+    }];
+  }).sort((left, right) => left.startedAt - right.startedAt || left.endedAt - right.endedAt || left.id.localeCompare(right.id));
+}
+
+function activityDetails(activity: ActivityInterval, timezone: string): string {
+  return `${activity.duration}${activity.distance === null ? "" : ` · ${activity.distance}`} · ${localClockTime(activity.startedAt, timezone)}–${localClockTime(activity.endedAt, timezone)} local`;
+}
+
 function doseTooltipObservations(
   exposure: SteroidExposureCurve,
   dayStart: number,
@@ -903,6 +970,10 @@ export function DailyHealthCurve({
   const cursorAwakeIntervals = awakeIntervals.filter(
     (interval) => cursorTime >= interval.startedAt && cursorTime < interval.endedAt,
   );
+  const activities = activityIntervals(data.garmin);
+  const cursorActivities = activities.filter(
+    (activity) => cursorTime >= activity.startedAt && cursorTime <= activity.endedAt,
+  );
   const doseObservations = doseTooltipObservations(data.exposure, start, end);
   const stressDoses = data.exposure.dose_markers.filter((dose) => {
     const occurredAt = Date.parse(dose.occurred_at);
@@ -1011,6 +1082,11 @@ export function DailyHealthCurve({
       series: "Awake interval",
       value: awakeIntervalValue(interval, data.exposure.timezone),
     })),
+    ...cursorActivities.map((activity) => ({
+      key: `activity-${activity.id}`,
+      series: activity.label,
+      value: activityDetails(activity, data.exposure.timezone),
+    })),
     ...cursorDoseObservations.map((observation) => ({
       key: observation.id,
       series: observation.series,
@@ -1028,6 +1104,7 @@ export function DailyHealthCurve({
     ...sleepObservations.map((observation) => Date.parse(observation.time)),
     ...(visible.symptoms ? unscoredSymptoms.map((observation) => Date.parse(observation.time)) : []),
     ...awakeIntervals.flatMap((interval) => [interval.startedAt, interval.endedAt]),
+    ...activities.flatMap((activity) => [activity.startedAt, activity.endedAt]),
   ])].filter((time) => Number.isFinite(time) && time >= start && time <= end).sort((left, right) => left - right);
   const previousObservation = [...navigableTimes].reverse().find((time) => time < cursorTime);
   const nextObservation = navigableTimes.find((time) => time > cursorTime);
@@ -1080,7 +1157,7 @@ export function DailyHealthCurve({
       These are actual recorded facts and do not require a dose plan. The selected model supports only its listed medications, formulations, routes, amounts, and units{isWakeFreeCurve(data.exposure) ? ` (${supportedDoseDescription(data.exposure)})` : ""}; it does not invent exposure for an unsupported fact. Hollow diamond markers show the recorded administration times.
       <ul>{unmodeledDoses.map((dose) => <li key={dose.dose_event_id}><time dateTime={dose.occurred_at}>{experiencedTime(dose.occurred_at, data.exposure.timezone)}</time>: <strong>{dose.category === "stress" ? "Stress dose" : "Dose"} — {dose.medication_name} {formatMeasurement(dose.amount, dose.unit)}</strong> ({dose.route}; {doseExclusionReason(dose.exclusion_reason)})</li>)}</ul>
     </aside>}
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}{showCurrentTime ? <span><i className="healthcurve-key healthcurve-key--current-time" aria-hidden="true" />Current local time · {currentTimeLabel}</span> : null}</div>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{activities.length === 0 ? null : <span><i className="healthcurve-key healthcurve-key--activity" aria-hidden="true" />Recorded activity interval</span>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}{showCurrentTime ? <span><i className="healthcurve-key healthcurve-key--current-time" aria-hidden="true" />Current local time · {currentTimeLabel}</span> : null}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
       <button type="button" className="button-secondary" aria-label="Zoom chart out" disabled={chartZoom === 1} onClick={() => { setChartZoom(chartZoom === 2 ? 1.5 : 1); }}>−</button>
@@ -1088,7 +1165,7 @@ export function DailyHealthCurve({
       <button type="button" className="button-secondary" aria-label="Zoom chart in" disabled={chartZoom === 2} onClick={() => { setChartZoom(chartZoom === 1 ? 1.5 : 2); }}>+</button>
     </div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.${showCurrentTime ? ` Current local time is marked at ${currentTimeLabel}; the region after the marker is later today and does not represent missing or zero data.` : ""}`}>
+      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${activities.length.toString()} recorded ${activities.length === 1 ? "activity" : "activities"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.${showCurrentTime ? ` Current local time is marked at ${currentTimeLabel}; the region after the marker is later today and does not represent missing or zero data.` : ""}`}>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
         {showCurrentTime ? <rect data-current-time-future-region="true" className="healthcurve-future-region" x={currentTimeX} y={TOP} width={Math.max(0, LEFT + PLOT_WIDTH - currentTimeX)} height={PLOT_HEIGHT} aria-hidden="true" /> : null}
         {expectedPreWakeEnd === undefined || expectedPreWakeEnd <= start ? null : <g data-series="expected-pre-wake-gap">
@@ -1115,6 +1192,20 @@ export function DailyHealthCurve({
           const awakeX = LEFT + (awakeStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
           const awakeEndX = LEFT + (awakeEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
           return <rect key={interval.id} className="healthcurve-awake-interval" x={awakeX} y={TOP} width={Math.max(2, awakeEndX - awakeX)} height={PLOT_HEIGHT}><title>{awakeIntervalValue(interval, data.exposure.timezone)}: explicit Garmin awake interval</title></rect>;
+        })}</g>}
+        {activities.length === 0 ? null : <g data-series="activities">{activities.map((activity) => {
+          const clippedStart = Math.max(start, activity.startedAt);
+          const clippedEnd = Math.min(end, activity.endedAt);
+          if (clippedEnd <= clippedStart) return null;
+          const activityX = LEFT + (clippedStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          const activityEndX = LEFT + (clippedEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
+          const width = Math.max(3, activityEndX - activityX);
+          return <g key={activity.id} className={`healthcurve-activity healthcurve-activity--${activity.family}`}>
+            <title>{experiencedTime(new Date(activity.startedAt).toISOString(), data.exposure.timezone)}: {activity.label}; {activityDetails(activity, data.exposure.timezone)}; source {activity.source}</title>
+            <rect className="healthcurve-activity-window" x={activityX} y={TOP} width={width} height={PLOT_HEIGHT} />
+            <rect className="healthcurve-activity-band" x={activityX} y={TOP + 14} width={width} height="10" rx="2" />
+            {width < 34 ? null : <text aria-hidden="true" className="healthcurve-activity-label" x={activityX + 4} y={TOP + 23}>{activity.family === "walking" ? "Walk" : activity.family === "running" ? "Run" : "Row"}</text>}
+          </g>;
         })}</g>}
         {[0, 25, 50, 75, 100].map((relative) => {
           const y = TOP + PLOT_HEIGHT - relative / 100 * PLOT_HEIGHT;
@@ -1201,6 +1292,13 @@ export function DailyHealthCurve({
         <button type="button" className="button-secondary" disabled={nextObservation === undefined} onClick={() => { if (nextObservation !== undefined) selectTime(nextObservation); }}>Next observation →</button>
       </div>
     </section>
+    {activities.length === 0 ? null : <section className="healthcurve-recorded-activities" aria-labelledby="healthcurve-recorded-activities-title">
+      <h3 id="healthcurve-recorded-activities-title">Recorded activities</h3>
+      <p>Garmin activity intervals are recorded facts on the shared time axis. They do not alter the modeled curve or establish a cause, medication need, or dosing guidance.</p>
+      <ul className="healthcurve-recorded-event-list">{activities.map((activity) => <li key={activity.id}>
+        <time dateTime={new Date(activity.startedAt).toISOString()}>{experiencedTime(new Date(activity.startedAt).toISOString(), data.exposure.timezone)}</time>–<time dateTime={new Date(activity.endedAt).toISOString()}>{localClockTime(activity.endedAt, data.exposure.timezone)}</time>: <strong>{activity.label}</strong> — {activity.duration}{activity.distance === null ? "" : ` · ${activity.distance}`} · {activity.source}
+      </li>)}</ul>
+    </section>}
     {data.symptoms.length > 0 ? <section className="healthcurve-recorded-symptoms" aria-labelledby="healthcurve-recorded-symptoms-title">
       <h3 id="healthcurve-recorded-symptoms-title">Recorded symptoms</h3>
       <p>Symptoms without a recorded severity use a time marker below the numeric scale; HealthCurve does not treat missing severity as zero.</p>

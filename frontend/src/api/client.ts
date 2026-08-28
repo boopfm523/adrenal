@@ -735,7 +735,9 @@ export async function getDailyGarminContext(day: string, timezone: string): Prom
         `/integrations/garmin/records?${selectedDayParams(day, timezone, page).toString()}`,
       );
       return {
-        items: response.records.filter((record) => record.kind === "daily"),
+        items: response.records.filter(
+          (record) => record.kind === "daily" || record.kind === "activity",
+        ),
         totalPages: response.page.total_pages,
       };
     }),

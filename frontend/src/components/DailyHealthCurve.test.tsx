@@ -794,6 +794,41 @@ describe("Daily HealthCurve", () => {
     expect(hoverAt(60).tooltip).toHaveTextContent("Awakenings: 2 reported; exact times unavailable");
   });
 
+  it("overlays supported recorded activity intervals with accessible exact details", () => {
+    const walking: GarminRecord = {
+      ...sample(60),
+      id: "50000000-0000-4000-8000-000000000030",
+      kind: "activity",
+      summary: "Garmin activity: walking",
+      ended_at: "2026-03-08T06:37:15Z",
+      duration_seconds: 2235,
+      activity_type: "walking",
+      distance_miles: "1.2555",
+      metric_type: null,
+      value: null,
+      unit: null,
+    };
+    const cycling: GarminRecord = {
+      ...walking,
+      id: "50000000-0000-4000-8000-000000000031",
+      activity_type: "cycling",
+      ended_at: "2026-03-08T07:00:00Z",
+    };
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [walking, cycling] })} />);
+
+    expect(document.querySelectorAll("[data-series='activities']")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-activity-window")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-activity-band")).toHaveLength(1);
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Recorded activity interval");
+    expect(screen.getByRole("img")).toHaveAccessibleName(/1 recorded activity/);
+    expect(screen.getByRole("img")).toHaveTextContent(/Walking; 37m 15s · 1\.2555 mi/);
+    const activitySection = screen.getByRole("heading", { name: "Recorded activities" }).closest("section");
+    expect(activitySection).toHaveTextContent("Walking — 37m 15s · 1.2555 mi · Garmin provider imported");
+    expect(activitySection).not.toHaveTextContent("Cycling");
+    expect(hoverAt(75).tooltip).toHaveTextContent("Walking: 37m 15s · 1.2555 mi");
+    expect(hoverAt(98).tooltip).not.toHaveTextContent("Walking:");
+  });
+
   it("consolidates duplicate, overlapping, and touching awake intervals", () => {
     const sleep: GarminRecord = {
       ...sample(0),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,10 +13,13 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncStatus,
 )
 from healthcurve.public_site.exporter import (
+    PUBLIC_ACTIVITY_START_DATE,
     PUBLIC_SCHEMA_VERSION,
     PublicIds,
     eligibility_cutoff,
     project_public,
+    public_activity_records,
+    supported_activity_type,
     sync_qualifies,
     validate_public_payload,
 )
@@ -143,3 +147,29 @@ def test_public_payload_validator_accepts_allowlisted_shape() -> None:
             "curve": {"series_name": "Synthetic curve"},
         }
     )
+
+
+@pytest.mark.parametrize(
+    "activity_type",
+    ["walking", "indoor_walking", "running", "treadmill_running", "rowing", "indoor_rowing"],
+)
+def test_supported_public_activity_families(activity_type: str) -> None:
+    assert supported_activity_type(activity_type)
+
+
+@pytest.mark.parametrize("activity_type", [None, "", "cycling", "open_water_swimming"])
+def test_unrequested_public_activity_families_are_excluded(activity_type: str | None) -> None:
+    assert not supported_activity_type(activity_type)
+
+
+def test_static_activity_projection_starts_on_owner_requested_day() -> None:
+    daily = SimpleNamespace(kind="daily")
+    walk = SimpleNamespace(kind="activity", activity_type="walking")
+    cycling = SimpleNamespace(kind="activity", activity_type="cycling")
+
+    records = [daily, walk, cycling]
+    before = public_activity_records(records, day=PUBLIC_ACTIVITY_START_DATE.replace(day=27))
+    starting = public_activity_records(records, day=PUBLIC_ACTIVITY_START_DATE)
+
+    assert before == []
+    assert starting == [walk]

@@ -36,8 +36,25 @@ from healthcurve.integrations.garmin.models import (
 
 PUBLIC_SCHEMA_VERSION: Final = "healthcurve-public-v1"
 PUBLIC_MODEL: Final = "hc-mixed-route-free-v4"
+PUBLIC_ACTIVITY_START_DATE: Final = date(2026, 8, 28)
 SUCCESSFUL_SYNC_STATUSES: Final = frozenset(
     {GarminSyncStatus.COMPLETED, GarminSyncStatus.COMPLETED_WITH_WARNINGS}
+)
+
+SUPPORTED_ACTIVITY_TYPES: Final = frozenset(
+    {
+        "walking",
+        "indoor_walking",
+        "treadmill_walking",
+        "running",
+        "indoor_running",
+        "treadmill_running",
+        "treadmill",
+        "rowing",
+        "indoor_rowing",
+        "rowing_machine",
+        "indoor_rowing_machine",
+    }
 )
 
 Projection = Mapping[str, "Projection | Literal[True]"]
@@ -467,6 +484,25 @@ def _garmin_record(record: Any, ids: PublicIds) -> dict[str, Any]:
     }
 
 
+def supported_activity_type(value: str | None) -> bool:
+    """Limit public activity context to the owner's reviewed workout families."""
+    if value is None:
+        return False
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    return normalized in SUPPORTED_ACTIVITY_TYPES
+
+
+def public_activity_records(records: Iterable[Any], *, day: date) -> list[Any]:
+    """Select forward-only activity facts approved for the public curve."""
+    if day < PUBLIC_ACTIVITY_START_DATE:
+        return []
+    return [
+        record
+        for record in records
+        if record.kind == "activity" and supported_activity_type(record.activity_type)
+    ]
+
+
 def _symptom(record: Any, ids: PublicIds) -> dict[str, Any]:
     return {
         "id": ids.map(record.id, "symptom"),
@@ -595,8 +631,9 @@ def _day_records(session: Session, owner: Owner, day: date) -> tuple[list[Any], 
             overlaps_window=True,
         )
     )
+    activities = public_activity_records(daily, day=day)
     return (
-        [record for record in daily if record.kind == "daily"] + samples + sleep,
+        [record for record in daily if record.kind == "daily"] + activities + samples + sleep,
         symptoms,
         pressure,
         temperature,

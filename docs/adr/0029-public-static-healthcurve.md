@@ -1,6 +1,6 @@
 # ADR-0029: One-way public static HealthCurve mirror
 
-**Status:** Accepted — 2026-08-24
+**Status:** Accepted — 2026-08-24; amended by ADR-0032 — 2026-08-28
 
 ## Context
 
