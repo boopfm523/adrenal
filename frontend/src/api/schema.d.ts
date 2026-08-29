@@ -468,6 +468,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-quality/background-jobs/acknowledge-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge All Background Job Findings */
+        post: operations["acknowledge_all_background_job_findings_api_v1_data_quality_background_jobs_acknowledge_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-quality/background-jobs/{job_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge Background Job Finding */
+        post: operations["acknowledge_background_job_finding_api_v1_data_quality_background_jobs__job_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-quality/garmin-syncs/{sync_run_id}/acknowledge": {
         parameters: {
             query?: never;
@@ -2434,8 +2468,10 @@ export interface components {
         };
         /** DataQualityFindingOut */
         DataQualityFindingOut: {
+            /** Acknowledge Label */
+            acknowledge_label: string | null;
             /** Action Label */
-            action_label: string;
+            action_label: string | null;
             /** Can Acknowledge */
             can_acknowledge: boolean;
             /** Detail */
@@ -2443,9 +2479,11 @@ export interface components {
             /** Finding Kind */
             finding_kind: string;
             /** Href */
-            href: string;
+            href: string | null;
             /** Id */
             id: string;
+            /** Occurred At */
+            occurred_at: string | null;
             /** Record Id */
             record_id: string | null;
             /** Severity */
@@ -2465,6 +2503,8 @@ export interface components {
             /** Findings */
             findings: components["schemas"]["DataQualityFindingOut"][];
             page: components["schemas"]["PageMetadata"];
+            /** Timezone */
+            timezone: string;
         };
         /** DayAnalysisGenerationOut */
         DayAnalysisGenerationOut: {
@@ -6619,6 +6659,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DataQualityOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_all_background_job_findings_api_v1_data_quality_background_jobs_acknowledge_all_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_background_job_finding_api_v1_data_quality_background_jobs__job_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

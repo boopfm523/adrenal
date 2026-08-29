@@ -2493,9 +2493,27 @@
       },
       "DataQualityFindingOut": {
         "properties": {
+          "acknowledge_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledge Label"
+          },
           "action_label": {
-            "title": "Action Label",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Label"
           },
           "can_acknowledge": {
             "title": "Can Acknowledge",
@@ -2510,12 +2528,31 @@
             "type": "string"
           },
           "href": {
-            "title": "Href",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Href"
           },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
           },
           "record_id": {
             "anyOf": [
@@ -2551,7 +2588,9 @@
           "record_id",
           "href",
           "action_label",
-          "can_acknowledge"
+          "can_acknowledge",
+          "acknowledge_label",
+          "occurred_at"
         ],
         "title": "DataQualityFindingOut",
         "type": "object"
@@ -2572,11 +2611,16 @@
           },
           "page": {
             "$ref": "#/components/schemas/PageMetadata"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
           }
         },
         "required": [
           "findings",
-          "page"
+          "page",
+          "timezone"
         ],
         "title": "DataQualityOut",
         "type": "object"
@@ -14280,6 +14324,132 @@
           }
         },
         "summary": "Data Quality",
+        "tags": [
+          "data-quality"
+        ]
+      }
+    },
+    "/api/v1/data-quality/background-jobs/acknowledge-all": {
+      "post": {
+        "operationId": "acknowledge_all_background_job_findings_api_v1_data_quality_background_jobs_acknowledge_all_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge All Background Job Findings",
+        "tags": [
+          "data-quality"
+        ]
+      }
+    },
+    "/api/v1/data-quality/background-jobs/{job_id}/acknowledge": {
+      "post": {
+        "operationId": "acknowledge_background_job_finding_api_v1_data_quality_background_jobs__job_id__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge Background Job Finding",
         "tags": [
           "data-quality"
         ]

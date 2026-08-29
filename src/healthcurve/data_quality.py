@@ -35,9 +35,11 @@ class Finding:
     title: str
     detail: str
     record_id: uuid.UUID | None
-    href: str
-    action_label: str
+    href: str | None
+    action_label: str | None
     can_acknowledge: bool = False
+    acknowledge_label: str | None = None
+    occurred_at: datetime | None = None
 
 
 GARMIN_WARNING_LABELS = {
@@ -89,19 +91,30 @@ def _garmin_warning_label(code: str) -> str:
     return code.replace("_", " ")
 
 
-def _garmin_sync_acknowledged(
-    session: Session, *, owner_id: uuid.UUID, sync_run_id: uuid.UUID
+def _finding_acknowledged(
+    session: Session, *, owner_id: uuid.UUID, target_type: str, target_id: uuid.UUID
 ) -> bool:
     return (
         session.scalar(
             select(AuditEntry.id).where(
                 AuditEntry.actor == audit.actor_for_owner(owner_id),
                 AuditEntry.action == audit.AuditAction.DATA_QUALITY_ACKNOWLEDGED,
-                AuditEntry.target_type == "garmin_sync_run",
-                AuditEntry.target_id == sync_run_id,
+                AuditEntry.target_type == target_type,
+                AuditEntry.target_id == target_id,
             )
         )
         is not None
+    )
+
+
+def _garmin_sync_acknowledged(
+    session: Session, *, owner_id: uuid.UUID, sync_run_id: uuid.UUID
+) -> bool:
+    return _finding_acknowledged(
+        session,
+        owner_id=owner_id,
+        target_type="garmin_sync_run",
+        target_id=sync_run_id,
     )
 
 
@@ -311,10 +324,19 @@ def findings_for_owner(
                     href="/settings#garmin-connection",
                     action_label="Open Garmin sync settings",
                     can_acknowledge=True,
+                    acknowledge_label="Clear reviewed notice",
+                    occurred_at=latest_sync.finished_at,
                 )
             )
 
-    for job in dead_letters(session):
+    for job in dead_letters(session, owner_id=owner_id):
+        if _finding_acknowledged(
+            session,
+            owner_id=owner_id,
+            target_type="background_job",
+            target_id=job.id,
+        ):
+            continue
         findings.append(
             Finding(
                 id=f"dead-letter:{job.id}",
@@ -322,10 +344,16 @@ def findings_for_owner(
                 severity="warning",
                 source="Background job queue",
                 title="Background task exhausted retries",
-                detail=f"Task {job.task}; reason {job.last_error_code or 'unknown_error'}.",
+                detail=(
+                    f"Task {job.task}; reason {job.last_error_code or 'unknown_error'}. "
+                    "Clearing this notice keeps the job history and does not change health data."
+                ),
                 record_id=job.id,
-                href="/data-quality#operations",
-                action_label="Review operations runbook",
+                href=None,
+                action_label=None,
+                can_acknowledge=True,
+                acknowledge_label="Clear reviewed failure",
+                occurred_at=job.finished_at,
             )
         )
     return sorted(findings, key=lambda finding: (finding.finding_kind, finding.source, finding.id))

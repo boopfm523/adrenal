@@ -323,16 +323,17 @@ def job_status(session: Session, *, task: str, idempotency_key: str) -> JobStatu
     )
 
 
-def dead_letters(session: Session, *, limit: int = 100) -> tuple[DeadLetter, ...]:
+def dead_letters(
+    session: Session, *, owner_id: uuid.UUID | None = None, limit: int = 100
+) -> tuple[DeadLetter, ...]:
     """Operator-safe dead-letter visibility; payload is deliberately excluded."""
     if not 1 <= limit <= 1000:
         raise JobQueueError("dead_letter_limit_invalid")
-    rows = session.scalars(
-        select(Job)
-        .where(Job.status == JobStatus.DEAD_LETTER)
-        .order_by(Job.finished_at.desc(), Job.id)
-        .limit(limit)
-    )
+    statement = select(Job).where(Job.status == JobStatus.DEAD_LETTER)
+    if owner_id is not None:
+        payload_owner = Job.payload["owner_id"].as_string()
+        statement = statement.where(or_(payload_owner.is_(None), payload_owner == str(owner_id)))
+    rows = session.scalars(statement.order_by(Job.finished_at.desc(), Job.id).limit(limit))
     return tuple(
         DeadLetter(
             id=row.id,

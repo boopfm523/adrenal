@@ -792,6 +792,18 @@ export async function acknowledgeGarminSyncFinding(syncRunId: string): Promise<v
   });
 }
 
+export async function acknowledgeBackgroundJobFinding(jobId: string): Promise<void> {
+  await apiRequest<unknown>(`/data-quality/background-jobs/${encodeURIComponent(jobId)}/acknowledge`, {
+    method: "POST",
+  });
+}
+
+export async function acknowledgeAllBackgroundJobFindings(): Promise<void> {
+  await apiRequest<unknown>("/data-quality/background-jobs/acknowledge-all", {
+    method: "POST",
+  });
+}
+
 export function getGarminStatus(): Promise<GarminStatus> {
   return apiRequest<GarminStatus>("/integrations/garmin/status");
 }

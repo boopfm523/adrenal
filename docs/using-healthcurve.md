@@ -801,9 +801,14 @@ episode end time from elapsed duration.
 
 The authenticated `/data-quality` page collects items that need attention from AI
 extraction drafts, rejected lab imports, and background jobs. Each finding links to
-the relevant review or correction destination. It also shows metrics that the latest
-Garmin source genuinely did not supply in a separate section. A provider-reported
-absence is not stored or displayed as zero.
+the relevant review or correction destination when one exists. Exhausted background
+jobs show when the final attempt failed in the owner's timezone. They remain visible
+so a missing reminder, chat answer, import, export, or backup is explainable; they do
+not imply that recorded health data is wrong. “Clear reviewed failure” and “Clear all
+reviewed failures” hide those notices with an audit entry while preserving the job
+history and all health data. A later failed job creates a new notice. The page also
+shows metrics that the latest Garmin source genuinely did not supply in a separate
+section. A provider-reported absence is not stored or displayed as zero.
 
 The page is a review queue, not a clinical completeness check. “No known data-quality
 findings” only means that the implemented deterministic checks found nothing current;

@@ -7738,8 +7738,10 @@ def test_data_quality_distinguishes_problems_from_provider_absence(
     client: TestClient, logged_in: dict[str, str], engine: Engine
 ) -> None:
     with Session(engine) as session, session.begin():
-        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
-        assert owner_id is not None
+        owner = session.scalar(select(Owner).where(Owner.email == EMAIL))
+        assert owner is not None
+        owner_id = owner.id
+        owner_timezone = owner.default_timezone
         session.add(
             ExtractionDraft(
                 owner_id=owner_id,
@@ -7778,17 +7780,19 @@ def test_data_quality_distinguishes_problems_from_provider_absence(
                 device_attributions=[],
             )
         )
-        session.add(
-            Job(
-                task="synthetic.quality",
-                payload={},
-                idempotency_key="synthetic-quality-dead-letter",
-                status=JobStatus.DEAD_LETTER,
-                attempt_count=3,
-                max_attempts=3,
-                last_error_code="synthetic_failure",
-            )
+        job = Job(
+            task="synthetic.quality",
+            payload={"owner_id": str(owner_id)},
+            idempotency_key="synthetic-quality-dead-letter",
+            status=JobStatus.DEAD_LETTER,
+            attempt_count=3,
+            max_attempts=3,
+            last_error_code="synthetic_failure",
+            finished_at=datetime(2026, 8, 12, 17, 30, tzinfo=UTC),
         )
+        session.add(job)
+        session.flush()
+        job_id = job.id
 
     response = client.get("/api/v1/data-quality")
     assert response.status_code == 200, response.text
@@ -7798,13 +7802,118 @@ def test_data_quality_distinguishes_problems_from_provider_absence(
     assert "Lab document import failed" in titles
     assert "Hrv not supplied" in titles
     assert "Background task exhausted retries" in titles
+    operational = next(
+        f for f in body["findings"] if f["title"] == "Background task exhausted retries"
+    )
+    assert operational["occurred_at"] == "2026-08-12T17:30:00Z"
+    assert operational["href"] is None
+    assert operational["action_label"] is None
+    assert operational["can_acknowledge"] is True
+    assert operational["acknowledge_label"] == "Clear reviewed failure"
+    assert "does not change health data" in operational["detail"]
     absence = next(f for f in body["findings"] if f["title"] == "Hrv not supplied")
     assert absence["finding_kind"] == "genuine_absence"
     assert "no zero is inferred" in absence["detail"]
     for finding in body["findings"]:
-        assert finding["href"].startswith("/")
-        assert finding["action_label"]
+        if finding["href"] is not None:
+            assert finding["href"].startswith("/")
+            assert finding["action_label"]
     assert "does not mean" in body["completeness_notice"]
+    assert body["timezone"] == owner_timezone
+
+    acknowledged = client.post(
+        f"/api/v1/data-quality/background-jobs/{job_id}/acknowledge",
+        headers=logged_in,
+    )
+    assert acknowledged.status_code == 204
+    assert all(
+        item["id"] != f"dead-letter:{job_id}"
+        for item in client.get("/api/v1/data-quality").json()["findings"]
+    )
+    with Session(engine) as session:
+        entry = session.scalar(
+            select(AuditEntry).where(
+                AuditEntry.action == AuditAction.DATA_QUALITY_ACKNOWLEDGED,
+                AuditEntry.target_type == "background_job",
+                AuditEntry.target_id == job_id,
+            )
+        )
+        assert entry is not None
+        assert entry.change_summary == "reviewed background job failure notice"
+
+
+def test_data_quality_bulk_acknowledges_owner_and_global_background_failures(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    with Session(engine) as session, session.begin():
+        owner_id = session.scalar(select(Owner.id).where(Owner.email == EMAIL))
+        assert owner_id is not None
+        other = Owner(
+            email=f"other-job-owner-{uuid.uuid4()}@example.test",
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone="UTC",
+        )
+        session.add(other)
+        session.flush()
+        jobs = [
+            Job(
+                task="synthetic.owner.quality",
+                payload={"owner_id": str(owner_id)},
+                idempotency_key=f"synthetic-owner-{uuid.uuid4()}",
+                status=JobStatus.DEAD_LETTER,
+                attempt_count=1,
+                max_attempts=1,
+                last_error_code="synthetic_failure",
+                finished_at=datetime(2026, 8, 12, 18, 0, tzinfo=UTC),
+            ),
+            Job(
+                task="synthetic.global.quality",
+                payload={},
+                idempotency_key=f"synthetic-global-{uuid.uuid4()}",
+                status=JobStatus.DEAD_LETTER,
+                attempt_count=1,
+                max_attempts=1,
+                last_error_code="synthetic_failure",
+                finished_at=datetime(2026, 8, 12, 18, 1, tzinfo=UTC),
+            ),
+            Job(
+                task="synthetic.other.quality",
+                payload={"owner_id": str(other.id)},
+                idempotency_key=f"synthetic-other-{uuid.uuid4()}",
+                status=JobStatus.DEAD_LETTER,
+                attempt_count=1,
+                max_attempts=1,
+                last_error_code="synthetic_failure",
+                finished_at=datetime(2026, 8, 12, 18, 2, tzinfo=UTC),
+            ),
+        ]
+        session.add_all(jobs)
+        session.flush()
+        owner_job_id, global_job_id, other_job_id = (job.id for job in jobs)
+
+    visible_ids = {
+        finding["record_id"] for finding in client.get("/api/v1/data-quality").json()["findings"]
+    }
+    assert str(owner_job_id) in visible_ids
+    assert str(global_job_id) in visible_ids
+    assert str(other_job_id) not in visible_ids
+
+    response = client.post(
+        "/api/v1/data-quality/background-jobs/acknowledge-all", headers=logged_in
+    )
+    assert response.status_code == 204
+    with Session(engine) as session:
+        acknowledged_ids = set(
+            session.scalars(
+                select(AuditEntry.target_id).where(
+                    AuditEntry.actor == audit.actor_for_owner(owner_id),
+                    AuditEntry.action == AuditAction.DATA_QUALITY_ACKNOWLEDGED,
+                    AuditEntry.target_type == "background_job",
+                    AuditEntry.target_id.in_((owner_job_id, global_job_id, other_job_id)),
+                )
+            )
+        )
+    assert acknowledged_ids == {owner_job_id, global_job_id}
 
 
 def test_data_quality_flags_only_owner_scoped_open_episodes_at_24_hour_boundary(
