@@ -34,6 +34,7 @@ from healthcurve.ai.extraction import (
     find_explicit_weight,
     find_time_expression,
     looks_like_deterministic_health_entry,
+    normalise_local_time,
 )
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.ai.ollama import ModelOutcome, OllamaClient
@@ -56,6 +57,8 @@ from healthcurve.events.timekeeping import (
     AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
     from_instant,
+    is_ambiguous,
+    is_nonexistent,
     resolve_event_time,
     timezone_abbreviation,
 )
@@ -574,6 +577,23 @@ def _planned_dose_draft(
     description = match.group("description").strip()
 
     local = _local_now(owner, now)
+    flags: list[FlagCode] = []
+    stated_time = find_time_expression(text)
+    if stated_time is None:
+        flags.append(FlagCode.ASSUMED_TIME)
+    else:
+        parsed = normalise_local_time(stated_time, local)
+        if parsed is None:  # defensive: finder and normalizer intentionally share a grammar
+            return Reply(
+                "I couldn't read the time in that scheduled-dose message. Nothing was "
+                "recorded; include the time as HH:MM."
+            )
+        local = parsed
+        if is_nonexistent(local, owner.default_timezone):
+            flags.append(FlagCode.NONEXISTENT_TIME)
+        elif is_ambiguous(local, owner.default_timezone):
+            flags.append(FlagCode.AMBIGUOUS_TIME)
+
     period = _planned_dose_period(description, local.time())
     if period is None:
         return Reply(
@@ -631,7 +651,8 @@ def _planned_dose_draft(
             local_time=local,
             timezone=owner.default_timezone,
             confidence=1.0,
-            flags=[FlagCode.ASSUMED_TIME],
+            flags=flags,
+            is_actionable=not bool(BLOCKING_FLAGS & set(flags)),
         )
         for slot in sorted(slots, key=lambda item: (item.sort_order, item.medication.name, item.id))
     ]
@@ -2203,11 +2224,19 @@ def draft_edit_help(session: Session, owner: Owner, draft_id: uuid.UUID) -> Repl
     return reply
 
 
+def _display_decimal(value: Decimal | None) -> str:
+    """Render canonical decimal values without leaking storage scale to the owner."""
+    if value is None:
+        return "?"
+    rendered = format(value, "f")
+    return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
+
+
 def _describe(candidate: ValidatedCandidate) -> str:
     when = candidate.local_time.strftime("%H:%M") if candidate.local_time else "time unknown"
     match candidate.type:
         case CandidateType.DOSE:
-            amount = f"{candidate.amount} {candidate.unit or ''}".strip()
+            amount = f"{_display_decimal(candidate.amount)} {candidate.unit or ''}".strip()
             category = (
                 "Stress dose" if candidate.dose_category is DoseCategory.STRESS else "Regular dose"
             )

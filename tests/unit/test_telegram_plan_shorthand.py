@@ -130,6 +130,54 @@ def test_generic_morning_shorthand_resolves_all_unique_plan_medications(
     assert active.call_args.args[2] == sent_at
 
 
+def test_morning_shorthand_honors_explicit_time_and_formats_plan_amounts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hydrocortisone = _medication("Hydrocortisone", "hydrocortisone")
+    fludrocortisone = _medication("Fludrocortisone", "fludrocortisone")
+
+    reply, candidates, _ = _resolve(
+        monkeypatch,
+        "Took my morning medicine at 6:40 am.",
+        sent_at=datetime(2026, 8, 30, 10, 48, tzinfo=UTC),  # 06:48 EDT
+        slots=[
+            _slot(hydrocortisone, "15.0000", clock=None, sort_order=0),
+            _slot(fludrocortisone, "0.1000", clock=time(7), sort_order=1),
+        ],
+    )
+
+    assert reply is not None and reply.text == "confirmation draft"
+    assert [candidate.local_time.isoformat() for candidate in candidates] == [
+        "2026-08-30T06:40:00",
+        "2026-08-30T06:40:00",
+    ]
+    assert all(handlers.FlagCode.ASSUMED_TIME not in candidate.flags for candidate in candidates)
+    assert [
+        handlers._describe(candidate)  # pyright: ignore[reportPrivateUsage]
+        for candidate in candidates
+    ] == [
+        "Regular dose: 15 mg Hydrocortisone at 06:40",
+        "Regular dose: 0.1 mg Fludrocortisone at 06:40",
+    ]
+
+
+def test_morning_shorthand_without_time_still_uses_message_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hydrocortisone = _medication("Hydrocortisone", "hydrocortisone")
+
+    _, candidates, _ = _resolve(
+        monkeypatch,
+        "Took my morning medicine.",
+        sent_at=datetime(2026, 8, 30, 10, 48, tzinfo=UTC),  # 06:48 EDT
+        slots=[_slot(hydrocortisone, "15.0000", clock=None, sort_order=0)],
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].local_time.isoformat() == "2026-08-30T06:48:00"
+    assert handlers.FlagCode.ASSUMED_TIME in candidates[0].flags
+
+
 def test_named_afternoon_shorthand_selects_only_named_medication(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
