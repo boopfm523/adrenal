@@ -28,8 +28,9 @@ HealthCurve stores only these fields when Garmin supplies them:
   score, and explicitly bounded awake-stage intervals when Garmin supplies them.
 
 Missing stays missing. HealthCurve never substitutes zero. Intensity minutes, Body
-Battery, Pulse Ox, calories, Garmin weight, non-awake sleep-stage detail, GPS routes,
-and every other provider field are deferred unless a later Bead explicitly adds them.
+Battery measurements/feedback, Pulse Ox, calories, Garmin weight, non-awake sleep-stage
+detail, GPS routes, and every other provider field are deferred unless a later Bead
+explicitly adds them.
 
 The selected-day sleep endpoint uses interval overlap, so a session beginning before
 midnight still appears on its wake day. HealthCurve stores only explicit bounded awake
@@ -37,6 +38,13 @@ intervals under the immutable sleep revision. An aggregate awakening count never
 becomes guessed timestamps; when the provider reports awakenings without their timing,
 the graph says that intermediate timing is unavailable. See
 [ADR-0016](adr/0016-garmin-sleep-interval-contract.md).
+
+Garmin naps are read separately from overnight sleep. HealthCurve keeps only each nap's
+start, end, duration, session kind, and provider provenance; unrelated body-battery
+feedback and stress arrays are discarded. Naps appear as distinct intervals and never
+supply the overnight final wake, wake-anchored reference, or nightly sleep baseline.
+If Garmin supplies no supported nap event, the capability remains unavailable rather
+than becoming a zero-duration nap. See [ADR-0034](adr/0034-garmin-nap-events.md).
 
 ## Verified intraday and aggregate contract
 

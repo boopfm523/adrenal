@@ -11,10 +11,11 @@ from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from healthcurve.events.timekeeping import EventTime, resolve_event_time
-from healthcurve.integrations.garmin.models import GarminMetricType
+from healthcurve.integrations.garmin.models import GarminMetricType, GarminSleepKind
 
 METERS_PER_MILE: Final = Decimal("1609.344")
 MAX_ACTIVITY_SECONDS: Final = Decimal(31 * 24 * 60 * 60)
+MAX_NAP_MILLISECONDS: Final = 24 * 60 * 60 * 1_000
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class SleepStageObservation:
 class SleepObservation:
     event_time: EventTime
     ended_at: datetime
+    kind: GarminSleepKind
     duration_seconds: int | None
     duration_source: str
     awakenings: int | None
@@ -228,6 +230,7 @@ def _map_sleep(
     return SleepObservation(
         event_time=event_time,
         ended_at=end_gmt,
+        kind=GarminSleepKind.OVERNIGHT,
         duration_seconds=duration,
         duration_source=duration_source,
         awakenings=awakenings,
@@ -237,6 +240,68 @@ def _map_sleep(
         provider_id=f"sleep:{day.isoformat()}",
         revision=_revision(selected),
     )
+
+
+def map_naps(
+    payload: list[dict[str, Any]], *, timezone: str
+) -> tuple[tuple[SleepObservation, ...], tuple[str, ...]]:
+    """Select bounded nap intervals without retaining body-battery event payloads."""
+
+    zone = _zone(timezone)
+    observations: list[SleepObservation] = []
+    warnings: list[str] = []
+    for raw in payload[:10_000]:
+        event = raw.get("event")
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("eventType")
+        if not isinstance(event_type, str) or event_type.strip().casefold() != "nap":
+            continue
+        started_at = _parse_iso(event.get("eventStartTimeGmt"), utc=True)
+        duration_ms = _bounded_int(event.get("durationInMilliseconds"), 1, MAX_NAP_MILLISECONDS)
+        if started_at is None:
+            warnings.append("nap_required_field_missing")
+            continue
+        if duration_ms is None:
+            warnings.append("nap_duration_invalid")
+            continue
+        ended_at = started_at + timedelta(milliseconds=duration_ms)
+        local = started_at.astimezone(zone)
+        offset = local.utcoffset()
+        if offset is None:  # pragma: no cover - ZoneInfo always supplies this
+            warnings.append("nap_timezone_invalid")
+            continue
+        event_time = EventTime(
+            occurred_at=started_at,
+            local_time=local.replace(tzinfo=None),
+            timezone=zone.key,
+            utc_offset_minutes=int(offset.total_seconds() / 60),
+        )
+        duration_seconds = int(Decimal(duration_ms) / Decimal(1_000))
+        selected = {
+            "kind": GarminSleepKind.NAP.value,
+            "start": started_at.isoformat(),
+            "end": ended_at.isoformat(),
+            "duration_seconds": duration_seconds,
+        }
+        observations.append(
+            SleepObservation(
+                event_time=event_time,
+                ended_at=ended_at,
+                kind=GarminSleepKind.NAP,
+                duration_seconds=duration_seconds,
+                duration_source="provider",
+                awakenings=None,
+                score=None,
+                stage_count=0,
+                stage_intervals=(),
+                provider_id=f"nap:{started_at.isoformat()}",
+                revision=_revision(selected),
+            )
+        )
+    if len(payload) > 10_000:
+        warnings.append("nap_response_truncated")
+    return tuple(observations), tuple(sorted(set(warnings)))
 
 
 def _map_sleep_stages(

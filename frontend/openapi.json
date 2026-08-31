@@ -4289,6 +4289,21 @@
             "title": "Sleep Intervals",
             "type": "array"
           },
+          "sleep_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "overnight",
+                  "nap"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sleep Kind"
+          },
           "sleep_score": {
             "anyOf": [
               {

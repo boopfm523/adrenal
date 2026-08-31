@@ -68,6 +68,11 @@ class GarminSleepStage(StrEnum):
     AWAKE = "awake"
 
 
+class GarminSleepKind(StrEnum):
+    OVERNIGHT = "overnight"
+    NAP = "nap"
+
+
 class GarminConnection(OpsBase):
     """Non-secret owner-scoped state for the opt-in automatic integration."""
 
@@ -322,6 +327,12 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
     __tablename__ = "garmin_sleep_event"
 
     ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sleep_kind: Mapped[GarminSleepKind] = mapped_column(
+        StrEnumType(GarminSleepKind, 16),
+        nullable=False,
+        default=GarminSleepKind.OVERNIGHT,
+        server_default=text("'overnight'"),
+    )
     overall_sleep_score: Mapped[int | None] = mapped_column()
     stage_count: Mapped[int] = mapped_column(nullable=False)
     duration_seconds: Mapped[int | None] = mapped_column()
@@ -335,6 +346,7 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
 
     __table_args__ = (
         CheckConstraint("ended_at > occurred_at", name="sleep_interval_ordered"),
+        CheckConstraint("sleep_kind IN ('overnight', 'nap')", name="sleep_kind_valid"),
         CheckConstraint(
             "overall_sleep_score IS NULL OR overall_sleep_score BETWEEN 0 AND 100",
             name="sleep_score_range",

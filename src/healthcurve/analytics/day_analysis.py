@@ -454,6 +454,7 @@ def build_projection(
             {
                 **_event_time(row, zone),
                 "ended_at": row.ended_at,
+                "sleep_kind": row.sleep_kind,
                 "duration_seconds": row.duration_seconds,
                 "overall_sleep_score": row.overall_sleep_score,
                 "awakenings": row.awakenings,

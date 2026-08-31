@@ -35,6 +35,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminMetricType,
     GarminSleepEvent,
+    GarminSleepKind,
     WearableDailySummary,
 )
 from healthcurve.labs.models import LabPanel, LabResult
@@ -500,6 +501,7 @@ def _event_payload(row: EventMixin, *, include_sensitive: bool) -> dict[str, obj
         payload.update(
             record_type="garmin_sleep",
             ended_at=row.ended_at,
+            sleep_kind=row.sleep_kind,
             duration_seconds=row.duration_seconds,
             overall_sleep_score=row.overall_sleep_score,
             awakenings=row.awakenings,
@@ -646,7 +648,9 @@ def _search_timeline(
     limited = rows[: args.limit]
     items = [_event_payload(row, include_sensitive=args.include_sensitive_text) for row in limited]
     sleep_rows = [row for row in rows if isinstance(row, GarminSleepEvent)]
-    wake_instants = [row.ended_at for row in sleep_rows]
+    wake_instants = [
+        row.ended_at for row in sleep_rows if row.sleep_kind is GarminSleepKind.OVERNIGHT
+    ]
     average_wake_time = _average_local_time(wake_instants, timezone=args.timezone)
     average_wake_hour: int | None = None
     average_wake_minute: int | None = None
@@ -1056,6 +1060,7 @@ def _sleep_before(
             select(GarminSleepEvent)
             .where(
                 GarminSleepEvent.owner_id == owner_id,
+                GarminSleepEvent.sleep_kind == GarminSleepKind.OVERNIGHT,
                 GarminSleepEvent.ended_at <= anchor,
                 GarminSleepEvent.ended_at >= history_start.astimezone(UTC),
                 event_service.current_fact_predicate(GarminSleepEvent, owner_id=owner_id),

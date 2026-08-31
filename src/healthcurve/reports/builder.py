@@ -361,6 +361,7 @@ def build_snapshot(
                 "garmin_sleep",
                 (
                     "ended_at",
+                    "sleep_kind",
                     "duration_seconds",
                     "garmin_duration_source",
                     "awakenings",

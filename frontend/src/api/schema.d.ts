@@ -3035,6 +3035,8 @@ export interface components {
             sample_interval_seconds?: number | null;
             /** Sleep Intervals */
             sleep_intervals?: components["schemas"]["GarminSleepIntervalOut"][];
+            /** Sleep Kind */
+            sleep_kind?: ("overnight" | "nap") | null;
             /** Sleep Score */
             sleep_score?: number | null;
             /** Summary */

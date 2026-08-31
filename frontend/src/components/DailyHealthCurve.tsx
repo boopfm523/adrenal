@@ -697,12 +697,14 @@ function sleepTooltipObservations(
     const awakeIntervals = record.sleep_intervals ?? [];
     const startIsVisible = sessionStart >= dayStart && sessionStart < dayEnd;
     const endIsVisible = sessionEnd > dayStart && sessionEnd <= dayEnd;
+    const isNap = record.sleep_kind === "nap";
+    const series = isNap ? "Nap" : "Sleep";
 
     if (startIsVisible) {
       observations.push({
         id: `${record.id}-sleep-start`,
         time: record.time.occurred_at,
-        series: "Sleep",
+        series,
         value: "started",
       });
     }
@@ -710,8 +712,8 @@ function sleepTooltipObservations(
       observations.push({
         id: `${record.id}-sleep-end`,
         time: record.ended_at ?? record.time.occurred_at,
-        series: "Sleep",
-        value: "final wake / sleep ended",
+        series,
+        value: isNap ? "ended" : "final wake / sleep ended",
       });
     }
     for (const [index, interval] of awakeIntervals.entries()) {
@@ -1003,6 +1005,8 @@ export function DailyHealthCurve({
     ? Date.parse(data.exposure.wake_reference.assumptions.wake_at)
     : undefined;
   const sleepRecords = data.garmin.filter((record) => record.kind === "sleep" && record.ended_at != null);
+  const overnightSleepRecords = sleepRecords.filter((record) => record.sleep_kind !== "nap");
+  const napRecords = sleepRecords.filter((record) => record.sleep_kind === "nap");
   const missingWakeTiming = sleepRecords.some(
     (record) => (record.awakenings ?? 0) > 0 && (record.sleep_intervals ?? []).length === 0,
   );
@@ -1199,7 +1203,7 @@ export function DailyHealthCurve({
       These are actual recorded facts and do not require a dose plan. The selected model supports only its listed medications, formulations, routes, amounts, and units{isWakeFreeCurve(data.exposure) ? ` (${supportedDoseDescription(data.exposure)})` : ""}; it does not invent exposure for an unsupported fact. Hollow diamond markers show the recorded administration times.
       <ul>{unmodeledDoses.map((dose) => <li key={dose.dose_event_id}><time dateTime={dose.occurred_at}>{experiencedTime(dose.occurred_at, data.exposure.timezone)}</time>: <strong>{dose.category === "stress" ? "Stress dose" : "Dose"} — {dose.medication_name} {formatMeasurement(dose.amount, dose.unit)}</strong> ({dose.route}; {doseExclusionReason(dose.exclusion_reason)})</li>)}</ul>
     </aside>}
-    <div className="healthcurve-legend" aria-label="Overlay series legend">{sleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{activities.length === 0 ? null : <span><i className="healthcurve-key healthcurve-key--activity" aria-hidden="true" />Recorded activity interval</span>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}{showCurrentTime ? <span><i className="healthcurve-key healthcurve-key--current-time" aria-hidden="true" />Current local time · {currentTimeLabel}</span> : null}</div>
+    <div className="healthcurve-legend" aria-label="Overlay series legend">{overnightSleepRecords.length === 0 ? null : <><span><i className="healthcurve-key healthcurve-key--sleep" aria-hidden="true" />Overnight sleep session</span><span><i className="healthcurve-key healthcurve-key--awake" aria-hidden="true" />Explicit awake interval</span></>}{napRecords.length === 0 ? null : <span><i className="healthcurve-key healthcurve-key--nap" aria-hidden="true" />Nap interval</span>}{activities.length === 0 ? null : <span><i className="healthcurve-key healthcurve-key--activity" aria-hidden="true" />Recorded activity interval</span>}{visibleContextBand ? <span><i className="healthcurve-key healthcurve-key--context-band" aria-hidden="true" />Illustrative circadian context · nmol/L</span> : null}{visibleWakeReferenceBand ? <span><i className="healthcurve-key healthcurve-key--wake-reference" aria-hidden="true" />Wake-anchored healthy reference · P5–P95 free nmol/L</span> : null}{shownLanes.map((lane) => <span key={lane.key}><i className={`healthcurve-key healthcurve-key--${lane.key}`} aria-hidden="true" />{lane.label} · {lane.unit}{lane.key === "respiration_rate" ? " · calmer 5-sample median line" : ""}</span>)}{showCurrentTime ? <span><i className="healthcurve-key healthcurve-key--current-time" aria-hidden="true" />Current local time · {currentTimeLabel}</span> : null}</div>
     <div className="healthcurve-mobile-controls" role="group" aria-label="Mobile chart controls">
       <span>Chart zoom</span>
       <button type="button" className="button-secondary" aria-label="Zoom chart out" disabled={chartZoom === 1} onClick={() => { setChartZoom(chartZoom === 2 ? 1.5 : 1); }}>−</button>
@@ -1207,7 +1211,7 @@ export function DailyHealthCurve({
       <button type="button" className="button-secondary" aria-label="Zoom chart in" disabled={chartZoom === 2} onClick={() => { setChartZoom(chartZoom === 1 ? 1.5 : 2); }}>+</button>
     </div>
     <div className="healthcurve-scroll" tabIndex={0} role="region" aria-label="Daily HealthCurve synchronized chart">
-      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${activities.length.toString()} recorded ${activities.length === 1 ? "activity" : "activities"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.${showCurrentTime ? ` Current local time is marked at ${currentTimeLabel}; the region after the marker is later today and does not represent missing or zero data.` : ""}`}>
+      <svg className={`healthcurve-chart healthcurve-chart--zoom-${chartZoom.toString().replace(".", "-")}`} viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`Interactive selected-day HealthCurve overlay for ${data.exposure.date} in ${timezoneAbbreviationForLocalDate(data.exposure.timezone, data.exposure.date)}; ${data.symptoms.length.toString()} recorded symptom ${data.symptoms.length === 1 ? "event" : "events"}; ${napRecords.length.toString()} recorded ${napRecords.length === 1 ? "nap" : "naps"}; ${activities.length.toString()} recorded ${activities.length === 1 ? "activity" : "activities"}; ${isWakeFreeCurve(data.exposure) ? "modeled and reference cortisol share an absolute serum-free-cortisol axis while other series use relative display positions" : "relative display positions share one time axis"}, and exact values follow.${showCurrentTime ? ` Current local time is marked at ${currentTimeLabel}; the region after the marker is later today and does not represent missing or zero data.` : ""}`}>
         <rect className="healthcurve-overlay-bg" x={LEFT} y={TOP} width={PLOT_WIDTH} height={PLOT_HEIGHT} />
         {showCurrentTime ? <rect data-current-time-future-region="true" className="healthcurve-future-region" x={currentTimeX} y={TOP} width={Math.max(0, LEFT + PLOT_WIDTH - currentTimeX)} height={PLOT_HEIGHT} aria-hidden="true" /> : null}
         {expectedPreWakeEnd === undefined || expectedPreWakeEnd <= start ? null : <g data-series="expected-pre-wake-gap">
@@ -1221,11 +1225,13 @@ export function DailyHealthCurve({
           const clippedEnd = Math.min(end, sessionEnd);
           const startX = LEFT + (clippedStart - start) / Math.max(end - start, 1) * PLOT_WIDTH;
           const endX = LEFT + (clippedEnd - start) / Math.max(end - start, 1) * PLOT_WIDTH;
-          return <g key={record.id} className="healthcurve-sleep-session">
-            <title>{experiencedTime(record.time.occurred_at, data.exposure.timezone)} sleep start; {experiencedTime(record.ended_at ?? record.time.occurred_at, data.exposure.timezone)} wake / sleep end; Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</title>
-            <rect className="healthcurve-sleep-band" x={startX} y={TOP} width={Math.max(2, endX - startX)} height="12" />
-            {sessionStart >= start && sessionStart < end ? <><line className="healthcurve-sleep-marker healthcurve-sleep-marker--start" x1={startX} y1={TOP} x2={startX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className="healthcurve-sleep-label" x={startX + 4} y={TOP + 27}>Sleep start</text></> : null}
-            {sessionEnd > start && sessionEnd <= end ? <><line className="healthcurve-sleep-marker healthcurve-sleep-marker--end" x1={endX} y1={TOP} x2={endX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className="healthcurve-sleep-label" x={endX + 4} y={TOP + 27}>Wake</text></> : null}
+          const isNap = record.sleep_kind === "nap";
+          const label = isNap ? "Nap" : "Sleep";
+          return <g key={record.id} className={isNap ? "healthcurve-sleep-session healthcurve-nap-session" : "healthcurve-sleep-session"}>
+            <title>{experiencedTime(record.time.occurred_at, data.exposure.timezone)} {label.toLowerCase()} start; {experiencedTime(record.ended_at ?? record.time.occurred_at, data.exposure.timezone)} {isNap ? "nap end" : "wake / sleep end"}; Garmin {record.provenance.confirmation_state.replaceAll("_", " ")}</title>
+            <rect className={isNap ? "healthcurve-sleep-band healthcurve-nap-band" : "healthcurve-sleep-band"} x={startX} y={TOP} width={Math.max(2, endX - startX)} height="12" />
+            {sessionStart >= start && sessionStart < end ? <><line className={`healthcurve-sleep-marker healthcurve-sleep-marker--start${isNap ? " healthcurve-nap-marker" : ""}`} x1={startX} y1={TOP} x2={startX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className={`healthcurve-sleep-label${isNap ? " healthcurve-nap-label" : ""}`} x={startX + 4} y={TOP + 27}>{isNap ? "Nap start" : "Sleep start"}</text></> : null}
+            {sessionEnd > start && sessionEnd <= end ? <><line className={`healthcurve-sleep-marker healthcurve-sleep-marker--end${isNap ? " healthcurve-nap-marker" : ""}`} x1={endX} y1={TOP} x2={endX} y2={TOP + PLOT_HEIGHT} /><text aria-hidden="true" className={`healthcurve-sleep-label${isNap ? " healthcurve-nap-label" : ""}`} x={endX + 4} y={TOP + 27}>{isNap ? "Nap end" : "Wake"}</text></> : null}
           </g>;
         })}{awakeIntervals.map((interval) => {
           const awakeStart = Math.max(start, interval.startedAt);

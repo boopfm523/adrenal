@@ -101,6 +101,10 @@ class _SyntheticGarminClient:
         del day
         return {}
 
+    def get_body_battery_events(self, day: str) -> list[dict[str, Any]]:
+        del day
+        return []
+
     def get_heart_rates(self, day: str) -> dict[str, Any]:
         del day
         return {}

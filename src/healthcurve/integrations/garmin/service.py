@@ -16,6 +16,7 @@ from healthcurve.integrations.garmin.models import (
     GarminImportBatch,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepKind,
     GarminSleepStage,
     GarminSleepStageInterval,
     GarminSourceMixin,
@@ -111,6 +112,7 @@ def confirm_import(
             row = GarminSleepEvent(
                 **common,
                 ended_at=candidate.ended_at,
+                sleep_kind=GarminSleepKind.OVERNIGHT,
                 overall_sleep_score=candidate.overall_sleep_score,
                 stage_count=candidate.stage_count,
                 duration_seconds=int(

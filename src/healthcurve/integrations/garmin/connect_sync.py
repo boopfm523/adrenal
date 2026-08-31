@@ -28,6 +28,7 @@ from healthcurve.integrations.garmin.connect_mapping import (
     SleepObservation,
     map_activities,
     map_day,
+    map_naps,
 )
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -35,6 +36,7 @@ from healthcurve.integrations.garmin.models import (
     GarminConnectionState,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepKind,
     GarminSleepStage,
     GarminSleepStageInterval,
     GarminSyncOrigin,
@@ -121,6 +123,14 @@ def fetch_window(
         metrics.extend(mapped.metrics)
         if mapped.sleep is not None:
             sleeps.append(mapped.sleep)
+        naps, nap_warnings = map_naps(
+            call(lambda day_text=day_text: client.get_body_battery_events(day_text)),
+            timezone=timezone,
+        )
+        sleeps.extend(naps)
+        warnings.extend(nap_warnings)
+        already_available = capabilities.get("naps") == "available"
+        capabilities["naps"] = "available" if naps or already_available else "unavailable"
         warnings.extend(mapped.warnings)
         for name, state in mapped.capabilities.items():
             already_available = capabilities.get(name) == "available"
@@ -223,6 +233,7 @@ def persist_window(
         "metrics": len(fetched.metrics),
         "intraday_metrics": len(fetched.intraday_metrics),
         "sleep": len(fetched.sleeps),
+        "naps": sum(value.kind is GarminSleepKind.NAP for value in fetched.sleeps),
         "activities": len(fetched.activities),
         "created": created,
         "corrected": corrected,
@@ -299,8 +310,14 @@ def _upsert_sleep(
 ) -> str:
     provider_id = _owned_provider_id(owner_id, value.provider_id)
     fields = {
-        **_source_fields(run_id, provider_id, value.revision, "daily-sleep"),
+        **_source_fields(
+            run_id,
+            provider_id,
+            value.revision,
+            "body-battery-events-nap" if value.kind is GarminSleepKind.NAP else "daily-sleep",
+        ),
         "ended_at": value.ended_at,
+        "sleep_kind": value.kind,
         "overall_sleep_score": value.score,
         "stage_count": value.stage_count,
         "duration_seconds": value.duration_seconds,

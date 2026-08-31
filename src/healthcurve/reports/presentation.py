@@ -358,6 +358,7 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
     sleep_rows = [
         [
             _time(record),
+            _value(record.get("sleep_kind")).title(),
             _hours(record.get("duration_seconds")),
             _value(record.get("overall_sleep_score")),
             _value(record.get("awakenings")),
@@ -442,7 +443,7 @@ def presentation(payload: dict[str, Any]) -> dict[str, Any]:
         ),
         _table(
             "Garmin sleep",
-            ["Started", "Duration", "Sleep score", "Awakenings"],
+            ["Started", "Kind", "Duration", "Sleep score", "Awakenings"],
             sleep_rows,
             "No Garmin sleep sessions selected for this period.",
             "wearables",

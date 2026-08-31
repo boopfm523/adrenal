@@ -450,10 +450,14 @@ circle.chart-series { fill: white; }
 .healthcurve-unmodeled-doses ul { margin: 0.55rem 0 0; padding-left: 1.25rem; }
 .healthcurve-unmodeled-doses li + li { margin-top: 0.25rem; }
 .healthcurve-sleep-band { fill: rgb(49 91 138 / 24%); stroke: #315b8a; stroke-width: 1; }
+.healthcurve-nap-band { fill: rgb(121 82 160 / 34%); stroke: #7952a0; }
 .healthcurve-awake-interval { fill: rgb(209 125 35 / 14%); stroke: #b05f0c; stroke-width: 1; stroke-dasharray: 3 3; }
 .healthcurve-sleep-marker { stroke: #315b8a; stroke-width: 2; stroke-dasharray: 5 3; }
 .healthcurve-sleep-marker--end { stroke: #5e3f83; }
 .healthcurve-sleep-label { fill: #274869; font-size: 11px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 3px; stroke-linejoin: round; }
+.healthcurve-nap-marker { stroke: #7952a0; stroke-dasharray: 2 3; }
+.healthcurve-nap-label { fill: #613d85; }
+.healthcurve-key--nap { background: #7952a0; }
 .healthcurve-activity-window { fill: rgb(8 127 107 / 8%); stroke: rgb(8 127 107 / 38%); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
 .healthcurve-activity-band { fill: rgb(8 127 107 / 68%); stroke: #075f52; stroke-width: 1; pointer-events: none; }
 .healthcurve-activity--running .healthcurve-activity-window { fill: rgb(173 91 20 / 8%); stroke: rgb(173 91 20 / 42%); }

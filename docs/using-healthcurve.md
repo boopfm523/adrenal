@@ -474,9 +474,12 @@ over the graph or using
 its keyboard/mobile time control shows exact nearby observations with their original
 units and timestamps. Continuous shapes use a clearly labeled relative 0–100 display
 position so unlike units can be compared in time without implying that their values
-are equivalent. The initial focused view compares theoretical exposure with Garmin
-stress; one-click controls switch to heart rate, HRV, respiration, blood pressure,
-temperature,
+are equivalent. Garmin-recorded naps appear as purple nap bands with separate start
+and end markers. They are visible in the curve, Timeline, Health data, chat context,
+reports, and eligible static daily pages, but they do not change overnight wake or
+sleep-reference calculations. The initial focused view compares theoretical exposure
+with Garmin stress; one-click controls switch to heart rate, HRV, respiration, blood
+pressure, temperature,
 recorded events, or an intentionally busy all-series view. Dense wearable sample dots
 are hidden from the graph while every exact value remains available through hover and
 the table. Lines connect only samples with an observed contiguous cadence;

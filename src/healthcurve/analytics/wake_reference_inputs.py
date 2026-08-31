@@ -15,7 +15,7 @@ from healthcurve.analytics import wake_reference
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState
 from healthcurve.events.models import MealEvent
-from healthcurve.integrations.garmin.models import GarminSleepEvent
+from healthcurve.integrations.garmin.models import GarminSleepEvent, GarminSleepKind
 
 MEAL_ROLES: Final = ("breakfast", "lunch", "dinner")
 
@@ -72,6 +72,7 @@ def observed_sleep_timing_for_day(
             select(GarminSleepEvent)
             .where(
                 GarminSleepEvent.owner_id == owner_id,
+                GarminSleepEvent.sleep_kind == GarminSleepKind.OVERNIGHT,
                 GarminSleepEvent.occurred_at < search_end,
                 GarminSleepEvent.ended_at > search_start,
                 GarminSleepEvent.confirmation_state == ConfirmationState.PROVIDER_IMPORTED,

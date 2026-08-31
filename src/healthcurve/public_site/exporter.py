@@ -472,6 +472,7 @@ def public_garmin_record(record: Any, ids: PublicIds) -> dict[str, Any]:
         "duration_source": record.duration_source,
         "awakenings": record.awakenings,
         "sleep_score": record.sleep_score,
+        "sleep_kind": getattr(record, "sleep_kind", None),
         "sleep_intervals": [
             {
                 "stage": interval.stage,

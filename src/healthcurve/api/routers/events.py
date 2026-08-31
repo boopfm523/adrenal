@@ -52,6 +52,7 @@ from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepKind,
 )
 from healthcurve.integrations.garmin.presentation import measurement_summary
 from healthcurve.medications.models import DoseEvent
@@ -710,6 +711,8 @@ def _summarize(row: EventMixin, type_name: str) -> str:
                 if duration is None
                 else f"{duration // 3600}h {(duration % 3600) // 60}m"
             )
+            if row.sleep_kind is GarminSleepKind.NAP:  # type: ignore[attr-defined]
+                return f"Nap: {duration_text}"
             score = row.overall_sleep_score  # type: ignore[attr-defined]
             score_text = "score unavailable" if score is None else f"score {score}"
             return f"Sleep: {duration_text}; {score_text}"

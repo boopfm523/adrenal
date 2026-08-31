@@ -755,6 +755,7 @@ describe("Daily HealthCurve", () => {
       ...sample(0),
       id: "50000000-0000-4000-8000-000000000001",
       kind: "sleep",
+      sleep_kind: "overnight",
       summary: "Sleep interval recorded by Garmin",
       time: { ...sample(0).time, occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00" },
       ended_at: "2026-03-08T12:00:00Z",
@@ -771,7 +772,7 @@ describe("Daily HealthCurve", () => {
     expect(document.querySelectorAll(".healthcurve-sleep-marker--start")).toHaveLength(1);
     expect(document.querySelectorAll(".healthcurve-sleep-marker--end")).toHaveLength(1);
     expect(document.querySelectorAll(".healthcurve-awake-interval")).toHaveLength(1);
-    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Sleep session");
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Overnight sleep session");
     expect(screen.getByRole("img")).toHaveTextContent("explicit Garmin awake interval");
     expect(screen.queryByText(/Garmin reported one or more awakenings without their exact times/)).not.toBeInTheDocument();
 
@@ -792,6 +793,33 @@ describe("Daily HealthCurve", () => {
     fireEvent.click(screen.getByText("HealthCurve context and limits"));
     expect(screen.getByText(/Garmin reported one or more awakenings without their exact times/)).toBeVisible();
     expect(hoverAt(60).tooltip).toHaveTextContent("Awakenings: 2 reported; exact times unavailable");
+  });
+
+  it("renders Garmin naps distinctly from overnight sleep", () => {
+    const nap: GarminRecord = {
+      ...sample(0),
+      id: "50000000-0000-4000-8000-000000000030",
+      kind: "sleep",
+      sleep_kind: "nap",
+      summary: "Nap recorded by Garmin",
+      time: { ...sample(0).time, occurred_at: "2026-03-08T17:00:00Z", local_time: "2026-03-08T13:00:00" },
+      ended_at: "2026-03-08T17:45:00Z",
+      duration_seconds: 2_700,
+      duration_source: "provider",
+      awakenings: null,
+      sleep_score: null,
+      sleep_intervals: [],
+    };
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [nap] })} />);
+
+    expect(document.querySelectorAll(".healthcurve-nap-band")).toHaveLength(1);
+    expect(document.querySelectorAll(".healthcurve-nap-marker")).toHaveLength(2);
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Nap interval");
+    expect(screen.getByRole("img")).toHaveAccessibleName(/1 recorded nap/);
+    expect(screen.getByRole("img")).toHaveTextContent("Nap start");
+    expect(screen.getByRole("img")).toHaveTextContent("Nap end");
+    expect(hoverAt(720).tooltip).toHaveTextContent("Nap: started");
+    expect(hoverAt(765).tooltip).toHaveTextContent("Nap: ended");
   });
 
   it("overlays supported recorded activity intervals with accessible exact details", () => {

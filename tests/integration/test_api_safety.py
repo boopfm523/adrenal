@@ -83,7 +83,7 @@ from healthcurve.integrations.garmin.connect_jobs import (
     GARMIN_DISCONNECT_TASK,
     make_disconnect_handler,
 )
-from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day
+from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day, map_naps
 from healthcurve.integrations.garmin.connect_sync import FetchedWindow, persist_window
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -93,6 +93,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminMetricType,
     GarminSleepEvent,
+    GarminSleepKind,
     GarminSleepStageInterval,
     GarminSyncOrigin,
     GarminSyncRun,
@@ -2187,6 +2188,18 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             timezone="UTC",
         )
         assert daily.sleep is not None
+        naps, nap_warnings = map_naps(
+            [
+                {
+                    "event": {
+                        "eventType": "NAP",
+                        "eventStartTimeGmt": "2026-01-10T13:00:00Z",
+                        "durationInMilliseconds": 2_700_000,
+                    }
+                }
+            ],
+            timezone="UTC",
+        )
         activities, activity_warnings = map_activities(
             [
                 {
@@ -2246,13 +2259,16 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             timezone="UTC",
             metrics=(*daily.metrics, *intraday.aggregates),
             intraday_metrics=intraday.observations,
-            sleeps=(daily.sleep,),
+            sleeps=(daily.sleep, *naps),
             activities=activities,
-            warnings=tuple(sorted({*daily.warnings, *intraday.warnings, *activity_warnings})),
+            warnings=tuple(
+                sorted({*daily.warnings, *intraday.warnings, *activity_warnings, *nap_warnings})
+            ),
             capabilities={
                 **daily.capabilities,
                 **intraday.capabilities,
                 "activities": "available",
+                "naps": "available",
             },
             started_at=observed_at,
             finished_at=observed_at + timedelta(seconds=1),
@@ -2260,15 +2276,15 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
 
     with Session(engine) as session, session.begin():
         first = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
-        assert (first.created, first.corrected, first.unchanged) == (14, 0, 0)
+        assert (first.created, first.corrected, first.unchanged) == (15, 0, 0)
     with Session(engine) as session, session.begin():
         duplicate = persist_window(session, owner_id=owner_id, fetched=fetched(100, 72))
-        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 14)
+        assert (duplicate.created, duplicate.corrected, duplicate.unchanged) == (0, 0, 15)
     with Session(engine) as session, session.begin():
         corrected = persist_window(
             session, owner_id=owner_id, fetched=fetched(120, 73, 43, 19.2, 12)
         )
-        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 5, 9)
+        assert (corrected.created, corrected.corrected, corrected.unchanged) == (0, 5, 10)
 
     with Session(engine) as session:
         metrics = list(
@@ -2316,8 +2332,13 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
         sleeps = list(
             session.scalars(select(GarminSleepEvent).where(GarminSleepEvent.owner_id == owner_id))
         )
-        assert len(sleeps) == 2
-        assert len(events.current_only(session, GarminSleepEvent, sleeps)) == 1
+        assert len(sleeps) == 3
+        current_sleeps = events.current_only(session, GarminSleepEvent, sleeps)
+        assert len(current_sleeps) == 2
+        assert {row.sleep_kind for row in current_sleeps} == {
+            GarminSleepKind.OVERNIGHT,
+            GarminSleepKind.NAP,
+        }
         assert (
             session.scalar(
                 select(func.count())
@@ -2388,16 +2409,23 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     )
     assert sleep_response.status_code == 200, sleep_response.text
     sleep_body = sleep_response.json()
-    assert sleep_body["page"]["total_items"] == 1
-    assert sleep_body["records"][0]["time"]["occurred_at"] == "2026-01-09T23:00:00Z"
-    assert sleep_body["records"][0]["ended_at"] == "2026-01-10T07:00:00Z"
-    assert sleep_body["records"][0]["sleep_intervals"] == [
+    assert sleep_body["page"]["total_items"] == 2
+    overnight = next(row for row in sleep_body["records"] if row["sleep_kind"] == "overnight")
+    nap = next(row for row in sleep_body["records"] if row["sleep_kind"] == "nap")
+    assert overnight["time"]["occurred_at"] == "2026-01-09T23:00:00Z"
+    assert overnight["ended_at"] == "2026-01-10T07:00:00Z"
+    assert overnight["sleep_intervals"] == [
         {
             "stage": "awake",
             "started_at": "2026-01-10T02:00:00Z",
             "ended_at": "2026-01-10T02:12:00Z",
         }
     ]
+    assert nap["summary"] == "Nap recorded by Garmin"
+    assert nap["time"]["occurred_at"] == "2026-01-10T13:00:00Z"
+    assert nap["ended_at"] == "2026-01-10T13:45:00Z"
+    assert nap["duration_seconds"] == 2_700
+    assert nap["sleep_score"] is None
     status_response = client.get("/api/v1/integrations/garmin/status")
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "connected"
@@ -2407,6 +2435,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     assert status_response.json()["last_success_at"] is not None
     assert status_response.json()["capabilities"]["hrv_daily_average"] == "unsupported"
     assert status_response.json()["capabilities"]["hrv_nightly_average"] == "available"
+    assert status_response.json()["capabilities"]["naps"] == "available"
     assert status_response.json()["latest_sync_origin"] == "legacy"
     garmin_timeline = client.get(
         "/api/v1/timeline?types=garmin_daily,garmin_activity&sort_order=asc"
@@ -2536,7 +2565,7 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     )
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["disconnect_requested"] is True
-    assert deleted.json()["data_rows_deleted"] == 24
+    assert deleted.json()["data_rows_deleted"] == 25
 
     class LogoutClient:
         logged_out = False
@@ -2548,6 +2577,9 @@ def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
             raise AssertionError("disconnect must not read data")
 
         def get_sleep_data(self, day: str) -> dict[str, Any]:
+            raise AssertionError("disconnect must not read data")
+
+        def get_body_battery_events(self, day: str) -> list[dict[str, Any]]:
             raise AssertionError("disconnect must not read data")
 
         def get_heart_rates(self, day: str) -> dict[str, Any]:
@@ -6630,6 +6662,34 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
             )
             sleep.apply_event_time(from_instant(started_at, "UTC"))
             session.add(sleep)
+
+        nap = GarminSleepEvent(
+            owner_id=owner_id,
+            recorded_at=datetime(2024, 2, 3, 8, 1, tzinfo=UTC),
+            source_type=SourceType.PROVIDER,
+            provider_id="synthetic-daytime-nap",
+            source_revision="synthetic-v1",
+            import_batch_id=None,
+            confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+            supersedes_id=None,
+            correction_reason=None,
+            notes=None,
+            garmin_import_batch_id=None,
+            garmin_sync_run_id=sync_run.id,
+            garmin_source_member="body-battery-events-nap",
+            garmin_manufacturer="Garmin",
+            garmin_product_name="Synthetic Test Device",
+            garmin_device_serial_hash=None,
+            ended_at=datetime(2024, 2, 1, 14, 0, tzinfo=UTC),
+            sleep_kind=GarminSleepKind.NAP,
+            overall_sleep_score=None,
+            stage_count=0,
+            duration_seconds=3_600,
+            garmin_duration_source="provider",
+            awakenings=None,
+        )
+        nap.apply_event_time(from_instant(datetime(2024, 2, 1, 13, 0, tzinfo=UTC), "UTC"))
+        session.add(nap)
 
     response = client.get(
         "/api/v1/analytics/steroid-exposure",

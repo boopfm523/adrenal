@@ -16,9 +16,9 @@ from healthcurve.integrations.garmin.connect_client import (
     validate_token_store_path,
 )
 from healthcurve.integrations.garmin.connect_intraday import map_intraday_day
-from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day
+from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day, map_naps
 from healthcurve.integrations.garmin.connect_sync import fetch_window
-from healthcurve.integrations.garmin.models import GarminMetricType
+from healthcurve.integrations.garmin.models import GarminMetricType, GarminSleepKind
 from healthcurve.integrations.garmin.presentation import measurement_summary
 
 
@@ -144,6 +144,47 @@ def test_sleep_maps_only_explicit_bounded_awake_intervals() -> None:
     assert "sleep_stage_bounds_invalid" in mapped.warnings
 
 
+def test_naps_select_only_minimal_bounded_event_fields() -> None:
+    naps, warnings = map_naps(
+        [
+            {
+                "activityName": "Synthetic private value that must not persist",
+                "event": {
+                    "eventType": "NAP",
+                    "eventStartTimeGmt": "2026-08-30T17:05:00Z",
+                    "durationInMilliseconds": 2_700_000,
+                    "feedbackType": "SYNTHETIC_FEEDBACK",
+                    "bodyBatteryImpact": 7,
+                },
+                "stressValuesArray": [[1, 2]],
+            },
+            {
+                "event": {
+                    "eventType": "ACTIVITY",
+                    "eventStartTimeGmt": "2026-08-30T18:00:00Z",
+                    "durationInMilliseconds": 60_000,
+                }
+            },
+            {
+                "event": {
+                    "eventType": "NAP",
+                    "eventStartTimeGmt": "2026-08-30T19:00:00Z",
+                    "durationInMilliseconds": -1,
+                }
+            },
+        ],
+        timezone="America/New_York",
+    )
+
+    assert len(naps) == 1
+    assert naps[0].kind is GarminSleepKind.NAP
+    assert naps[0].event_time.local_time.isoformat() == "2026-08-30T13:05:00"
+    assert naps[0].duration_seconds == 2_700
+    assert naps[0].ended_at == datetime(2026, 8, 30, 17, 50, tzinfo=UTC)
+    assert naps[0].provider_id == "nap:2026-08-30T17:05:00+00:00"
+    assert warnings == ("nap_duration_invalid",)
+
+
 def test_activity_contract_covers_miles_unknown_types_and_missing_distance() -> None:
     activities, warnings = map_activities(
         [
@@ -250,6 +291,9 @@ class _SyntheticClient:
     def get_sleep_data(self, day: str) -> dict[str, Any]:
         return {}
 
+    def get_body_battery_events(self, day: str) -> list[dict[str, Any]]:
+        return []
+
     def get_heart_rates(self, day: str) -> dict[str, Any]:
         return {}
 
@@ -295,7 +339,8 @@ def test_fetch_window_rate_limits_every_provider_read() -> None:
     )
 
     assert client.logged_in
-    assert pauses == [0.5] * 7
+    assert pauses == [0.5] * 8
+    assert fetched.capabilities["naps"] == "unavailable"
     assert fetched.capabilities["activities"] == "unavailable"
 
 

@@ -25,6 +25,8 @@ class GarminReadClient(Protocol):
 
     def get_sleep_data(self, day: str) -> dict[str, Any]: ...
 
+    def get_body_battery_events(self, day: str) -> list[dict[str, Any]]: ...
+
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]: ...
 
     def logout(self) -> None: ...
@@ -93,6 +95,9 @@ class PythonGarminReadClient:
 
     def get_sleep_data(self, day: str) -> dict[str, Any]:
         return self._read(lambda: self._client.get_sleep_data(day), dict)
+
+    def get_body_battery_events(self, day: str) -> list[dict[str, Any]]:
+        return self._read(lambda: self._client.get_body_battery_events(day), list)
 
     def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
         return self._read(lambda: self._client.get_activities_by_date(start, end), list)

@@ -30,6 +30,7 @@ from healthcurve.integrations.garmin.models import (
     GarminConnectionState,
     GarminMetricEvent,
     GarminSleepEvent,
+    GarminSleepKind,
     GarminSleepStageInterval,
     GarminSyncOrigin,
     GarminSyncRun,
@@ -109,6 +110,7 @@ class GarminRecordOut(BaseModel):
     duration_source: str | None = None
     awakenings: int | None = None
     sleep_score: int | None = None
+    sleep_kind: Literal["overnight", "nap"] | None = None
     sleep_intervals: list[GarminSleepIntervalOut] = Field(default_factory=list)
     activity_type: str | None = None
     activity_environment: str | None = None
@@ -423,10 +425,11 @@ def _garmin_record_out(
             ),
         )
     if isinstance(row, GarminSleepEvent):
+        is_nap = row.sleep_kind is GarminSleepKind.NAP
         return GarminRecordOut(
             id=row.id,
             kind="sleep",
-            summary="Sleep interval recorded by Garmin",
+            summary="Nap recorded by Garmin" if is_nap else "Sleep interval recorded by Garmin",
             time=time_out(row),
             provenance=provenance_out(row),
             ended_at=row.ended_at,
@@ -434,6 +437,7 @@ def _garmin_record_out(
             duration_source=row.garmin_duration_source,
             awakenings=row.awakenings,
             sleep_score=row.overall_sleep_score,
+            sleep_kind=row.sleep_kind.value,
             sleep_intervals=[
                 GarminSleepIntervalOut(
                     stage=interval.stage.value,
