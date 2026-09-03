@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -107,7 +107,16 @@ describe("Health data page", () => {
     expect(await screen.findByRole("img", { name: /Blood pressure/ })).toBeVisible();
     expect(screen.getByText("X axis: Experienced date / time (EDT). Y axis: Blood pressure (mmHg).")).toBeVisible();
     expect(screen.getByText("X axis: Experienced date / time (EDT). Y axis: Weight (lb).")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Blood pressure interactive graph" })).toBeVisible();
+    const pressureGraph = screen.getByRole("region", { name: "Blood pressure interactive graph" });
+    expect(pressureGraph).toBeVisible();
+    expect(within(pressureGraph).getByRole("img", { name: /Blood pressure/ })).toBeVisible();
+    const pressureChart = within(pressureGraph).getByRole("img", { name: /Blood pressure/ });
+    vi.spyOn(pressureChart, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 720, bottom: 320, width: 720, height: 320, toJSON: () => ({}) });
+    fireEvent.mouseMove(pressureChart, { clientX: 696 });
+    const pressureTooltip = within(pressureGraph).getByRole("status");
+    expect(pressureTooltip).toHaveTextContent("2026-08-09 08:15");
+    expect(pressureTooltip).toHaveTextContent("Systolic: 119 mmHg");
+    expect(pressureTooltip).toHaveTextContent("Diastolic: 76 mmHg");
     expect(screen.getByRole("region", { name: "Weight interactive graph" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Body temperature interactive graph" })).toBeVisible();
     expect(screen.getAllByText("Missing values")[0]).toBeVisible();

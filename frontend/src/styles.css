@@ -359,7 +359,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--hc-color-surface-muted) 55
 .chart-plot-scroll--compact { width: min(100%, 42rem); margin-inline: auto; }
 .chart-interaction-instructions { margin-block: 0.35rem 0.5rem; color: #53615b; font-size: 0.9rem; }
 .chart-plot-canvas { position: relative; min-width: 38rem; }
-.line-chart { display: block; width: 100%; min-height: 17rem; background: #fbfcfb; }
+.line-chart { display: block; width: 100%; min-height: 17rem; background: #fbfcfb; cursor: crosshair; }
 .chart-axis { stroke: #68756f; stroke-width: 1.5; }
 .chart-grid-line { stroke: #dce2dd; stroke-width: 1; }
 .chart-x-tick text, .chart-y-tick text { fill: #26322d; font-size: 12px; font-weight: 650; }
