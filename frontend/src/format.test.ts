@@ -5,6 +5,7 @@ import {
   formatMeasurement,
   formatPreviewJson,
   formatQuantitativeText,
+  formatRoundedDecimal,
   garminMetricLabel,
   humanizeUnit,
 } from "./format";
@@ -29,6 +30,18 @@ describe("health value presentation formatting", () => {
     expect(formatDecimal(undefined, "Not recorded")).toBe("Not recorded");
     expect(formatDecimal("<5")).toBe("<5");
     expect(formatDecimal("1e1001")).toBe("1e1001");
+  });
+
+  it.each([
+    ["244.817090855", 1, "244.8"],
+    ["96.6667", 0, "97"],
+    ["57.1964", 1, "57.2"],
+    ["-0.6148", 1, "-0.6"],
+    ["2.0000", 1, "2"],
+    ["999.96", 1, "1,000"],
+    ["-0.04", 1, "0"],
+  ])("rounds summary value %s to at most %i fractional digits", (input, precision, expected) => {
+    expect(formatRoundedDecimal(input, precision)).toBe(expected);
   });
 
   it("uses readable deterministic unit and Garmin labels", () => {

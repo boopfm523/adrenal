@@ -50,6 +50,39 @@ export function formatDecimal(value: NumericDisplayValue, missing = "Unavailable
 }
 
 /**
+ * Round an exact decimal string for compact summaries without routing API
+ * decimals through IEEE-754. Unlike formatDecimal, this intentionally limits
+ * display precision; stored and calculated values remain unchanged.
+ */
+export function formatRoundedDecimal(
+  value: NumericDisplayValue,
+  maximumFractionDigits: number,
+  missing = "Unavailable",
+): string {
+  if (value == null) return missing;
+  if (typeof value === "number" && !Number.isFinite(value)) return missing;
+  if (!Number.isInteger(maximumFractionDigits) || maximumFractionDigits < 0) return formatDecimal(value, missing);
+
+  const raw = expandScientificNotation(String(value).trim());
+  const match = /^([+-]?)(\d+)(?:\.(\d*))?$/.exec(raw);
+  if (match === null) return raw;
+
+  const integer = (match[2] ?? "0").replace(/^0+(?=\d)/, "");
+  const fraction = match[3] ?? "";
+  const keptFraction = fraction.padEnd(maximumFractionDigits, "0").slice(0, maximumFractionDigits);
+  const roundUp = (fraction[maximumFractionDigits] ?? "0") >= "5";
+  let scaled = BigInt(`${integer}${keptFraction}`);
+  if (roundUp) scaled += 1n;
+
+  const digits = scaled.toString().padStart(maximumFractionDigits + 1, "0");
+  const wholeDigits = maximumFractionDigits === 0 ? digits : digits.slice(0, -maximumFractionDigits);
+  const whole = wholeDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const roundedFraction = maximumFractionDigits === 0 ? "" : digits.slice(-maximumFractionDigits).replace(/0+$/, "");
+  const sign = scaled === 0n ? "" : match[1] === "-" ? "-" : "";
+  return `${sign}${whole}${roundedFraction === "" ? "" : `.${roundedFraction}`}`;
+}
+
+/**
  * Format recorded miles with the two fractional digits used by activity views.
  * Rounding is performed on the decimal string so API values never pass through
  * IEEE-754 before presentation.
