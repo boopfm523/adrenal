@@ -107,9 +107,9 @@ describe("Health data page", () => {
     expect(await screen.findByRole("img", { name: /Blood pressure/ })).toBeVisible();
     expect(screen.getByText("X axis: Experienced date / time (EDT). Y axis: Blood pressure (mmHg).")).toBeVisible();
     expect(screen.getByText("X axis: Experienced date / time (EDT). Y axis: Weight (lb).")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Blood pressure scrollable graph" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Weight scrollable graph" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Body temperature scrollable graph" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Blood pressure interactive graph" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Weight interactive graph" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Body temperature interactive graph" })).toBeVisible();
     expect(screen.getAllByText("Missing values")[0]).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Systolic (mmHg)" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Weight (lb)" })).toHaveLength(1);

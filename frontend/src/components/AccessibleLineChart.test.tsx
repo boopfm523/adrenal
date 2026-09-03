@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { AccessibleLineChart, type ChartSeries } from "./AccessibleLineChart";
 
@@ -17,7 +17,7 @@ describe("Accessible line chart", () => {
 
     expect(screen.getByRole("img", { name: /Synthetic chart/ })).toBeVisible();
     expect(screen.getByText("X axis: Date (GMT+1). Y axis: Dose total (mg).")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Synthetic chart scrollable graph" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Synthetic chart interactive graph" })).toBeVisible();
     expect([...container.querySelectorAll(".chart-x-tick text")].map((node) => node.textContent)).toEqual(["08-01", "08-02", "08-03", "08-04", "08-05"]);
     expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["1", "1.5", "2", "2.5", "3", "3.5", "4"]);
     expect(container.querySelectorAll('[data-series="Recorded"]')).toHaveLength(2);
@@ -29,6 +29,30 @@ describe("Accessible line chart", () => {
     expect(screen.getByText("View data table")).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Recorded (mg)" })).toBeInTheDocument();
     expect(screen.getByText(/source: synthetic facts/)).toBeVisible();
+  });
+
+  it("inspects all series at the nearest date with pointer and keyboard input", () => {
+    const { container } = render(chart());
+    const graph = screen.getByRole("region", { name: "Synthetic chart interactive graph" });
+    const svg = screen.getByRole("img", { name: /Synthetic chart/ });
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 720, bottom: 320, width: 720, height: 320, toJSON: () => ({}) });
+
+    fireEvent.mouseMove(svg, { clientX: 543 });
+    expect(screen.getByRole("status")).toHaveTextContent("2026-08-04");
+    expect(screen.getByRole("status")).toHaveTextContent("Recorded: 3 mg");
+    expect(screen.getByRole("status")).toHaveTextContent("Plan: 2 mg");
+    expect(container.querySelectorAll("circle.chart-series--active")).toHaveLength(2);
+
+    fireEvent.focus(graph);
+    fireEvent.keyDown(graph, { key: "Home" });
+    expect(screen.getByRole("status")).toHaveTextContent("2026-08-01");
+    fireEvent.keyDown(graph, { key: "ArrowRight" });
+    expect(screen.getByRole("status")).toHaveTextContent("2026-08-02");
+    fireEvent.keyDown(graph, { key: "ArrowRight" });
+    expect(screen.getByRole("status")).toHaveTextContent("Recorded: Gap—no value");
+    expect(screen.getByRole("status")).toHaveTextContent("Plan: 2 mg");
+    fireEvent.keyDown(graph, { key: "End" });
+    expect(screen.getByRole("status")).toHaveTextContent("2026-08-05");
   });
 
   it("includes zero only when the metric requests a zero baseline", () => {
@@ -43,7 +67,7 @@ describe("Accessible line chart", () => {
       series: [{ name: "Weight", source: "synthetic facts", values: [{ label: "2026-08-01", value: "180" }] }],
     }));
 
-    expect(screen.getByRole("region", { name: "Synthetic chart scrollable graph" })).toHaveClass("chart-plot-scroll--compact");
+    expect(screen.getByRole("region", { name: "Synthetic chart interactive graph" })).toHaveClass("chart-plot-scroll--compact");
     expect([...container.querySelectorAll(".chart-y-tick text")].map((node) => node.textContent)).toEqual(["179", "179.5", "180", "180.5", "181"]);
     expect(container.querySelectorAll('[data-point-series="Weight"]')).toHaveLength(1);
 

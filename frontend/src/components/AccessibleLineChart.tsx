@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { formatDecimal, formatMeasurement, humanizeUnit } from "../format";
 import { timezoneAbbreviation, timezoneAbbreviationForLocalDate } from "../time";
@@ -167,6 +167,8 @@ export function AccessibleLineChart({
   compactPlot = false,
 }: AccessibleLineChartProps): React.JSX.Element {
   const headingId = useId();
+  const interactionInstructionsId = useId();
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const numericValues = series.flatMap((item) => item.values.flatMap((value) => value.value === null ? [] : [Number(value.value)])).filter(Number.isFinite);
   const units = valueUnits(series, unit);
   const mixedUnits = units.size > 1;
@@ -179,6 +181,26 @@ export function AccessibleLineChart({
     ? timezoneAbbreviation(timezone)
     : timezoneAbbreviationForLocalDate(timezone, timezoneReferenceDate);
   const axisDescription = `X axis: ${xAxisLabel} (${timezoneLabel}). Y axis: ${yAxisLabel} (${displayedUnit}).`;
+  const activeLabel = activeIndex === null ? null : labels[activeIndex] ?? null;
+
+  function inspectPointer(event: React.MouseEvent<SVGSVGElement>): void {
+    if (labels.length === 0) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const viewBoxX = (event.clientX - bounds.left) / bounds.width * WIDTH;
+    const ratio = Math.max(0, Math.min(1, (viewBoxX - LEFT) / PLOT_WIDTH));
+    setActiveIndex(Math.round(ratio * Math.max(labels.length - 1, 0)));
+  }
+
+  function inspectKeyboard(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (labels.length === 0) return;
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "Home") setActiveIndex(0);
+    else if (event.key === "End") setActiveIndex(labels.length - 1);
+    else if (event.key === "ArrowLeft") setActiveIndex((current) => Math.max(0, (current ?? 0) - 1));
+    else setActiveIndex((current) => Math.min(labels.length - 1, (current ?? -1) + 1));
+  }
 
   return <section className="metric-card chart-card" aria-labelledby={headingId}>
     <h2 id={headingId}>{title}</h2>
@@ -187,8 +209,9 @@ export function AccessibleLineChart({
     {series.length > 1 ? <aside className="association-caution"><strong>Association does not establish causation.</strong> Overlaid series share a time axis for comparison only.</aside> : null}
     <div className="chart-legend" aria-label="Chart series">{series.map((item, index) => <span key={item.name}><i className={`series-key series-key--${(index % 3).toString()}`} aria-hidden="true" />{item.name} · source: {item.source}</span>)}</div>
     <p className="chart-axis-description">{axisDescription}</p>
-    {mixedUnits ? <p className="chart-unit-warning" role="status"><strong>Graph not plotted:</strong> these values use different units and cannot share one reliable Y-axis. Use the exact-value table below.</p> : <div className={`chart-plot-scroll${compactPlot ? " chart-plot-scroll--compact" : ""}`} tabIndex={0} role="region" aria-label={`${title} scrollable graph`}>
-      <svg className="line-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`${title}. ${summary} ${axisDescription}`}>
+    {mixedUnits ? <p className="chart-unit-warning" role="status"><strong>Graph not plotted:</strong> these values use different units and cannot share one reliable Y-axis. Use the exact-value table below.</p> : <><p id={interactionInstructionsId} className="chart-interaction-instructions">Hover across the chart to inspect a date. For keyboard access, focus the chart and use the left and right arrow keys.</p><div className={`chart-plot-scroll${compactPlot ? " chart-plot-scroll--compact" : ""}`} tabIndex={0} role="region" aria-label={`${title} interactive graph`} aria-describedby={interactionInstructionsId} onFocus={() => { if (activeIndex === null && labels.length > 0) setActiveIndex(0); }} onBlur={() => { setActiveIndex(null); }} onKeyDown={inspectKeyboard}>
+      <div className="chart-plot-canvas">
+      <svg className="line-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`${title}. ${summary} ${axisDescription}`} onMouseMove={inspectPointer} onMouseLeave={() => { setActiveIndex(null); }}>
         <title>{title}. {summary} {axisDescription}</title>
         {scale.ticks.map((tick) => {
           const y = TOP + (scale.maximum - tick) / (scale.maximum - scale.minimum) * PLOT_HEIGHT;
@@ -203,12 +226,18 @@ export function AccessibleLineChart({
         <line x1={LEFT} y1={TOP} x2={LEFT} y2={PLOT_BOTTOM} className="chart-axis" />
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezoneLabel})</text>
         <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({displayedUnit})</text>
+        {activeIndex === null ? null : <line className="chart-inspection-line" x1={LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH} y1={TOP} x2={LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH} y2={PLOT_BOTTOM} />}
         {series.map((item, seriesIndex) => {
           const segments = plottedSegments(item.values, scale);
-          return <g key={item.name} aria-hidden="true">{segments.map((segment, segmentIndex) => segment.length > 1 ? <path key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} d={path(segment)} className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} /> : null)}{segments.flat().map((point, pointIndex) => <circle key={`${item.name}-point-${pointIndex.toString()}`} data-point-series={item.name} cx={point.x} cy={point.y} r="4" className={`chart-series chart-series--${(seriesIndex % 3).toString()}`}><title>{point.item.label}: {formatMeasurement(point.item.value, point.item.unit ?? effectiveUnit)}</title></circle>)}</g>;
+          return <g key={item.name} aria-hidden="true">{segments.map((segment, segmentIndex) => segment.length > 1 ? <path key={`${item.name}-${segmentIndex.toString()}`} data-series={item.name} d={path(segment)} className={`chart-series chart-series--${(seriesIndex % 3).toString()}`} /> : null)}{segments.flat().map((point, pointIndex) => <circle key={`${item.name}-point-${pointIndex.toString()}`} data-point-series={item.name} cx={point.x} cy={point.y} r={activeLabel === point.item.label ? "6" : "4"} className={`chart-series chart-series--${(seriesIndex % 3).toString()}${activeLabel === point.item.label ? " chart-series--active" : ""}`}><title>{point.item.label}: {formatMeasurement(point.item.value, point.item.unit ?? effectiveUnit)}</title></circle>)}</g>;
         })}
       </svg>
-    </div>}
+      {activeIndex === null || activeLabel === null ? null : <output className="chart-inspection-tooltip" aria-live="polite" style={{ left: `${Math.max(18, Math.min(82, (LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH) / WIDTH * 100)).toString()}%` }}><strong>{activeLabel}</strong>{series.map((item) => {
+        const inspected = item.values[activeIndex];
+        return <span key={item.name}>{item.name}: {inspected?.value == null ? "Gap—no value" : formatMeasurement(inspected.value, inspected.unit ?? effectiveUnit)}</span>;
+      })}</output>}
+      </div>
+    </div></>}
     <details className="chart-table"><summary>View data table</summary><div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} data table`}><table><thead><tr><th scope="col">Date / time</th>{series.map((item) => <th scope="col" key={item.name}>{item.name} ({mixedUnits ? "unit shown per value" : displayedUnit})</th>)}</tr></thead><tbody>{labels.map((label, index) => <tr key={label}><th scope="row">{label}</th>{series.map((item) => <td key={item.name}>{tableValue(item.values[index], mixedUnits, unit)}</td>)}</tr>)}</tbody></table></div></details>
     <details className="metric-definition"><summary>Metric definition</summary><p>{definition}</p></details>
   </section>;

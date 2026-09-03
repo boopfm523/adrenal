@@ -33,6 +33,37 @@ const data = {
   days: [],
 } as DailyPatterns;
 
+const dailyData = {
+  ...data,
+  days: [{
+    date: "2026-08-05",
+    timezone: "America/New_York",
+    elapsed_hours: "24",
+    feature_version: "hc-daily-pattern-v1",
+    exposure_model_version: "hc-exposure-v1",
+    dose_plan_version_ids: [],
+    source_revision_watermark_sha256: "a".repeat(64),
+    supported_dose_count: 0,
+    excluded_dose_count: 0,
+    exposure_peak_reu: "0",
+    exposure_peak_at: "2026-08-05T04:00:00Z",
+    exposure_auc_reu_hours: "0",
+    symptom_count: 0,
+    symptom_severity_sample_count: 0,
+    symptom_severity_missing_count: 0,
+    average_symptom_severity: null,
+    symptom_timings: [],
+    wearables: [
+      { metric_type: "stress", unit: "score", sample_count: 414, samples_without_cadence: 1, observed_coverage_minutes: "1296", observed_coverage_percent: "90", missingness_state: "partial_observed_coverage", incompatible_units: false, minimum: "5", average: "25.744", maximum: "82", source_revision_watermark_sha256: "b".repeat(64), summary_version: "hc-wearable-daily-v1" },
+      { metric_type: "heart_rate", unit: "bpm", sample_count: 713, samples_without_cadence: 1, observed_coverage_minutes: "1424", observed_coverage_percent: "98.8889", missingness_state: "partial_observed_coverage", incompatible_units: false, minimum: "53", average: "68.2342", maximum: "108", source_revision_watermark_sha256: "c".repeat(64), summary_version: "hc-wearable-daily-v1" },
+      { metric_type: "hrv", unit: null, sample_count: 0, samples_without_cadence: 0, observed_coverage_minutes: "0", observed_coverage_percent: "0", missingness_state: "no_samples", incompatible_units: false, minimum: null, average: null, maximum: null, source_revision_watermark_sha256: "d".repeat(64), summary_version: "hc-wearable-daily-v1" },
+      { metric_type: "respiration_rate", unit: null, sample_count: 0, samples_without_cadence: 0, observed_coverage_minutes: "0", observed_coverage_percent: "0", missingness_state: "no_samples", incompatible_units: false, minimum: null, average: null, maximum: null, source_revision_watermark_sha256: "e".repeat(64), summary_version: "hc-wearable-daily-v1" },
+    ],
+    blood_pressure: { sample_count: 0, pulse_sample_count: 0, pulse_missing_count: 0, systolic: { minimum: null, average: null, maximum: null }, diastolic: { minimum: null, average: null, maximum: null }, pulse: { minimum: null, average: null, maximum: null } },
+    stress_episodes: { count: 0, open_count: 0, overlap_minutes: "0" },
+  }],
+} as DailyPatterns;
+
 describe("DailyPatternsTable", () => {
   it("uses concise human-facing precision in the longitudinal summary", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("null", { headers: { "Content-Type": "application/json" } }));
@@ -45,5 +76,16 @@ describe("DailyPatternsTable", () => {
     expect(within(summary).getByRole("rowheader", { name: /Heart rate daily average/ }).parentElement).toHaveTextContent("57.2 bpm minimum; 71.7 bpm median; 81.7 bpm maximum");
     expect(within(summary).getByRole("rowheader", { name: /HRV daily average/ }).parentElement).toHaveTextContent("−0.6 ms");
     expect(within(summary).getByRole("rowheader", { name: /Respiration daily average/ }).parentElement).toHaveTextContent("+1.8 breaths/min");
+  });
+
+  it("rounds wearable averages and cadence coverage in daily detail rows", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("null", { headers: { "Content-Type": "application/json" } }));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><DailyPatternsTable data={dailyData} /></MemoryRouter></QueryClientProvider>);
+
+    const details = screen.getByRole("region", { name: "Daily pattern values" });
+    expect(details).toHaveTextContent("5 score–82 score; average 25.7 score; 414 samples; 90% observed cadence coverage");
+    expect(details).toHaveTextContent("53 bpm–108 bpm; average 68.2 bpm; 713 samples; 99% observed cadence coverage");
+    expect(details).not.toHaveTextContent("25.744");
+    expect(details).not.toHaveTextContent("98.8889%");
   });
 });
