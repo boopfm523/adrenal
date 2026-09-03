@@ -3517,6 +3517,54 @@ def test_dose_correction_is_typed_and_preserves_superseded_fact(
     assert {original["id"], body["id"]} <= history_ids
 
 
+def test_voided_dose_is_auditable_idempotent_and_excluded_from_current_views(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    original = _a_dose(client, logged_in)
+    endpoint = f"/api/v1/doses/{original['id']}/void"
+    payload = {
+        "reason": "Synthetic duplicate entry",
+        "confirmation": "REMOVE THIS RECORDED DOSE",
+    }
+
+    response = client.post(endpoint, json=payload, headers=logged_in)
+    assert response.status_code == 201, response.text
+    tombstone = response.json()
+    assert tombstone["voided"] is True
+    assert tombstone["provenance"]["supersedes_id"] == original["id"]
+    assert tombstone["provenance"]["correction_reason"] == "Synthetic duplicate entry"
+
+    repeated = client.post(endpoint, json=payload, headers=logged_in)
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json()["id"] == tombstone["id"]
+
+    current = client.get("/api/v1/doses").json()
+    assert original["id"] not in {row["id"] for row in current["items"]}
+    assert tombstone["id"] not in {row["id"] for row in current["items"]}
+    removed = client.get("/api/v1/doses/voided").json()
+    assert {row["id"] for row in removed["items"]} == {tombstone["id"]}
+    assert original["id"] in {row["id"] for row in removed["revisions"]}
+    timeline = client.get("/api/v1/timeline", params={"types": "dose"}).json()
+    assert original["id"] not in {row["id"] for row in timeline["items"]}
+    assert tombstone["id"] not in {row["id"] for row in timeline["items"]}
+
+    with Session(engine) as session:
+        retained_original = session.get(DoseEvent, uuid.UUID(original["id"]))
+        retained_tombstone = session.get(DoseEvent, uuid.UUID(tombstone["id"]))
+        assert retained_original is not None
+        assert retained_original.voided is False
+        assert retained_tombstone is not None
+        assert retained_tombstone.voided is True
+        assert retained_tombstone.supersedes_id == retained_original.id
+
+    invalid_confirmation = client.post(
+        f"/api/v1/doses/{uuid.uuid4()}/void",
+        json={"reason": "Synthetic", "confirmation": "delete"},
+        headers=logged_in,
+    )
+    assert invalid_confirmation.status_code == 422
+
+
 def test_dose_correction_can_replace_medication_and_route_without_a_plan(
     client: TestClient, logged_in: dict[str, str]
 ) -> None:

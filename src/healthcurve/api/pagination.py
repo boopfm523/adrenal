@@ -13,6 +13,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from healthcurve.api.schemas import PageMetadata
 from healthcurve.events.base import EventMixin
+from healthcurve.events.service import current_fact_predicate
 
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
@@ -76,21 +77,38 @@ def paginate_current_facts[E: EventMixin](
     include_revisions: bool = True,
 ) -> CurrentFactPage[E]:
     """Page current facts and fetch correction ancestors only for visible rows."""
-    current = select(model).where(
+    return paginate_fact_heads(
+        session,
+        model,
+        owner_id=owner_id,
+        request=request,
+        head_predicates=(current_fact_predicate(model, owner_id=owner_id),),
+        predicates=predicates,
+        include_revisions=include_revisions,
+    )
+
+
+def paginate_fact_heads[E: EventMixin](
+    session: Session,
+    model: type[E],
+    *,
+    owner_id: uuid.UUID,
+    request: PageRequest,
+    head_predicates: tuple[ColumnElement[bool], ...],
+    predicates: tuple[ColumnElement[bool], ...] = (),
+    include_revisions: bool = True,
+) -> CurrentFactPage[E]:
+    """Page selected correction-chain heads and fetch their retained ancestors."""
+    heads = select(model).where(
         model.owner_id == owner_id,
-        model.id.not_in(
-            select(model.supersedes_id).where(
-                model.owner_id == owner_id,
-                model.supersedes_id.is_not(None),
-            )
-        ),
+        *head_predicates,
         *predicates,
     )
-    total_items = session.scalar(select(func.count()).select_from(current.subquery())) or 0
+    total_items = session.scalar(select(func.count()).select_from(heads.subquery())) or 0
     metadata = page_metadata(total_items, request)
     items = list(
         session.scalars(
-            current.order_by(model.occurred_at.desc(), model.id.asc())
+            heads.order_by(model.occurred_at.desc(), model.id.asc())
             .offset(request.offset)
             .limit(request.page_size)
         )

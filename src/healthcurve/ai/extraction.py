@@ -1165,7 +1165,13 @@ def _duplicate_exists(
     window = timedelta(minutes=30)
     existing = session.scalar(
         select(DoseEvent.id).where(
-            DoseEvent.owner_id == owner_id,
+            DoseEvent.id.not_in(
+                select(DoseEvent.supersedes_id).where(
+                    DoseEvent.owner_id == owner_id,
+                    DoseEvent.supersedes_id.is_not(None),
+                )
+            ),
+            DoseEvent.voided.is_(False),
             DoseEvent.medication_id == medication_id,
             DoseEvent.occurred_at >= resolved.occurred_at - window,
             DoseEvent.occurred_at <= resolved.occurred_at + window,

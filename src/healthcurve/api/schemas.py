@@ -299,6 +299,7 @@ class DoseOut(FactResource):
     unit: DoseUnit
     route: Route
     dose_category: DoseCategory
+    voided: bool
     time: EventTimeOut
     provenance: ProvenanceOut
     regimen_version_id: uuid.UUID | None
@@ -338,6 +339,13 @@ class DoseCorrectionIn(ApiModel):
 
     reason: str = Field(min_length=1, max_length=500)
     changes: DoseCorrectionChanges
+
+
+class DoseVoidIn(ApiModel):
+    """Explicit confirmation that a recorded dose entry did not happen."""
+
+    reason: str = Field(min_length=1, max_length=500)
+    confirmation: Literal["REMOVE THIS RECORDED DOSE"]
 
 
 # ---------------------------------------------------------------------------

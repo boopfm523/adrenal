@@ -15,6 +15,7 @@ export type Dose = components["schemas"]["DoseOut"];
 export type DosePage = components["schemas"]["DosePage"];
 export type DoseInput = components["schemas"]["DoseIn"];
 export type DoseCorrectionInput = components["schemas"]["DoseCorrectionIn"];
+export type DoseVoidInput = components["schemas"]["DoseVoidIn"];
 export type Timeline = components["schemas"]["TimelinePage"];
 export type Symptom = components["schemas"]["SymptomOut"];
 export type SymptomPage = components["schemas"]["SymptomPage"];
@@ -360,8 +361,19 @@ export function getDoses(filters: RecordedHistoryFilters, page = 1): Promise<Dos
   return apiRequest<DosePage>(`/doses?${recordedHistoryQuery(filters, page).toString()}`);
 }
 
+export function getVoidedDoses(filters: RecordedHistoryFilters, page = 1): Promise<DosePage> {
+  return apiRequest<DosePage>(`/doses/voided?${recordedHistoryQuery(filters, page).toString()}`);
+}
+
 export function correctDose(doseId: string, payload: DoseCorrectionInput): Promise<Dose> {
   return apiRequest<Dose>(`/doses/${doseId}/correct`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function voidDose(doseId: string, payload: DoseVoidInput): Promise<Dose> {
+  return apiRequest<Dose>(`/doses/${doseId}/void`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -207,6 +207,13 @@ _BEADS_ADD_PHRASE: Final = re.compile(
     r"(?:\s+(?:that|to|for)\b|\s*[:.\-])?\s*(?P<request>.+)$",
     re.IGNORECASE,
 )
+_REMOVE_DUPLICATE_DOSE_PHRASE: Final = re.compile(
+    r"^(?:(?:please|can you|could you)\s+)?(?:correct\s+(?:this\s+)?(?:by\s+)?)?"
+    r"(?:remove|delete|void|correct)\s+(?:(?:one|the|my|an?)\s+)?"
+    r"(?:(?:extra|second|duplicate|duplicated)\s+)(?:recorded\s+)?dose"
+    r"(?:\s+(?P<selector>.+?))?[?.!]*$",
+    re.IGNORECASE,
+)
 
 # Public command registry used by the in-app Help drift gate. Commands must be in
 # this set to reach dispatch below; adding one therefore requires documenting it.
@@ -227,6 +234,7 @@ SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
         "location",
         "meal",
         "privacy",
+        "removedose",
         "start",
         "symptom",
         "today",
@@ -262,6 +270,7 @@ Recording commands (these work even if the language model is offline):
 /today - what's recorded today vs your plan
 /location - add optional coarse location to the pending draft
 /edit <number> <field> <value> - correct amount, unit, time, or medication
+/removedose [YYYY-MM-DD] [HH:MM] - review one exact duplicate dose for removal
 /undo - cancel the pending draft
 /privacy - what this bot stores
 /help - this message
@@ -403,6 +412,7 @@ def _is_conversational_shortcut(text: str) -> bool:
             _BEADS_LIST_PHRASE,
             _BEADS_STATUS_PHRASE,
             _BEADS_ADD_PHRASE,
+            _REMOVE_DUPLICATE_DOSE_PHRASE,
             _WEIGHT_ONLY_PHRASE,
             _MEAL_PHRASE,
             _SYMPTOM_PHRASE,
@@ -443,6 +453,15 @@ def _handle_conversational_shortcut(
             client=client,
             limiter=limiter,
             model_policy=model_policy,
+            now=now,
+            chat_id=chat_id,
+        )
+    duplicate_removal = _REMOVE_DUPLICATE_DOSE_PHRASE.fullmatch(text)
+    if duplicate_removal is not None:
+        return _begin_duplicate_dose_removal(
+            session,
+            owner,
+            selector=(duplicate_removal.group("selector") or ""),
             now=now,
             chat_id=chat_id,
         )
@@ -738,6 +757,99 @@ def _named_plan_medications(
 # ---------------------------------------------------------------------------
 
 
+def _begin_duplicate_dose_removal(
+    session: Session,
+    owner: Owner,
+    *,
+    selector: str,
+    now: datetime,
+    chat_id: int | None,
+) -> Reply:
+    """Find one exact active duplicate and ask before creating a void correction."""
+    if chat_id is None:
+        return Reply("I need this Telegram chat to confirm removal. Try again from the bot chat.")
+
+    date_match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", selector)
+    time_match = re.search(r"\b(\d{1,2}):([0-5]\d)\b", selector)
+    selected_date: date | None = None
+    selected_hour_minute: tuple[int, int] | None = None
+    if date_match is not None:
+        try:
+            selected_date = date.fromisoformat(date_match.group(1))
+        except ValueError:
+            return Reply("I couldn't read that date. Use /removedose YYYY-MM-DD HH:MM.")
+    if time_match is not None:
+        hour = int(time_match.group(1))
+        if hour > 23:
+            return Reply("I couldn't read that time. Use /removedose YYYY-MM-DD HH:MM.")
+        selected_hour_minute = (hour, int(time_match.group(2)))
+
+    rows = list(
+        session.scalars(
+            select(DoseEvent)
+            .where(
+                events.current_fact_predicate(DoseEvent, owner_id=owner.id),
+                DoseEvent.occurred_at >= now - timedelta(days=45),
+                DoseEvent.occurred_at <= now + timedelta(minutes=5),
+            )
+            .order_by(DoseEvent.recorded_at.asc(), DoseEvent.id.asc())
+        )
+    )
+    groups: dict[tuple[object, ...], list[DoseEvent]] = {}
+    for dose in rows:
+        local = from_instant(dose.occurred_at, owner.default_timezone).local_time
+        if selected_date is not None and local.date() != selected_date:
+            continue
+        if selected_hour_minute is not None and (local.hour, local.minute) != selected_hour_minute:
+            continue
+        key = (
+            local.replace(second=0, microsecond=0),
+            dose.medication_id,
+            dose.amount,
+            dose.unit,
+            dose.route,
+            dose.category,
+        )
+        groups.setdefault(key, []).append(dose)
+    duplicates = [group for group in groups.values() if len(group) > 1]
+    if not duplicates:
+        return Reply(
+            "I couldn't find two current doses with the same medication, amount, and "
+            "experienced minute in the past 45 days. Nothing was changed. "
+            "Try /removedose YYYY-MM-DD HH:MM."
+        )
+    if len(duplicates) > 1:
+        return Reply(
+            "I found more than one duplicate-dose time. Nothing was changed. "
+            "Use /removedose YYYY-MM-DD HH:MM to choose one."
+        )
+
+    duplicate_group = duplicates[0]
+    target = max(duplicate_group, key=lambda item: (item.recorded_at, str(item.id)))
+    local = from_instant(target.occurred_at, owner.default_timezone).local_time
+    question = (
+        f"Remove one of {len(duplicate_group)} identical "
+        f"{_display_decimal(target.amount)} {target.unit.value} {target.medication.name} "
+        f"entries at {local:%Y-%m-%d %H:%M}? Reply REMOVE to confirm or CANCEL."
+    )
+    conversation.remember_exchange(
+        session,
+        owner_id=owner.id,
+        chat_id=chat_id,
+        user_text="Review an exact duplicate dose",
+        assistant_text=question,
+        pending=conversation.PendingIntent(
+            kind="void_duplicate_dose",
+            request="Review an exact duplicate dose",
+            question=question,
+            dose_id=target.id,
+            reason="Accidental duplicate confirmed by owner",
+        ),
+        now=now,
+    )
+    return Reply(question)
+
+
 def _handle_command(
     session: Session,
     owner: Owner,
@@ -765,6 +877,10 @@ def _handle_command(
             return Reply(PRIVACY_TEXT)
         case "dose":
             return _cmd_dose(session, owner, args, now=now)
+        case "removedose":
+            return _begin_duplicate_dose_removal(
+                session, owner, selector=raw_argument, now=now, chat_id=chat_id
+            )
         case "bp":
             return _cmd_blood_pressure(session, owner, args, now=now)
         case "weight":
@@ -889,6 +1005,8 @@ def _resume_pending_intent(
 ) -> Reply:
     if answer.casefold().strip(" .!") in {"cancel", "never mind", "nevermind", "stop"}:
         conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+        if pending.kind == "void_duplicate_dose":
+            return Reply("Cancelled. No recorded dose was changed.")
         return Reply("Cancelled. I didn't create a Bead.")
     if pending.kind == "beads_add":
         return _cmd_bd_add(
@@ -902,6 +1020,27 @@ def _resume_pending_intent(
             now=now,
             chat_id=chat_id,
             clarification_answer=answer,
+        )
+    if pending.kind == "void_duplicate_dose":
+        if answer.casefold().strip(" .!") not in {"remove", "confirm remove", "yes remove"}:
+            return Reply("Nothing was changed. Reply REMOVE to confirm or CANCEL.")
+        assert pending.dose_id is not None and pending.reason is not None
+        dose = session.get(DoseEvent, pending.dose_id)
+        if dose is None or dose.owner_id != owner.id:
+            conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+            return Reply("That dose is no longer available. Nothing was changed.")
+        try:
+            tombstone = meds.void_recorded_dose(session, dose, reason=pending.reason)
+        except events.CorrectionError:
+            conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+            return Reply("That dose was already corrected. Nothing else was changed.")
+        conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
+        local = from_instant(tombstone.occurred_at, owner.default_timezone).local_time
+        return Reply(
+            f"Removed one duplicate {_display_decimal(tombstone.amount)} "
+            f"{tombstone.unit.value} {tombstone.medication.name} entry at {local:%Y-%m-%d %H:%M}. "
+            "It no longer counts in current records or calculations; "
+            "its correction history remains."
         )
     conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
     return Reply("That earlier question expired. Please send the request again.")

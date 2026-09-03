@@ -222,7 +222,12 @@ def _owned_episode(session: DbSession, owner_id: uuid.UUID, episode_id: uuid.UUI
 
 def _episode_out(session: DbSession, e: StressEpisode) -> EpisodeOut:
     dose_count = session.scalar(
-        select(func.count()).select_from(DoseEvent).where(DoseEvent.episode_id == e.id)
+        select(func.count())
+        .select_from(DoseEvent)
+        .where(
+            DoseEvent.episode_id == e.id,
+            events.current_fact_predicate(DoseEvent, owner_id=e.owner_id),
+        )
     )
     symptom_count = session.scalar(
         select(func.count()).select_from(SymptomEvent).where(SymptomEvent.episode_id == e.id)

@@ -161,6 +161,14 @@
       "confirmation": "Editing does not record anything. Review the updated draft and press Confirm."
     },
     {
+      "command": "/removedose",
+      "syntax": "/removedose [YYYY-MM-DD] [HH:MM]",
+      "example": "/removedose 2026-08-30 15:45",
+      "purpose": "Find one exact duplicate recorded dose and review removal without using the language model.",
+      "result": "Audited dose correction",
+      "confirmation": "Reply REMOVE to exclude one duplicate from current records and calculations. The original remains in correction history."
+    },
+    {
       "command": "/undo",
       "syntax": "/undo",
       "example": "/undo",

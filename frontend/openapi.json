@@ -3226,6 +3226,10 @@
           },
           "unit": {
             "$ref": "#/components/schemas/DoseUnit"
+          },
+          "voided": {
+            "title": "Voided",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3237,6 +3241,7 @@
           "unit",
           "route",
           "dose_category",
+          "voided",
           "time",
           "provenance",
           "regimen_version_id",
@@ -3469,6 +3474,29 @@
         ],
         "title": "DoseUnit",
         "type": "string"
+      },
+      "DoseVoidIn": {
+        "additionalProperties": false,
+        "description": "Explicit confirmation that a recorded dose entry did not happen.",
+        "properties": {
+          "confirmation": {
+            "const": "REMOVE THIS RECORDED DOSE",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "confirmation"
+        ],
+        "title": "DoseVoidIn",
+        "type": "object"
       },
       "EpisodeIn": {
         "additionalProperties": false,
@@ -15054,6 +15082,129 @@
         ]
       }
     },
+    "/api/v1/doses/voided": {
+      "get": {
+        "description": "List retained tombstones for entries removed through dose correction.",
+        "operationId": "list_voided_doses_api_v1_doses_voided_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "local_date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Local Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Local Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timezone"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DosePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Voided Doses",
+        "tags": [
+          "doses"
+        ]
+      }
+    },
     "/api/v1/doses/{dose_id}/correct": {
       "post": {
         "description": "Correct a dose. The original stays queryable with its original values (SAFE-08).",
@@ -15135,6 +15286,92 @@
           }
         },
         "summary": "Correct Dose",
+        "tags": [
+          "doses"
+        ]
+      }
+    },
+    "/api/v1/doses/{dose_id}/void": {
+      "post": {
+        "description": "Remove an erroneous dose from current facts while preserving its history.",
+        "operationId": "void_dose_api_v1_doses__dose_id__void_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dose_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dose Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoseVoidIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Void Dose",
         "tags": [
           "doses"
         ]

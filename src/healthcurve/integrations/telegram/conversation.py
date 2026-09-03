@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
@@ -31,9 +31,17 @@ class ConversationTurn(BaseModel):
 class PendingIntent(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    kind: Literal["beads_add"]
+    kind: Literal["beads_add", "void_duplicate_dose"]
     request: str = Field(min_length=8, max_length=500)
     question: str = Field(min_length=8, max_length=300)
+    dose_id: uuid.UUID | None = None
+    reason: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_kind_fields(self) -> PendingIntent:
+        if self.kind == "void_duplicate_dose" and (self.dose_id is None or self.reason is None):
+            raise ValueError("void_duplicate_dose requires dose_id and reason")
+        return self
 
 
 def active_context(

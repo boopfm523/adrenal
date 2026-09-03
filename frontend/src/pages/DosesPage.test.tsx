@@ -14,7 +14,7 @@ function renderPage(initialEntry = "/doses"): void {
   render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><DosesPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 }
 
-function dose(id: string, amount: string, supersedesId: string | null, reason: string | null, occurredAt = "2026-08-09T11:00:00Z", medicationName = "Synthetic medicine") {
+function dose(id: string, amount: string, supersedesId: string | null, reason: string | null, occurredAt = "2026-08-09T11:00:00Z", medicationName = "Synthetic medicine", voided = false) {
   return {
     id,
     category: "fact",
@@ -30,6 +30,7 @@ function dose(id: string, amount: string, supersedesId: string | null, reason: s
     slot_id: null,
     episode_id: null,
     notes: null,
+    voided,
   };
 }
 
@@ -46,6 +47,7 @@ function page(items: unknown[], revisions: unknown[] = [], currentPage = 1, tota
 function supportingResponse(url: string): Response | null {
   if (url.endsWith("/medications")) return new Response(JSON.stringify([{ id: "33333333-3333-4333-8333-333333333333", category: "plan", name: "Synthetic medicine", formulation: "tablet", strength: null, strength_unit: null, default_unit: "mg", default_route: "oral", active_from: null, active_to: null, notes: null }]), { headers: { "Content-Type": "application/json" } });
   if (url.includes("/stress-episodes?") && url.includes("status_filter=open")) return new Response(JSON.stringify({ items: [{ id: "55555555-5555-4555-8555-555555555555", category: "fact", trigger: "Synthetic illness", status: "open", severity: null, started_at: "2026-08-09T08:00:00Z", ended_at: null, timezone: "America/New_York", highest_temperature_c: null, illness_description: null, recovery_notes: null, outcome: null, notes: null, dose_count: 0, symptom_count: 0 }], page: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } }), { headers: { "Content-Type": "application/json" } });
+  if (url.includes("/doses/voided")) return new Response(JSON.stringify(page([])), { headers: { "Content-Type": "application/json" } });
   return null;
 }
 
@@ -91,6 +93,40 @@ describe("Doses page", () => {
     expect(new Headers(write?.[1]?.headers).get("X-CSRF-Token")).toBe("synthetic-csrf");
     const body = write?.[1]?.body;
     expect(JSON.parse(typeof body === "string" ? body : "{}") as unknown).toEqual({ reason: "Synthetic second correction", changes: { amount: "10.2500" } });
+  });
+
+  it("removes an erroneous dose only after a reason and explicit confirmation", async () => {
+    sessionStore.set(session);
+    const original = dose("11111111-1111-4111-8111-111111111111", "5.0000", null, null);
+    const tombstone = dose("22222222-2222-4222-8222-222222222222", "5.0000", original.id, "Accidental duplicate", "2026-08-09T11:00:00Z", "Synthetic medicine", true);
+    let removed = false;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (url.endsWith(`/doses/${original.id}/void`) && init?.method === "POST") {
+        removed = true;
+        return Promise.resolve(new Response(JSON.stringify(tombstone), { status: 201, headers: { "Content-Type": "application/json" } }));
+      }
+      if (url.includes("/doses/voided")) return Promise.resolve(new Response(JSON.stringify(removed ? page([tombstone], [original]) : page([])), { headers: { "Content-Type": "application/json" } }));
+      const supporting = supportingResponse(url);
+      if (supporting !== null) return Promise.resolve(supporting);
+      return Promise.resolve(new Response(JSON.stringify(removed ? page([]) : page([original])), { headers: { "Content-Type": "application/json" } }));
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Correct recorded fact" }));
+    const form = screen.getByRole("form", { name: "Correct Synthetic medicine dose" });
+    const remove = within(form).getByRole("button", { name: "Remove this recorded dose" });
+    expect(remove).toBeDisabled();
+    await userEvent.type(within(form).getByLabelText("Correction reason"), "Accidental duplicate");
+    await userEvent.click(within(form).getByLabelText(/I confirm this recorded dose did not happen/));
+    expect(remove).toBeEnabled();
+    await userEvent.click(remove);
+
+    await screen.findByRole("heading", { name: "Removed dose entries" });
+    expect(screen.getByText("Removed · Accidental duplicate")).toBeVisible();
+    const write = fetchMock.mock.calls.find(([input, init]) => requestUrl(input).endsWith(`/doses/${original.id}/void`) && init?.method === "POST");
+    expect(JSON.parse(typeof write?.[1]?.body === "string" ? write[1].body : "{}") as unknown).toEqual({ reason: "Accidental duplicate", confirmation: "REMOVE THIS RECORDED DOSE" });
+    expect(new Headers(write?.[1]?.headers).get("X-CSRF-Token")).toBe("synthetic-csrf");
   });
 
   it("orders current facts by experienced time with deterministic equal-time IDs", async () => {

@@ -6,6 +6,7 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 
 from healthcurve.analytics.wake_reference_inputs import (
     observed_sleep_timing_for_day,
@@ -13,12 +14,13 @@ from healthcurve.analytics.wake_reference_inputs import (
 )
 from healthcurve.api.date_filters import local_date_window
 from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
-from healthcurve.api.pagination import Pagination, paginate_current_facts
+from healthcurve.api.pagination import Pagination, paginate_current_facts, paginate_fact_heads
 from healthcurve.api.schemas import (
     DoseCorrectionIn,
     DoseIn,
     DoseOut,
     DosePage,
+    DoseVoidIn,
     EventTimeOut,
     PlanComparisonDay,
     PlanComparisonRegimen,
@@ -113,6 +115,48 @@ def list_doses(
     )
 
 
+@router.get("/doses/voided", response_model=DosePage)
+def list_voided_doses(
+    session: DbSession,
+    owner: CurrentOwner,
+    pagination: Pagination,
+    local_date_from: date | None = None,
+    local_date_to: date | None = None,
+    timezone: str | None = None,
+):
+    """List retained tombstones for entries removed through dose correction."""
+    window = local_date_window(
+        profile_timezone=owner.default_timezone,
+        timezone=timezone,
+        date_from=local_date_from,
+        date_to=local_date_to,
+    )
+    predicates = []
+    if window.start is not None:
+        predicates.append(DoseEvent.occurred_at >= window.start)
+    if window.end_exclusive is not None:
+        predicates.append(DoseEvent.occurred_at < window.end_exclusive)
+    head = DoseEvent.id.not_in(
+        select(DoseEvent.supersedes_id).where(
+            DoseEvent.owner_id == owner.id,
+            DoseEvent.supersedes_id.is_not(None),
+        )
+    )
+    page = paginate_fact_heads(
+        session,
+        DoseEvent,
+        owner_id=owner.id,
+        request=pagination,
+        head_predicates=(head, DoseEvent.voided.is_(True)),
+        predicates=tuple(predicates),
+    )
+    return DosePage(
+        items=[_dose_out(dose, dose.medication) for dose in page.items],
+        revisions=[_dose_out(dose, dose.medication) for dose in page.revisions],
+        page=page.metadata,
+    )
+
+
 @router.post(
     "/doses/{dose_id}/correct",
     response_model=DoseOut,
@@ -165,6 +209,24 @@ def correct_dose(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     return _dose_out(correction, correction.medication)
+
+
+@router.post(
+    "/doses/{dose_id}/void",
+    response_model=DoseOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def void_dose(dose_id: uuid.UUID, payload: DoseVoidIn, session: DbSession, owner: CurrentOwner):
+    """Remove an erroneous dose from current facts while preserving its history."""
+    original = session.get(DoseEvent, dose_id)
+    if original is None or original.owner_id != owner.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="dose not found")
+    try:
+        tombstone = meds.void_recorded_dose(session, original, reason=payload.reason)
+    except events.CorrectionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return _dose_out(tombstone, tombstone.medication)
 
 
 @router.get("/doses/plan-comparison", response_model=PlanComparisonDay)
@@ -282,6 +344,7 @@ def _dose_out(dose: DoseEvent, medication: Medication) -> DoseOut:
         unit=dose.unit,
         route=dose.route,
         dose_category=dose.category,
+        voided=dose.voided,
         time=EventTimeOut(
             occurred_at=dose.occurred_at,
             local_time=dose.local_time,

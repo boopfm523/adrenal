@@ -561,12 +561,7 @@ def timeline(
             model.occurred_at.label("occurred_at"),
         ).where(
             model.owner_id == owner.id,
-            model.id.not_in(
-                select(model.supersedes_id).where(
-                    model.owner_id == owner.id,
-                    model.supersedes_id.is_not(None),
-                )
-            ),
+            events.current_fact_predicate(model, owner_id=owner.id),
         )
         if date_from:
             query = query.where(model.occurred_at >= date_from)

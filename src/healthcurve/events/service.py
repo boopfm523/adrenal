@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import inspect, select
+from sqlalchemy import and_, inspect, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -147,7 +147,7 @@ def current_only[E: EventMixin](session: Session, model: type[E], rows: list[E])
     superseded = set(
         session.scalars(select(model.supersedes_id).where(model.supersedes_id.in_(ids)))
     )
-    return [r for r in rows if r.id not in superseded]
+    return [r for r in rows if r.id not in superseded and not bool(getattr(r, "voided", False))]
 
 
 def current_fact_predicate[E: EventMixin](
@@ -160,12 +160,14 @@ def current_fact_predicate[E: EventMixin](
     PostgreSQL in a second potentially enormous ``IN`` query.  It is the appropriate
     shape for dense wearable and long report windows.
     """
-    return model.id.not_in(
+    current = model.id.not_in(
         select(model.supersedes_id).where(
             model.owner_id == owner_id,
             model.supersedes_id.is_not(None),
         )
     )
+    voided = getattr(model, "voided", None)
+    return current if voided is None else and_(current, voided.is_(False))
 
 
 def is_superseded[E: EventMixin](session: Session, model: type[E], event_id: uuid.UUID) -> bool:

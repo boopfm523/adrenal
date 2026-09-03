@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { correctDose, getDoses, getMedications, getOpenEpisodes, recordDose, type Dose, type DoseCorrectionInput, type DoseInput, type Medication, type RecordedHistoryFilters } from "../api/client";
+import { correctDose, getDoses, getMedications, getOpenEpisodes, getVoidedDoses, recordDose, voidDose, type Dose, type DoseCorrectionInput, type DoseInput, type Medication, type RecordedHistoryFilters } from "../api/client";
 import { useAuth } from "../auth/context";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
@@ -21,12 +21,13 @@ interface FormValues {
   reason: string;
 }
 
-interface DoseViewState extends RecordedHistoryFilters { page: number }
+interface DoseViewState extends RecordedHistoryFilters { page: number; removedPage: number }
 
 function viewFromSearch(search: string, profileTimezone: string): DoseViewState {
   const params = new URLSearchParams(search);
   const page = params.get("page") ?? "";
-  return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, page: /^\d+$/.test(page) && Number(page) >= 1 ? Number(page) : 1 };
+  const removedPage = params.get("removed_page") ?? "";
+  return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, page: /^\d+$/.test(page) && Number(page) >= 1 ? Number(page) : 1, removedPage: /^\d+$/.test(removedPage) && Number(removedPage) >= 1 ? Number(removedPage) : 1 };
 }
 
 function searchFromView(view: DoseViewState): URLSearchParams {
@@ -34,6 +35,7 @@ function searchFromView(view: DoseViewState): URLSearchParams {
   if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom);
   if (view.dateTo !== "") params.set("local_date_to", view.dateTo);
   if (view.page > 1) params.set("page", view.page.toString());
+  if (view.removedPage > 1) params.set("removed_page", view.removedPage.toString());
   return params;
 }
 
@@ -142,16 +144,25 @@ function CorrectionForm({ dose, onCancel }: { dose: Dose; onCancel: () => void }
   const queryClient = useQueryClient();
   const [values, setValues] = useState(() => initialValues(dose));
   const [validation, setValidation] = useState<string | null>(null);
+  const [removeConfirmed, setRemoveConfirmed] = useState(false);
+  const refresh = async (): Promise<void> => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doses"] }),
+      queryClient.invalidateQueries({ queryKey: ["voided-doses"] }),
+      queryClient.invalidateQueries({ queryKey: ["timeline"] }),
+      queryClient.invalidateQueries({ queryKey: ["today"] }),
+      queryClient.invalidateQueries({ queryKey: ["healthcurve"] }),
+      queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+    ]);
+    onCancel();
+  };
   const mutation = useMutation({
     mutationFn: (payload: DoseCorrectionInput) => correctDose(dose.id, payload),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["doses"] }),
-        queryClient.invalidateQueries({ queryKey: ["timeline"] }),
-        queryClient.invalidateQueries({ queryKey: ["today"] }),
-      ]);
-      onCancel();
-    },
+    onSuccess: refresh,
+  });
+  const removeMutation = useMutation({
+    mutationFn: () => voidDose(dose.id, { reason: values.reason.trim(), confirmation: "REMOVE THIS RECORDED DOSE" }),
+    onSuccess: refresh,
   });
 
   function submit(event: React.SyntheticEvent<HTMLFormElement>): void {
@@ -183,6 +194,13 @@ function CorrectionForm({ dose, onCancel }: { dose: Dose; onCancel: () => void }
       {validation === null ? null : <p className="error-summary form-wide" role="alert">{validation}</p>}
       {mutation.isError ? <p className="error-summary form-wide" role="alert">The correction was not saved. Check the amount, local time, and timezone.</p> : null}
       <div className="filter-actions form-wide"><button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Save corrected fact"}</button><button className="button-secondary" type="button" onClick={onCancel}>Cancel</button></div>
+      <fieldset className="form-wide danger-zone">
+        <legend>Remove erroneous entry</legend>
+        <p>Use this only when this dose was entered by mistake, including an accidental duplicate. It will stop appearing in current records and calculations; the original remains in correction history.</p>
+        <label className="checkbox-label"><input type="checkbox" checked={removeConfirmed} onChange={(event) => { setRemoveConfirmed(event.target.checked); }} /> I confirm this recorded dose did not happen as a separate dose.</label>
+        <button className="danger-button" type="button" disabled={!removeConfirmed || values.reason.trim() === "" || removeMutation.isPending} onClick={() => { removeMutation.mutate(); }}>{removeMutation.isPending ? "Removing…" : "Remove this recorded dose"}</button>
+        {removeMutation.isError ? <p className="error-summary" role="alert">The dose was not removed. Correct the current version or try again.</p> : null}
+      </fieldset>
     </form>
   );
 }
@@ -200,9 +218,11 @@ export function DosesPage(): React.JSX.Element {
   const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
   const [validation, setValidation] = useState<string | null>(null);
   const doses = useQuery({ queryKey: ["doses", filters, view.page], queryFn: () => getDoses(filters, view.page), enabled: !invalidRange });
+  const voidedDoses = useQuery({ queryKey: ["voided-doses", filters, view.removedPage], queryFn: () => getVoidedDoses(filters, view.removedPage), enabled: !invalidRange });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const byId = new Map([...(doses.data?.items ?? []), ...(doses.data?.revisions ?? [])].map((dose) => [dose.id, dose]));
+  const byId = new Map([...(doses.data?.items ?? []), ...(doses.data?.revisions ?? []), ...(voidedDoses.data?.items ?? []), ...(voidedDoses.data?.revisions ?? [])].map((dose) => [dose.id, dose]));
   const current = doses.data?.items ?? [];
+  const removed = voidedDoses.data;
 
   function historyFor(dose: Dose): Dose[] {
     const history: Dose[] = [];
@@ -219,14 +239,14 @@ export function DosesPage(): React.JSX.Element {
   return (
     <Page title="Doses" description="Actual recorded doses and their immutable correction history—not the physician-approved schedule.">
       <RecordDoseForm timezone={profileTimezone} />
-      <Paper component="form" className="filter-panel doses-filter-panel" withBorder radius="lg" p="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditingId(null); setSearchParams(searchFromView({ ...draft, page: 1 })); }}>
+      <Paper component="form" className="filter-panel doses-filter-panel" withBorder radius="lg" p="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setEditingId(null); setSearchParams(searchFromView({ ...draft, page: 1, removedPage: 1 })); }}>
         <SimpleGrid cols={{ base: 1, sm: 3 }} className="form-wide"><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="IANA timezone" required value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>
         {validation === null && !invalidRange ? null : <Alert color="red" className="form-wide" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}
         <Group className="filter-actions"><Button type="submit">Apply filters</Button><Button variant="outline" type="button" onClick={() => { setValidation(null); setEditingId(null); setDraftState({ search: "", filters: { dateFrom: "", dateTo: "", timezone: profileTimezone } }); setSearchParams(new URLSearchParams()); }}>Clear filters</Button></Group>
       </Paper>
       <Text c="dimmed" size="sm" mt="md">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. These are actual recorded facts, not scheduled plan entries.</Text>
-      {doses.isFetching ? <Text role="status">Loading recorded doses…</Text> : null}
-      {doses.isError ? <Alert color="red" role="alert">Recorded doses could not be loaded.</Alert> : null}
+      {doses.isFetching || voidedDoses.isFetching ? <Text role="status">Loading recorded doses…</Text> : null}
+      {doses.isError || voidedDoses.isError ? <Alert color="red" role="alert">Recorded doses could not be loaded.</Alert> : null}
       {doses.data?.page.total_items === 0 ? <Paper component="section" className="empty-state" withBorder radius="lg" p="lg"><Title order={2}>No doses recorded</Title><Text>A missing record is not a recorded zero dose.</Text></Paper> : null}
       {current.length === 0 ? null : <Paper className="dose-table-region" withBorder radius="lg"><div className="table-scroll" tabIndex={0} role="region" aria-label="Recorded doses table">
         <Table className="dose-table" verticalSpacing="sm" horizontalSpacing="md" highlightOnHover>
@@ -246,6 +266,12 @@ export function DosesPage(): React.JSX.Element {
         </Table>
       </div></Paper>}
       {doses.data === undefined ? null : <PaginationControls label="Recorded doses" metadata={doses.data.page} onPageChange={(page) => { setEditingId(null); setSearchParams(searchFromView({ ...view, page })); }} />}
+      {removed === undefined || removed.items.length === 0 ? null : <Paper component="section" className="dose-table-region" withBorder radius="lg" mt="xl" p="md" aria-labelledby="removed-dose-heading">
+        <Title order={2} id="removed-dose-heading">Removed dose entries</Title>
+        <Text c="dimmed">These entries were corrected as not having happened separately. They do not contribute to current records or calculations.</Text>
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Removed dose entries table"><Table verticalSpacing="sm" horizontalSpacing="md"><caption>Auditable correction tombstones with their retained original facts.</caption><thead><tr><th scope="col">Experienced time</th><th scope="col">Medication and amount</th><th scope="col">Correction reason and history</th></tr></thead><tbody>{removed.items.map((dose) => { const history = historyFor(dose); return <tr key={dose.id}><td data-label="Experienced time">{experiencedTime(dose)}</td><th data-label="Medication and amount" scope="row">{dose.medication_name} · {formatMeasurement(dose.amount, dose.unit)}</th><td data-label="Correction reason and history"><span>Removed · {dose.provenance.correction_reason ?? "reason recorded"}</span><details className="revision-history"><summary>Original and revision history ({history.length})</summary>{history.map((prior) => <article key={prior.id}><h3>Retained recorded value</h3><p>{formatMeasurement(prior.amount, prior.unit)} · {experiencedTime(prior)} · {prior.route} · {prior.dose_category}</p><p>Source: {prior.provenance.source_type.replace("_", " ")} · Confirmation: {prior.provenance.confirmation_state.replace("_", " ")}</p></article>)}</details></td></tr>; })}</tbody></Table></div>
+        <PaginationControls label="Removed dose entries" metadata={removed.page} onPageChange={(removedPage) => { setEditingId(null); setSearchParams(searchFromView({ ...view, removedPage })); }} />
+      </Paper>}
     </Page>
   );
 }

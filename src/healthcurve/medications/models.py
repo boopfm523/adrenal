@@ -16,6 +16,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    false,
     func,
     text,
 )
@@ -336,6 +338,12 @@ class DoseEvent(EventMixin, FactBase):
     unit: Mapped[DoseUnit] = mapped_column(StrEnumType(DoseUnit, 16), nullable=False)
     route: Mapped[Route] = mapped_column(StrEnumType(Route, 24), nullable=False)
     category: Mapped[DoseCategory] = mapped_column(StrEnumType(DoseCategory, 24), nullable=False)
+    #: A correction tombstone for an entry the owner says never happened (for
+    #: example, an accidental duplicate). The copied clinical fields preserve the
+    #: immutable correction chain, while current-fact readers exclude this row.
+    voided: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
     regimen_version_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("plan.regimen_version.id", ondelete="RESTRICT")

@@ -6,6 +6,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -20,9 +21,12 @@ from healthcurve.ai.models import TelegramConversationContext
 from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
 from healthcurve.config import Settings
 from healthcurve.db import SCHEMAS, Base
+from healthcurve.events import service as events
+from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import conversation, handlers
 from healthcurve.integrations.telegram.feature_requests import FEATURE_REQUEST_JSON_SCHEMA
+from healthcurve.medications.models import DoseCategory, DoseEvent, DoseUnit, Medication, Route
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 NOW = datetime(2026, 8, 13, 14, tzinfo=UTC)
@@ -251,6 +255,70 @@ def test_follow_up_resolves_pending_request_and_clears_context(
         ),
     }
     assert len(list((tmp_path / "pending").glob("*.json"))) == 1
+
+
+def test_natural_language_duplicate_dose_removal_requires_confirmation(engine: Engine) -> None:
+    owner = _owner("duplicate-dose-removal@example.test")
+    medication = Medication(
+        owner_id=owner.id,
+        name="Synthetic hydrocortisone",
+        normalized_name="synthetic hydrocortisone",
+        default_unit=DoseUnit.MG,
+        default_route=Route.ORAL,
+    )
+    experienced = NOW - timedelta(hours=1)
+    with Session(engine) as session, session.begin():
+        session.add_all((owner, medication))
+        session.flush()
+        for _ in range(2):
+            events.create_event(
+                session,
+                DoseEvent,
+                owner_id=owner.id,
+                event_time=events.build_event_time(experienced.replace(tzinfo=None), "UTC"),
+                source_type=SourceType.TELEGRAM,
+                confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
+                medication_id=medication.id,
+                amount=Decimal("5"),
+                unit=DoseUnit.MG,
+                route=Route.ORAL,
+                category=DoseCategory.SCHEDULED,
+            )
+
+        proposal = handlers.handle_message(
+            session,
+            owner,
+            text="Please correct the duplicate dose",
+            chat_id=CHAT_ID,
+            now=NOW,
+        )
+        assert "Reply REMOVE to confirm" in proposal.text
+
+        def current() -> list[DoseEvent]:
+            return list(
+                session.scalars(
+                    select(DoseEvent).where(
+                        events.current_fact_predicate(DoseEvent, owner_id=owner.id)
+                    )
+                )
+            )
+
+        assert len(current()) == 2
+
+        rejected = handlers.handle_message(
+            session, owner, text="maybe", chat_id=CHAT_ID, now=NOW + timedelta(seconds=1)
+        )
+        assert rejected.text == "Nothing was changed. Reply REMOVE to confirm or CANCEL."
+        assert len(current()) == 2
+
+        removed = handlers.handle_message(
+            session, owner, text="REMOVE", chat_id=CHAT_ID, now=NOW + timedelta(seconds=2)
+        )
+        assert "Removed one duplicate 5 mg Synthetic hydrocortisone" in removed.text
+        assert len(current()) == 1
+        rows = list(session.scalars(select(DoseEvent).where(DoseEvent.owner_id == owner.id)))
+        assert len(rows) == 3
+        assert sum(row.voided for row in rows) == 1
 
 
 def test_cancel_supersession_model_failure_and_injection_fail_closed(

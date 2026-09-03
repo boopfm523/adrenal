@@ -578,6 +578,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/doses/voided": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Voided Doses
+         * @description List retained tombstones for entries removed through dose correction.
+         */
+        get: operations["list_voided_doses_api_v1_doses_voided_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/doses/{dose_id}/correct": {
         parameters: {
             query?: never;
@@ -592,6 +612,26 @@ export interface paths {
          * @description Correct a dose. The original stays queryable with its original values (SAFE-08).
          */
         post: operations["correct_dose_api_v1_doses__dose_id__correct_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/doses/{dose_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Dose
+         * @description Remove an erroneous dose from current facts while preserving its history.
+         */
+        post: operations["void_dose_api_v1_doses__dose_id__void_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2711,6 +2751,8 @@ export interface components {
             slot_id: string | null;
             time: components["schemas"]["EventTimeOut"];
             unit: components["schemas"]["DoseUnit"];
+            /** Voided */
+            voided: boolean;
         };
         /** DosePage */
         DosePage: {
@@ -2791,6 +2833,19 @@ export interface components {
          * @enum {string}
          */
         DoseUnit: "mg" | "mcg" | "ml" | "tablet";
+        /**
+         * DoseVoidIn
+         * @description Explicit confirmation that a recorded dose entry did not happen.
+         */
+        DoseVoidIn: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "REMOVE THIS RECORDED DOSE";
+            /** Reason */
+            reason: string;
+        };
         /** EpisodeIn */
         EpisodeIn: {
             /** Highest Temperature C */
@@ -6958,6 +7013,43 @@ export interface operations {
             };
         };
     };
+    list_voided_doses_api_v1_doses_voided_get: {
+        parameters: {
+            query?: {
+                local_date_from?: string | null;
+                local_date_to?: string | null;
+                timezone?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DosePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     correct_dose_api_v1_doses__dose_id__correct_post: {
         parameters: {
             query?: never;
@@ -6974,6 +7066,45 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DoseCorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_dose_api_v1_doses__dose_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                dose_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoseVoidIn"];
             };
         };
         responses: {

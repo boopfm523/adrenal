@@ -1004,3 +1004,35 @@ def find_medication_by_name(session: Session, owner_id: uuid.UUID, name: str) ->
             Medication.normalized_name == normalize_name(name),
         )
     )
+
+
+def void_recorded_dose(
+    session: Session,
+    dose: DoseEvent,
+    *,
+    reason: str,
+    correlation_id: str | None = None,
+) -> DoseEvent:
+    """Supersede an erroneous dose with an auditable non-current tombstone.
+
+    The copied dose fields preserve what was originally recorded. Current-fact
+    readers omit the tombstone, so the dose no longer contributes to timelines,
+    plan comparisons, reports, chat context, or modeled curves.
+    """
+    if dose.voided:
+        return dose
+    existing = session.scalar(select(DoseEvent).where(DoseEvent.supersedes_id == dose.id))
+    if existing is not None:
+        if existing.voided:
+            return existing
+        raise event_service.CorrectionError(
+            "this record has already been corrected; remove the current version instead"
+        )
+    return event_service.correct_event(
+        session,
+        DoseEvent,
+        dose,
+        reason=reason,
+        changes={"voided": True},
+        correlation_id=correlation_id,
+    )
