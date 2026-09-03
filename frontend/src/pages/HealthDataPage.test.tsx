@@ -117,7 +117,15 @@ describe("Health data page", () => {
     expect(pressureTooltip).toHaveTextContent("2026-08-09 08:15");
     expect(pressureTooltip).toHaveTextContent("Systolic: 119 mmHg");
     expect(pressureTooltip).toHaveTextContent("Diastolic: 76 mmHg");
-    expect(screen.getByRole("region", { name: "Weight interactive graph" })).toBeVisible();
+    const weightGraph = screen.getByRole("region", { name: "Weight interactive graph" });
+    expect(weightGraph).toBeVisible();
+    expect(weightGraph).not.toHaveClass("chart-plot-scroll--compact");
+    const weightChart = within(weightGraph).getByRole("img", { name: /Weight/ });
+    vi.spyOn(weightChart, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 720, bottom: 320, width: 720, height: 320, toJSON: () => ({}) });
+    fireEvent.mouseMove(weightChart, { clientX: 696 });
+    const weightTooltip = within(weightGraph).getByRole("status");
+    expect(weightTooltip).toHaveTextContent("2026-08-10 08:15");
+    expect(weightTooltip).toHaveTextContent("Weight: 183.2 lb");
     expect(screen.getByRole("region", { name: "Body temperature interactive graph" })).toBeVisible();
     expect(screen.getAllByText("Missing values")[0]).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Systolic (mmHg)" })).toBeInTheDocument();
