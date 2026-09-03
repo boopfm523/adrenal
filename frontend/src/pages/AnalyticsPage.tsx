@@ -24,7 +24,7 @@ import {
   type HealthCurveVisibility,
 } from "../components/DailyHealthCurve";
 import { DailyPatternsTable } from "../components/DailyPatternsTable";
-import { formatDecimal, formatMeasurement } from "../format";
+import { formatDecimal, formatMeasurement, formatRoundedDecimal } from "../format";
 import { localDate, shiftIsoDate, timezoneAbbreviationForLocalDate } from "../time";
 
 interface MetricFrameProps extends PropsWithChildren {
@@ -62,17 +62,17 @@ function Timing({ summary }: { summary: AnalyticsSummary }): React.JSX.Element {
   return <MetricFrame title="Dose timing" metric={metric} referenceDate={summary.date_to}>
     <dl className="metric-values">
       <div><dt>Matched doses</dt><dd>{formatDecimal(metric.matched_count)}</dd></div>
-      <div><dt>Average absolute difference from plan</dt><dd>{metric.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatDecimal(metric.average_absolute_deviation_minutes)} minutes`}</dd></div>
+      <div><dt>Average absolute difference from plan</dt><dd>{metric.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatRoundedDecimal(metric.average_absolute_deviation_minutes, 1)} minutes`}</dd></div>
       <div><dt>Total absolute difference from plan</dt><dd>{metric.total_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatDecimal(metric.total_absolute_deviation_minutes)} minutes`}</dd></div>
       <div><dt>Wake-anchored slots</dt><dd>{formatDecimal(metric.wake_sample_count)}</dd></div>
       <div><dt>Wake-anchored doses with observed wake and dose</dt><dd>{formatDecimal(metric.wake_matched_count)}</dd></div>
-      <div><dt>Average signed wake-to-dose timing</dt><dd>{metric.wake_average_signed_minutes === null ? "Missing—no observed wake-to-dose pairs" : `${formatDecimal(metric.wake_average_signed_minutes)} minutes`}</dd></div>
+      <div><dt>Average signed wake-to-dose timing</dt><dd>{metric.wake_average_signed_minutes === null ? "Missing—no observed wake-to-dose pairs" : `${formatRoundedDecimal(metric.wake_average_signed_minutes, 1)} minutes`}</dd></div>
       <div><dt>Wake-anchored slots missing wake or dose</dt><dd>{formatDecimal(metric.wake_missing_count)}</dd></div>
       <div><dt>On time</dt><dd>{formatDecimal(metric.on_time)}</dd></div><div><dt>Early</dt><dd>{formatDecimal(metric.early)}</dd></div><div><dt>Late</dt><dd>{formatDecimal(metric.late)}</dd></div><div><dt>Unplanned</dt><dd>{formatDecimal(metric.unplanned)}</dd></div><div><dt>Missing schedule matches</dt><dd>{formatDecimal(metric.missing_count)}</dd></div>
     </dl>
     <h3>Results by historical plan period</h3>
     {metric.plan_periods.length === 0 ? <p>No scheduled or recorded dose timing rows in this range.</p> : <div className="table-scroll" tabIndex={0} role="region" aria-label="Dose timing by historical plan period">
-      <table className="vital-table"><caption>Each row uses the physician-approved plan effective at the recorded or scheduled time. Missing and unplanned doses are excluded from minute averages.</caption><thead><tr><th scope="col">Plan</th><th scope="col">Effective interval</th><th scope="col">Matched</th><th scope="col">Average absolute difference</th><th scope="col">On time</th><th scope="col">Early</th><th scope="col">Late</th><th scope="col">Missing</th><th scope="col">Unplanned</th></tr></thead><tbody>{metric.plan_periods.map((period, index) => <tr key={period.regimen_version_id ?? `no-plan-${index.toString()}`}><th scope="row">{period.regimen_version_label ?? "No physician-approved plan"}</th><td>{period.effective_from === null ? "No plan interval" : `${period.effective_from} through ${period.effective_to ?? "ongoing"}`}</td><td>{formatDecimal(period.matched_count)}</td><td>{period.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatDecimal(period.average_absolute_deviation_minutes)} minutes`}</td><td>{formatDecimal(period.on_time)}</td><td>{formatDecimal(period.early)}</td><td>{formatDecimal(period.late)}</td><td>{formatDecimal(period.missing_count)}</td><td>{formatDecimal(period.unplanned)}</td></tr>)}</tbody></table>
+      <table className="vital-table"><caption>Each row uses the physician-approved plan effective at the recorded or scheduled time. Missing and unplanned doses are excluded from minute averages.</caption><thead><tr><th scope="col">Plan</th><th scope="col">Effective interval</th><th scope="col">Matched</th><th scope="col">Average absolute difference</th><th scope="col">On time</th><th scope="col">Early</th><th scope="col">Late</th><th scope="col">Missing</th><th scope="col">Unplanned</th></tr></thead><tbody>{metric.plan_periods.map((period, index) => <tr key={period.regimen_version_id ?? `no-plan-${index.toString()}`}><th scope="row">{period.regimen_version_label ?? "No physician-approved plan"}</th><td>{period.effective_from === null ? "No plan interval" : `${period.effective_from} through ${period.effective_to ?? "ongoing"}`}</td><td>{formatDecimal(period.matched_count)}</td><td>{period.average_absolute_deviation_minutes === null ? "Missing—no matched doses" : `${formatRoundedDecimal(period.average_absolute_deviation_minutes, 1)} minutes`}</td><td>{formatDecimal(period.on_time)}</td><td>{formatDecimal(period.early)}</td><td>{formatDecimal(period.late)}</td><td>{formatDecimal(period.missing_count)}</td><td>{formatDecimal(period.unplanned)}</td></tr>)}</tbody></table>
     </div>}
   </MetricFrame>;
 }
