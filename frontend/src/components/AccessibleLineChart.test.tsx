@@ -53,6 +53,8 @@ describe("Accessible line chart", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Plan: 2 mg");
     fireEvent.keyDown(graph, { key: "End" });
     expect(screen.getByRole("status")).toHaveTextContent("2026-08-05");
+    fireEvent.keyDown(graph, { key: "ArrowLeft" });
+    expect(screen.getByRole("status")).toHaveTextContent("2026-08-04");
   });
 
   it("includes zero only when the metric requests a zero baseline", () => {

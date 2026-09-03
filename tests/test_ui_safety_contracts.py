@@ -106,6 +106,8 @@ def test_chart_axes_accessibility_and_phone_readability_stay_under_ui_test() -> 
     styles = STYLES.read_text(encoding="utf-8")
     for semantic in (
         "chart-axis-description",
+        "chart-interaction-instructions",
+        "chart-inspection-tooltip",
         "chart-x-tick",
         "chart-y-tick",
         "Graph not plotted:",
@@ -113,7 +115,9 @@ def test_chart_axes_accessibility_and_phone_readability_stay_under_ui_test() -> 
         assert semantic in chart
     for tested_behavior in (
         "X axis:",
-        "scrollable graph",
+        "interactive graph",
+        "ArrowLeft",
+        "ArrowRight",
         "data table",
         "different units",
         "Gap—no value",
@@ -121,7 +125,7 @@ def test_chart_axes_accessibility_and_phone_readability_stay_under_ui_test() -> 
         assert tested_behavior in test
     for visual_contract in (
         ".chart-plot-scroll { max-width: 100%; overflow-x: auto;",
-        ".line-chart { display: block; width: 100%; min-width: 38rem;",
+        ".chart-plot-canvas { position: relative; min-width: 38rem;",
         ".chart-x-tick text, .chart-y-tick text { fill: #26322d; font-size: 12px;",
     ):
         assert visual_contract in styles
