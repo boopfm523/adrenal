@@ -989,9 +989,12 @@ def _validate_candidate(
     )
 
 
-#: Clock-only forms the model emits in practice, e.g. "7:08am", "07:08", "7.08 pm".
+#: Clock-only forms the model emits in practice, e.g. "7am", "7:08am", "07:08",
+#: and "7.08 pm". An hour without minutes is accepted only with am/pm so a bare
+#: medication amount cannot be mistaken for a time.
 _CLOCK_PATTERN: Final = re.compile(
-    r"^(?P<hour>\d{1,2})[:.](?P<minute>\d{2})\s*(?P<meridiem>am|pm)?$", re.IGNORECASE
+    r"^(?P<hour>\d{1,2})(?:(?:[:.](?P<minute>\d{2}))\s*(?P<meridiem>am|pm)?|\s*(?P<hour_meridiem>am|pm))$",
+    re.IGNORECASE,
 )
 
 #: "just now", "now", "right now" -- unambiguous, and common in practice.
@@ -1013,7 +1016,10 @@ _TIME_IN_MESSAGE_PATTERNS: Final = (
         r"\b(?:\d+|an?|half\s+an?)\s*(?:minute|min|hour|hr)s?\s+ago\b",
         re.IGNORECASE,
     ),
-    re.compile(r"\b\d{1,2}[:.]\d{2}\s*(?:am|pm)?\b", re.IGNORECASE),
+    re.compile(
+        r"\b\d{1,2}(?:(?:[:.]\d{2})\s*(?:am|pm)?|\s*(?:am|pm))\b",
+        re.IGNORECASE,
+    ),
 )
 
 
@@ -1086,8 +1092,10 @@ def normalise_local_time(raw: str, now_local: datetime) -> datetime | None:
         return None
 
     hour = int(match.group("hour"))
-    minute = int(match.group("minute"))
-    meridiem = (match.group("meridiem") or "").lower()
+    minute = int(match.group("minute") or "0")
+    meridiem = (match.group("meridiem") or match.group("hour_meridiem") or "").lower()
+    if meridiem and not 1 <= hour <= 12:
+        return None
     if meridiem == "pm" and hour < 12:
         hour += 12
     elif meridiem == "am" and hour == 12:

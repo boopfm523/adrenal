@@ -161,6 +161,37 @@ def test_morning_shorthand_honors_explicit_time_and_formats_plan_amounts(
     ]
 
 
+def test_morning_shorthand_honors_hour_only_meridiem_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hydrocortisone = _medication("Hydrocortisone", "hydrocortisone")
+    fludrocortisone = _medication("Fludrocortisone", "fludrocortisone")
+
+    reply, candidates, _ = _resolve(
+        monkeypatch,
+        "I took my morning medication at 7am",
+        sent_at=datetime(2026, 9, 5, 11, 30, tzinfo=UTC),  # 07:30 EDT
+        slots=[
+            _slot(hydrocortisone, "15", clock=None, sort_order=0),
+            _slot(fludrocortisone, "0.1", clock=time(7), sort_order=1),
+        ],
+    )
+
+    assert reply is not None and reply.text == "confirmation draft"
+    assert [candidate.local_time.isoformat() for candidate in candidates] == [
+        "2026-09-05T07:00:00",
+        "2026-09-05T07:00:00",
+    ]
+    assert all(handlers.FlagCode.ASSUMED_TIME not in candidate.flags for candidate in candidates)
+    assert [
+        handlers._describe(candidate)  # pyright: ignore[reportPrivateUsage]
+        for candidate in candidates
+    ] == [
+        "Regular dose: 15 mg Hydrocortisone at 07:00",
+        "Regular dose: 0.1 mg Fludrocortisone at 07:00",
+    ]
+
+
 def test_morning_shorthand_without_time_still_uses_message_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,6 +207,19 @@ def test_morning_shorthand_without_time_still_uses_message_time(
     assert len(candidates) == 1
     assert candidates[0].local_time.isoformat() == "2026-08-30T06:48:00"
     assert handlers.FlagCode.ASSUMED_TIME in candidates[0].flags
+
+
+def test_conversational_time_token_accepts_hour_only_with_meridiem() -> None:
+    reference = datetime(2026, 9, 5, 11, 30)  # noqa: DTZ001
+    assert handlers._parse_time_token(  # pyright: ignore[reportPrivateUsage]
+        "7am", reference
+    ) == datetime(2026, 9, 5, 7, 0)  # noqa: DTZ001
+    assert (
+        handlers._parse_time_token(  # pyright: ignore[reportPrivateUsage]
+            "7", reference
+        )
+        is None
+    )
 
 
 def test_named_afternoon_shorthand_selects_only_named_medication(

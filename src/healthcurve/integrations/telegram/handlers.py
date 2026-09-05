@@ -2723,16 +2723,16 @@ def _looks_like_time(token: str) -> bool:
 
 
 def _parse_time_token(token: str, local_reference: datetime) -> datetime | None:
-    """Parse ``HH:MM`` against today, rolling back a day if that would be the future."""
+    """Parse an exact clock time against today, rolling back if it would be future."""
     match = re.fullmatch(
-        r"\s*(?P<hour>\d{1,2})[:.](?P<minute>\d{2})\s*(?P<meridiem>am|pm)?\s*",
+        r"\s*(?P<hour>\d{1,2})(?:(?:[:.](?P<minute>\d{2}))\s*(?P<meridiem>am|pm)?|\s*(?P<hour_meridiem>am|pm))\s*",
         token,
         re.IGNORECASE,
     )
     if match is None:
         return None
-    hour, minute = int(match.group("hour")), int(match.group("minute"))
-    meridiem = (match.group("meridiem") or "").lower()
+    hour, minute = int(match.group("hour")), int(match.group("minute") or "0")
+    meridiem = (match.group("meridiem") or match.group("hour_meridiem") or "").lower()
     if meridiem:
         if not 1 <= hour <= 12:
             return None

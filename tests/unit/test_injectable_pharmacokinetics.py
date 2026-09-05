@@ -4,6 +4,7 @@ import math
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -247,3 +248,86 @@ def test_oral_only_output_is_unchanged_between_v3_and_v4() -> None:
     assert v4_values == pytest.approx(v3_values, abs=1e-6)
     assert v3["model"]["id"] == "hc-wake-free-v3"
     assert v4["model"]["id"] == "hc-mixed-route-free-v4"
+
+
+def test_owner_curve_uses_only_corrected_dose_leaf(monkeypatch: pytest.MonkeyPatch) -> None:
+    owner_id = uuid.UUID(int=101)
+    original_id = uuid.UUID(int=201)
+    correction_id = uuid.UUID(int=202)
+
+    def row(identity: uuid.UUID, occurred_at: datetime, supersedes_id: uuid.UUID | None) -> Any:
+        return SimpleNamespace(
+            id=identity,
+            owner_id=owner_id,
+            occurred_at=occurred_at,
+            local_time=occurred_at.replace(tzinfo=None),
+            timezone="UTC",
+            utc_offset_minutes=0,
+            amount=Decimal("15"),
+            unit=DoseUnit.MG,
+            route=Route.ORAL,
+            category=DoseCategory.SCHEDULED,
+            medication=SimpleNamespace(
+                name="Hydrocortisone", normalized_name="hydrocortisone", formulation="tablet"
+            ),
+            source_type=SimpleNamespace(value="telegram"),
+            confirmation_state=SimpleNamespace(value="confirmed_from_draft"),
+            supersedes_id=supersedes_id,
+            voided=False,
+            recorded_at=occurred_at + timedelta(minutes=30),
+            source_revision=None,
+        )
+
+    original = row(original_id, datetime(2026, 9, 5, 7, 30, tzinfo=UTC), None)
+    correction = row(
+        correction_id,
+        datetime(2026, 9, 5, 7, tzinfo=UTC),
+        original_id,
+    )
+
+    class FakeSession:
+        calls = 0
+
+        def scalars(self, _statement: object) -> list[Any]:
+            self.calls += 1
+            return [original, correction] if self.calls == 1 else [original_id]
+
+    def active_parameters(_session: object, *, owner_id: uuid.UUID) -> Any:
+        assert owner_id == uuid.UUID(int=101)
+        return wake_pharmacokinetics.DEFAULT_PARAMETERS
+
+    monkeypatch.setattr(
+        injectable_pharmacokinetics.oral_model,
+        "active_parameters",
+        active_parameters,
+    )
+    curve = cast(
+        dict[str, Any],
+        injectable_pharmacokinetics.curve_for_owner(
+            cast(Any, FakeSession()),
+            owner_id=owner_id,
+            day=date(2026, 9, 5),
+            timezone="UTC",
+        ),
+    )
+
+    assert curve["supported_dose_count"] == 1
+    assert [marker["dose_event_id"] for marker in curve["dose_markers"]] == [correction_id]
+    expected = injectable_pharmacokinetics.build_curve(
+        day=date(2026, 9, 5),
+        timezone="UTC",
+        parameters=wake_pharmacokinetics.DEFAULT_PARAMETERS,
+        doses=[
+            dose(
+                identity=202,
+                occurred_at=datetime(2026, 9, 5, 7, tzinfo=UTC),
+                amount="15",
+                route=Route.ORAL,
+                category=DoseCategory.SCHEDULED,
+                name="Hydrocortisone",
+                normalized_name="hydrocortisone",
+                formulation="tablet",
+            )
+        ],
+    )
+    assert curve["samples"] == expected["samples"]

@@ -365,6 +365,14 @@ def test_clock_time_resolves_to_the_most_recent_occurrence() -> None:
     assert normalise_local_time("7:08am", now_local) == datetime(2026, 8, 9, 7, 8)  # noqa: DTZ001
 
 
+def test_hour_only_meridiem_time_is_exact_but_bare_hour_is_not_a_time() -> None:
+    now_local = datetime(2026, 8, 9, 9, 0)  # noqa: DTZ001
+    assert normalise_local_time("7am", now_local) == datetime(2026, 8, 9, 7, 0)  # noqa: DTZ001
+    assert normalise_local_time("7 pm", now_local) == datetime(2026, 8, 8, 19, 0)  # noqa: DTZ001
+    assert normalise_local_time("7", now_local) is None
+    assert normalise_local_time("13am", now_local) is None
+
+
 def test_clock_time_never_resolves_into_the_future() -> None:
     """ "7:08am" sent at half past midnight means yesterday morning, not in nine hours."""
     now_local = datetime(2026, 8, 9, 0, 30)  # noqa: DTZ001
@@ -444,6 +452,7 @@ def test_a_missing_time_is_proposed_and_flagged_not_left_unknown() -> None:
         ("Took 15mg hydrocortisone an hour ago", "an hour ago"),
         ("Took 15mg of hydrocortisone just now", "just now"),
         ("Took 15mg at 7:08am", "7:08am"),
+        ("Took my morning medication at 7am", "7am"),
         ("20 minutes ago I took my dose", "20 minutes ago"),
     ],
 )
