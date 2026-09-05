@@ -128,6 +128,33 @@ def test_later_wake_changes_morning_but_converges_by_evening() -> None:
     assert evening_ratio == pytest.approx(1.0, abs=0.06)
 
 
+def test_short_sleep_does_not_put_night_anchor_after_observed_wake() -> None:
+    day = date(2026, 8, 12)
+    zone = ZoneInfo("America/New_York")
+    wake_hour = 6 + 31 / 60
+    result = cast(
+        dict[str, Any],
+        build_reference(
+            day=day,
+            timezone="America/New_York",
+            wake_at=datetime(2026, 8, 12, 6, 31, tzinfo=zone),
+            sleep_onset_at=datetime(2026, 8, 12, 0, 49, tzinfo=zone),
+            meals=None,
+            age_years=47,
+            sex="M",
+        ),
+    )
+
+    morning_samples = [
+        sample
+        for sample in result["samples"]
+        if wake_hour - 0.5 <= float(sample["hour_local"]) <= wake_hour + 35 / 60
+    ]
+    medians = [float(sample["serum_free_p50_nmol_l"]) for sample in morning_samples]
+
+    assert medians == sorted(medians)
+
+
 def test_unobserved_meals_are_not_invented() -> None:
     without_meals = _reference(meals=False)
     with_meals = _reference(meals=True)

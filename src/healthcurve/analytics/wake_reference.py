@@ -194,11 +194,19 @@ def _periodic_log_anchors(
     wake_hour: float, sleep_onset_hour: float
 ) -> tuple[list[float], list[float]]:
     points = [(wake_hour + tau, value) for tau, value in DAY_ANCHORS_TAU]
-    points.extend((sleep_onset_hour + nu, value) for nu, value in NIGHT_ANCHORS_NU)
+    wake_absolute = wake_hour
+    if wake_absolute <= sleep_onset_hour:
+        wake_absolute += 24.0
+    sleep_duration = wake_absolute - sleep_onset_hour
+    # A short observed sleep can end before the fixed six-hour night profile.
+    # Anchors at or after wake belong to neither the observed sleep interval nor
+    # the post-wake daytime profile, and retaining them creates a false dip
+    # between the pre-wake rise and the cortisol-awakening response.
+    night_anchors = tuple((nu, value) for nu, value in NIGHT_ANCHORS_NU if nu < sleep_duration)
+    points.extend((sleep_onset_hour + nu, value) for nu, value in night_anchors)
 
-    last_nu, last_value = NIGHT_ANCHORS_NU[-1]
+    last_nu, last_value = night_anchors[-1]
     bridge_start = sleep_onset_hour + last_nu
-    wake_absolute = wake_hour + 24.0 if wake_hour < bridge_start else wake_hour
     if wake_absolute - bridge_start > 0.25:
         midpoint = bridge_start + 0.6 * (wake_absolute - bridge_start)
         bridge_value = last_value + 0.62 * (DAY_ANCHORS_TAU[0][1] - last_value)
