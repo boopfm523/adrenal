@@ -139,7 +139,7 @@ _DETERMINISTIC_BLOOD_PRESSURE_PATTERN: Final = re.compile(
     rf"^(?:my\s+)?(?:blood\s+pressure|bp)(?:\s+reading)?\s*"
     rf"(?:(?:is|was|of)\s*)?"
     rf"(?P<systolic>\d{{1,3}})\s*(?:/|\bover\b)\s*(?P<diastolic>\d{{1,3}})"
-    rf"(?:\s*(?:,|and|with)?\s*(?:a\s+)?pulse(?:\s+(?:of|is|was))?\s*"
+    rf"(?:\s*(?:[.,;:]|and|with)?\s*(?:a\s+)?pulse(?:\s+(?:of|is|was))?\s*"
     rf"(?P<pulse>\d{{1,3}}))?"
     rf"(?:\s*(?:,|and)?\s*(?P<position>lying|supine|sitting|seated|standing))?"
     rf"(?:\s*(?:,|and)?\s*(?:measured\s+|taken\s+)?(?:at|from)\s+"
