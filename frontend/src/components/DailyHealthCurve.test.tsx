@@ -550,6 +550,21 @@ describe("Daily HealthCurve", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("5 exact point(s)");
   });
 
+  it("does not surface a post-gap observation while hovering inside the gap", () => {
+    const withInterval = (index: number, interval: number): GarminRecord => ({ ...sample(index), sample_interval_seconds: interval });
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [
+      sample(0), sample(1), sample(2), sample(3), sample(4),
+      withInterval(30, 1_560),
+      sample(31),
+    ] })} />);
+
+    const { target, tooltip } = hoverAt(20);
+    expect(tooltip).toHaveTextContent("No exact observation at this time");
+    expect(tooltip).not.toHaveTextContent("Heart rate: 90 bpm");
+    fireEvent.pointerMove(target, { clientX: 30 });
+    expect(tooltip).toHaveTextContent("Heart rate: 90 bpm");
+  });
+
   it("offers large mobile zoom controls without changing desktop hover behavior", () => {
     renderWithTheme(<DailyHealthCurve data={data()} />);
 

@@ -668,9 +668,12 @@ function nearestVisiblePoints(shownLanes: Lane[], cursorTime: number): { lane: L
       return Math.abs(Date.parse(candidate.time) - cursorTime) < Math.abs(Date.parse(current.time) - cursorTime) ? candidate : current;
     }, null);
     if (nearest === null) return [];
-    const tolerance = lane.key === "exposure"
-      ? (nearest.cadenceSeconds ?? 300) * 500
-      : (nearest.cadenceSeconds ?? 120) * 500;
+    // A post-gap sample's cadence is the gap itself; hovering inside that gap must not
+    // surface the next observation, so the lane's typical cadence bounds the tolerance.
+    const tolerance = Math.min(
+      nearest.cadenceSeconds ?? (lane.key === "exposure" ? 300 : 120),
+      typicalCadenceSeconds(lane.points),
+    ) * 500;
     if (Math.abs(Date.parse(nearest.time) - cursorTime) > tolerance) return [];
     return lane.points
       .filter((point) => point.time === nearest.time)
