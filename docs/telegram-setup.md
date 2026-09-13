@@ -314,10 +314,10 @@ deterministic confirmation-draft path and do not call Ollama. Compound, negated,
 hypothetical, unknown-medication, or otherwise unsupported wording intentionally falls
 through to schema-constrained extraction. Route and latency are logged without message
 text or health values. `HC_OLLAMA_KEEP_ALIVE_S` controls how long only the host-native
-text model remains resident after a model-backed request (default 300 seconds, allowed
-range 0–3600). A longer value reduces cold starts but keeps roughly 30 GB allocated;
-it neither starts the optional Compose Ollama service nor changes vision-model
-residency.
+text model remains resident after a model-backed request (default 300 seconds, finite
+range 0–3600, or `-1` to keep it resident indefinitely). A longer value reduces cold
+starts but keeps the model's memory allocated; it neither starts the optional Compose
+Ollama service nor changes vision-model residency.
 
 **Nothing arrives while the machine is asleep.**
 Also expected, and the main practical cost of polling. Telegram holds updates for about

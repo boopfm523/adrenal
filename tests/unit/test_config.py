@@ -102,7 +102,11 @@ def test_defaults_are_safe() -> None:
     assert settings.garmin_sync_interval_hours == 12
 
 
-@pytest.mark.parametrize("seconds", [-1, 3601])
+def test_ollama_keep_alive_accepts_indefinite_residency() -> None:
+    assert _settings(ollama_keep_alive_s=-1).ollama_keep_alive_s == -1
+
+
+@pytest.mark.parametrize("seconds", [-2, 3601])
 def test_ollama_keep_alive_is_bounded(seconds: int) -> None:
     with pytest.raises(ValueError):
         _settings(ollama_keep_alive_s=seconds)

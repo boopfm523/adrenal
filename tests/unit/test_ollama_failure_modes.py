@@ -216,8 +216,10 @@ def test_schema_is_sent_to_constrain_decoding(monkeypatch: pytest.MonkeyPatch) -
     assert seen["keep_alive"] == 300
 
 
-def test_text_model_keep_alive_is_bounded_configuration(
+@pytest.mark.parametrize("keep_alive", [-1, 1800])
+def test_text_model_keep_alive_configuration_is_forwarded(
     monkeypatch: pytest.MonkeyPatch,
+    keep_alive: int,
 ) -> None:
     seen: dict[str, Any] = {}
 
@@ -226,10 +228,12 @@ def test_text_model_keep_alive_is_bounded_configuration(
         return httpx.Response(200, json={"message": {"content": "{}"}})
 
     _patch_transport(monkeypatch, handler)
-    client = OllamaClient(Settings(ollama_base_url="http://ollama:11434", ollama_keep_alive_s=1800))
+    client = OllamaClient(
+        Settings(ollama_base_url="http://ollama:11434", ollama_keep_alive_s=keep_alive)
+    )
     _call(client)
 
-    assert seen["keep_alive"] == 1800
+    assert seen["keep_alive"] == keep_alive
 
 
 def test_generation_limits_are_forwarded_as_ollama_options(

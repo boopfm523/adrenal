@@ -103,13 +103,14 @@ prevents that. A multi-event extraction took 61.968 seconds, so extraction now h
 hard 120-second read ceiling; ordinary extraction cases were generally 34–36 seconds.
 
 For owner acceptance testing, `HC_OLLAMA_KEEP_ALIVE_S` may be raised from its
-five-minute default to at most 3600 seconds. HealthCurve sends this bounded value only
-on text-model API requests to host-native Ollama; it does not start the optional
-Compose Ollama service and does not pin the separate vision model. This can remove a
-cold-load delay between sporadic requests, but it cannot remove the dense model's
-34–36 second generation cost. Clear single Telegram temperature, blood-pressure,
-weight, and explicit-dose statements therefore use deterministic validation and the
-same confirmation-draft contract before model fallback.
+five-minute default to at most 3600 seconds, or set to Ollama's `-1` sentinel to keep
+the selected text model resident indefinitely. HealthCurve sends this value only on
+text-model API requests to host-native Ollama; it does not start the optional Compose
+Ollama service and does not pin the separate vision model. This can remove a cold-load
+delay between sporadic requests, but it cannot remove the dense model's generation
+cost. Clear single Telegram temperature, blood-pressure, weight, and explicit-dose
+statements therefore use deterministic validation and the same confirmation-draft
+contract before model fallback.
 
 The qualification was a technical **PASS**. After live private-runtime acceptance
 testing, the owner explicitly accepted the candidate's slower model-backed responses
