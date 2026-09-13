@@ -40,6 +40,9 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0030](0030-qwen38-text-model-candidate.md) | Qualification-gated Qwen3.8 text-model candidate | Accepted |
 | [0031](0031-synthetic-multimodal-workflow-contract.md) | Synthetic contract before image/PDF workflow replacement | Accepted |
 | [0032](0032-forward-only-public-activity-overlays.md) | Forward-only recorded activity overlays | Accepted |
+| [0033](0033-private-garmin-activity-weather.md) | Private Garmin activity location and historical weather | Accepted |
+| [0034](0034-garmin-nap-events.md) | Garmin nap events | Accepted |
+| [0035](0035-garmin-sleep-heart-rate-samples.md) | Garmin sleep-session heart-rate samples | Accepted; amends 0014 |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

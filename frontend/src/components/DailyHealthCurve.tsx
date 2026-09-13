@@ -350,9 +350,20 @@ function yPosition(lane: Lane, value: number, overrideBounds?: { minimum: number
   return TOP + PLOT_HEIGHT - relativeValue(lane, value, overrideBounds) / 100 * PLOT_HEIGHT;
 }
 
+function typicalCadenceSeconds(points: Point[]): number {
+  const cadences = points
+    .flatMap((point) => point.cadenceSeconds === undefined ? [] : [point.cadenceSeconds])
+    .sort((left, right) => left - right);
+  return cadences[Math.floor((cadences.length - 1) / 2)] ?? Number.POSITIVE_INFINITY;
+}
+
 function connectedSegments(lane: Lane): Point[][] {
   if (lane.key === "symptoms") return [];
   if (lane.key === "exposure") return lane.points.length > 1 ? [lane.points] : [];
+  // A provider sample's cadence is the elapsed time since its prior sample, so the
+  // sample after a gap carries the gap itself. The lane's median cadence bounds the
+  // allowed gap so a real missing interval is never drawn as a connected line.
+  const typicalCadence = typicalCadenceSeconds(lane.points);
   const segments: Point[][] = [];
   let current: Point[] = [];
   for (const point of lane.points) {
@@ -363,7 +374,7 @@ function connectedSegments(lane: Lane): Point[][] {
       continue;
     }
     if (previous !== undefined) {
-      const allowedGap = Math.max(previous.cadenceSeconds ?? 0, point.cadenceSeconds) * 1_500;
+      const allowedGap = Math.min(Math.max(previous.cadenceSeconds ?? 0, point.cadenceSeconds), typicalCadence) * 1_500;
       if (Date.parse(point.time) - Date.parse(previous.time) > allowedGap) {
         if (current.length > 1) segments.push(current);
         current = [];

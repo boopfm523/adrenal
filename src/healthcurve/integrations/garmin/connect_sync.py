@@ -19,8 +19,11 @@ from healthcurve.events.base import ConfirmationState, EventMixin, SourceType
 from healthcurve.events.timekeeping import EventTime, resolve_event_time
 from healthcurve.integrations.garmin.connect_client import GarminIntradayReadClient
 from healthcurve.integrations.garmin.connect_intraday import (
+    SLEEP_HEART_RATE_CONFLICT,
+    SLEEP_HEART_RATE_FIELD,
     IntradayObservation,
     map_intraday_day,
+    reconcile_window_sleep_heart_rate,
 )
 from healthcurve.integrations.garmin.connect_mapping import (
     ActivityObservation,
@@ -114,12 +117,9 @@ def fetch_window(
     current = start_date
     while current <= end_date:
         day_text = current.isoformat()
-        mapped = map_day(
-            day=current,
-            stats=call(lambda day_text=day_text: client.get_stats(day_text)),
-            sleep=call(lambda day_text=day_text: client.get_sleep_data(day_text)),
-            timezone=timezone,
-        )
+        stats = call(lambda day_text=day_text: client.get_stats(day_text))
+        sleep = call(lambda day_text=day_text: client.get_sleep_data(day_text))
+        mapped = map_day(day=current, stats=stats, sleep=sleep, timezone=timezone)
         metrics.extend(mapped.metrics)
         if mapped.sleep is not None:
             sleeps.append(mapped.sleep)
@@ -143,6 +143,7 @@ def fetch_window(
             hrv=call(lambda day_text=day_text: client.get_hrv_data(day_text)),
             steps=call(lambda day_text=day_text: client.get_steps_data(day_text)),
             timezone=timezone,
+            sleep=sleep,
         )
         intraday_metrics.extend(intraday.observations)
         metrics.extend(intraday.aggregates)
@@ -151,6 +152,9 @@ def fetch_window(
             already_available = capabilities.get(name) == "available"
             capabilities[name] = "available" if state == "available" or already_available else state
         current += timedelta(days=1)
+
+    intraday_metrics, window_warnings = reconcile_window_sleep_heart_rate(intraday_metrics)
+    warnings.extend(window_warnings)
 
     raw_activities = call(
         lambda: client.get_activities_by_date(start_date.isoformat(), end_date.isoformat())
@@ -207,7 +211,7 @@ def persist_window(
     session.add(run)
     session.flush([run])
 
-    created = corrected = unchanged = 0
+    created = corrected = unchanged = sleep_conflicts = 0
     for observation in fetched.metrics:
         outcome = _upsert_metric(session, owner_id, run.id, fetched.timezone, observation)
         created += outcome == "created"
@@ -217,7 +221,11 @@ def persist_window(
         outcome = _upsert_intraday_metric(session, owner_id, run.id, observation)
         created += outcome == "created"
         corrected += outcome == "corrected"
-        unchanged += outcome == "unchanged"
+        unchanged += outcome in {"unchanged", "sleep_conflict"}
+        sleep_conflicts += outcome == "sleep_conflict"
+    if sleep_conflicts and SLEEP_HEART_RATE_CONFLICT not in run.warning_codes:
+        run.warning_codes = sorted({*run.warning_codes, SLEEP_HEART_RATE_CONFLICT})
+        run.status = GarminSyncStatus.COMPLETED_WITH_WARNINGS
     for observation in fetched.sleeps:
         outcome = _upsert_sleep(session, owner_id, run.id, observation)
         created += outcome == "created"
@@ -290,8 +298,20 @@ def _upsert_intraday_metric(
     value: IntradayObservation,
 ) -> str:
     provider_id = _owned_provider_id(owner_id, value.provider_id)
+    from_sleep = value.field_name == SLEEP_HEART_RATE_FIELD
+    if from_sleep:
+        # The ordinary heart-rate series is authoritative at a shared instant, so a
+        # later sleep response never corrects a fact that series already recorded.
+        head = _current_provider_head(session, GarminMetricEvent, owner_id, provider_id)
+        if head is not None and head.garmin_field_name != SLEEP_HEART_RATE_FIELD:
+            return "unchanged" if head.value == value.value else "sleep_conflict"
     fields = {
-        **_source_fields(run_id, provider_id, value.revision, "intraday-sample"),
+        **_source_fields(
+            run_id,
+            provider_id,
+            value.revision,
+            "sleep-heart-rate-sample" if from_sleep else "intraday-sample",
+        ),
         "metric_type": value.metric_type,
         "value": value.value,
         "unit": value.unit,
@@ -386,17 +406,7 @@ def _upsert_event[E: EventMixin](
     event_time: EventTime,
     fields: dict[str, Any],
 ) -> tuple[str, E]:
-    rows = list(
-        session.scalars(
-            select(model).where(
-                model.owner_id == owner_id,
-                model.source_type == SourceType.PROVIDER,
-                model.provider_id == provider_id,
-            )
-        )
-    )
-    current = events.current_only(session, model, rows)
-    head = current[0] if current else None
+    head = _current_provider_head(session, model, owner_id, provider_id)
     if head is not None and head.source_revision == revision:
         return "unchanged", head
     if head is None:
@@ -419,6 +429,22 @@ def _upsert_event[E: EventMixin](
         event_time=event_time,
     )
     return "corrected", corrected
+
+
+def _current_provider_head[E: EventMixin](
+    session: Session, model: type[E], owner_id: uuid.UUID, provider_id: str
+) -> E | None:
+    rows = list(
+        session.scalars(
+            select(model).where(
+                model.owner_id == owner_id,
+                model.source_type == SourceType.PROVIDER,
+                model.provider_id == provider_id,
+            )
+        )
+    )
+    current = events.current_only(session, model, rows)
+    return current[0] if current else None
 
 
 def _source_fields(

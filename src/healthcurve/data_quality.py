@@ -47,6 +47,13 @@ GARMIN_WARNING_LABELS = {
     "intraday_respiration_rate_missing_or_invalid": "intraday respiration was missing or unusable",
     "intraday_stress_missing_or_invalid": "intraday stress was missing or unusable",
     "intraday_hrv_missing_or_invalid": "intraday HRV was missing or unusable",
+    "intraday_sleep_heart_rate_missing_or_invalid": (
+        "sleep-session heart rate was missing or unusable"
+    ),
+    "intraday_heart_rate_sleep_conflict": (
+        "sleep-session heart rate disagreed with ordinary heart rate at the same time; "
+        "the ordinary reading was kept"
+    ),
     "hrv_nightly_average_shape_invalid": "nightly-average HRV used an unexpected response format",
 }
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,11 @@ from healthcurve.integrations.garmin.connect_client import (
     PythonGarminReadClient,
     validate_token_store_path,
 )
-from healthcurve.integrations.garmin.connect_intraday import map_intraday_day
+from healthcurve.integrations.garmin.connect_intraday import (
+    SLEEP_HEART_RATE_FIELD,
+    map_intraday_day,
+    reconcile_window_sleep_heart_rate,
+)
 from healthcurve.integrations.garmin.connect_mapping import map_activities, map_day, map_naps
 from healthcurve.integrations.garmin.connect_sync import fetch_window
 from healthcurve.integrations.garmin.models import GarminMetricType, GarminSleepKind
@@ -514,6 +518,7 @@ def test_intraday_contract_maps_timestamped_series_and_preserves_missingness() -
         "intraday_heart_rate": "available",
         "intraday_stress": "available",
         "intraday_respiration_rate": "available",
+        "intraday_sleep_heart_rate": "unavailable",
         "intraday_hrv": "available",
         "intraday_steps": "available",
         "hrv_daily_average": "unsupported",
@@ -592,6 +597,213 @@ def test_intraday_contract_requires_provider_descriptors() -> None:
     assert mapped.capabilities["hrv_nightly_average"] == "unavailable"
     assert mapped.capabilities["respiration_daily_high"] == "available"
     assert mapped.capabilities["respiration_daily_low"] == "unavailable"
+
+
+_HEART_RATE_DESCRIPTORS = [
+    {"index": 0, "key": "timestamp"},
+    {"index": 1, "key": "heartrate"},
+]
+
+
+def _heart_rate_only(
+    day: date,
+    *,
+    heart_rate: dict[str, Any] | None = None,
+    sleep: dict[str, Any] | None = None,
+    timezone: str = "America/New_York",
+) -> Any:
+    return map_intraday_day(
+        day=day,
+        heart_rate=heart_rate or {},
+        stress={},
+        respiration={},
+        hrv={},
+        steps=[],
+        timezone=timezone,
+        sleep=sleep,
+    )
+
+
+def test_sleep_heart_rate_keeps_prior_local_day_samples_and_ordinary_precedence() -> None:
+    def at(minute: int) -> datetime:
+        # 05:00 UTC is local midnight in America/New_York on the synthetic wake day.
+        return datetime(2026, 1, 10, 4, 56, tzinfo=UTC) + timedelta(minutes=minute - 56)
+
+    mapped = _heart_rate_only(
+        date(2026, 1, 10),
+        heart_rate={
+            "heartRateValueDescriptors": _HEART_RATE_DESCRIPTORS,
+            "heartRateValues": [
+                [_milliseconds(at(60)), 60],
+                [_milliseconds(at(62)), 61],
+                [_milliseconds(at(64)), 62],
+            ],
+        },
+        sleep={
+            "dailySleepDTO": {"synthetic": "ignored"},
+            SLEEP_HEART_RATE_FIELD: [
+                {"startGMT": _milliseconds(at(56)), "value": 55},
+                {"startGMT": "2026-01-10T04:58:00.0", "value": 56},
+                # Identical to the ordinary reading: one fact, ordinary provenance.
+                {"startGMT": _milliseconds(at(60)), "value": 60},
+                # Conflicts with the ordinary reading: ordinary kept and reported.
+                {"startGMT": _milliseconds(at(62)), "value": 70},
+                {"startGMT": _milliseconds(at(66)), "value": None},
+                {"startGMT": _milliseconds(at(67)), "value": 0},
+                {"startGMT": "not-a-time", "value": 50},
+                "not-a-row",
+                {"startGMT": _milliseconds(at(68)), "value": 58},
+                {"startGMT": _milliseconds(at(56)), "value": 57},
+            ],
+        },
+    )
+
+    assert [
+        (
+            item.event_time.local_time.isoformat(),
+            item.value,
+            item.field_name,
+            item.sample_interval_seconds,
+        )
+        for item in mapped.observations
+    ] == [
+        ("2026-01-09T23:56:00", 55, SLEEP_HEART_RATE_FIELD, None),
+        ("2026-01-09T23:58:00", 56, SLEEP_HEART_RATE_FIELD, 120),
+        ("2026-01-10T00:00:00", 60, "heartrate", 120),
+        ("2026-01-10T00:02:00", 61, "heartrate", 120),
+        ("2026-01-10T00:04:00", 62, "heartrate", 120),
+        ("2026-01-10T00:08:00", 58, SLEEP_HEART_RATE_FIELD, 240),
+    ]
+    assert all(item.metric_type is GarminMetricType.HEART_RATE for item in mapped.observations)
+    assert all(item.unit == "bpm" for item in mapped.observations)
+    assert mapped.observations[0].provider_id == "intraday:heart_rate:2026-01-10T04:56:00+00:00"
+    assert mapped.observations[0].event_time.utc_offset_minutes == -300
+    assert mapped.capabilities["intraday_heart_rate"] == "available"
+    assert mapped.capabilities["intraday_sleep_heart_rate"] == "available"
+    assert {
+        "intraday_heart_rate_sleep_conflict",
+        "intraday_sleep_heart_rate_missing_or_invalid",
+        "intraday_sleep_heart_rate_duplicate_timestamp",
+    } <= set(mapped.warnings)
+    assert _heart_rate_only(
+        date(2026, 1, 10),
+        heart_rate={
+            "heartRateValueDescriptors": _HEART_RATE_DESCRIPTORS,
+            "heartRateValues": [[_milliseconds(at(60)), 60]],
+        },
+        sleep={SLEEP_HEART_RATE_FIELD: [{"startGMT": _milliseconds(at(56)), "value": 55}]},
+    ) == _heart_rate_only(
+        date(2026, 1, 10),
+        heart_rate={
+            "heartRateValueDescriptors": _HEART_RATE_DESCRIPTORS,
+            "heartRateValues": [[_milliseconds(at(60)), 60]],
+        },
+        sleep={SLEEP_HEART_RATE_FIELD: [{"startGMT": _milliseconds(at(56)), "value": 55}]},
+    )
+
+
+def test_sleep_heart_rate_absence_and_shape_changes_stay_missing() -> None:
+    absent = _heart_rate_only(date(2026, 1, 10), sleep={"dailySleepDTO": {}})
+    assert absent.observations == ()
+    assert absent.capabilities["intraday_sleep_heart_rate"] == "unavailable"
+    assert not any("sleep_heart_rate" in warning for warning in absent.warnings)
+
+    malformed = _heart_rate_only(
+        date(2026, 1, 10), sleep={SLEEP_HEART_RATE_FIELD: {"startGMT": 1, "value": 60}}
+    )
+    assert malformed.observations == ()
+    assert malformed.capabilities["intraday_sleep_heart_rate"] == "unavailable"
+    assert malformed.warnings == ("intraday_sleep_heart_rate_shape_invalid",)
+
+
+def test_window_reconciliation_prefers_ordinary_samples_from_any_day() -> None:
+    shared = _milliseconds(datetime(2026, 1, 10, 4, 58, tzinfo=UTC))
+    sleep_only = _milliseconds(datetime(2026, 1, 10, 4, 56, tzinfo=UTC))
+    prior_day = _heart_rate_only(
+        date(2026, 1, 9),
+        heart_rate={
+            "heartRateValueDescriptors": _HEART_RATE_DESCRIPTORS,
+            "heartRateValues": [[shared, 56]],
+        },
+    )
+    wake_day = _heart_rate_only(
+        date(2026, 1, 10),
+        sleep={
+            SLEEP_HEART_RATE_FIELD: [
+                {"startGMT": sleep_only, "value": 55},
+                {"startGMT": shared, "value": 57},
+            ]
+        },
+    )
+    repeated_sleep = _heart_rate_only(
+        date(2026, 1, 11),
+        sleep={SLEEP_HEART_RATE_FIELD: [{"startGMT": sleep_only, "value": 54}]},
+    )
+
+    kept, warnings = reconcile_window_sleep_heart_rate(
+        [*prior_day.observations, *wake_day.observations, *repeated_sleep.observations]
+    )
+
+    assert [(item.value, item.field_name) for item in kept] == [
+        (55, SLEEP_HEART_RATE_FIELD),
+        (56, "heartrate"),
+    ]
+    assert sorted(set(warnings)) == [
+        "intraday_heart_rate_sleep_conflict",
+        "intraday_sleep_heart_rate_duplicate_timestamp",
+    ]
+    identical, identical_warnings = reconcile_window_sleep_heart_rate(
+        [*prior_day.observations, *prior_day.observations]
+    )
+    assert len(identical) == 2
+    assert identical_warnings == []
+
+
+def test_fetch_window_imports_sleep_heart_rate_without_an_extra_provider_read() -> None:
+    shared = _milliseconds(datetime(2026, 1, 10, 4, 58, tzinfo=UTC))
+    sleep_only = _milliseconds(datetime(2026, 1, 10, 4, 56, tzinfo=UTC))
+
+    class _OvernightClient(_SyntheticClient):
+        def get_heart_rates(self, day: str) -> dict[str, Any]:
+            if day != "2026-01-09":
+                return {}
+            return {
+                "heartRateValueDescriptors": _HEART_RATE_DESCRIPTORS,
+                "heartRateValues": [[shared, 56]],
+            }
+
+        def get_sleep_data(self, day: str) -> dict[str, Any]:
+            if day != "2026-01-10":
+                return {}
+            return {
+                SLEEP_HEART_RATE_FIELD: [
+                    {"startGMT": sleep_only, "value": 55},
+                    {"startGMT": shared, "value": 56},
+                ]
+            }
+
+    pauses: list[float] = []
+    fetched = fetch_window(
+        _OvernightClient(),
+        start_date=date(2026, 1, 9),
+        end_date=date(2026, 1, 10),
+        timezone="America/New_York",
+        minimum_call_interval_s=0.5,
+        monotonic=lambda: 0.0,
+        pause=pauses.append,
+    )
+
+    # Eight reads per day plus one activity-list read; every read after the first waits.
+    assert len(pauses) == 8 * 2
+    assert [
+        (item.event_time.local_time.isoformat(), item.value, item.field_name)
+        for item in fetched.intraday_metrics
+    ] == [
+        ("2026-01-09T23:56:00", 55, SLEEP_HEART_RATE_FIELD),
+        ("2026-01-09T23:58:00", 56, "heartrate"),
+    ]
+    assert fetched.capabilities["intraday_sleep_heart_rate"] == "available"
+    assert not any("conflict" in warning for warning in fetched.warnings)
 
 
 def test_measurement_summary_hides_decimal_padding_and_internal_unit() -> None:

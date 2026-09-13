@@ -20,6 +20,8 @@ from healthcurve.integrations.garmin.connect_mapping import DailyObservation
 from healthcurve.integrations.garmin.models import GarminMetricType
 
 MAX_SAMPLES_PER_SERIES: Final = 10_000
+SLEEP_HEART_RATE_FIELD: Final = "sleepHeartRate"
+SLEEP_HEART_RATE_CONFLICT: Final = "intraday_heart_rate_sleep_conflict"
 
 
 @dataclass(frozen=True)
@@ -51,8 +53,14 @@ def map_intraday_day(
     hrv: dict[str, Any],
     steps: list[Any],
     timezone: str,
+    sleep: dict[str, Any] | None = None,
 ) -> MappedIntraday:
-    """Map one provider day without retaining the four raw response bodies."""
+    """Map one provider day without retaining the raw response bodies.
+
+    ``sleep`` is the same day's sleep response; only its ``sleepHeartRate`` series is
+    selected. That series can begin before local midnight, so each sample keeps its
+    actual instant rather than the provider day it was requested under.
+    """
 
     zone = _zone(timezone)
     warnings: list[str] = []
@@ -106,6 +114,14 @@ def map_intraday_day(
         )
         observations.extend(mapped)
         capabilities[f"intraday_{metric_type.value}"] = "available" if mapped else "unavailable"
+
+    mapped_sleep_heart_rate = _map_sleep_heart_rate(sleep or {}, zone=zone, warnings=warnings)
+    capabilities["intraday_sleep_heart_rate"] = (
+        "available" if mapped_sleep_heart_rate else "unavailable"
+    )
+    observations.extend(
+        _without_ordinary_overlap(observations, mapped_sleep_heart_rate, warnings=warnings)
+    )
 
     mapped_hrv = _map_hrv(hrv, zone=zone, warnings=warnings)
     observations.extend(mapped_hrv)
@@ -276,6 +292,117 @@ def _map_descriptor_pairs(
     if missing:
         warnings.append(f"intraday_{metric_type.value}_missing_or_invalid")
     return output
+
+
+def _map_sleep_heart_rate(
+    payload: dict[str, Any], *, zone: ZoneInfo, warnings: list[str]
+) -> list[IntradayObservation]:
+    """Select timestamped heart rate from the overnight sleep response.
+
+    Garmin's ordinary per-day heart-rate series can stop at sleep onset while the next
+    day's sleep response carries the whole overnight session. Only explicit instants
+    and valid bpm values are selected; everything else stays missing.
+    """
+
+    rows = payload.get(SLEEP_HEART_RATE_FIELD)
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        warnings.append("intraday_sleep_heart_rate_shape_invalid")
+        return []
+    if len(rows) > MAX_SAMPLES_PER_SERIES:
+        warnings.append("intraday_sleep_heart_rate_truncated")
+    output: list[IntradayObservation] = []
+    seen: set[datetime] = set()
+    missing = False
+    for row in rows[:MAX_SAMPLES_PER_SERIES]:
+        if not isinstance(row, dict):
+            missing = True
+            continue
+        raw_start = row.get("startGMT")
+        occurred_at = (
+            _parse_gmt(raw_start) if isinstance(raw_start, str) else _epoch_millis(raw_start)
+        )
+        value = _bounded_decimal(row.get("value"), Decimal(1), Decimal(260))
+        if occurred_at is None or value is None:
+            missing = True
+            continue
+        if occurred_at in seen:
+            warnings.append("intraday_sleep_heart_rate_duplicate_timestamp")
+            continue
+        seen.add(occurred_at)
+        output.append(
+            _observation(
+                occurred_at,
+                GarminMetricType.HEART_RATE,
+                value,
+                "bpm",
+                SLEEP_HEART_RATE_FIELD,
+                zone,
+            )
+        )
+    if missing:
+        warnings.append("intraday_sleep_heart_rate_missing_or_invalid")
+    return output
+
+
+def _without_ordinary_overlap(
+    ordinary: list[IntradayObservation],
+    sleep_samples: list[IntradayObservation],
+    *,
+    warnings: list[str],
+) -> list[IntradayObservation]:
+    """Keep the ordinary heart-rate series authoritative at shared instants.
+
+    An identical shared value is one fact. A differing value is never chosen silently:
+    the ordinary reading is kept and the conflict is reported.
+    """
+
+    ordinary_values = {
+        item.event_time.occurred_at: item.value
+        for item in ordinary
+        if item.metric_type is GarminMetricType.HEART_RATE
+        and item.field_name != SLEEP_HEART_RATE_FIELD
+    }
+    output: list[IntradayObservation] = []
+    for sample in sleep_samples:
+        existing = ordinary_values.get(sample.event_time.occurred_at)
+        if existing is None:
+            output.append(sample)
+        elif existing != sample.value:
+            warnings.append(SLEEP_HEART_RATE_CONFLICT)
+    return output
+
+
+def reconcile_window_sleep_heart_rate(
+    observations: list[IntradayObservation],
+) -> tuple[list[IntradayObservation], list[str]]:
+    """Apply the sleep heart-rate overlap rule across provider days in one window.
+
+    A sleep response can repeat instants that a different day's ordinary response
+    already supplied. Ordinary samples are never removed; sleep samples at an
+    ordinary instant are dropped, and later sleep duplicates keep the earliest day.
+    """
+
+    warnings: list[str] = []
+    kept = [item for item in observations if item.field_name != SLEEP_HEART_RATE_FIELD]
+    ordinary_values = {item.provider_id: item.value for item in kept}
+    kept_sleep: dict[str, IntradayObservation] = {}
+    for item in observations:
+        if item.field_name != SLEEP_HEART_RATE_FIELD:
+            continue
+        ordinary_value = ordinary_values.get(item.provider_id)
+        if ordinary_value is not None:
+            if ordinary_value != item.value:
+                warnings.append(SLEEP_HEART_RATE_CONFLICT)
+            continue
+        if item.provider_id in kept_sleep:
+            warnings.append("intraday_sleep_heart_rate_duplicate_timestamp")
+            continue
+        kept_sleep[item.provider_id] = item
+    kept.extend(kept_sleep.values())
+    kept.sort(key=lambda value: (value.event_time.occurred_at, value.metric_type.value))
+    return kept, warnings
 
 
 def _map_hrv(

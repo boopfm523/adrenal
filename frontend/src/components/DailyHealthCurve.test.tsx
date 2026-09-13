@@ -522,6 +522,34 @@ describe("Daily HealthCurve", () => {
     expect(releasePointerCapture).toHaveBeenCalledWith(7);
   });
 
+  it("draws pre-midnight sleep-session heart rate and still breaks real cadence gaps", () => {
+    const sleepSample = (occurredAt: string, localTime: string, value: string, interval: number | null): GarminRecord => ({
+      id: `20000000-0000-4000-8000-${Date.parse(occurredAt).toString().slice(-12)}`,
+      kind: "sample",
+      summary: `Heart rate: ${value} bpm`,
+      time: { occurred_at: occurredAt, local_time: localTime, timezone: "America/New_York", utc_offset_minutes: -240 },
+      provenance,
+      metric_type: "heart_rate",
+      value,
+      unit: "bpm",
+      aggregation: "provider_sample",
+      sample_interval_seconds: interval,
+      garmin_field_name: "sleepHeartRate",
+    });
+    renderWithTheme(<DailyHealthCurve data={data({ garmin: [
+      sleepSample("2026-03-09T02:00:00Z", "2026-03-08T22:00:00", "58", null),
+      sleepSample("2026-03-09T02:02:00Z", "2026-03-08T22:02:00", "57", 120),
+      sleepSample("2026-03-09T02:04:00Z", "2026-03-08T22:04:00", "56", 120),
+      sleepSample("2026-03-09T03:00:00Z", "2026-03-08T23:00:00", "55", 3_360),
+      sleepSample("2026-03-09T03:02:00Z", "2026-03-08T23:02:00", "54", 120),
+    ] })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Heart rate" }));
+    expect(document.querySelectorAll("path.healthcurve-series--heart_rate")).toHaveLength(2);
+    fireEvent.focus(screen.getByRole("button", { name: "About Heart rate data" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("5 exact point(s)");
+  });
+
   it("offers large mobile zoom controls without changing desktop hover behavior", () => {
     renderWithTheme(<DailyHealthCurve data={data()} />);
 

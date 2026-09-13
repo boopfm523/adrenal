@@ -1,6 +1,7 @@
 # ADR-0014: Read-only Garmin intraday metric contract
 
-**Status:** Accepted — 2026-08-11
+**Status:** Accepted — 2026-08-11; heart-rate source amended by
+[ADR-0035](0035-garmin-sleep-heart-rate-samples.md)
 
 ## Context
 

@@ -22,7 +22,8 @@ HealthCurve stores only these fields when Garmin supplies them:
 - daily steps, resting heart rate in bpm, and average Garmin stress score;
 - provider-defined aggregate facts for nightly-average HRV; waking- and sleeping-
   period average respiration; and daily low/high respiration;
-- timestamped heart rate, stress, respiration, and nightly HRV samples when available;
+- timestamped heart rate, stress, respiration, and nightly HRV samples when available,
+  including overnight heart rate from the sleep response's `sleepHeartRate` series;
 - hourly step totals produced by summing only Garmin's observed intraday step buckets;
 - sleep start, wake time, duration, duration source, number of awakenings, sleep
   score, and explicitly bounded awake-stage intervals when Garmin supplies them.
@@ -56,6 +57,16 @@ guaranteed.
 Heart rate is bpm, respiration is breaths/min, HRV is ms, and stress is Garmin's 0–100
 score. Negative stress/respiration sentinels and null values mean missing; stress zero
 is a valid reading.
+
+Garmin's ordinary per-day heart-rate series can stop at sleep onset. The next day's
+sleep response then carries a separate `sleepHeartRate` series for the whole
+overnight session, including samples from before local midnight. HealthCurve imports
+those samples at their actual instants, so they appear on their real local day. The
+sync makes no extra provider read for this. Where both series report the same instant,
+the ordinary reading is kept. An identical value is one fact. A differing value is
+reported as `intraday_heart_rate_sleep_conflict` and is never used to correct the
+ordinary fact. Capability status lists `intraday sleep heart rate` separately. See
+[ADR-0035](adr/0035-garmin-sleep-heart-rate-samples.md).
 
 HealthCurve deterministically sums valid step buckets into local-clock hours for the
 selected day. An observed zero remains zero, while an absent or malformed bucket stays

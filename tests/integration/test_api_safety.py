@@ -2119,6 +2119,147 @@ def test_garmin_preview_then_confirm_is_idempotent_and_preserves_provenance(
         assert session.scalar(select(func.count()).select_from(GarminActivityEvent)) == 2
 
 
+def test_garmin_sleep_heart_rate_fills_prior_day_with_safe_reconciliation(
+    client: TestClient, engine: Engine, settings: Settings
+) -> None:
+    email = "garmin-sleep-heart-rate@example.com"
+    observed_at = datetime(2026, 1, 10, 12, tzinfo=UTC)
+    zone = "America/New_York"
+    with Session(engine) as session, session.begin():
+        owner = Owner(
+            email=email,
+            password_hash=auth.hash_password(PASSWORD),
+            default_timezone=zone,
+        )
+        session.add(owner)
+        session.flush()
+        owner_id = owner.id
+        session.add(
+            GarminConnection(
+                owner_id=owner_id,
+                state=GarminConnectionState.CONNECTED,
+                connected_at=observed_at,
+                capabilities={},
+                client_version="synthetic",
+            )
+        )
+
+    def millis(hour: int, minute: int) -> int:
+        return int(datetime(2026, 1, 10, hour, minute, tzinfo=UTC).timestamp() * 1_000)
+
+    def fetched(heart_rate: dict[str, Any], sleep_rows: list[dict[str, Any]]) -> FetchedWindow:
+        intraday = map_intraday_day(
+            day=date(2026, 1, 10),
+            heart_rate=heart_rate,
+            stress={},
+            respiration={},
+            hrv={},
+            steps=[],
+            timezone=zone,
+            sleep={"sleepHeartRate": sleep_rows},
+        )
+        return FetchedWindow(
+            start_date=date(2026, 1, 10),
+            end_date=date(2026, 1, 10),
+            timezone=zone,
+            metrics=(),
+            intraday_metrics=intraday.observations,
+            sleeps=(),
+            activities=(),
+            warnings=intraday.warnings,
+            capabilities=intraday.capabilities,
+            started_at=observed_at,
+            finished_at=observed_at + timedelta(seconds=1),
+        )
+
+    ordinary = {
+        "heartRateValueDescriptors": [
+            {"index": 0, "key": "timestamp"},
+            {"index": 1, "key": "heartrate"},
+        ],
+        # 05:00 UTC is the synthetic owner's local midnight.
+        "heartRateValues": [[millis(5, 0), 60], [millis(5, 2), 61]],
+    }
+    overnight = [
+        {"startGMT": millis(4, 56), "value": 55},
+        {"startGMT": millis(4, 58), "value": 56},
+        {"startGMT": millis(5, 0), "value": 60},
+        {"startGMT": millis(5, 8), "value": 58},
+    ]
+    with Session(engine) as session, session.begin():
+        first = persist_window(session, owner_id=owner_id, fetched=fetched(ordinary, overnight))
+        assert (first.created, first.corrected, first.unchanged) == (5, 0, 0)
+        assert first.run.status is GarminSyncStatus.COMPLETED
+    with Session(engine) as session, session.begin():
+        repeated = persist_window(session, owner_id=owner_id, fetched=fetched(ordinary, overnight))
+        assert (repeated.created, repeated.corrected, repeated.unchanged) == (0, 0, 5)
+    with Session(engine) as session, session.begin():
+        # A later sleep-only read revises one sleep-only value and disagrees with the
+        # ordinary reading at local midnight. Only the sleep-sourced fact is corrected.
+        revised = persist_window(
+            session,
+            owner_id=owner_id,
+            fetched=fetched(
+                {},
+                [
+                    {"startGMT": millis(4, 56), "value": 54},
+                    {"startGMT": millis(4, 58), "value": 56},
+                    {"startGMT": millis(5, 0), "value": 99},
+                ],
+            ),
+        )
+        assert (revised.created, revised.corrected, revised.unchanged) == (0, 1, 2)
+        assert revised.run.status is GarminSyncStatus.COMPLETED_WITH_WARNINGS
+        assert "intraday_heart_rate_sleep_conflict" in revised.run.warning_codes
+
+    with Session(engine) as session:
+        rows = list(
+            session.scalars(select(GarminMetricEvent).where(GarminMetricEvent.owner_id == owner_id))
+        )
+        current = events.current_only(session, GarminMetricEvent, rows)
+        assert len(rows) == 6
+        assert len(current) == 5
+        by_instant = {row.occurred_at: row for row in current}
+        corrected = by_instant[datetime(2026, 1, 10, 4, 56, tzinfo=UTC)]
+        assert corrected.value == Decimal(54)
+        assert corrected.supersedes_id is not None
+        assert corrected.garmin_field_name == "sleepHeartRate"
+        assert corrected.garmin_source_member == "sleep-heart-rate-sample"
+        assert corrected.local_time.isoformat() == "2026-01-09T23:56:00"
+        midnight = by_instant[datetime(2026, 1, 10, 5, 0, tzinfo=UTC)]
+        assert midnight.value == Decimal(60)
+        assert midnight.garmin_field_name == "heartrate"
+        assert midnight.supersedes_id is None
+
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert login.status_code == 200
+    prior_day = client.get(
+        "/api/v1/integrations/garmin/samples",
+        params={"day": "2026-01-09", "timezone": zone, "page_size": 100},
+    )
+    assert prior_day.status_code == 200, prior_day.text
+    assert [
+        (row["time"]["local_time"], row["value"], row["garmin_field_name"])
+        for row in sorted(prior_day.json()["records"], key=lambda row: row["time"]["occurred_at"])
+    ] == [
+        ("2026-01-09T23:56:00", "54.0000", "sleepHeartRate"),
+        ("2026-01-09T23:58:00", "56.0000", "sleepHeartRate"),
+    ]
+    wake_day = client.get(
+        "/api/v1/integrations/garmin/samples",
+        params={"day": "2026-01-10", "timezone": zone, "page_size": 100},
+    )
+    assert wake_day.status_code == 200, wake_day.text
+    assert sorted(
+        (row["time"]["local_time"], row["value"], row["garmin_field_name"])
+        for row in wake_day.json()["records"]
+    ) == [
+        ("2026-01-10T00:00:00", "60.0000", "heartrate"),
+        ("2026-01-10T00:02:00", "61.0000", "heartrate"),
+        ("2026-01-10T00:08:00", "58.0000", "sleepHeartRate"),
+    ]
+
+
 def test_garmin_connect_sync_corrects_and_disconnects_owner_scoped_data(
     client: TestClient, engine: Engine, settings: Settings
 ) -> None:
