@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -22,10 +23,10 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
-from healthcurve.chat.tools import execute_chat_tool
+from healthcurve.analysis.helpers import ModeledExposureArguments, modeled_exposure
 from healthcurve.config import get_settings
 from healthcurve.identity.models import Owner
 
@@ -363,10 +364,11 @@ def test_cortisol_pk_assumptions_are_not_writable_by_ai_or_backup(
 
 
 @pytest.mark.safety("SAFE-15")
-def test_restricted_chat_role_can_build_preceding_curve_context(
+def test_restricted_ai_role_can_compute_modeled_exposure_for_chat(
     owner_engine: Engine,
     ai_engine: Engine,
 ) -> None:
+    """Chat's modeled-exposure helper runs read-only through the restricted AI role."""
     account = Owner(
         email=f"chat-parameter-read-{uuid.uuid4()}@example.test",
         password_hash="synthetic-not-a-login-hash",
@@ -377,23 +379,15 @@ def test_restricted_chat_role_can_build_preceding_curve_context(
         session.flush()
         owner_id = account.id
 
-    with Session(ai_engine) as session:
-        result = execute_chat_tool(
-            session,
-            owner_id=owner_id,
-            tool_name="get_preceding_health_context",
-            arguments={
-                "anchor_at": "2026-08-15T13:00:00-04:00",
-                "timezone": "America/New_York",
-                "lookback_hours": 6,
-                "history_days": 30,
-                "similar_limit": 5,
-                "include_stress_episode_anchors": False,
-            },
-        )
+    data = modeled_exposure(
+        sessionmaker(ai_engine),
+        owner_id=owner_id,
+        timezone="America/New_York",
+        arguments=ModeledExposureArguments(date=date(2026, 8, 15), local_times=["13:00"]),
+    )
 
-    assert result.tool_name == "get_preceding_health_context"
-    assert isinstance(result.data["modeled_curve_at_anchor"], dict)
+    assert data["model_id"] == "hc-mixed-route-free-v4"
+    assert [point["local_time"] for point in data["points"]] == ["13:00"]
 
 
 @pytest.mark.safety("SAFE-15")

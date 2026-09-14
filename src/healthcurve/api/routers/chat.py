@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.orm import Session, sessionmaker
 
+from healthcurve.analysis.tools import AnalysisAccess
 from healthcurve.api.chat_schemas import (
     ChatConversationCreate,
     ChatConversationOut,
@@ -29,6 +32,8 @@ from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.chat import service
 from healthcurve.chat.jobs import check_source_staleness, enqueue_chat_response
 from healthcurve.chat.models import ChatConversation, ChatMessage, ChatMessageState, ChatRole
+from healthcurve.db import get_analyst_engine, get_analyst_text_engine
+from healthcurve.identity.models import Owner
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditAction
 from healthcurve.operations.rate_limit import RateLimitPolicy
@@ -290,12 +295,31 @@ def get_message_staleness(
         ai_factory,
         owner_id=owner.id,
         assistant_message_id=message_id,
+        access_for=_analysis_access(owner, ai_factory),
     )
     return ChatMessageStalenessOut(
         status=result.status,
         stale=result.stale,
         checked_at=result.checked_at,
     )
+
+
+def _analysis_access(
+    owner: Owner, ai_factory: sessionmaker[Session]
+) -> Callable[[bool], AnalysisAccess]:
+    """View-only analyst access for replaying an answer's tool calls (ADR-0036)."""
+
+    def build(allow_text: bool) -> AnalysisAccess:
+        return AnalysisAccess(
+            engine=get_analyst_engine(),
+            text_engine=get_analyst_text_engine(),
+            allow_text=allow_text,
+            owner_id=owner.id,
+            timezone=owner.default_timezone,
+            model_session_factory=ai_factory,
+        )
+
+    return build
 
 
 def _owned_conversation(

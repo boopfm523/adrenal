@@ -1,22 +1,6 @@
-"""Private owner-scoped conversational analysis.
+"""Private owner-scoped conversational analysis (ADR-0036).
 
-The package deliberately exposes read tools separately from Ollama orchestration. A
-model can request a named tool, but never receives a SQL connection, owner identifier,
-or mutation operation (ADR-0025).
+A local model answers questions by calling the shared analysis tools in
+``healthcurve.analysis``. It never receives a database connection, owner identifier,
+or mutation operation; model-authored queries run only through view-only analyst roles.
 """
-
-from healthcurve.chat.tools import (
-    CHAT_TOOL_CATALOG_VERSION,
-    ChatToolError,
-    ChatToolResult,
-    execute_chat_tool,
-    tool_definitions,
-)
-
-__all__ = [
-    "CHAT_TOOL_CATALOG_VERSION",
-    "ChatToolError",
-    "ChatToolResult",
-    "execute_chat_tool",
-    "tool_definitions",
-]

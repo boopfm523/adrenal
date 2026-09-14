@@ -6,9 +6,11 @@ evaluation suite. This contract supplements `docs/analysis-evaluation.md`; it do
 permit real owner data in fixtures, snapshots, logs, or recorded baselines.
 
 ADR-0036 replaces the fixed-tool planner with analytical tool calling over curated
-views. Until the analytical evaluation set lands (Beads `hc-ixn3.7`), the gates below
-apply to the existing catalog. That work adds numeric-accuracy grading on a synthetic
-dataset and replaces "only allow-listed domain tools" with the ADR-0036 catalog.
+views. `scripts/evaluate_chatbot.py` now runs `evals/chatbot/gold-v3.json` through the
+real orchestration and validators with canned synthetic tool results for the ADR-0036
+catalog, and `evals/chatbot/baseline-v3.json` records the selected local model. The
+analytical evaluation set (Beads `hc-ixn3.7`) adds numeric-accuracy grading against a
+synthetic database. "Allow-listed tools" below means the ADR-0036 analysis catalog.
 
 ## Release-gated behaviors
 

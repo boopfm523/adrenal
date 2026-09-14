@@ -17,7 +17,12 @@ from types import FrameType
 from healthcurve.ai.ollama import OllamaClient
 from healthcurve.chat.jobs import CHAT_RESPONSE_TASK, make_chat_response_handler
 from healthcurve.config import Environment, Settings, TelegramMode, get_settings
-from healthcurve.db import get_ai_session_factory, get_session_factory
+from healthcurve.db import (
+    get_ai_session_factory,
+    get_analyst_engine,
+    get_analyst_text_engine,
+    get_session_factory,
+)
 from healthcurve.integrations.telegram import polling
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.confirmation_reminders import (
@@ -108,6 +113,9 @@ def main() -> int:
             get_ai_session_factory(),
             identity_factory=get_session_factory(),
             client=OllamaClient(settings),
+            settings=settings,
+            analyst_engine=get_analyst_engine(),
+            analyst_text_engine=get_analyst_text_engine(),
         ),
         DRAFT_EXPIRY_TASK: make_draft_expiry_handler(),
         WEATHER_ENRICHMENT_TASK: make_weather_handler(),

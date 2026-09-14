@@ -1,18 +1,24 @@
-"""Durable private-Ollama response jobs for HealthCurve Chat."""
+"""Durable private-Ollama response jobs for HealthCurve Chat (ADR-0036)."""
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from healthcurve.ai.ollama import OllamaClient
+from healthcurve.analysis.tools import (
+    AnalysisAccess,
+    ToolOutput,
+    execute_analysis_tool,
+    tool_definitions,
+)
 from healthcurve.chat import orchestration, service
 from healthcurve.chat.models import (
     ChatConversation,
@@ -22,12 +28,15 @@ from healthcurve.chat.models import (
     ChatToolExecution,
     ChatToolOutcome,
 )
-from healthcurve.chat.tools import ChatToolResult, execute_chat_tool
+from healthcurve.config import Settings
 from healthcurve.identity.models import Owner
+from healthcurve.logging import get_logger
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditAction
 from healthcurve.operations.jobs import Job, JobQueueError, enqueue
 from healthcurve.operations.worker import JobHandler
+
+log = get_logger(__name__)
 
 CHAT_RESPONSE_TASK = "ai.chat.respond"
 _TERMINAL_STATES = frozenset(
@@ -40,6 +49,9 @@ _TERMINAL_STATES = frozenset(
         ChatMessageState.FAILED,
     }
 )
+
+#: Builds analysis access for a conversation; the argument is whether text is enabled.
+type AccessFactory = Callable[[bool], AnalysisAccess]
 
 
 class _ChatCancelled(RuntimeError):
@@ -58,8 +70,9 @@ def check_source_staleness(
     *,
     owner_id: uuid.UUID,
     assistant_message_id: uuid.UUID,
+    access_for: AccessFactory,
 ) -> ChatSourceStatus:
-    """Re-run prior bounded reads and compare their deterministic fingerprints."""
+    """Re-run an answer's successful tool calls and compare their result fingerprints."""
     checked_at = datetime.now(UTC)
     with factory() as metadata_session:
         assistant = service.get_owned_message(
@@ -76,9 +89,15 @@ def check_source_staleness(
         conversation = metadata_session.get(ChatConversation, assistant.conversation_id)
         if conversation is None or conversation.owner_id != owner_id:
             return ChatSourceStatus(status="not_applicable", stale=None, checked_at=checked_at)
-        include_sensitive = conversation.include_sensitive_text
-        executions = list(
-            metadata_session.scalars(
+        include_text = conversation.include_sensitive_text
+        executions = [
+            (
+                execution.tool_name,
+                execution.tool_version,
+                execution.result_fingerprint,
+                dict(execution.validated_arguments),
+            )
+            for execution in metadata_session.scalars(
                 select(ChatToolExecution)
                 .where(
                     ChatToolExecution.owner_id == owner_id,
@@ -87,24 +106,17 @@ def check_source_staleness(
                 )
                 .order_by(ChatToolExecution.created_at.asc(), ChatToolExecution.id.asc())
             )
-        )
+        ]
 
-    for execution in executions:
+    access = access_for(include_text)
+    for tool_name, tool_version, fingerprint, arguments in executions:
         try:
-            with factory() as tool_session, tool_session.begin():
-                current = execute_chat_tool(
-                    tool_session,
-                    owner_id=owner_id,
-                    tool_name=execution.tool_name,
-                    arguments=execution.validated_arguments,
-                    allow_sensitive_text=include_sensitive,
-                )
+            current = execute_analysis_tool(access, tool_name, arguments)
         except Exception:
             return ChatSourceStatus(status="unavailable", stale=None, checked_at=checked_at)
-        if (
-            current.tool_version != execution.tool_version
-            or current.result_sha256 != execution.result_fingerprint
-        ):
+        if not current.ok:
+            return ChatSourceStatus(status="unavailable", stale=None, checked_at=checked_at)
+        if current.tool_version != tool_version or current.result_sha256 != fingerprint:
             return ChatSourceStatus(status="stale", stale=True, checked_at=checked_at)
     return ChatSourceStatus(status="fresh", stale=False, checked_at=checked_at)
 
@@ -137,12 +149,16 @@ def make_chat_response_handler(
     *,
     identity_factory: sessionmaker[Session],
     client: OllamaClient,
+    settings: Settings,
+    analyst_engine: Engine | None,
+    analyst_text_engine: Engine | None,
 ) -> JobHandler:
     """Build a handler with restricted AI writes and a bounded identity lookup.
 
     ``healthcurve_ai`` must remain unable to read the identity schema.  The owner
     timezone is therefore read through the ordinary application role, while all
-    chat state and generated output continue to use the restricted AI role.
+    chat state and generated output continue to use the restricted AI role. Model
+    queries run only on the view-only analyst engines (ADR-0036).
     """
 
     def handle(queue_session: Session, payload: Mapping[str, object]) -> None:
@@ -166,7 +182,7 @@ def make_chat_response_handler(
             if source is None or source.body is None or conversation is None:
                 raise JobQueueError("chat_source_missing")
             question = source.body
-            include_sensitive = conversation.include_sensitive_text
+            include_text = conversation.include_sensitive_text
             context = service.bounded_context(
                 session,
                 owner_id=owner_id,
@@ -179,7 +195,16 @@ def make_chat_response_handler(
                 raise JobQueueError("chat_owner_missing")
             default_timezone = owner.default_timezone
         current_local_datetime = datetime.now(ZoneInfo(default_timezone))
-        current_local_date = current_local_datetime.date()
+
+        access = AnalysisAccess(
+            engine=analyst_engine,
+            text_engine=analyst_text_engine,
+            allow_text=include_text,
+            owner_id=owner_id,
+            timezone=default_timezone,
+            model_session_factory=factory,
+        )
+        query_engine = analyst_text_engine if include_text else analyst_engine
 
         def observe_state(state: ChatMessageState) -> None:
             with factory() as state_session, state_session.begin():
@@ -198,30 +223,38 @@ def make_chat_response_handler(
                 row.state = state
                 row.updated_at = datetime.now(UTC)
 
-        def run_tool(tool_name: str, arguments: dict[str, object]) -> ChatToolResult:
-            with factory() as tool_session, tool_session.begin():
-                return execute_chat_tool(
-                    tool_session,
-                    owner_id=owner_id,
+        def run_tool(tool_name: str, arguments: dict[str, Any]) -> ToolOutput:
+            try:
+                return execute_analysis_tool(access, tool_name, arguments)
+            except Exception:
+                # A tool defect becomes a repairable result rather than a failed run.
+                log.warning("analysis tool failed", reason_code="chat_tool_failed")
+                return ToolOutput(
                     tool_name=tool_name,
-                    arguments=arguments,
-                    allow_sensitive_text=include_sensitive,
+                    tool_version="unknown",
+                    ok=False,
+                    error_code="tool_failed",
+                    error_message="The tool failed unexpectedly; try a simpler request.",
                 )
 
         def observe_tool(execution: orchestration.ExecutedTool) -> None:
+            output = execution.output
             with factory() as tool_session, tool_session.begin():
                 tool_session.add(
                     ChatToolExecution(
                         conversation_id=conversation_id,
                         assistant_message_id=message_id,
                         owner_id=owner_id,
-                        tool_name=execution.result.tool_name,
-                        tool_version=execution.result.tool_version,
+                        tool_name=execution.tool_name[:80],
+                        tool_version=output.tool_version[:32],
                         validated_arguments=execution.arguments,
-                        outcome=ChatToolOutcome.COMPLETED,
+                        outcome=(
+                            ChatToolOutcome.COMPLETED if output.ok else ChatToolOutcome.INVALID
+                        ),
                         duration_ms=execution.duration_ms,
-                        result_fingerprint=execution.result.result_sha256,
-                        source_manifest=[{"sources": execution.result.source_manifest}],
+                        result_fingerprint=output.result_sha256 or None,
+                        source_manifest=[{"views": list(output.views)}],
+                        error_code=None if output.ok else (output.error_code or "tool_failed")[:64],
                     )
                 )
 
@@ -229,13 +262,19 @@ def make_chat_response_handler(
             result = orchestration.run(
                 question=question,
                 context=context,
+                tools=tool_definitions(access),
                 execute_tool=run_tool,
                 client=client,
-                observe_state=observe_state,
-                observe_tool=observe_tool,
-                current_local_date=current_local_date,
                 current_local_datetime=current_local_datetime,
                 default_timezone=default_timezone,
+                allow_text=include_text,
+                analysis_configured=query_engine is not None,
+                think=settings.chat_thinking,
+                context_window=settings.chat_context_window or settings.ollama_context_window,
+                max_output_tokens=settings.chat_max_output_tokens,
+                read_timeout_s=settings.chat_read_timeout_s,
+                observe_state=observe_state,
+                observe_tool=observe_tool,
             )
         except _ChatCancelled:
             return
