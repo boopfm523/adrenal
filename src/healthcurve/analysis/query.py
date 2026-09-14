@@ -235,13 +235,13 @@ def execute_query(
             fetched = result.fetchmany(limit + 1)
             result.close()
     except DBAPIError as exc:
-        raise _database_error(exc) from None
+        raise database_error(exc) from None
 
     truncated = len(fetched) > limit
     rows: list[tuple[Any, ...]] = []
     budget = MAX_RESULT_CHARS
     for raw in fetched[:limit]:
-        row = tuple(_jsonable(value) for value in raw)
+        row = tuple(jsonable(value) for value in raw)
         size = len(json.dumps(row, separators=(",", ":"), ensure_ascii=False))
         if size > budget:
             truncated = True
@@ -261,7 +261,7 @@ def execute_query(
     )
 
 
-def _database_error(exc: DBAPIError) -> QueryError:
+def database_error(exc: DBAPIError) -> QueryError:
     original = exc.orig
     diag = getattr(original, "diag", None)
     sqlstate = getattr(original, "sqlstate", None) or getattr(diag, "sqlstate", None)
@@ -285,7 +285,7 @@ def _database_error(exc: DBAPIError) -> QueryError:
     return QueryError("query_invalid", f"PostgreSQL error {sqlstate}: {message}")
 
 
-def _jsonable(value: Any) -> Any:
+def jsonable(value: Any) -> Any:
     if value is None or isinstance(value, bool | int):
         return value
     if isinstance(value, str):
@@ -304,5 +304,7 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, list | tuple):
-        return [_jsonable(item) for item in value][:MAX_ROW_LIMIT]
+        return [jsonable(item) for item in value][:MAX_ROW_LIMIT]
+    if isinstance(value, dict):
+        return {str(key): jsonable(item) for key, item in value.items()}
     return str(value)[:MAX_CELL_CHARS]

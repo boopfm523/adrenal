@@ -97,6 +97,21 @@ catalog, shared by chat and the local MCP server:
   functions such as `now()` and `current_date` are rejected so a stored query gives the
   same answer when re-run; models use literal dates.
 
+Deterministic helpers cover calculations local models tend to get wrong. Their SQL is
+fixed and parameterized, never model-authored:
+
+- `clock_time_stats` reports the circular mean, median, earliest, latest, and spread of
+  local clock times for bedtimes, wake times, all doses or the first dose of each day,
+  meals, symptoms, or activity starts, so times either side of midnight stay adjacent.
+- `event_window_stats` summarizes heart rate, stress, respiration, or HRV samples in a
+  window before and after each symptom, dose, activity, meal, stress episode, wake, or
+  bedtime. It returns per-event rows and an overall summary; missing samples are counted
+  as absent, never zero.
+- `modeled_exposure` returns values from the default modeled free-cortisol curve for a
+  date, with the recorded-reference band position, labeled as modeled analysis. It
+  needs domain services over base tables, so it runs only where the caller supplies a
+  read-only application session; otherwise the tool is not offered.
+
 Queries run on the analyst role in a read-only transaction with a 10-second statement
 timeout, a server-side cursor, a 500-row cap, and a result-size cap; results report
 truncation. Execution uses PostgreSQL's extended protocol, so the server rejects

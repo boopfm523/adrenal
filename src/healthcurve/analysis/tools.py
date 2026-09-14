@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
 from healthcurve.analysis.catalog import (
     CATALOG_VERSION,
@@ -21,6 +23,15 @@ from healthcurve.analysis.catalog import (
     VIEWS,
     VIEWS_BY_NAME,
     View,
+)
+from healthcurve.analysis.helpers import (
+    ClockTimeStatsArguments,
+    EventWindowStatsArguments,
+    ModeledExposureArguments,
+    clock_time_stats,
+    configured_modeled_exposure,
+    event_window_stats,
+    modeled_exposure,
 )
 from healthcurve.analysis.query import (
     DEFAULT_ROW_LIMIT,
@@ -53,6 +64,11 @@ class AnalysisAccess:
     engine: Engine | None
     text_engine: Engine | None = None
     allow_text: bool = False
+    #: Modeled exposure needs domain services over base tables, so it runs in a
+    #: caller-provided read-only session; omit it where that access is not wanted.
+    owner_id: uuid.UUID | None = None
+    timezone: str | None = None
+    model_session_factory: Callable[[], Session] | None = None
 
     def engine_for_query(self) -> Engine:
         engine = self.text_engine if self.allow_text else self.engine
@@ -268,11 +284,84 @@ RUN_QUERY: Final = AnalysisTool(
     handler=_run_query,  # type: ignore[arg-type]
 )
 
-TOOLS: Final[dict[str, AnalysisTool]] = {tool.name: tool for tool in (DESCRIBE_DATA, RUN_QUERY)}
+
+def _clock_time_stats(access: AnalysisAccess, arguments: ClockTimeStatsArguments) -> ToolOutput:
+    try:
+        data = clock_time_stats(access.engine_for_query(), arguments)
+    except QueryError as exc:
+        return _failure(CLOCK_TIME_STATS, exc.code, exc.message)
+    return _success(CLOCK_TIME_STATS, data)
 
 
-def tool_definitions() -> list[dict[str, Any]]:
-    return [tool.definition() for tool in TOOLS.values()]
+def _event_window_stats(access: AnalysisAccess, arguments: EventWindowStatsArguments) -> ToolOutput:
+    try:
+        data = event_window_stats(access.engine_for_query(), arguments)
+    except QueryError as exc:
+        return _failure(EVENT_WINDOW_STATS, exc.code, exc.message)
+    return _success(EVENT_WINDOW_STATS, data)
+
+
+def _modeled_exposure(access: AnalysisAccess, arguments: ModeledExposureArguments) -> ToolOutput:
+    try:
+        factory, owner_id, timezone = configured_modeled_exposure(
+            access.model_session_factory, access.owner_id, access.timezone
+        )
+        data = modeled_exposure(factory, owner_id=owner_id, timezone=timezone, arguments=arguments)
+    except QueryError as exc:
+        return _failure(MODELED_EXPOSURE, exc.code, exc.message)
+    return _success(MODELED_EXPOSURE, data)
+
+
+CLOCK_TIME_STATS: Final = AnalysisTool(
+    name="clock_time_stats",
+    version="hc-analysis-clock-v1",
+    description=(
+        "Average (circular mean), median, earliest, and latest local clock time of bedtimes, "
+        "wake times, doses (all or first per day), meals, symptoms, or activity starts over "
+        "a date range. Use this instead of averaging clock times in SQL."
+    ),
+    arguments=ClockTimeStatsArguments,
+    handler=_clock_time_stats,  # type: ignore[arg-type]
+)
+
+EVENT_WINDOW_STATS: Final = AnalysisTool(
+    name="event_window_stats",
+    version="hc-analysis-window-v1",
+    description=(
+        "For each symptom, dose, activity, meal, stress episode, wake, or bedtime in a date "
+        "range, summarize heart rate, stress, respiration, or HRV samples in the minutes "
+        "before and after it, with per-event rows and an overall summary."
+    ),
+    arguments=EventWindowStatsArguments,
+    handler=_event_window_stats,  # type: ignore[arg-type]
+)
+
+MODELED_EXPOSURE: Final = AnalysisTool(
+    name="modeled_exposure",
+    version="hc-analysis-exposure-v1",
+    description=(
+        "Modeled theoretical free-cortisol values for a local date from recorded doses, "
+        "with the recorded-reference band position. Modeled analysis, not a measurement."
+    ),
+    arguments=ModeledExposureArguments,
+    handler=_modeled_exposure,  # type: ignore[arg-type]
+)
+
+TOOLS: Final[dict[str, AnalysisTool]] = {
+    tool.name: tool
+    for tool in (DESCRIBE_DATA, RUN_QUERY, CLOCK_TIME_STATS, EVENT_WINDOW_STATS, MODELED_EXPOSURE)
+}
+
+
+def tool_definitions(access: AnalysisAccess | None = None) -> list[dict[str, Any]]:
+    """Tool definitions; with ``access``, omit tools that context cannot run."""
+
+    hidden = (
+        {MODELED_EXPOSURE.name}
+        if access is not None and access.model_session_factory is None
+        else set()
+    )
+    return [tool.definition() for name, tool in TOOLS.items() if name not in hidden]
 
 
 def execute_analysis_tool(

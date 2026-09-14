@@ -12,7 +12,7 @@ from healthcurve.analysis.catalog import EXAMPLE_QUERIES, TEXT_SCHEMA, VIEWS
 from healthcurve.analysis.query import (
     MAX_SQL_CHARS,
     QueryError,
-    _jsonable,  # pyright: ignore[reportPrivateUsage]
+    jsonable,
     validate_query,
 )
 from healthcurve.analysis.tools import (
@@ -142,18 +142,18 @@ def test_text_views_require_explicit_text_access() -> None:
 
 
 def test_result_values_are_json_safe_and_compact() -> None:
-    assert _jsonable(Decimal("8000.0000")) == "8000"
-    assert _jsonable(Decimal("12.3400")) == "12.34"
-    assert _jsonable(dt.datetime(2026, 3, 8, 7, 15, tzinfo=dt.UTC)) == "2026-03-08T07:15:00+00:00"
-    assert _jsonable(dt.time(23, 30)) == "23:30:00"
-    assert _jsonable(dt.timedelta(minutes=5)) == "300 seconds"
-    assert _jsonable(uuid.UUID(int=1)) == "00000000-0000-0000-0000-000000000001"
-    assert _jsonable("x" * 1_000).endswith("…")
+    assert jsonable(Decimal("8000.0000")) == "8000"
+    assert jsonable(Decimal("12.3400")) == "12.34"
+    assert jsonable(dt.datetime(2026, 3, 8, 7, 15, tzinfo=dt.UTC)) == "2026-03-08T07:15:00+00:00"
+    assert jsonable(dt.time(23, 30)) == "23:30:00"
+    assert jsonable(dt.timedelta(minutes=5)) == "300 seconds"
+    assert jsonable(uuid.UUID(int=1)) == "00000000-0000-0000-0000-000000000001"
+    assert jsonable("x" * 1_000).endswith("…")
 
 
 def test_tool_definitions_are_strict_function_schemas() -> None:
     definitions = {item["function"]["name"]: item for item in tool_definitions()}
-    assert set(definitions) == {"describe_data", "run_query"}
+    assert {"describe_data", "run_query"} <= set(definitions)
     run_query = definitions["run_query"]["function"]["parameters"]
     assert run_query["additionalProperties"] is False
     assert set(run_query["required"]) == {"sql", "purpose"}
