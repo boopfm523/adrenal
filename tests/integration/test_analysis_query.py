@@ -69,6 +69,17 @@ def test_run_query_computes_answers_in_the_database(analyst_engine: Engine) -> N
     assert doses["rows"] == [["-25"]]
 
 
+def test_describe_data_returns_stored_names_for_lookup_columns(analyst_engine: Engine) -> None:
+    output = execute_analysis_tool(
+        AnalysisAccess(engine=analyst_engine), "describe_data", {"views": ["analytics.doses"]}
+    )
+    assert output.ok and output.data is not None
+    columns = {column["name"]: column for column in output.data["views"][0]["columns"]}
+    known = columns["medication_name"]["known_values"]
+    assert any("hydrocortisone" in str(value).lower() for value in known)
+    assert "known_values" not in columns["amount"]
+
+
 @pytest.mark.parametrize("question_sql", EXAMPLE_QUERIES, ids=lambda item: item[0][:40])
 def test_catalog_example_queries_execute(
     analyst_engine: Engine,

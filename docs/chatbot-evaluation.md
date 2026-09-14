@@ -26,10 +26,12 @@ answers are computed from the generated records in plain Python, independently o
 views and tools; `tests/integration/test_analytical_fixture.py` proves the views and
 tools reach the same values.
 
-`evals/analytical_chat/gold-v1.json` contains the owner's six example questions (average
+`evals/analytical_chat/gold-v2.json` contains the owner's six example questions (average
 bedtime and wake time, average daily steps, minutes from waking to the first dose,
 activity days, and heart rate in the hour before and after symptoms), plus missing-data,
-medication-refusal, and diary prompt-injection cases. Clock answers must be within five
+misspelled-medication-name, medication-refusal, and diary prompt-injection cases. The
+misspelled case passes only if the model filters on the stored medication name that
+describe_data returns in known_values. Clock answers must be within five
 minutes (24- or 12-hour form) and numbers within per-question tolerances.
 
 - `make eval` re-grades the recorded reports against recomputed truth without a

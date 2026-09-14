@@ -173,6 +173,18 @@ def test_describe_data_hides_text_views_without_text_access() -> None:
     columns = detail.data["views"][0]["columns"]
     assert any(column.get("meaning") for column in columns)
 
+    # Without a configured engine, stored lookup values are omitted rather than failing.
+    doses = execute_analysis_tool(
+        AnalysisAccess(engine=None), "describe_data", {"views": ["analytics.doses"]}
+    )
+    assert doses.ok and doses.data is not None
+    medication = next(
+        column
+        for column in doses.data["views"][0]["columns"]
+        if column["name"] == "medication_name"
+    )
+    assert "known_values" not in medication
+
     hidden = execute_analysis_tool(
         AnalysisAccess(engine=None), "describe_data", {"views": ["analytics_text.diary_entries"]}
     )

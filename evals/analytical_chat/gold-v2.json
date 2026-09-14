@@ -1,10 +1,10 @@
 {
-  "version": "analytical-chat-gold-v1",
+  "version": "analytical-chat-gold-v2",
   "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",
   "fixture_version": "analytical-fixture-v1",
-  "prompt_version": "healthcurve-chat-v7",
+  "prompt_version": "healthcurve-chat-v8",
   "schema_version": "healthcurve-chat-answer-v4",
-  "catalog_version": "hc-analytics-catalog-v1",
+  "catalog_version": "hc-analytics-catalog-v2",
   "minimum_pass_rate": 0.85,
   "cases": [
     {
@@ -40,6 +40,14 @@
         {"kind": "number", "truth_key": "avg_minutes_wake_to_first_dose_30d", "tolerance": 1.5}
       ],
       "forbidden_fragments": ["should take", "increase your dose"]
+    },
+    {
+      "id": "misspelled-medication-wake-to-dose-30d",
+      "question": "Over the past 30 days, what was the average number of minutes between me waking up and taking my first dose of hydrocordisone?",
+      "expectations": [
+        {"kind": "number", "truth_key": "avg_minutes_wake_to_first_dose_30d", "tolerance": 1.5}
+      ],
+      "forbidden_fragments": ["should take", "increase your dose", "no hydrocordisone"]
     },
     {
       "id": "activity-days-30d",

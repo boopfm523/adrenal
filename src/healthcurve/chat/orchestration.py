@@ -29,7 +29,7 @@ from healthcurve.analysis.tools import CONVENTIONS, ToolOutput
 from healthcurve.chat.models import ChatMessageState, ChatRole
 from healthcurve.chat.service import BoundedConversationContext
 
-PROMPT_VERSION: Final = "healthcurve-chat-v7"
+PROMPT_VERSION: Final = "healthcurve-chat-v8"
 SCHEMA_VERSION: Final = "healthcurve-chat-answer-v4"
 SUBMIT_ANSWER: Final = "submit_answer"
 MAX_MODEL_TURNS: Final = 14
@@ -358,7 +358,9 @@ owner gives no period, choose a sensible recent period and state it.
 
 How to work:
 - Plan briefly, then query. Use describe_data with specific view names when you need \
-column meanings or units.
+column meanings, units, or the stored spelling of names. The owner may misspell or \
+abbreviate medication, symptom, activity, or lab names: before filtering on such a name, \
+read that column's known_values and filter on the matching stored value.
 - Compute every number with run_query or the helper tools, including unit conversions, \
 differences, percentages, and counts. Never calculate or estimate numbers yourself.
 {helper_text}

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-CATALOG_VERSION: Final = "hc-analytics-catalog-v1"
+CATALOG_VERSION: Final = "hc-analytics-catalog-v2"
 
 ANALYTICS_SCHEMA: Final = "analytics"
 TEXT_SCHEMA: Final = "analytics_text"
@@ -30,6 +30,9 @@ class Column:
     name: str
     kind: str
     meaning: str = ""
+    # Owner-typed names (medications, symptoms, sports) may be misspelled; describe_data
+    # returns the stored values of these columns so filters use the exact spelling.
+    lookup: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,8 +53,8 @@ class View:
         return self.schema == TEXT_SCHEMA
 
 
-def _c(name: str, kind: str, meaning: str = "") -> Column:
-    return Column(name, kind, meaning)
+def _c(name: str, kind: str, meaning: str = "", *, lookup: bool = False) -> Column:
+    return Column(name, kind, meaning, lookup)
 
 
 _UTC = "timestamptz"
@@ -138,7 +141,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("local_clock", "time"),
             _c("timezone", "text"),
             _c("medication_id", "uuid"),
-            _c("medication_name", "text"),
+            _c("medication_name", "text", lookup=True),
             _c("amount", "numeric"),
             _c("unit", "text", "mg, mcg, ml, or tablet"),
             _c("route", "text", "oral, intramuscular, subcutaneous, or intravenous"),
@@ -192,7 +195,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("value_id", "uuid"),
             _c("local_date", "date"),
             _c("timezone", "text"),
-            _c("metric_type", "text"),
+            _c("metric_type", "text", lookup=True),
             _c("source_field", "text", "provider field, e.g. totalSteps, lowestRespirationValue"),
             _c("value", "numeric"),
             _c("unit", "text"),
@@ -238,7 +241,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("sample_local", _LOCAL),
             _c("local_date", "date"),
             _c("timezone", "text"),
-            _c("metric_type", "text"),
+            _c("metric_type", "text", lookup=True),
             _c("value", "numeric"),
             _c("unit", "text"),
             _c("sample_interval_seconds", "integer", "elapsed seconds since the prior sample"),
@@ -260,8 +263,13 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("start_local", _LOCAL),
             _c("local_date", "date"),
             _c("timezone", "text"),
-            _c("sport", "text", "e.g. walking, running, treadmill_running, indoor_rowing"),
-            _c("sub_sport", "text"),
+            _c(
+                "sport",
+                "text",
+                "e.g. walking, running, treadmill_running, indoor_rowing",
+                lookup=True,
+            ),
+            _c("sub_sport", "text", lookup=True),
             _c("elapsed_minutes", "numeric"),
             _c("distance_miles", "numeric"),
             _c("calories", "integer"),
@@ -279,9 +287,9 @@ VIEWS: Final[tuple[View, ...]] = (
         (
             _c("symptom_id", "uuid"),
             *_EVENT_TIME,
-            _c("name", "text"),
+            _c("name", "text", lookup=True),
             _c("severity", "integer", "0-10, may be null"),
-            _c("body_area", "text"),
+            _c("body_area", "text", lookup=True),
             _c(
                 "tracking_category",
                 "text",
@@ -323,7 +331,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("injection_id", "uuid"),
             *_EVENT_TIME,
             _c("medication_id", "uuid"),
-            _c("medication_name", "text"),
+            _c("medication_name", "text", lookup=True),
             _c("amount", "numeric"),
             _c("unit", "text"),
             _c("route", "text"),
@@ -410,7 +418,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("humidity_percent", "numeric"),
             _c("precipitation", "numeric"),
             _c("precipitation_unit", "text", "mm or in"),
-            _c("conditions", "text"),
+            _c("conditions", "text", lookup=True),
             _c("wind_speed_kph", "numeric"),
             _c("wind_gust_kph", "numeric"),
             _c("weather_confidence", "numeric"),
@@ -433,7 +441,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("reported_at", _UTC),
             _c("specimen_type", "text"),
             _c("report_status", "text"),
-            _c("analyte_name", "text"),
+            _c("analyte_name", "text", lookup=True),
             _c("normalized_analyte_code", "text"),
             _c("original_value", "text"),
             _c("qualitative_result", "text"),
@@ -452,7 +460,7 @@ VIEWS: Final[tuple[View, ...]] = (
         "Medication definitions used by plans and recorded doses.",
         (
             _c("medication_id", "uuid"),
-            _c("name", "text"),
+            _c("name", "text", lookup=True),
             _c("formulation", "text"),
             _c("strength", "numeric"),
             _c("strength_unit", "text"),
@@ -495,7 +503,7 @@ VIEWS: Final[tuple[View, ...]] = (
             _c("version_label", "text"),
             _c("version_status", "text"),
             _c("medication_id", "uuid"),
-            _c("medication_name", "text"),
+            _c("medication_name", "text", lookup=True),
             _c("timing_mode", "text", "fixed_time or wake"),
             _c("scheduled_clock", "time"),
             _c("reminder_clock", "time"),

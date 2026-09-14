@@ -22,6 +22,7 @@ from healthcurve.analysis.catalog import (
     EXAMPLE_QUERIES,
     VIEWS,
     VIEWS_BY_NAME,
+    Column,
     View,
 )
 from healthcurve.analysis.helpers import (
@@ -39,6 +40,7 @@ from healthcurve.analysis.query import (
     MAX_SQL_CHARS,
     QueryError,
     execute_query,
+    jsonable,
     validate_query,
 )
 
@@ -54,6 +56,9 @@ CONVENTIONS: Final = (
     "and round results. Do not compute numbers yourself.",
     "Recorded facts, physician-approved plans (medications, plan_* views), and provider "
     "summaries are different categories. A plan is not evidence that a dose was taken.",
+    "Names the owner types (medications, symptoms, sports, lab analytes) may be misspelled "
+    "or abbreviated. Filter on the stored value from describe_data known_values, and if a "
+    "name filter matches no rows, re-check known_values before reporting none.",
 )
 
 
@@ -169,20 +174,45 @@ def _view_summary(view: View) -> dict[str, Any]:
     }
 
 
-def _view_detail(view: View) -> dict[str, Any]:
+_MAX_KNOWN_VALUES: Final = 50
+
+
+def _known_values(access: AnalysisAccess, view: View, column: Column) -> list[Any] | None:
+    """The most frequent stored values of a lookup column, or None when unavailable."""
+
+    # Identifiers come from the static catalog, never from model or owner input, and the
+    # statement still passes the same validator as model-authored queries.
+    sql = (
+        f"SELECT {column.name} AS value, count(*) AS row_count "  # noqa: S608
+        f"FROM {view.qualified_name} WHERE {column.name} IS NOT NULL "
+        f"GROUP BY {column.name} ORDER BY row_count DESC, {column.name} "
+        f"LIMIT {_MAX_KNOWN_VALUES}"
+    )
+    try:
+        validated = validate_query(sql, allow_text=access.allow_text)
+        result = execute_query(access.engine_for_query(), validated, row_limit=_MAX_KNOWN_VALUES)
+    except QueryError:
+        return None
+    return [jsonable(row[0]) for row in result.rows]
+
+
+def _view_detail(view: View, access: AnalysisAccess) -> dict[str, Any]:
+    columns: list[dict[str, Any]] = []
+    for column in view.columns:
+        detail: dict[str, Any] = {"name": column.name, "type": column.kind}
+        if column.meaning:
+            detail["meaning"] = column.meaning
+        if column.lookup:
+            known = _known_values(access, view, column)
+            if known is not None:
+                detail["known_values"] = known
+        columns.append(detail)
     return {
         "view": view.qualified_name,
         "category": view.category.value,
         "grain": view.grain,
         "description": view.description,
-        "columns": [
-            {
-                "name": column.name,
-                "type": column.kind,
-                **({"meaning": column.meaning} if column.meaning else {}),
-            }
-            for column in view.columns
-        ],
+        "columns": columns,
     }
 
 
@@ -205,7 +235,7 @@ def _describe_data(access: AnalysisAccess, arguments: DescribeDataArguments) -> 
             )
         data: dict[str, Any] = {
             "catalog_version": CATALOG_VERSION,
-            "views": [_view_detail(VIEWS_BY_NAME[name]) for name in arguments.views],
+            "views": [_view_detail(VIEWS_BY_NAME[name], access) for name in arguments.views],
         }
     else:
         data = {
