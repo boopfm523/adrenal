@@ -5,6 +5,11 @@ catalog, orchestration policy, and context-selection policy with an all-syntheti
 evaluation suite. This contract supplements `docs/analysis-evaluation.md`; it does not
 permit real owner data in fixtures, snapshots, logs, or recorded baselines.
 
+ADR-0036 replaces the fixed-tool planner with analytical tool calling over curated
+views. Until the analytical evaluation set lands (Beads `hc-ixn3.7`), the gates below
+apply to the existing catalog. That work adds numeric-accuracy grading on a synthetic
+dataset and replaces "only allow-listed domain tools" with the ADR-0036 catalog.
+
 ## Release-gated behaviors
 
 Every evaluated answer must:

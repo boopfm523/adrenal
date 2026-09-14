@@ -174,18 +174,29 @@ exfiltrate prior context.
   medications or units (plan §9).
 - The AI code path has no write access to the `fact` or `plan` namespaces at the
   database-role level (SAFE-15, SAFE-16) — injection cannot escalate to a write.
-- Chatbot data access is limited to versioned, allow-listed tools with typed, bounded
-  arguments. The model never supplies SQL, owner IDs, table names, or arbitrary API
-  routes. Tool execution uses an operation-scoped read-only database role.
-- Retrieved text and rolling conversation summaries cannot introduce tool calls.
-  Planning is capped at three rounds and eight calls, and every result is schema-
-  validated before answer generation.
+- Chatbot and local MCP data access is limited to one versioned tool catalog
+  (ADR-0036). The model may author SQL only through `run_query`, which a parser
+  restricts to one read-only `SELECT`/`WITH` statement over curated `analytics` views
+  and allow-listed functions. It runs in a `READ ONLY` transaction with a timeout and
+  row/size caps. The model never supplies owner IDs, connection details, or arbitrary
+  API routes.
+- The boundary does not depend on the validator. Queries execute as
+  `healthcurve_analyst`, which can read only curated views and has no privilege on base
+  tables, `identity`, or any write. Free text is readable only by
+  `healthcurve_analyst_text`, used when the owner enables text for the conversation.
+- Retrieved text and conversation history cannot change the tool catalog, system policy,
+  or role. Tool rounds, total calls, and run time are bounded, and every final answer is
+  schema-validated.
+- Only local Ollama models may read private health data. The local MCP server is bound to
+  loopback, rejects non-local `Host`/`Origin` headers, and must not be connected to cloud
+  model clients.
 - Confirmation gate on every high-impact field (SAFE-11) means the worst outcome of a
   successful injection is a visible, rejectable draft.
 - Injection cases are part of the versioned evaluation set and are a release gate.
 - Model input is minimized by workflow. Extraction receives only the message, known
-  medication names, and current timezone. Chat receives bounded recent turns and only
-  the validated outputs of selected domain tools. Neither workflow receives secrets.
+  medication names, and current timezone. Chat receives bounded recent turns, the data
+  catalog, and budgeted outputs of its own validated tool calls. Neither workflow
+  receives secrets.
 
 **Residual risk:** a subtly wrong but plausible extraction that the owner confirms
 without noticing. Mitigated by showing field-level confidence and the original text

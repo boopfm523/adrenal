@@ -32,7 +32,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0022](0022-durable-streamed-private-exports.md) | Durable streamed private exports | Accepted |
 | [0023](0023-indefinite-hot-wearable-retention.md) | Indefinite exact wearable retention | Accepted |
 | [0024](0024-selectable-physiological-cortisol-scenario-model.md) | Selectable physiological cortisol scenario model without dosing-adequacy claims | Accepted; default-selection portion superseded by 0028 |
-| [0025](0025-private-health-data-chatbot.md) | Private health-data chatbot uses bounded read-only domain tools | Accepted |
+| [0025](0025-private-health-data-chatbot.md) | Private health-data chatbot uses bounded read-only domain tools | Accepted; partially superseded by 0036 |
 | [0026](0026-wake-anchored-free-cortisol-reference-and-meals.md) | Wake-anchored free-cortisol reference and observed meal context | Accepted |
 | [0027](0027-evidence-versioned-50mg-iv-push-hydrocortisone-model.md) | Evidence-versioned 50 mg and 100 mg IV-push hydrocortisone model | Accepted |
 | [0028](0028-full-cortisol-model-default.md) | Full cortisol model v4 as the Daily Review default | Accepted |
@@ -43,6 +43,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0033](0033-private-garmin-activity-weather.md) | Private Garmin activity location and historical weather | Accepted |
 | [0034](0034-garmin-nap-events.md) | Garmin nap events | Accepted |
 | [0035](0035-garmin-sleep-heart-rate-samples.md) | Garmin sleep-session heart-rate samples | Accepted; amends 0014 |
+| [0036](0036-local-model-analytical-chat.md) | Local-model analytical chat over curated read-only views | Accepted; supersedes part of 0025 |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

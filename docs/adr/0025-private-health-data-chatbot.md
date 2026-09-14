@@ -1,6 +1,8 @@
 # ADR-0025: Private health-data chatbot uses bounded read-only domain tools
 
-**Status:** Accepted — 2026-08-16
+**Status:** Accepted — 2026-08-16; tool catalog, SQL and MCP exclusions, planner,
+orchestration, and numeric validation superseded by
+[ADR-0036](0036-local-model-analytical-chat.md)
 
 ## Context
 
