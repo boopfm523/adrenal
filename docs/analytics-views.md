@@ -84,7 +84,7 @@ Modeled cortisol and exposure curves are computed in Python and are not in these
 ## Query tools
 
 `healthcurve.analysis` exposes the views to local models through one versioned tool
-catalog, shared by chat and the local MCP server:
+catalog, shared by chat and the [local MCP server](local-mcp-server.md):
 
 - `describe_data` returns the view catalog (grain, category, columns), query conventions,
   and example queries; passing view names returns column types, units, and meanings.

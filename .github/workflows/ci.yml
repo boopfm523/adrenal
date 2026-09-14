@@ -217,6 +217,13 @@ jobs:
             --profile garmin config --format json > /tmp/healthcurve-garmin.json
           python3 scripts/check_compose_topology.py /tmp/healthcurve-garmin.json
 
+          # The opt-in local MCP server may publish one port, on loopback only (ADR-0036).
+          POSTGRES_PASSWORD=ci-placeholder-not-a-secret \
+          POSTGRES_AI_PASSWORD=ci-placeholder-not-a-secret \
+          docker compose --env-file /dev/null --profile mcp config --format json \
+            > /tmp/healthcurve-mcp.json
+          python3 scripts/check_compose_topology.py /tmp/healthcurve-mcp.json
+
           POSTGRES_PASSWORD=ci-placeholder-not-a-secret \
           POSTGRES_AI_PASSWORD=ci-placeholder-not-a-secret \
           HC_CADDY_BIND_IP=100.64.0.1 \

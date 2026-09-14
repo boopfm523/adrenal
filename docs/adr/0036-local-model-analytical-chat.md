@@ -135,6 +135,8 @@ requires starting it explicitly with the text role. Its documentation states tha
 local-model clients may be connected. Logs contain tool names, durations, row counts,
 and error codes only.
 
+Implemented in [docs/local-mcp-server.md](../local-mcp-server.md).
+
 ### Retained from ADR-0025
 
 Conversation storage, retention, deletion, export, durable queued runs and their state

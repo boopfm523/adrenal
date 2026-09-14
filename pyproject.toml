@@ -27,6 +27,7 @@ dependencies = [
     "redis==8.1.0",
     "garminconnect==0.3.11",
     "sqlglot==30.18.0",
+    "mcp==2.2.0",
 ]
 
 [project.optional-dependencies]

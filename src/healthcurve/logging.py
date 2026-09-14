@@ -58,6 +58,8 @@ LOGGABLE_KEYS: Final[frozenset[str]] = frozenset(
         "outcome",
         "reason_code",
         "count",
+        # a fixed analysis-catalog tool name (or "unknown"), never its arguments (C0)
+        "tool_name",
         "created",
         "updated",
         "skipped",

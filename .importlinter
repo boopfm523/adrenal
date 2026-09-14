@@ -46,6 +46,28 @@ layers =
 ; AI reads facts and plans through the interfaces its layer already allows; what it
 ; must never touch is a writer/repository/service module.
 ; ---------------------------------------------------------------------------
+[importlinter:contract:domain-does-not-import-mcp-server]
+; The local MCP server (ADR-0036) is an entry point like `app`, `cli`, and `worker`:
+; it wires the shared analysis catalog to a transport. Domain code must never import
+; it, so the catalog cannot come to depend on how, or to whom, it is exposed.
+name = Domain modules do not import the local MCP server entry point
+type = forbidden
+source_modules =
+    healthcurve.chat
+    healthcurve.analysis
+    healthcurve.reports
+    healthcurve.analytics
+    healthcurve.integrations
+    healthcurve.ai
+    healthcurve.episodes
+    healthcurve.labs
+    healthcurve.medications
+    healthcurve.events
+    healthcurve.identity
+    healthcurve.operations
+forbidden_modules =
+    healthcurve.mcp_server
+
 [importlinter:contract:ai-cannot-reach-write-paths]
 name = AI code cannot import fact or plan write paths (SAFE-15, SAFE-16)
 type = forbidden

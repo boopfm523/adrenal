@@ -21,8 +21,44 @@ def validate(compose: dict[str, Any], *, production: bool) -> list[str]:
     services = compose.get("services", {})
 
     publishers = [name for name, service in services.items() if service.get("ports")]
-    if publishers != ["caddy"]:
+    # The opt-in local MCP server is the only other publisher, and only on the host
+    # loopback (ADR-0036); its binding is checked below.
+    if [name for name in publishers if name != "mcp"] != ["caddy"]:
         errors.append("only caddy may publish ports")
+
+    mcp = services.get("mcp")
+    if isinstance(mcp, dict):
+        if "mcp" not in mcp.get("profiles", []):
+            errors.append("mcp must require the mcp profile")
+        mcp_ports = mcp.get("ports", [])
+        if len(mcp_ports) != 1 or not all(
+            isinstance(binding, dict) and binding.get("host_ip") == "127.0.0.1"
+            for binding in mcp_ports
+        ):
+            errors.append("mcp must publish exactly one port on 127.0.0.1")
+        if mcp.get("read_only") is not True:
+            errors.append("mcp must be read-only")
+        if "ALL" not in mcp.get("cap_drop", []):
+            errors.append("mcp must drop all capabilities")
+        if "no-new-privileges:true" not in mcp.get("security_opt", []):
+            errors.append("mcp must set no-new-privileges")
+        mcp_networks = mcp.get("networks", {})
+        mcp_network_names = set(mcp_networks) if isinstance(mcp_networks, (dict, list)) else set()
+        if mcp_network_names != {"hc-internal"}:
+            errors.append("mcp must use only hc-internal")
+        mcp_environment = mcp.get("environment", {})
+        for forbidden in (
+            "HC_AI_DATABASE_URL",
+            "HC_CREDENTIAL_KEY_FILE",
+            "HC_DATABASE_URL",
+            "HC_GARMIN_PASSWORD",
+            "HC_OLLAMA_BASE_URL",
+            "HC_REDIS_URL",
+            "HC_TELEGRAM_BOT_TOKEN",
+            "HC_TELEGRAM_WEBHOOK_SECRET",
+        ):
+            if forbidden in mcp_environment:
+                errors.append(f"mcp must not receive {forbidden}")
 
     caddy = services.get("caddy", {})
     ports = caddy.get("ports", [])

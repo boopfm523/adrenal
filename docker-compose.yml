@@ -213,6 +213,62 @@ services:
       postgres:
         condition: service_healthy
 
+  mcp:
+    # Opt-in local MCP server over the analysis tools (ADR-0036,
+    # docs/local-mcp-server.md). LOCAL-model clients only (for example Open WebUI in
+    # Docker via host.docker.internal); never connect Claude or any cloud-backed client.
+    #   docker compose --profile mcp up -d mcp
+    profiles: [mcp]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    <<: *restart
+    user: "10001:10001"
+    # 0.0.0.0 is the container's own interface; the only publication below is on the
+    # host loopback, and the server additionally rejects any Host or Origin that is not
+    # localhost, 127.0.0.1, or host.docker.internal on this port. --container makes
+    # that wildcard bind an explicit, reviewed choice.
+    command:
+      - python
+      - -m
+      - healthcurve.mcp_server
+      - --transport
+      - http
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8766"
+      - --container
+    environment:
+      # View-only analyst role (docs/analytics-views.md). No application, AI, Redis,
+      # or integration credential is passed to this service.
+      HC_ANALYST_DATABASE_URL: ${HC_ANALYST_DATABASE_URL:-}
+      # Free text stays off unless HC_MCP_ALLOW_TEXT=true; only then is the text role used.
+      HC_MCP_ALLOW_TEXT: ${HC_MCP_ALLOW_TEXT:-false}
+      HC_ANALYST_TEXT_DATABASE_URL: ${HC_ANALYST_TEXT_DATABASE_URL:-}
+    ports:
+      # Loopback only. Never a LAN, wildcard, or Tailscale address.
+      - "127.0.0.1:8766:8766"
+    networks: [hc-internal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1', 8766), 2).close()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     # postgres:16-alpine
     image: postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777

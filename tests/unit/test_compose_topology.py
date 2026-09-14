@@ -90,6 +90,65 @@ def test_base_topology_preserves_the_garmin_database_path_without_the_worker() -
     )
 
 
+def _mcp_service() -> dict[str, Any]:
+    return {
+        "profiles": ["mcp"],
+        "environment": {"HC_ANALYST_DATABASE_URL": "", "HC_MCP_ALLOW_TEXT": "false"},
+        "ports": [{"host_ip": "127.0.0.1", "published": "8766", "target": 8766}],
+        "networks": {"hc-internal": None},
+        "read_only": True,
+        "cap_drop": ["ALL"],
+        "security_opt": ["no-new-privileges:true"],
+    }
+
+
+def test_accepts_the_loopback_only_mcp_server_and_rejects_widening() -> None:
+    for production in (False, True):
+        config = deepcopy(_config(production=production))
+        config["services"]["mcp"] = _mcp_service()
+        assert validate(config, production=production) == []
+
+    config = deepcopy(_config(production=False))
+    mcp = _mcp_service()
+    mcp["ports"][0]["host_ip"] = "0.0.0.0"  # noqa: S104 - the rejected binding under test
+    mcp["profiles"] = []
+    mcp["read_only"] = False
+    mcp["networks"] = {"hc-internal": None, "hc-garmin": None}
+    mcp["environment"]["HC_DATABASE_URL"] = "synthetic-placeholder"
+    config["services"]["mcp"] = mcp
+    errors = validate(config, production=False)
+    assert "mcp must publish exactly one port on 127.0.0.1" in errors
+    assert "mcp must require the mcp profile" in errors
+    assert "mcp must be read-only" in errors
+    assert "mcp must use only hc-internal" in errors
+    assert "mcp must not receive HC_DATABASE_URL" in errors
+    assert "only caddy may publish ports" not in errors
+
+    mcp["ports"].append({"host_ip": "127.0.0.1", "published": "8767", "target": 8767})
+    assert "mcp must publish exactly one port on 127.0.0.1" in validate(config, production=False)
+
+
+def test_base_compose_publishes_mcp_only_on_loopback_behind_a_profile() -> None:
+    root = Path(__file__).resolve().parents[2]
+    compose = yaml.safe_load((root / "docker-compose.yml").read_text(encoding="utf-8"))
+    mcp = compose["services"]["mcp"]
+
+    assert mcp["profiles"] == ["mcp"]
+    assert mcp["ports"] == ["127.0.0.1:8766:8766"]
+    assert mcp["networks"] == ["hc-internal"]
+    assert mcp["user"] == "10001:10001"
+    assert mcp["read_only"] is True
+    assert mcp["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert mcp["command"][:3] == ["python", "-m", "healthcurve.mcp_server"]
+    assert "--container" in mcp["command"]
+    assert "--allow-text" not in mcp["command"]
+    assert mcp["environment"] == {
+        "HC_ANALYST_DATABASE_URL": "${HC_ANALYST_DATABASE_URL:-}",
+        "HC_MCP_ALLOW_TEXT": "${HC_MCP_ALLOW_TEXT:-false}",
+        "HC_ANALYST_TEXT_DATABASE_URL": "${HC_ANALYST_TEXT_DATABASE_URL:-}",
+    }
+
+
 def test_rejects_public_or_lan_production_binding() -> None:
     config = _config(production=True)
     config["services"]["caddy"]["ports"][0]["host_ip"] = "192.168.1.5"
