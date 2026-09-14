@@ -80,3 +80,25 @@ experienced wall-clock time in the row's IANA `timezone`.
 | `analytics_text.diary_entries`, `analytics_text.life_events`, `analytics_text.record_notes`, `analytics_text.plan_slot_conditions` | text item | Free text; readable only by the text role |
 
 Modeled cortisol and exposure curves are computed in Python and are not in these views.
+
+## Query tools
+
+`healthcurve.analysis` exposes the views to local models through one versioned tool
+catalog, shared by chat and the local MCP server:
+
+- `describe_data` returns the view catalog (grain, category, columns), query conventions,
+  and example queries; passing view names returns column types, units, and meanings.
+  `healthcurve/analysis/catalog.py` is the single source of truth, and an integration
+  test fails if it drifts from the migrated views.
+- `run_query` accepts exactly one read-only `SELECT` (optionally `WITH`) over
+  schema-qualified catalog views. A PostgreSQL-dialect parser rejects writes, DDL,
+  `COPY`, `SET`, `SELECT INTO`, row locks, bind parameters, relations outside the
+  catalog, text views without text access, and functions outside an allow-list. Clock
+  functions such as `now()` and `current_date` are rejected so a stored query gives the
+  same answer when re-run; models use literal dates.
+
+Queries run on the analyst role in a read-only transaction with a 10-second statement
+timeout, a server-side cursor, a 500-row cap, and a result-size cap; results report
+truncation. Execution uses PostgreSQL's extended protocol, so the server rejects
+multiple statements even if the parser were bypassed. Rejections and database errors
+are returned to the model as short, repairable messages rather than failing the run.

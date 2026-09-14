@@ -23,6 +23,7 @@ name = Domain modules form a one-way dependency stack
 type = layers
 layers =
     healthcurve.chat
+    healthcurve.analysis
     healthcurve.reports
     healthcurve.analytics
     healthcurve.integrations
