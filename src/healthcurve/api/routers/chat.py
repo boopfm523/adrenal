@@ -8,6 +8,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session, sessionmaker
 
+from healthcurve.ai.ollama import OllamaClient
 from healthcurve.analysis.tools import AnalysisAccess
 from healthcurve.api.chat_schemas import (
     ChatConversationCreate,
@@ -17,6 +18,8 @@ from healthcurve.api.chat_schemas import (
     ChatMessageOut,
     ChatMessagePage,
     ChatMessageStalenessOut,
+    ChatModelList,
+    ChatModelOut,
     ChatUserMessageCreate,
 )
 from healthcurve.api.deps import (
@@ -32,6 +35,7 @@ from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.chat import service
 from healthcurve.chat.jobs import check_source_staleness, enqueue_chat_response
 from healthcurve.chat.models import ChatConversation, ChatMessage, ChatMessageState, ChatRole
+from healthcurve.config import Settings
 from healthcurve.db import get_analyst_engine, get_analyst_text_engine
 from healthcurve.identity.models import Owner
 from healthcurve.operations import audit
@@ -39,6 +43,27 @@ from healthcurve.operations.audit import AuditAction
 from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+@router.get("/models", response_model=ChatModelList)
+def list_chat_models(settings: AppSettings, owner: CurrentOwner) -> ChatModelList:
+    """Installed local Ollama models that can run analytical chat; never cloud models."""
+    del owner  # authentication only
+    installed = OllamaClient(settings).chat_models()
+    return ChatModelList(
+        default_model=settings.ollama_model,
+        ollama_reachable=installed is not None,
+        models=[
+            ChatModelOut(
+                name=model.name,
+                parameter_size=model.parameter_size,
+                thinking=model.thinking,
+                vision=model.vision,
+                default=model.name == settings.ollama_model,
+            )
+            for model in installed or ()
+        ],
+    )
 
 
 @router.get("/conversations", response_model=ChatConversationPage)
@@ -64,13 +89,18 @@ def list_conversations(
     dependencies=[Depends(require_csrf)],
 )
 def create_conversation(
-    payload: ChatConversationCreate, session: DbSession, owner: CurrentOwner
+    payload: ChatConversationCreate,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
 ) -> ChatConversationOut:
+    _require_local_chat_model(settings, payload.model_name)
     conversation = service.create_conversation(
         session,
         owner_id=owner.id,
         title=payload.title,
         include_sensitive_text=payload.include_sensitive_text,
+        model_name=payload.model_name,
     )
     audit.record(
         session,
@@ -117,13 +147,19 @@ def update_conversation(
     payload: ChatConversationUpdate,
     session: DbSession,
     owner: CurrentOwner,
+    settings: AppSettings,
 ) -> ChatConversationOut:
     conversation = _owned_conversation(session, owner.id, conversation_id)
     changed_fields = sorted(payload.model_fields_set)
+    update_model = "model_name" in payload.model_fields_set
+    if update_model:
+        _require_local_chat_model(settings, payload.model_name)
     service.update_conversation(
         conversation,
         title=payload.title,
         include_sensitive_text=payload.include_sensitive_text,
+        update_model=update_model,
+        model_name=payload.model_name,
     )
     audit.record(
         session,
@@ -331,6 +367,17 @@ def _owned_conversation(
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
     return conversation
+
+
+def _require_local_chat_model(settings: Settings, model_name: str | None) -> None:
+    """Accept only the default or an installed local tool-calling model (ADR-0036)."""
+    if model_name is None or model_name == settings.ollama_model:
+        return
+    installed = OllamaClient(settings).chat_models() or ()
+    if all(model.name != model_name for model in installed):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="chat_model_not_available"
+        )
 
 
 def _conversation_out(conversation: ChatConversation) -> ChatConversationOut:

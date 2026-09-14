@@ -15,6 +15,7 @@ vi.mock("../api/client", async (importOriginal) => {
     getChatConversations: vi.fn(),
     getChatMessages: vi.fn(),
     getChatMessageStaleness: vi.fn(),
+    getChatModels: vi.fn(),
     createChatConversation: vi.fn(),
     updateChatConversation: vi.fn(),
     deleteChatConversation: vi.fn(),
@@ -28,6 +29,7 @@ const conversation: api.ChatConversation = {
   id: "00000000-0000-4000-8000-000000000001",
   title: "Review yesterday",
   include_sensitive_text: false,
+  model_name: null,
   created_at: "2026-08-16T12:00:00Z",
   updated_at: "2026-08-16T12:01:00Z",
   last_message_at: "2026-08-16T12:01:00Z",
@@ -60,10 +62,18 @@ function message(overrides: Partial<api.ChatMessage>): api.ChatMessage {
   };
 }
 
-function renderChat(messages: api.ChatMessage[]): void {
-  vi.mocked(api.getChatConversations).mockResolvedValue({ items: [conversation], page: { page: 1, page_size: 50, total_items: 1, total_pages: 1 } });
+function renderChat(messages: api.ChatMessage[], conversations: api.ChatConversation[] = [conversation]): void {
+  vi.mocked(api.getChatConversations).mockResolvedValue({ items: conversations, page: { page: 1, page_size: 50, total_items: conversations.length, total_pages: 1 } });
   vi.mocked(api.getChatMessages).mockResolvedValue({ items: messages, page: { page: 1, page_size: 100, total_items: messages.length, total_pages: 1 } });
   vi.mocked(api.getChatMessageStaleness).mockResolvedValue({ status: "fresh", stale: false, checked_at: "2026-08-16T12:02:00Z" });
+  vi.mocked(api.getChatModels).mockResolvedValue({
+    default_model: "synthetic-local-model",
+    ollama_reachable: true,
+    models: [
+      { name: "synthetic-local-model", parameter_size: "27B", thinking: true, vision: false, default: true },
+      { name: "synthetic-other-model", parameter_size: "30B", thinking: false, vision: true, default: false },
+    ],
+  });
   render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/chat"]}><ChatPage /></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 }
 
@@ -146,6 +156,26 @@ describe("HealthCurve Chat page", () => {
     await waitFor(() => { expect(api.sendChatMessage).toHaveBeenCalledWith(conversation.id, "Compare stress and symptoms yesterday", expect.any(String)); });
     await user.click(screen.getByLabelText("Include diary, life-event, and note text"));
     await waitFor(() => { expect(api.updateChatConversation).toHaveBeenCalledWith(conversation.id, { include_sensitive_text: true }); });
+  });
+
+  it("lets the owner choose another installed local model for the conversation", async () => {
+    renderChat([]);
+    vi.mocked(api.updateChatConversation).mockResolvedValue({ ...conversation, model_name: "synthetic-other-model" });
+    const user = userEvent.setup();
+    const picker = (await screen.findAllByLabelText("Model")).find((element) => element.tagName === "INPUT");
+    if (picker === undefined) throw new Error("model picker input missing");
+    // jsdom has no scrollIntoView; the Mantine dropdown scrolls to the selected option.
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    await waitFor(() => { expect(picker).toHaveValue("synthetic-local-model · default, evaluated"); });
+    await user.click(picker);
+    // The dropdown is still in its opening transition, so include not-yet-visible options.
+    await user.click(await screen.findByRole("option", { name: "synthetic-other-model · no thinking · vision", hidden: true }));
+    await waitFor(() => { expect(api.updateChatConversation).toHaveBeenCalledWith(conversation.id, { model_name: "synthetic-other-model" }); });
+  });
+
+  it("warns that a non-default model is not evaluated", async () => {
+    renderChat([], [{ ...conversation, model_name: "synthetic-other-model" }]);
+    expect(await screen.findByText(/Only the default model \(synthetic-local-model\) is evaluated/)).toBeVisible();
   });
 
   it("collapses and restores the entire New chat and history rail", async () => {

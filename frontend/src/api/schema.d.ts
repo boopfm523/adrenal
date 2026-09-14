@@ -399,6 +399,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Chat Models
+         * @description Installed local Ollama models that can run analytical chat; never cloud models.
+         */
+        get: operations["list_chat_models_api_v1_chat_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/context-events": {
         parameters: {
             query?: never;
@@ -1895,6 +1915,8 @@ export interface components {
              * @default false
              */
             include_sensitive_text: boolean;
+            /** Model Name */
+            model_name?: string | null;
             /**
              * Title
              * @default New conversation
@@ -1923,6 +1945,8 @@ export interface components {
             include_sensitive_text: boolean;
             /** Last Message At */
             last_message_at: string | null;
+            /** Model Name */
+            model_name: string | null;
             /** Retention Expires At */
             retention_expires_at: string | null;
             /** Title */
@@ -1943,6 +1967,8 @@ export interface components {
         ChatConversationUpdate: {
             /** Include Sensitive Text */
             include_sensitive_text?: boolean | null;
+            /** Model Name */
+            model_name?: string | null;
             /** Title */
             title?: string | null;
         };
@@ -2038,6 +2064,28 @@ export interface components {
          * @enum {string}
          */
         ChatMessageState: "accepted" | "queued" | "planning" | "reading" | "generating" | "completed" | "cancelled" | "unavailable" | "timed_out" | "invalid" | "failed";
+        /** ChatModelList */
+        ChatModelList: {
+            /** Default Model */
+            default_model: string;
+            /** Models */
+            models: components["schemas"]["ChatModelOut"][];
+            /** Ollama Reachable */
+            ollama_reachable: boolean;
+        };
+        /** ChatModelOut */
+        ChatModelOut: {
+            /** Default */
+            default: boolean;
+            /** Name */
+            name: string;
+            /** Parameter Size */
+            parameter_size: string | null;
+            /** Thinking */
+            thinking: boolean;
+            /** Vision */
+            vision: boolean;
+        };
         /**
          * ChatRole
          * @enum {string}
@@ -6531,6 +6579,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatMessageStalenessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_chat_models_api_v1_chat_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatModelList"];
                 };
             };
             /** @description Validation Error */

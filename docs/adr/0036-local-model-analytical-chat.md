@@ -103,6 +103,13 @@ routes, the one-shot planner, and regex date overrides are removed. The model st
 the time scope it used. When the owner gives none, it picks a reasonable scope and
 says so.
 
+- The default chat model is `HC_OLLAMA_MODEL`, the model the evaluation sets gate. The
+  owner may choose another model per conversation, but only from models installed in
+  the local Ollama that report tool-calling support; Ollama cloud or remote models are
+  never listed or accepted. The choice is re-checked when each answer runs, thinking is
+  requested only from models that support it, and each answer's provenance records the
+  model name and digest. Non-default models are not evaluated, and loading one can
+  unload the default model from memory; the chat UI says so.
 - Thinking is enabled by default (`HC_CHAT_THINKING=true`). Thinking text is transient
   C9 data: never persisted, logged, or shown.
 - The context window comes from configuration. Tool results are budgeted and truncated

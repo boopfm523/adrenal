@@ -41,7 +41,7 @@ from healthcurve.ai.models import (
     ExtractionDraft,
     TelegramConversationContext,
 )
-from healthcurve.ai.ollama import ModelOutcome, ModelResult, OllamaClient
+from healthcurve.ai.ollama import LocalChatModel, ModelOutcome, ModelResult, OllamaClient
 from healthcurve.analytics import day_analysis as day_analysis_service
 from healthcurve.analytics import exposure, wake_pharmacokinetics, wake_reference_inputs
 from healthcurve.analytics import service as analytics_service
@@ -9169,6 +9169,56 @@ def test_common_views_meet_latency_targets_on_six_year_synthetic_volume(
         finally:
             session.close()
             transaction.rollback()
+
+
+def test_chat_model_choice_accepts_only_installed_local_models(
+    client: TestClient, logged_in: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the default or an installed local tool-calling model can be chosen."""
+    installed = (
+        LocalChatModel(
+            name="synthetic-other:30b",
+            digest="d" * 64,
+            parameter_size="30B",
+            thinking=False,
+            vision=True,
+        ),
+    )
+
+    def installed_models(_self: OllamaClient) -> tuple[LocalChatModel, ...]:
+        return installed
+
+    monkeypatch.setattr(OllamaClient, "chat_models", installed_models)
+
+    listed = client.get("/api/v1/chat/models", headers=logged_in)
+    assert listed.status_code == 200
+    assert listed.json()["ollama_reachable"] is True
+    assert [model["name"] for model in listed.json()["models"]] == ["synthetic-other:30b"]
+    assert listed.json()["models"][0]["default"] is False
+
+    created = client.post(
+        "/api/v1/chat/conversations",
+        headers=logged_in,
+        json={"title": "Synthetic model choice"},
+    )
+    assert created.status_code == 201
+    assert created.json()["model_name"] is None
+    conversation_id = created.json()["id"]
+    path = f"/api/v1/chat/conversations/{conversation_id}"
+
+    rejected = client.patch(path, headers=logged_in, json={"model_name": "synthetic-remote:cloud"})
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"] == "chat_model_not_available"
+
+    chosen = client.patch(path, headers=logged_in, json={"model_name": "synthetic-other:30b"})
+    assert chosen.status_code == 200
+    assert chosen.json()["model_name"] == "synthetic-other:30b"
+
+    reset = client.patch(path, headers=logged_in, json={"model_name": None})
+    assert reset.status_code == 200
+    assert reset.json()["model_name"] is None
+    # Leave the shared synthetic owner's conversation count unchanged for later tests.
+    assert client.delete(path, headers=logged_in).status_code == 204
 
 
 def test_chat_conversation_lifecycle_is_owner_scoped_bounded_and_non_authoritative(

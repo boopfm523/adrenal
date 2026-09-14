@@ -567,6 +567,19 @@
             "title": "Include Sensitive Text",
             "type": "boolean"
           },
+          "model_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
           "title": {
             "default": "New conversation",
             "maxLength": 120,
@@ -613,6 +626,17 @@
             ],
             "title": "Last Message At"
           },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
           "retention_expires_at": {
             "anyOf": [
               {
@@ -639,6 +663,7 @@
           "id",
           "title",
           "include_sensitive_text",
+          "model_name",
           "created_at",
           "updated_at",
           "last_message_at",
@@ -681,6 +706,19 @@
               }
             ],
             "title": "Include Sensitive Text"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
           },
           "title": {
             "anyOf": [
@@ -976,6 +1014,74 @@
         ],
         "title": "ChatMessageState",
         "type": "string"
+      },
+      "ChatModelList": {
+        "additionalProperties": false,
+        "properties": {
+          "default_model": {
+            "title": "Default Model",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ChatModelOut"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "ollama_reachable": {
+            "title": "Ollama Reachable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "default_model",
+          "ollama_reachable",
+          "models"
+        ],
+        "title": "ChatModelList",
+        "type": "object"
+      },
+      "ChatModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameter_size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameter Size"
+          },
+          "thinking": {
+            "title": "Thinking",
+            "type": "boolean"
+          },
+          "vision": {
+            "title": "Vision",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "parameter_size",
+          "thinking",
+          "vision",
+          "default"
+        ],
+        "title": "ChatModelOut",
+        "type": "object"
       },
       "ChatRole": {
         "enum": [
@@ -13937,6 +14043,56 @@
           }
         },
         "summary": "Get Message Staleness",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/models": {
+      "get": {
+        "description": "Installed local Ollama models that can run analytical chat; never cloud models.",
+        "operationId": "list_chat_models_api_v1_chat_models_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatModelList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Chat Models",
         "tags": [
           "chat"
         ]

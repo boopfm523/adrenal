@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Checkbox, Group, Loader, Textarea } from "@mantine/core";
+import { Alert, Button, Checkbox, Group, Loader, Select, Textarea } from "@mantine/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -8,6 +8,7 @@ import {
   deleteChatConversation,
   getChatConversations,
   getChatMessages,
+  getChatModels,
   getChatMessageStaleness,
   sendChatMessage,
   updateChatConversation,
@@ -41,6 +42,7 @@ const errorExplanations: Record<string, string> = {
   chat_answer_medication_guidance: "The answer read as medication advice, which HealthCurve never provides.",
   chat_turn_budget_exhausted: "The private model used its whole query budget without finishing. Try a narrower question.",
   chat_run_timed_out: "The private model ran out of time. Try a narrower question or a shorter period.",
+  chat_model_not_available: "The model chosen for this conversation is no longer installed in local Ollama. Pick another model.",
 };
 
 function stringField(record: Record<string, unknown>, key: string): string | null {
@@ -237,6 +239,15 @@ export function ChatPage(): React.JSX.Element {
   const createConversation = useMutation({ mutationFn: () => createChatConversation(), onSuccess: async (conversation) => { setSelectedId(conversation.id); await queryClient.invalidateQueries({ queryKey: ["chat-conversations"] }); } });
   const removeConversation = useMutation({ mutationFn: (id: string) => deleteChatConversation(id), onSuccess: async (_data, id) => { if (effectiveSelectedId === id) setSelectedId(null); await queryClient.invalidateQueries({ queryKey: ["chat-conversations"] }); } });
   const updateConversation = useMutation({ mutationFn: ({ id, includeSensitiveText }: { id: string; includeSensitiveText: boolean }) => updateChatConversation(id, { include_sensitive_text: includeSensitiveText }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["chat-conversations"] }); } });
+  const models = useQuery({ queryKey: ["chat-models"], queryFn: getChatModels, staleTime: 60_000 });
+  const updateModel = useMutation({ mutationFn: ({ id, modelName }: { id: string; modelName: string | null }) => updateChatConversation(id, { model_name: modelName }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["chat-conversations"] }); } });
+  const defaultModel = models.data?.default_model ?? null;
+  const chosenModel = selected?.model_name ?? defaultModel;
+  const modelOptions = (models.data?.models ?? []).map((model) => ({
+    value: model.name,
+    label: [model.name, model.default ? "default, evaluated" : null, model.thinking ? null : "no thinking", model.vision ? "vision" : null].filter((part) => part !== null).join(" · "),
+  }));
+  if (chosenModel !== null && !modelOptions.some((option) => option.value === chosenModel)) modelOptions.push({ value: chosenModel, label: `${chosenModel} · not installed` });
   const send = useMutation({
     mutationFn: ({ conversationId, body }: { conversationId: string; body: string }) => sendChatMessage(conversationId, body, newClientMessageId()),
     onSuccess: async (_message, variables) => {
@@ -272,7 +283,26 @@ export function ChatPage(): React.JSX.Element {
           {conversations.isError ? <Alert color="red" role="alert">Conversations could not be loaded.</Alert> : null}
           {selected === null ? <div className="chat-welcome"><h2>Start a conversation</h2><p>Ask about a day, a trend, recorded symptoms, doses, episodes, sleep, or Garmin observations.</p><Button onClick={() => { createConversation.mutate(); }} loading={createConversation.isPending}>New chat</Button></div> : (
             <>
-              <header className="chat-panel__header"><div><h2>{selected.title}</h2><span className="category-label">AI conversation</span></div><Checkbox checked={selected.include_sensitive_text} label="Include diary, life-event, and note text" onChange={(event) => { updateConversation.mutate({ id: selected.id, includeSensitiveText: event.currentTarget.checked }); }} /></header>
+              <div className="chat-panel__top">
+              <header className="chat-panel__header">
+                <div><h2>{selected.title}</h2><span className="category-label">AI conversation</span></div>
+                <div className="chat-panel__controls">
+                  <Select
+                    label="Model"
+                    size="xs"
+                    data={modelOptions}
+                    value={chosenModel}
+                    allowDeselect={false}
+                    disabled={models.data === undefined || activeAssistant !== undefined || updateModel.isPending}
+                    onChange={(value) => { if (value !== null && value !== chosenModel) updateModel.mutate({ id: selected.id, modelName: value === defaultModel ? null : value }); }}
+                  />
+                  <Checkbox checked={selected.include_sensitive_text} label="Include diary, life-event, and note text" onChange={(event) => { updateConversation.mutate({ id: selected.id, includeSensitiveText: event.currentTarget.checked }); }} />
+                </div>
+              </header>
+              {models.data?.ollama_reachable === false ? <p className="chat-model-note" role="status">Local Ollama could not be reached to list installed models.</p> : null}
+              {updateModel.isError ? <p className="chat-model-note" role="alert">That model could not be selected. It may no longer be installed locally.</p> : null}
+              {chosenModel !== null && defaultModel !== null && chosenModel !== defaultModel ? <p className="chat-model-note" role="note">Only the default model ({defaultModel}) is evaluated for answer accuracy. Loading another model can unload the default from memory, so the next answer with it may take longer. Chat uses text only, even with vision models.</p> : null}
+              </div>
               <div className="chat-messages" aria-live="polite" aria-busy={activeAssistant !== undefined}>
                 {messages.isPending ? <p role="status">Loading conversation…</p> : null}
                 {messages.isError ? <Alert color="red" role="alert">This conversation could not be loaded.</Alert> : null}

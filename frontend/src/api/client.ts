@@ -81,6 +81,7 @@ export type GarminRecords = components["schemas"]["GarminRecordsOut"];
 export type GarminDisconnectPreview = components["schemas"]["GarminDisconnectPreviewOut"];
 export type ChatConversation = components["schemas"]["ChatConversationOut"];
 export type ChatConversationPage = components["schemas"]["ChatConversationPage"];
+export type ChatModelList = components["schemas"]["ChatModelList"];
 export type ChatMessage = components["schemas"]["ChatMessageOut"];
 export type ChatMessagePage = components["schemas"]["ChatMessagePage"];
 export type ChatMessageStaleness = components["schemas"]["ChatMessageStalenessOut"];
@@ -927,7 +928,11 @@ export function createChatConversation(includeSensitiveText = false): Promise<Ch
   });
 }
 
-export function updateChatConversation(id: string, payload: { title?: string; include_sensitive_text?: boolean }): Promise<ChatConversation> {
+export function getChatModels(): Promise<ChatModelList> {
+  return apiRequest<ChatModelList>("/chat/models");
+}
+
+export function updateChatConversation(id: string, payload: { title?: string; include_sensitive_text?: boolean; model_name?: string | null }): Promise<ChatConversation> {
   return apiRequest<ChatConversation>(`/chat/conversations/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload),

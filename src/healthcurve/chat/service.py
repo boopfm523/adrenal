@@ -41,11 +41,13 @@ def create_conversation(
     owner_id: uuid.UUID,
     title: str = "New conversation",
     include_sensitive_text: bool = False,
+    model_name: str | None = None,
 ) -> ChatConversation:
     conversation = ChatConversation(
         owner_id=owner_id,
         title=title.strip(),
         include_sensitive_text=include_sensitive_text,
+        model_name=model_name,
     )
     session.add(conversation)
     session.flush()
@@ -90,11 +92,15 @@ def update_conversation(
     *,
     title: str | None = None,
     include_sensitive_text: bool | None = None,
+    update_model: bool = False,
+    model_name: str | None = None,
 ) -> ChatConversation:
     if title is not None:
         conversation.title = title.strip()
     if include_sensitive_text is not None:
         conversation.include_sensitive_text = include_sensitive_text
+    if update_model:
+        conversation.model_name = model_name
     conversation.updated_at = datetime.now(UTC)
     return conversation
 

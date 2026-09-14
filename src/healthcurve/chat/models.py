@@ -72,6 +72,8 @@ class ChatConversation(AIBase):
     include_sensitive_text: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # Local Ollama model chosen for this conversation; NULL uses HC_OLLAMA_MODEL.
+    model_name: Mapped[str | None] = mapped_column(String(200))
     rolling_summary: Mapped[str | None] = mapped_column(Text)
     retention_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

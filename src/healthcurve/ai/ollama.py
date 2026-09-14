@@ -264,6 +264,25 @@ class CircuitBreaker:
             self._opened_at = time.monotonic()
 
 
+@dataclass(frozen=True, slots=True)
+class LocalChatModel:
+    """A model installed in the local Ollama that can run tool-calling chat."""
+
+    name: str
+    digest: str
+    parameter_size: str | None
+    thinking: bool
+    vision: bool
+
+
+def _is_remote(entry: Mapping[str, Any]) -> bool:
+    # Ollama cloud models forward prompts to a remote service; private data stays local.
+    name = str(entry.get("name") or entry.get("model") or "")
+    return bool(entry.get("remote_host") or entry.get("remote_model")) or name.endswith(
+        ("-cloud", ":cloud")
+    )
+
+
 class OllamaClient:
     """Schema-constrained JSON generation against a private Ollama."""
 
@@ -294,6 +313,53 @@ class OllamaClient:
                 if isinstance(digest, str) and digest:
                     return ModelIdentity(name=selected_model, digest=digest)
         return None
+
+    def for_model(self, model_name: str) -> OllamaClient:
+        """A client whose default model is ``model_name``; every other setting is shared."""
+        return OllamaClient(self._settings.model_copy(update={"ollama_model": model_name}))
+
+    def chat_models(self) -> tuple[LocalChatModel, ...] | None:
+        """Installed local models that support tool calling; None when Ollama is unreachable.
+
+        Remote (Ollama cloud) models are never listed: private health data must not leave
+        this computer (ADR-0036). Only metadata is read, so no model is loaded.
+        """
+        models: list[LocalChatModel] = []
+        try:
+            with httpx.Client(
+                base_url=self._settings.ollama_base_url, timeout=httpx.Timeout(5.0)
+            ) as client:
+                response = client.get("/api/tags")
+                response.raise_for_status()
+                for entry in response.json().get("models", []):
+                    if not isinstance(entry, dict) or _is_remote(entry):
+                        continue
+                    name, digest = entry.get("name"), entry.get("digest")
+                    if not isinstance(name, str) or not isinstance(digest, str) or not digest:
+                        continue
+                    shown = client.post("/api/show", json={"model": name})
+                    if not shown.is_success:
+                        continue
+                    detail = shown.json()
+                    if not isinstance(detail, dict) or _is_remote(detail):
+                        continue
+                    capabilities = detail.get("capabilities") or []
+                    if "tools" not in capabilities or "completion" not in capabilities:
+                        continue
+                    details = entry.get("details")
+                    size = details.get("parameter_size") if isinstance(details, dict) else None
+                    models.append(
+                        LocalChatModel(
+                            name=name,
+                            digest=digest,
+                            parameter_size=size if isinstance(size, str) else None,
+                            thinking="thinking" in capabilities,
+                            vision="vision" in capabilities,
+                        )
+                    )
+        except (httpx.HTTPError, ValueError, AttributeError):
+            return None
+        return tuple(sorted(models, key=lambda model: model.name))
 
     def generate_json(
         self,

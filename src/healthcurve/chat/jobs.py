@@ -144,6 +144,32 @@ def _message_id(payload: Mapping[str, object]) -> uuid.UUID:
         raise JobQueueError("chat_job_payload_invalid") from exc
 
 
+@dataclass(frozen=True, slots=True)
+class _ModelChoice:
+    client: OllamaClient
+    think: bool
+    available: bool
+
+
+def _choose_model(client: OllamaClient, settings: Settings, model_name: str | None) -> _ModelChoice:
+    """Bind the conversation's chosen local model, re-checked when the answer runs.
+
+    The default model keeps its configured behavior. Any other choice must still be an
+    installed local tool-calling model, and thinking is requested only if it supports it.
+    """
+    if model_name is None or model_name == settings.ollama_model:
+        return _ModelChoice(client=client, think=settings.chat_thinking, available=True)
+    installed = client.chat_models() or ()
+    chosen = next((model for model in installed if model.name == model_name), None)
+    if chosen is None:
+        return _ModelChoice(client=client, think=False, available=False)
+    return _ModelChoice(
+        client=client.for_model(chosen.name),
+        think=settings.chat_thinking and chosen.thinking,
+        available=True,
+    )
+
+
 def make_chat_response_handler(
     factory: sessionmaker[Session],
     *,
@@ -183,6 +209,7 @@ def make_chat_response_handler(
                 raise JobQueueError("chat_source_missing")
             question = source.body
             include_text = conversation.include_sensitive_text
+            chosen_model = conversation.model_name
             context = service.bounded_context(
                 session,
                 owner_id=owner_id,
@@ -258,24 +285,30 @@ def make_chat_response_handler(
                     )
                 )
 
+        choice = _choose_model(client, settings, chosen_model)
         try:
-            result = orchestration.run(
-                question=question,
-                context=context,
-                tools=tool_definitions(access),
-                execute_tool=run_tool,
-                client=client,
-                current_local_datetime=current_local_datetime,
-                default_timezone=default_timezone,
-                allow_text=include_text,
-                analysis_configured=query_engine is not None,
-                think=settings.chat_thinking,
-                context_window=settings.chat_context_window or settings.ollama_context_window,
-                max_output_tokens=settings.chat_max_output_tokens,
-                read_timeout_s=settings.chat_read_timeout_s,
-                observe_state=observe_state,
-                observe_tool=observe_tool,
-            )
+            if not choice.available:
+                result = orchestration.OrchestrationResult(
+                    state=ChatMessageState.UNAVAILABLE, error_code="chat_model_not_available"
+                )
+            else:
+                result = orchestration.run(
+                    question=question,
+                    context=context,
+                    tools=tool_definitions(access),
+                    execute_tool=run_tool,
+                    client=choice.client,
+                    current_local_datetime=current_local_datetime,
+                    default_timezone=default_timezone,
+                    allow_text=include_text,
+                    analysis_configured=query_engine is not None,
+                    think=choice.think,
+                    context_window=settings.chat_context_window or settings.ollama_context_window,
+                    max_output_tokens=settings.chat_max_output_tokens,
+                    read_timeout_s=settings.chat_read_timeout_s,
+                    observe_state=observe_state,
+                    observe_tool=observe_tool,
+                )
         except _ChatCancelled:
             return
         except Exception:
