@@ -204,6 +204,36 @@ def test_development_may_omit_the_ai_role() -> None:
     assert _settings(environment=Environment.DEV).ai_database_url is None
 
 
+def test_analyst_urls_must_not_reuse_a_broader_role() -> None:
+    """Model-authored SQL must run as a view-only role (ADR-0036)."""
+    main = "postgresql+psycopg://healthcurve@postgres:5432/healthcurve"
+    ai = "postgresql+psycopg://healthcurve_ai@postgres:5432/healthcurve"
+    with pytest.raises(ValueError, match="HC_ANALYST_DATABASE_URL must not reuse"):
+        _settings(database_url=main, ai_database_url=ai, analyst_database_url=ai)
+    with pytest.raises(ValueError, match="HC_ANALYST_TEXT_DATABASE_URL must not reuse"):
+        _settings(database_url=main, analyst_text_database_url=main)
+
+
+def test_analyst_and_text_roles_must_be_distinct() -> None:
+    """Free text is readable only through the opt-in text role."""
+    url = "postgresql+psycopg://healthcurve_analyst@postgres:5432/healthcurve"
+    with pytest.raises(ValueError, match="must differ"):
+        _settings(analyst_database_url=url, analyst_text_database_url=url)
+
+
+def test_analyst_roles_are_optional_and_accept_distinct_urls() -> None:
+    assert _settings().analyst_database_url is None
+    assert _settings().analyst_text_database_url is None
+    settings = _settings(
+        analyst_database_url="postgresql+psycopg://healthcurve_analyst@postgres:5432/healthcurve",
+        analyst_text_database_url=(
+            "postgresql+psycopg://healthcurve_analyst_text@postgres:5432/healthcurve"
+        ),
+    )
+    assert settings.analyst_database_url is not None
+    assert settings.analyst_text_database_url is not None
+
+
 def test_the_chat_allow_list_is_required_in_both_modes() -> None:
     """A bot that answers anyone is a bot anyone can put data into."""
     for mode in (TelegramMode.POLLING, TelegramMode.WEBHOOK):

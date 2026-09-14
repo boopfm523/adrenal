@@ -12,7 +12,10 @@ from pathlib import Path
 
 from healthcurve.config import Settings
 
-_VARIABLE = re.compile(r"\b(?:HC_[A-Z0-9_]+|POSTGRES_(?:PASSWORD|AI_PASSWORD|BACKUP_PASSWORD))\b")
+_VARIABLE = re.compile(
+    r"\b(?:HC_[A-Z0-9_]+|POSTGRES_(?:PASSWORD|AI_PASSWORD|BACKUP_PASSWORD"
+    r"|ANALYST_PASSWORD|ANALYST_TEXT_PASSWORD))\b"
+)
 _ASSIGNMENT = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]*)\s*=(.*)$")
 
 # These names are intentionally created inside trusted runners or fixed by Compose.
@@ -50,6 +53,8 @@ OPERATOR_EXTRAS = {
     "POSTGRES_PASSWORD",
     "POSTGRES_AI_PASSWORD",
     "POSTGRES_BACKUP_PASSWORD",
+    "POSTGRES_ANALYST_PASSWORD",
+    "POSTGRES_ANALYST_TEXT_PASSWORD",
 }
 
 # Values that could identify an owner, reveal a credential, or disclose a private
@@ -59,6 +64,8 @@ MUST_BE_EMPTY = {
     "POSTGRES_PASSWORD",
     "POSTGRES_AI_PASSWORD",
     "POSTGRES_BACKUP_PASSWORD",
+    "POSTGRES_ANALYST_PASSWORD",
+    "POSTGRES_ANALYST_TEXT_PASSWORD",
     "HC_ALERT_URL",
     "HC_BACKUP_LOCAL_DIR",
     "HC_BACKUP_OFFSITE_CREDENTIAL_FILE",

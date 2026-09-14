@@ -101,6 +101,12 @@ class Settings(BaseSettings):
     #: Unset means the AI path shares the privileged connection, which downgrades those
     #: rules from a database privilege to a convention -- refused in production.
     ai_database_url: str | None = None
+    #: View-only role for model-authored analytical queries (ADR-0036). It can read only
+    #: the curated ``analytics`` views. Unset disables analytical tools; there is no
+    #: fallback to a broader connection.
+    analyst_database_url: str | None = None
+    #: The same boundary plus opt-in free text in ``analytics_text``.
+    analyst_text_database_url: str | None = None
 
     # --- Local LLM (ADR-0003). Never public. ---
     ollama_base_url: str = "http://ollama:11434"
@@ -251,6 +257,29 @@ class Settings(BaseSettings):
             raise ValueError(
                 "HC_AI_DATABASE_URL must not equal HC_DATABASE_URL: pointing both at "
                 "the same role defeats SAFE-15/16 while appearing to satisfy them.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_analyst_roles_are_separate(self) -> Self:
+        """Analytical queries must run as a view-only role, never a broader one."""
+        broader = {self.database_url, self.ai_database_url} - {None}
+        for name, url in (
+            ("HC_ANALYST_DATABASE_URL", self.analyst_database_url),
+            ("HC_ANALYST_TEXT_DATABASE_URL", self.analyst_text_database_url),
+        ):
+            if url is not None and url in broader:
+                raise ValueError(
+                    f"{name} must not reuse HC_DATABASE_URL or HC_AI_DATABASE_URL: "
+                    "model-authored queries must run as a view-only role (ADR-0036)."
+                )
+        if (
+            self.analyst_database_url is not None
+            and self.analyst_database_url == self.analyst_text_database_url
+        ):
+            raise ValueError(
+                "HC_ANALYST_DATABASE_URL and HC_ANALYST_TEXT_DATABASE_URL must differ: "
+                "free text is readable only through the opt-in text role (ADR-0036)."
             )
         return self
 

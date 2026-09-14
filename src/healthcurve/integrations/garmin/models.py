@@ -365,6 +365,8 @@ class GarminSleepEvent(GarminSourceMixin, EventMixin, FactBase):
             "(garmin_import_batch_id IS NULL AND garmin_sync_run_id IS NOT NULL)",
             name="garmin_sleep_exactly_one_source",
         ),
+        # Wake-date selection filters on the session end, not its start.
+        Index("ix_garmin_sleep_event_ended_at", "ended_at"),
         *event_table_args("garmin_sleep_event"),
     )
 

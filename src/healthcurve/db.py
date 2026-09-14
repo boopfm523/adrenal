@@ -221,6 +221,24 @@ def get_ai_engine() -> Engine:
 
 
 @lru_cache(maxsize=1)
+def get_analyst_engine() -> Engine | None:
+    """Engine for the view-only analyst role (ADR-0036), or None when not configured.
+
+    There is deliberately no fallback: model-authored SQL must never run on a
+    connection that can read base tables or write anything.
+    """
+    url = get_settings().analyst_database_url
+    return None if url is None else build_engine(url)
+
+
+@lru_cache(maxsize=1)
+def get_analyst_text_engine() -> Engine | None:
+    """Engine for the analyst role that may also read opt-in free text (ADR-0036)."""
+    url = get_settings().analyst_text_database_url
+    return None if url is None else build_engine(url)
+
+
+@lru_cache(maxsize=1)
 def get_session_factory() -> sessionmaker[Session]:
     return sessionmaker(get_engine(), expire_on_commit=False)
 

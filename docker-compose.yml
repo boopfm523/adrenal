@@ -43,6 +43,10 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       # Used only where model output becomes a draft (SAFE-15/16).
       HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
+      # View-only roles for model-authored analytical queries (ADR-0036). Optional;
+      # set full URLs in .env after enabling login with 03-analyst-roles.sh.
+      HC_ANALYST_DATABASE_URL: ${HC_ANALYST_DATABASE_URL:-}
+      HC_ANALYST_TEXT_DATABASE_URL: ${HC_ANALYST_TEXT_DATABASE_URL:-}
       # Host-native Ollama is the owner runtime so Apple Metal remains available and
       # large model storage is not duplicated in Docker. Must remain private.
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
@@ -133,6 +137,10 @@ services:
       HC_DATABASE_URL: postgresql+psycopg://healthcurve:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/healthcurve
       # Used only where model output becomes a draft. Denied writes on fact and plan.
       HC_AI_DATABASE_URL: postgresql+psycopg://healthcurve_ai:${POSTGRES_AI_PASSWORD:?set POSTGRES_AI_PASSWORD}@postgres:5432/healthcurve
+      # View-only roles for model-authored analytical queries (ADR-0036). Optional;
+      # set full URLs in .env after enabling login with 03-analyst-roles.sh.
+      HC_ANALYST_DATABASE_URL: ${HC_ANALYST_DATABASE_URL:-}
+      HC_ANALYST_TEXT_DATABASE_URL: ${HC_ANALYST_TEXT_DATABASE_URL:-}
       # Same private host-native model endpoint used by the API (ADR-0017).
       HC_OLLAMA_BASE_URL: ${HC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       HC_OLLAMA_MODEL: ${HC_OLLAMA_MODEL:-qwen3:30b}
@@ -209,6 +217,10 @@ services:
       # deploy/postgres-init creates a dedicated read-only dump role. Existing volumes
       # use the same idempotent script manually; see the backup runbook.
       POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:-}
+      # Optional. deploy/postgres-init/03-analyst-roles.sh enables login for the
+      # view-only analyst roles (ADR-0036); existing volumes run it manually.
+      POSTGRES_ANALYST_PASSWORD: ${POSTGRES_ANALYST_PASSWORD:-}
+      POSTGRES_ANALYST_TEXT_PASSWORD: ${POSTGRES_ANALYST_TEXT_PASSWORD:-}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
