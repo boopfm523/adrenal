@@ -134,6 +134,7 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .chat-message__label { margin-bottom: 0.35rem; font-family: "Rubik-SemiBold", sans-serif; font-size: 0.8rem; }
 .chat-message__body { margin: 0; white-space: pre-wrap; }
 .chat-message__working { display: flex; align-items: center; gap: 0.5rem; color: var(--hc-color-text-muted); }
+.chat-message__timing { margin: 0.55rem 0 0; color: var(--hc-color-text-muted); font-size: 0.82rem; }
 .chat-message > button, .chat-message > .mantine-Alert-root, .chat-stale-note, .chat-provenance { margin-top: 0.7rem; }
 .chat-error-code { display: block; margin-top: 0.25rem; font-size: 0.78rem; }
 .chat-stale-note { border-left: 0.25rem solid var(--mantine-color-horizonOrange-6); padding: 0.5rem 0.7rem; background: var(--mantine-color-horizonOrange-0); }

@@ -111,6 +111,7 @@ describe("HealthCurve Chat page", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByText("Data used and AI details"));
     expect(screen.getByText("7234").tagName).toBe("STRONG");
+    expect(screen.getByText("Answered in 30 s")).toBeVisible();
     expect(screen.getByText("2026-07-01 to 2026-07-30")).toBeVisible();
     expect(screen.getByText("Not included")).toBeVisible();
     expect(screen.getByText("run query: Average daily steps")).toBeVisible();

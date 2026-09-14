@@ -74,6 +74,20 @@ function formatConversationDate(value: string | null): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
+function responseSeconds(message: ChatMessage): number | null {
+  const finished = message.generated_at ?? (FAILURE_STATES.has(message.state) ? message.updated_at : null);
+  if (finished === null) return null;
+  const seconds = Math.round((Date.parse(finished) - Date.parse(message.created_at)) / 1000);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${String(seconds)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${String(minutes)} min` : `${String(minutes)} min ${String(rest)} s`;
+}
+
 function sourceLabel(source: Record<string, unknown>, index: number): string {
   for (const key of ["label", "tool", "tool_name", "domain", "record_type"]) {
     const value = source[key];
@@ -141,6 +155,7 @@ function MessageCard({ message, priorUserMessage, onCancel, onRetry, cancelling,
   const errorExplanation = message.error_code === null ? undefined : errorExplanations[message.error_code];
   const timePeriod = message.source_scope === null ? null : stringField(message.source_scope, "time_scope");
   const textAccess = message.source_scope?.text_access;
+  const elapsed = isAssistant ? responseSeconds(message) : null;
   return (
     <article className={`chat-message chat-message--${message.role}`} aria-label={isAssistant ? "HealthCurve AI response" : "Your message"}>
       <div className="chat-message__label">{isAssistant ? "HealthCurve AI" : "You"}</div>
@@ -150,6 +165,7 @@ function MessageCard({ message, priorUserMessage, onCancel, onRetry, cancelling,
       {isAssistant && failed ? <Alert color="grape" variant="light" role="alert">{errorExplanation === undefined ? statusText[message.state] : <>{errorExplanation} Your message is still saved.</>}{message.error_code === null ? null : <span className="chat-error-code"> Reference: {message.error_code}</span>}</Alert> : null}
       {isAssistant && active ? <Button variant="outline" size="xs" loading={cancelling} onClick={() => { onCancel(message.id); }}>Cancel response</Button> : null}
       {isAssistant && failed && priorUserMessage?.body != null ? <Button variant="outline" size="xs" loading={retrying} onClick={() => { onRetry(priorUserMessage.body ?? ""); }}>Try again</Button> : null}
+      {isAssistant && elapsed !== null && (message.state === "completed" || failed) ? <p className="chat-message__timing">{message.state === "completed" ? "Answered" : "Stopped"} in {formatDuration(elapsed)}</p> : null}
       {isAssistant ? <StalenessNotice message={message} /> : null}
       {isAssistant && message.state === "completed" ? (
         <details className="chat-provenance">
