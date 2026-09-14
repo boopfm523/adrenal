@@ -110,8 +110,12 @@ says so.
 - Tool rounds, total tool calls, per-call time, and whole-run time are bounded.
   Cancellation remains available.
 - The final answer is submitted through a strict schema. Deterministic validation
-  rejects: any numeric health claim not present in tool results (numbers and dates from
-  the owner's question and the stated scope excepted); dose, schedule, taper, or stress
+  rejects: any numeric health claim not grounded in tool results (numbers and dates from
+  the owner's question and the stated scope excepted). Grounded restatements are
+  accepted: parts of dates and timestamps, 12-hour forms of clock hours, decimals rounded
+  to fewer places, and day counts within a queried date range (the range length, or that
+  length minus a count the tool returned). A rejected draft gets up to two repair turns
+  with the offending numbers listed. The validator also rejects dose, schedule, taper, or stress
   guidance (SAFE-17); emergency authorship (SAFE-22); causal claims from association
   (SAFE-25); and missing disclosure of material missingness (SAFE-26).
 - Each completed answer stores tool names and versions, validated arguments including

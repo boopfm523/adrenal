@@ -9,7 +9,10 @@ health text is present in the repository or baseline.
 
 - `tests/unit/test_chat_orchestration.py` exercises the native tool-calling loop,
   numeric validation against tool results (including clock times, thousands
-  separators, and signs), one repair turn, medication-guidance rejection, refusals,
+  separators, and signs; grounded restatements such as date parts, 12-hour clock hours,
+  rounded decimals, and day counts within a queried range are accepted, while numbers
+  not derivable from results are rejected), up to two repair turns,
+  medication-guidance rejection, refusals,
   injected tool text, tool errors returned for repair, context trimming, turn and
   whole-run bounds, model unavailability and timeouts, unconfigured analysis, and
   source-fingerprint staleness.

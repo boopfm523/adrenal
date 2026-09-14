@@ -210,14 +210,33 @@ def test_unsupported_number_gets_one_repair_then_completes() -> None:
             _submit("You averaged 6421 steps on 5 days."),
         ]
     )
+    rejections: list[tuple[str, str]] = []
+
+    def observe_rejection(code: str, feedback: str) -> None:
+        rejections.append((code, feedback))
+
     result, _, _ = _run(
-        "Average steps?", client, _Executor({"run_query": [_output("run_query", STEPS_DATA)]})
+        "Average steps?",
+        client,
+        _Executor({"run_query": [_output("run_query", STEPS_DATA)]}),
+        observe_rejection=observe_rejection,
     )
 
     assert result.state is ChatMessageState.COMPLETED
     feedback = client.requests[2]["messages"][-1]
     assert feedback["role"] == "tool"
     assert "unsupported_numeric" in feedback["content"] and "7000" in feedback["content"]
+    assert [code for code, _ in rejections] == ["unsupported_numeric"]
+    assert "7000" in rejections[0][1]
+
+
+def test_system_prompt_spells_out_relative_periods_as_dates_including_today() -> None:
+    client = _Client([_submit("Nothing to report.")])
+    _run("How did the past 30 days go?", client, _Executor({}))
+
+    system = client.requests[0]["messages"][0]["content"]
+    assert "past 30 days is 2026-07-17 through 2026-08-15" in system
+    assert "past 14 days is 2026-08-02 through 2026-08-15" in system
 
 
 def test_repeated_unsupported_numbers_end_invalid() -> None:
@@ -226,6 +245,7 @@ def test_repeated_unsupported_numbers_end_invalid() -> None:
             _turn(_call("run_query", {"sql": STEPS_SQL, "purpose": "steps"})),
             _submit("About 7000 steps."),
             _submit("About 7100 steps."),
+            _submit("About 7200 steps."),
         ]
     )
     result, _, _ = _run(
@@ -234,6 +254,50 @@ def test_repeated_unsupported_numbers_end_invalid() -> None:
     assert result.state is ChatMessageState.INVALID
     assert result.error_code == "chat_answer_unsupported_numeric"
     assert result.body is None
+
+
+def test_grounded_restatements_of_tool_numbers_are_accepted() -> None:
+    sql = (
+        "SELECT count(steps) AS days_with_steps FROM analytics.daily_wearables "
+        "WHERE local_date BETWEEN DATE '2026-07-17' AND DATE '2026-08-15'"
+    )
+    data = {
+        "columns": ["days_with_steps", "last_sample_at", "spread_minutes"],
+        "rows": [[28, "2026-08-13T20:15:00-04:00", "49.3"]],
+        "row_count": 1,
+        "truncated": False,
+        "views": ["analytics.daily_wearables"],
+    }
+    client = _Client(
+        [
+            _turn(_call("run_query", {"sql": sql, "purpose": "Step coverage"})),
+            _submit(
+                "The last sample was on August 13, 2026 at 8:15 PM. 28 of the 30 days had "
+                "steps, so 2 days had none, and the spread was about 49 minutes."
+            ),
+        ]
+    )
+    result, _, _ = _run(
+        "How complete were my steps in the past 30 days?",
+        client,
+        _Executor({"run_query": [_output("run_query", data)]}),
+    )
+    assert result.state is ChatMessageState.COMPLETED, result.error_code
+
+
+def test_numbers_not_derivable_from_results_are_still_rejected() -> None:
+    client = _Client(
+        [
+            _turn(_call("run_query", {"sql": STEPS_SQL, "purpose": "steps"})),
+            _submit("Your heart rate averaged 145 bpm."),
+            _submit("You averaged 6421 steps on 5 days."),
+        ]
+    )
+    result, _, _ = _run(
+        "Average steps?", client, _Executor({"run_query": [_output("run_query", STEPS_DATA)]})
+    )
+    assert result.state is ChatMessageState.COMPLETED
+    assert "145" in client.requests[2]["messages"][-1]["content"]
 
 
 def test_medication_guidance_is_rejected_but_a_refusal_completes() -> None:
@@ -267,6 +331,7 @@ def test_injected_tool_text_cannot_produce_guidance() -> None:
             ),
             _submit("Double your dose to 40 mg."),
             _submit("Double your dose to 40 mg now."),
+            _submit("You must double your dose to 40 mg."),
         ]
     )
     result, _, _ = _run(

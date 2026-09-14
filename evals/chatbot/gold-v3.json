@@ -1,6 +1,6 @@
 {
   "version": "chatbot-gold-v3",
-  "prompt_version": "healthcurve-chat-v6",
+  "prompt_version": "healthcurve-chat-v7",
   "schema_version": "healthcurve-chat-answer-v4",
   "catalog_version": "hc-analytics-catalog-v1",
   "synthetic_marker": "SYNTHETIC-DO-NOT-USE-REAL-DATA",

@@ -16,8 +16,8 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from datetime import date, datetime
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -29,12 +29,13 @@ from healthcurve.analysis.tools import CONVENTIONS, ToolOutput
 from healthcurve.chat.models import ChatMessageState, ChatRole
 from healthcurve.chat.service import BoundedConversationContext
 
-PROMPT_VERSION: Final = "healthcurve-chat-v6"
+PROMPT_VERSION: Final = "healthcurve-chat-v7"
 SCHEMA_VERSION: Final = "healthcurve-chat-answer-v4"
 SUBMIT_ANSWER: Final = "submit_answer"
 MAX_MODEL_TURNS: Final = 14
 MAX_TOOL_CALLS: Final = 16
-MAX_REPAIRS: Final = 1
+MAX_REPAIRS: Final = 2
+MAX_PERIOD_DAYS: Final = 366
 MAX_WHOLE_RUN_SECONDS: Final = 900.0
 MAX_TOOL_RESULT_CHARS: Final = 16_000
 MAX_ANSWER_CHARS: Final = 8_000
@@ -43,6 +44,9 @@ CHARS_PER_TOKEN: Final = 3
 
 _NUMBER: Final = re.compile(r"(?<![\w-])[-+]?\d+(?:\.\d+)?(?![\w-])")
 _THOUSANDS: Final = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
+_DIGITS: Final = re.compile(r"\d+(?:\.\d+)?")
+_CLOCK_HOUR: Final = re.compile(r"(?<!\d)(\d{1,2}):\d{2}(?!\d)")
+_ISO_DATE: Final = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
 _GUIDANCE: Final = re.compile(
     r"\b(?:should|must|recommend|suggest|increase|decrease|double|halve|adjust|change)\b"
     r"[^.]{0,100}\b(?:dose|dosing|mg|mcg|tablet|medication|schedule)\b"
@@ -142,6 +146,7 @@ class OrchestrationResult:
 type ToolExecutor = Callable[[str, dict[str, Any]], ToolOutput]
 type StateObserver = Callable[[ChatMessageState], None]
 type ToolObserver = Callable[[ExecutedTool], None]
+type RejectionObserver = Callable[[str, str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +172,7 @@ def run(
     read_timeout_s: float = 300.0,
     observe_state: StateObserver = lambda _state: None,
     observe_tool: ToolObserver = lambda _execution: None,
+    observe_rejection: RejectionObserver = lambda _code, _feedback: None,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> OrchestrationResult:
     """Answer one owner question; every failure is a typed terminal result."""
@@ -185,7 +191,7 @@ def run(
         current_local_datetime=current_local_datetime,
         default_timezone=default_timezone,
     )
-    allowed = _number_tokens(question) | _number_tokens(current_local_datetime.isoformat())
+    allowed = _grounded_tokens(question) | _grounded_tokens(current_local_datetime.isoformat())
     executions: list[ExecutedTool] = []
     repairs = 0
     model_name: str | None = None
@@ -230,8 +236,11 @@ def run(
                 executions.append(execution)
                 observe_tool(execution)
                 if execution.output.ok:
-                    allowed |= _number_tokens(_json(execution.output.data))
-                    allowed |= _number_tokens(_json(call.arguments))
+                    data_text = _json(execution.output.data)
+                    arguments_text = _json(call.arguments)
+                    allowed |= _grounded_tokens(data_text)
+                    allowed |= _grounded_tokens(arguments_text)
+                    allowed |= _period_tokens(arguments_text, data_text)
                 messages.append(_tool_result_message(call, _budgeted(execution.output)))
             for call in submits:
                 messages.append(
@@ -259,6 +268,7 @@ def run(
                     allow_text=allow_text,
                 )
         assert problem is not None
+        observe_rejection(problem.code, problem.feedback)
         if repairs >= MAX_REPAIRS:
             return _failure(ChatMessageState.INVALID, f"chat_answer_{problem.code}")
         repairs += 1
@@ -337,8 +347,13 @@ You are HealthCurve's private analysis assistant, running on the owner's own com
 You answer questions about the owner's recorded health data by querying it with tools.
 
 Today is {local.strftime("%A")} {local.date().isoformat()}, and the local time is \
-{local.strftime("%H:%M")} in {default_timezone}. Resolve relative periods such as \
-"the past 30 days" to explicit dates ending today unless the owner says otherwise. If the \
+{local.strftime("%H:%M")} in {default_timezone}. Resolve relative periods to explicit \
+local dates that include today unless the owner says otherwise: "the past N days" is exactly \
+N dates ending today, so the past 30 days is \
+{datetime.fromordinal(local.toordinal() - 29).date().isoformat()} through \
+{local.date().isoformat()} and the past 14 days is \
+{datetime.fromordinal(local.toordinal() - 13).date().isoformat()} through \
+{local.date().isoformat()}. Use the same dates in every query and in time_scope. If the \
 owner gives no period, choose a sensible recent period and state it.
 
 How to work:
@@ -549,6 +564,59 @@ def _number_tokens(text: str) -> set[str]:
 def _normalized(number: Decimal) -> str:
     text = format(number.normalize(), "f")
     return "0" if text in {"-0", "+0"} else text
+
+
+def _grounded_tokens(text: str) -> set[str]:
+    """Numbers an answer may quote from grounded text (the question, the date, tool results).
+
+    Every digit run counts, including the parts of dates and timestamps, plus decimals
+    rounded to fewer places and 12-hour forms of clock hours, so restating "20:15" as
+    "8:15 PM" or 49.3 as 49 is not mistaken for an invented number.
+    """
+
+    cleaned = _THOUSANDS.sub("", text)
+    tokens: set[str] = set()
+    for raw in _DIGITS.findall(cleaned):
+        number = Decimal(raw)
+        tokens.add(_normalized(number))
+        places = len(raw.partition(".")[2])
+        for kept in range(places):
+            quantum = Decimal(1).scaleb(-kept)
+            tokens.add(_normalized(number.quantize(quantum, rounding=ROUND_HALF_UP)))
+            tokens.add(_normalized(number.quantize(quantum, rounding=ROUND_DOWN)))
+    for hour_text in _CLOCK_HOUR.findall(cleaned):
+        hour = int(hour_text)
+        if hour <= 23:
+            tokens.add(str(hour % 12 or 12))
+    return tokens
+
+
+def _period_tokens(arguments: str, data: str) -> set[str]:
+    """Day counts implied by the date range a tool was asked for.
+
+    For a queried range of N dates this allows N, N - 1, and N minus any whole count in
+    the result, so "2 of the 30 days had no data" is grounded when the tool counted 28.
+    """
+
+    dates = set()
+    for year, month, day in _ISO_DATE.findall(arguments):
+        try:
+            dates.add(date(int(year), int(month), int(day)))
+        except ValueError:
+            continue
+    ordered = sorted(dates)
+    spans = {
+        (last - first).days + 1
+        for index, first in enumerate(ordered)
+        for last in ordered[index + 1 :]
+        if (last - first).days + 1 <= MAX_PERIOD_DAYS
+    }
+    if not spans:
+        return set()
+    counts = {int(raw) for raw in _DIGITS.findall(data) if "." not in raw and len(raw) <= 3}
+    tokens = {str(span) for span in spans} | {str(span - 1) for span in spans}
+    tokens |= {str(span - count) for span in spans for count in counts if count <= span}
+    return tokens
 
 
 def _json(value: object, *, sort_keys: bool = False) -> str:

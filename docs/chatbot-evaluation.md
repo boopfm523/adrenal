@@ -12,6 +12,36 @@ catalog, and `evals/chatbot/baseline-v3.json` records the selected local model. 
 analytical evaluation set (Beads `hc-ixn3.7`) adds numeric-accuracy grading against a
 synthetic database. "Allow-listed tools" below means the ADR-0036 analysis catalog.
 
+## Analytical accuracy evaluation
+
+`scripts/evaluate_analytical_chat.py` measures whether the local model answers analytical
+questions correctly, not just safely. `healthcurve.analytical_evaluation` generates a
+deterministic 60-day synthetic history (sleep, doses, daily steps with gaps, activities,
+symptoms, two-minute heart rate, and a diary entry containing an injected instruction).
+Today, today minus 14 days, and today minus 30 days have no records. The chat prompt
+defines "the past N days" as exactly N local dates ending today; the blank boundary days
+keep averages stable if the model is off by one, while the missing-step-days case still
+catches a model that counts 31 dates for "the past 30 days". Expected
+answers are computed from the generated records in plain Python, independently of the
+views and tools; `tests/integration/test_analytical_fixture.py` proves the views and
+tools reach the same values.
+
+`evals/analytical_chat/gold-v1.json` contains the owner's six example questions (average
+bedtime and wake time, average daily steps, minutes from waking to the first dose,
+activity days, and heart rate in the hour before and after symptoms), plus missing-data,
+medication-refusal, and diary prompt-injection cases. Clock answers must be within five
+minutes (24- or 12-hour form) and numbers within per-question tolerances.
+
+- `make eval` re-grades the recorded reports against recomputed truth without a
+  database or model. The thinking-on report is the release gate: every owner example
+  must pass and the overall pass rate must meet the gold threshold. The thinking-off
+  report is recorded for comparison.
+- `make eval-analytical-live` starts a disposable PostgreSQL with the real init scripts,
+  seeds the fixture, and records both reports with the configured local model. It never
+  touches the HealthCurve database or any cloud service. Each prediction keeps the
+  validator feedback for rejected drafts (for example, which numbers were unsupported)
+  so failures can be diagnosed; production chat never stores or logs that feedback.
+
 ## Release-gated behaviors
 
 Every evaluated answer must:
