@@ -14,7 +14,8 @@ from __future__ import annotations
 import json
 import time
 from base64 import b64encode
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Final
 
@@ -30,6 +31,11 @@ log = get_logger(__name__)
 BREAKER_THRESHOLD: Final = 3
 #: How long the breaker stays open before a single trial request is allowed.
 BREAKER_RESET_SECONDS: Final = 60.0
+#: Tool calls accepted in one chat response. More than this is treated as a malformed
+#: response rather than silently truncated, so the loop never runs a partial plan.
+MAX_TOOL_CALLS_PER_RESPONSE: Final = 8
+#: Message roles the chat endpoint accepts.
+CHAT_ROLES: Final = frozenset({"system", "user", "assistant", "tool"})
 
 
 class ModelOutcome(StrEnum):
@@ -60,6 +66,147 @@ class ModelResult:
 class ModelIdentity:
     name: str
     digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChatToolCall:
+    """One validated tool call. ``arguments`` is untrusted model output (SAFE-19).
+
+    The name is guaranteed to be one of the offered tools; the arguments are only
+    guaranteed to be a JSON object and must still be validated by the tool.
+    """
+
+    id: str | None
+    name: str
+    arguments: dict[str, Any]
+
+    def wire_format(self) -> dict[str, Any]:
+        """The Ollama representation used when replaying an assistant turn."""
+        call: dict[str, Any] = {"function": {"name": self.name, "arguments": self.arguments}}
+        if self.id is not None:
+            call["id"] = self.id
+        return call
+
+
+@dataclass(frozen=True, slots=True)
+class ChatResult:
+    """The result of one chat turn.
+
+    ``content`` and ``tool_calls`` are only ever set when ``ok``. Thinking text is
+    transient C9 data (ADR-0036): it is never carried here, only its length.
+    """
+
+    outcome: ModelOutcome
+    content: str | None = None
+    tool_calls: tuple[ChatToolCall, ...] = field(default_factory=tuple)
+    done_reason: str | None = None
+    prompt_tokens: int | None = None
+    output_tokens: int | None = None
+    model_name: str | None = None
+    model_digest: str | None = None
+    latency_ms: int | None = None
+    detail: str | None = None
+    thinking_chars: int = 0
+
+    @property
+    def ok(self) -> bool:
+        return self.outcome is ModelOutcome.OK
+
+    def assistant_message(self) -> dict[str, Any]:
+        """Replay this turn as an assistant message, without any thinking text."""
+        message: dict[str, Any] = {"role": "assistant", "content": self.content or ""}
+        if self.tool_calls:
+            message["tool_calls"] = [call.wire_format() for call in self.tool_calls]
+        return message
+
+
+def tool_result_message(call: ChatToolCall, content: str) -> dict[str, Any]:
+    """Build the message that returns a tool's (already budgeted) result to the model."""
+    message: dict[str, Any] = {"role": "tool", "tool_name": call.name, "content": content}
+    if call.id is not None:
+        message["tool_call_id"] = call.id
+    return message
+
+
+class _MalformedChatResponseError(Exception):
+    """Internal: the response did not match the tool-calling contract.
+
+    Carries only a fixed reason code, never any model-authored text.
+    """
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def _offered_tool_names(tools: Sequence[Mapping[str, Any]]) -> frozenset[str]:
+    names: set[str] = set()
+    for tool in tools:
+        if tool.get("type") != "function":
+            raise ValueError("each tool must be a function tool with a non-empty name")
+        function = tool.get("function")
+        name = function.get("name") if isinstance(function, Mapping) else None
+        if not isinstance(name, str) or not name:
+            raise ValueError("each tool must be a function tool with a non-empty name")
+        names.add(name)
+    return frozenset(names)
+
+
+def _outgoing_messages(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    if not messages:
+        raise ValueError("messages must not be empty")
+    outgoing: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") not in CHAT_ROLES:
+            raise ValueError("each message must have a supported role")
+        # Thinking is never replayed: it is transient and must not be re-sent (C9).
+        outgoing.append({k: v for k, v in message.items() if k != "thinking"})
+    return outgoing
+
+
+def _parse_tool_arguments(raw: object) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            raise _MalformedChatResponseError("tool_arguments_not_json") from None
+    if not isinstance(raw, dict):
+        raise _MalformedChatResponseError("tool_arguments_not_object")
+    return {str(key): value for key, value in raw.items()}
+
+
+def _parse_tool_calls(raw: object, offered: frozenset[str]) -> tuple[ChatToolCall, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise _MalformedChatResponseError("tool_calls_not_list")
+    if len(raw) > MAX_TOOL_CALLS_PER_RESPONSE:
+        raise _MalformedChatResponseError("too_many_tool_calls")
+    calls: list[ChatToolCall] = []
+    for item in raw:
+        function = item.get("function") if isinstance(item, dict) else None
+        if not isinstance(function, dict):
+            raise _MalformedChatResponseError("tool_call_malformed")
+        name = function.get("name")
+        if not isinstance(name, str) or not name:
+            raise _MalformedChatResponseError("tool_call_missing_name")
+        if name not in offered:
+            raise _MalformedChatResponseError("tool_call_unknown_tool")
+        call_id = item.get("id")
+        calls.append(
+            ChatToolCall(
+                id=call_id if isinstance(call_id, str) and call_id else None,
+                name=name,
+                arguments=_parse_tool_arguments(function.get("arguments")),
+            )
+        )
+    return tuple(calls)
+
+
+def _optional_int(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _parse_model_json(content: str) -> object:
@@ -322,9 +469,188 @@ class OllamaClient:
             latency_ms=latency_ms,
         )
 
-    def _failed(
-        self, outcome: ModelOutcome, started: float, detail: str, model_name: str
-    ) -> ModelResult:
+    def chat(
+        self,
+        *,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
+        think: bool | None = None,
+        temperature: float = 0.0,
+        context_window: int | None = None,
+        max_output_tokens: int | None = None,
+        read_timeout_s: float | None = None,
+        model_name: str | None = None,
+    ) -> ChatResult:
+        """Run one turn of a native Ollama tool-calling conversation (ADR-0036).
+
+        ``messages`` carries prior turns, including assistant tool calls
+        (:meth:`ChatResult.assistant_message`) and tool results
+        (:func:`tool_result_message`). Everything in them other than the system
+        prompt is untrusted data (SAFE-19). ``tools`` uses Ollama's function-tool
+        format; a returned call to any other name is rejected.
+
+        ``think`` defaults to ``HC_CHAT_THINKING``. Thinking text is never returned,
+        logged, or stored; only its character count is exposed for telemetry.
+        """
+        selected_model = model_name or self._settings.ollama_model
+        offered = _offered_tool_names(tools)
+        outgoing = _outgoing_messages(messages)
+        if max_output_tokens is not None and max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be positive")
+        if context_window is not None and context_window <= 0:
+            raise ValueError("context_window must be positive")
+        if read_timeout_s is not None and read_timeout_s <= 0:
+            raise ValueError("read_timeout_s must be positive")
+
+        if self._breaker.is_open:
+            self._telemetry.record(OperationalEvent.MODEL_FAILURE)
+            return ChatResult(
+                outcome=ModelOutcome.UNAVAILABLE,
+                model_name=selected_model,
+                detail="circuit_breaker_open",
+            )
+
+        num_ctx = context_window or (
+            self._settings.chat_context_window or self._settings.ollama_context_window
+        )
+        payload: dict[str, Any] = {
+            "model": selected_model,
+            "stream": False,
+            "think": self._settings.chat_thinking if think is None else think,
+            "options": {
+                "temperature": temperature,
+                "num_ctx": num_ctx,
+                "num_predict": max_output_tokens or self._settings.chat_max_output_tokens,
+            },
+            "messages": outgoing,
+        }
+        if tools:
+            payload["tools"] = [dict(tool) for tool in tools]
+        if selected_model == self._settings.ollama_model:
+            # Host-native text-model residency only, as for generate_json.
+            payload["keep_alive"] = self._settings.ollama_keep_alive_s
+
+        started = time.monotonic()
+        try:
+            with httpx.Client(
+                base_url=self._settings.ollama_base_url,
+                timeout=httpx.Timeout(
+                    connect=self._settings.ollama_connect_timeout_s,
+                    read=(
+                        self._settings.chat_read_timeout_s
+                        if read_timeout_s is None
+                        else read_timeout_s
+                    ),
+                    write=self._settings.ollama_connect_timeout_s,
+                    pool=self._settings.ollama_connect_timeout_s,
+                ),
+            ) as client:
+                response = client.post("/api/chat", json=payload)
+                if response.status_code == 400 and "think" in payload:
+                    # Non-reasoning models reject the field. Answering without the
+                    # reasoning phase beats not answering.
+                    log.info(
+                        "model does not accept the think field; retrying without it",
+                        model_name=selected_model,
+                        reason_code="think_unsupported",
+                    )
+                    payload.pop("think")
+                    response = client.post("/api/chat", json=payload)
+                response.raise_for_status()
+                body: object = response.json()
+        except httpx.TimeoutException:
+            return self._chat_failed(ModelOutcome.TIMEOUT, started, "timeout", selected_model)
+        except httpx.HTTPStatusError as exc:
+            return self._chat_failed(
+                ModelOutcome.ERROR,
+                started,
+                f"http_status_{exc.response.status_code}",
+                selected_model,
+            )
+        except httpx.HTTPError:
+            return self._chat_failed(
+                ModelOutcome.UNAVAILABLE, started, "unreachable", selected_model
+            )
+        except ValueError:
+            return self._chat_failed(
+                ModelOutcome.INVALID_JSON, started, "response_not_json", selected_model
+            )
+
+        thinking_chars = 0
+        try:
+            if not isinstance(body, dict):
+                raise _MalformedChatResponseError("response_not_object")
+            if body.get("done") is False:
+                raise _MalformedChatResponseError("incomplete_response")
+            message = body.get("message")
+            if not isinstance(message, dict):
+                raise _MalformedChatResponseError("missing_message")
+            thinking = message.get("thinking")
+            thinking_chars = len(thinking) if isinstance(thinking, str) else 0
+            raw_content = message.get("content")
+            if raw_content is not None and not isinstance(raw_content, str):
+                raise _MalformedChatResponseError("content_not_string")
+            tool_calls = _parse_tool_calls(message.get("tool_calls"), offered)
+            content = raw_content if raw_content and raw_content.strip() else None
+            if content is None and not tool_calls:
+                raise _MalformedChatResponseError("empty_response")
+        except _MalformedChatResponseError as exc:
+            return self._chat_failed(
+                ModelOutcome.INVALID_JSON,
+                started,
+                exc.code,
+                selected_model,
+                thinking_chars=thinking_chars,
+            )
+
+        latency_ms = int((time.monotonic() - started) * 1000)
+        self._breaker.record_success()
+        # Counts and timing only -- never messages, arguments, or completions (C9).
+        log.info(
+            "model chat call",
+            outcome=ModelOutcome.OK.value,
+            model_name=selected_model,
+            latency_ms=latency_ms,
+            count=len(tool_calls),
+        )
+        done_reason = body.get("done_reason")
+        model_digest = body.get("model_digest")
+        return ChatResult(
+            outcome=ModelOutcome.OK,
+            content=content,
+            tool_calls=tool_calls,
+            done_reason=done_reason if isinstance(done_reason, str) else None,
+            prompt_tokens=_optional_int(body.get("prompt_eval_count")),
+            output_tokens=_optional_int(body.get("eval_count")),
+            model_name=selected_model,
+            model_digest=model_digest if isinstance(model_digest, str) else None,
+            latency_ms=latency_ms,
+            thinking_chars=thinking_chars,
+        )
+
+    def _chat_failed(
+        self,
+        outcome: ModelOutcome,
+        started: float,
+        detail: str,
+        model_name: str,
+        *,
+        thinking_chars: int = 0,
+    ) -> ChatResult:
+        """``detail`` is a fixed reason code; it never contains model or owner text."""
+        self._breaker.record_failure()
+        latency_ms = self._record_failure(outcome, started, model_name, reason_code=detail)
+        return ChatResult(
+            outcome=outcome,
+            model_name=model_name,
+            latency_ms=latency_ms,
+            detail=detail,
+            thinking_chars=thinking_chars,
+        )
+
+    def _record_failure(
+        self, outcome: ModelOutcome, started: float, model_name: str, *, reason_code: str
+    ) -> int:
         latency_ms = int((time.monotonic() - started) * 1000)
         self._telemetry.record(OperationalEvent.MODEL_FAILURE)
         # Outcome and timing only -- never the prompt or any partial completion (C9).
@@ -333,8 +659,14 @@ class OllamaClient:
             outcome=outcome.value,
             model_name=model_name,
             latency_ms=latency_ms,
-            reason_code=outcome.value,
+            reason_code=reason_code,
         )
+        return latency_ms
+
+    def _failed(
+        self, outcome: ModelOutcome, started: float, detail: str, model_name: str
+    ) -> ModelResult:
+        latency_ms = self._record_failure(outcome, started, model_name, reason_code=outcome.value)
         return ModelResult(
             outcome=outcome,
             model_name=model_name,

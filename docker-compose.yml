@@ -58,6 +58,12 @@ services:
       HC_OLLAMA_CONTEXT_WINDOW: ${HC_OLLAMA_CONTEXT_WINDOW:-24576}
       HC_OLLAMA_KEEP_ALIVE_S: ${HC_OLLAMA_KEEP_ALIVE_S:-300}
       HC_OLLAMA_THINKING: ${HC_OLLAMA_THINKING:-false}
+      # Analytical chat turns (ADR-0036). An empty chat context window falls back to
+      # HC_OLLAMA_CONTEXT_WINDOW.
+      HC_CHAT_THINKING: ${HC_CHAT_THINKING:-true}
+      HC_CHAT_CONTEXT_WINDOW: ${HC_CHAT_CONTEXT_WINDOW:-}
+      HC_CHAT_READ_TIMEOUT_S: ${HC_CHAT_READ_TIMEOUT_S:-300}
+      HC_CHAT_MAX_OUTPUT_TOKENS: ${HC_CHAT_MAX_OUTPUT_TOKENS:-4096}
       HC_REDIS_URL: redis://redis:6379/0
       # The API receives only the non-secret feature flag/lookback so it can expose
       # owner controls. Garmin credentials and tokens are mounted only into the
@@ -150,6 +156,11 @@ services:
       HC_OLLAMA_CONTEXT_WINDOW: ${HC_OLLAMA_CONTEXT_WINDOW:-24576}
       HC_OLLAMA_KEEP_ALIVE_S: ${HC_OLLAMA_KEEP_ALIVE_S:-300}
       HC_OLLAMA_THINKING: ${HC_OLLAMA_THINKING:-false}
+      # Analytical chat turns run in the worker (ADR-0036).
+      HC_CHAT_THINKING: ${HC_CHAT_THINKING:-true}
+      HC_CHAT_CONTEXT_WINDOW: ${HC_CHAT_CONTEXT_WINDOW:-}
+      HC_CHAT_READ_TIMEOUT_S: ${HC_CHAT_READ_TIMEOUT_S:-300}
+      HC_CHAT_MAX_OUTPUT_TOKENS: ${HC_CHAT_MAX_OUTPUT_TOKENS:-4096}
       HC_REDIS_URL: redis://redis:6379/0
       # Telegram (docs/telegram-setup.md). Passed through explicitly rather than via
       # env_file so database credentials do not leak into every container's

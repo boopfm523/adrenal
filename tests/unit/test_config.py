@@ -112,6 +112,46 @@ def test_ollama_keep_alive_is_bounded(seconds: int) -> None:
         _settings(ollama_keep_alive_s=seconds)
 
 
+def test_chat_defaults_enable_thinking_with_bounded_turns() -> None:
+    """ADR-0036: chat reasons by default; the context window falls back to Ollama's."""
+    settings = _settings()
+    assert settings.chat_thinking is True
+    assert settings.chat_context_window is None
+    assert settings.chat_read_timeout_s == 300
+    assert settings.chat_max_output_tokens == 4096
+
+
+def test_chat_settings_accept_overrides() -> None:
+    settings = _settings(
+        chat_thinking=False,
+        chat_context_window=32_768,
+        chat_read_timeout_s=1_800,
+        chat_max_output_tokens=2_048,
+    )
+    assert settings.chat_thinking is False
+    assert settings.chat_context_window == 32_768
+    assert settings.chat_read_timeout_s == 1_800
+    assert settings.chat_max_output_tokens == 2_048
+
+
+def test_empty_chat_context_window_means_fallback() -> None:
+    assert _settings(chat_context_window="").chat_context_window is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"chat_context_window": 0},
+        {"chat_read_timeout_s": 0},
+        {"chat_read_timeout_s": 1_801},
+        {"chat_max_output_tokens": 0},
+    ],
+)
+def test_chat_settings_are_bounded(overrides: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        _settings(**overrides)
+
+
 def test_garmin_sync_interval_must_divide_the_owner_local_day() -> None:
     with pytest.raises(ValueError, match="must divide evenly into 24"):
         _settings(garmin_sync_interval_hours=5)

@@ -128,6 +128,17 @@ class Settings(BaseSettings):
     #: latency with no accuracy gain, so it is off by default. Set true to compare.
     ollama_thinking: bool = False
 
+    # --- Analytical chat (ADR-0036) ---
+    #: Chat chooses queries and interprets results, so reasoning is on by default and
+    #: trades latency for accuracy. Thinking text is transient C9 data, never stored.
+    chat_thinking: bool = True
+    #: Unset falls back to ``ollama_context_window``.
+    chat_context_window: int | None = Field(default=None, gt=0)
+    #: One model turn with thinking can take minutes; bounded so a hung model cannot
+    #: hold a queued run indefinitely.
+    chat_read_timeout_s: float = Field(default=300.0, gt=0, le=1_800)
+    chat_max_output_tokens: int = Field(default=4_096, gt=0)
+
     # --- Telegram (docs/telegram-setup.md). All three are class C8 secrets. ---
     #: Mounted JSON key ring for encrypted credentials (threat model C8). The file,
     #: not its contents, is configured here. Production rejects plaintext provider
