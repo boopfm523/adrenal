@@ -47,7 +47,7 @@ from healthcurve.chat.orchestration import PROMPT_VERSION, SCHEMA_VERSION, run
 from healthcurve.chat.service import BoundedConversationContext, ContextTurn
 
 ROOT = Path(__file__).resolve().parents[1]
-GOLD = ROOT / "evals" / "analytical_chat" / "gold-v1.json"
+GOLD = ROOT / "evals" / "analytical_chat" / "gold-v2.json"
 REPORTS = {
     True: ROOT / "evals" / "analytical_chat" / "report-thinking-on.json",
     False: ROOT / "evals" / "analytical_chat" / "report-thinking-off.json",
