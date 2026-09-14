@@ -16,22 +16,54 @@ import {
 } from "../api/client";
 import { Page } from "../components/Page";
 
+import { ChatAnswerText } from "../components/ChatAnswerText";
+
 const ACTIVE_STATES = new Set<ChatMessage["state"]>(["queued", "planning", "reading", "generating"]);
 const FAILURE_STATES = new Set<ChatMessage["state"]>(["cancelled", "unavailable", "timed_out", "invalid", "failed"]);
 
 const statusText: Record<ChatMessage["state"], string> = {
   accepted: "Accepted",
   queued: "Waiting for the private model…",
-  planning: "Understanding your question…",
-  reading: "Reading the relevant HealthCurve data…",
-  generating: "Preparing an answer…",
+  planning: "Thinking about your question and choosing what to look up…",
+  reading: "Querying your HealthCurve data…",
+  generating: "Checking the answer against the query results…",
   completed: "Completed",
   cancelled: "Response cancelled.",
   unavailable: "The private model is unavailable right now. Your message is still saved.",
   timed_out: "The private model did not finish in time. Your message is still saved.",
-  invalid: "The private model returned an answer that did not pass HealthCurve’s source and format checks. This is not a privacy block.",
+  invalid: "The private model returned an answer that did not pass HealthCurve’s checks, so it was not shown. This is not a privacy block.",
   failed: "HealthCurve could not complete this answer. Your records were not changed.",
 };
+
+const errorExplanations: Record<string, string> = {
+  chat_analysis_not_configured: "Analysis queries are not configured on this HealthCurve installation yet.",
+  chat_answer_unsupported_numeric: "The answer included numbers that did not come from the data queries.",
+  chat_answer_medication_guidance: "The answer read as medication advice, which HealthCurve never provides.",
+  chat_turn_budget_exhausted: "The private model used its whole query budget without finishing. Try a narrower question.",
+  chat_run_timed_out: "The private model ran out of time. Try a narrower question or a shorter period.",
+};
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function ProvenanceStep({ source, index }: { source: Record<string, unknown>; index: number }): React.JSX.Element {
+  const rawArguments = source.arguments;
+  const toolArguments = typeof rawArguments === "object" && rawArguments !== null && !Array.isArray(rawArguments) ? rawArguments as Record<string, unknown> : null;
+  const sql = toolArguments === null ? null : stringField(toolArguments, "sql");
+  const parameters = toolArguments === null ? {} : Object.fromEntries(Object.entries(toolArguments).filter(([key]) => key !== "sql" && key !== "purpose"));
+  const views = Array.isArray(source.views) ? source.views.filter((view): view is string => typeof view === "string") : [];
+  return (
+    <li className="chat-provenance__step">
+      <span>{sourceLabel(source, index)}</span>
+      {source.ok === false ? <span className="chat-provenance__note">This step did not succeed; the model tried another way.</span> : null}
+      {views.length > 0 ? <span className="chat-provenance__note">Views: {views.join(", ")}</span> : null}
+      {sql === null ? null : <details><summary>Query</summary><pre><code>{sql}</code></pre></details>}
+      {sql === null && Object.keys(parameters).length > 0 ? <details><summary>Parameters</summary><pre><code>{JSON.stringify(parameters, null, 2)}</code></pre></details> : null}
+    </li>
+  );
+}
 
 function newClientMessageId(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `web-${Date.now().toString()}`;
@@ -106,12 +138,16 @@ function MessageCard({ message, priorUserMessage, onCancel, onRetry, cancelling,
   const isAssistant = message.role === "assistant";
   const active = ACTIVE_STATES.has(message.state);
   const failed = FAILURE_STATES.has(message.state);
+  const errorExplanation = message.error_code === null ? undefined : errorExplanations[message.error_code];
+  const timePeriod = message.source_scope === null ? null : stringField(message.source_scope, "time_scope");
+  const textAccess = message.source_scope?.text_access;
   return (
     <article className={`chat-message chat-message--${message.role}`} aria-label={isAssistant ? "HealthCurve AI response" : "Your message"}>
       <div className="chat-message__label">{isAssistant ? "HealthCurve AI" : "You"}</div>
-      {message.body !== null ? <p className="chat-message__body">{message.body}</p> : null}
+      {message.body !== null && isAssistant ? <ChatAnswerText body={message.body} /> : null}
+      {message.body !== null && !isAssistant ? <p className="chat-message__body">{message.body}</p> : null}
       {isAssistant && active ? <div className="chat-message__working" role="status"><Loader size="xs" aria-hidden="true" /> {statusText[message.state]}</div> : null}
-      {isAssistant && failed ? <Alert color="grape" variant="light" role="alert">{statusText[message.state]}{message.error_code === null ? null : <span className="chat-error-code"> Reference: {message.error_code}</span>}</Alert> : null}
+      {isAssistant && failed ? <Alert color="grape" variant="light" role="alert">{errorExplanation === undefined ? statusText[message.state] : <>{errorExplanation} Your message is still saved.</>}{message.error_code === null ? null : <span className="chat-error-code"> Reference: {message.error_code}</span>}</Alert> : null}
       {isAssistant && active ? <Button variant="outline" size="xs" loading={cancelling} onClick={() => { onCancel(message.id); }}>Cancel response</Button> : null}
       {isAssistant && failed && priorUserMessage?.body != null ? <Button variant="outline" size="xs" loading={retrying} onClick={() => { onRetry(priorUserMessage.body ?? ""); }}>Try again</Button> : null}
       {isAssistant ? <StalenessNotice message={message} /> : null}
@@ -121,11 +157,13 @@ function MessageCard({ message, priorUserMessage, onCancel, onRetry, cancelling,
           <div>
             <p><strong>Private model:</strong> {message.model_name ?? "Not recorded"}</p>
             <p><strong>Generated:</strong> {message.generated_at === null ? "Not recorded" : formatConversationDate(message.generated_at)}</p>
+            {timePeriod === null ? null : <p><strong>Time period:</strong> {timePeriod}</p>}
+            {typeof textAccess === "boolean" ? <p><strong>Diary and note text:</strong> {textAccess ? "Included" : "Not included"}</p> : null}
             <p><strong>Data used:</strong></p>
             {message.source_manifest === null || message.source_manifest.length === 0
-              ? <p>No source records were needed for this answer.</p>
-              : <ul>{message.source_manifest.map((source, index) => <li key={`${message.id}-${String(index)}`}>{sourceLabel(source, index)}</li>)}</ul>}
-            <p className="chat-provenance__boundary">AI-generated interpretation is kept separate from recorded facts and physician-approved plans.</p>
+              ? <p>No data queries were needed for this answer.</p>
+              : <ol className="chat-provenance__steps">{message.source_manifest.map((source, index) => <ProvenanceStep key={`${message.id}-${String(index)}`} source={source} index={index} />)}</ol>}
+            <p className="chat-provenance__boundary">AI-generated interpretation is kept separate from recorded facts and physician-approved plans. Numbers in the answer were checked against these query results.</p>
           </div>
         </details>
       ) : null}
@@ -201,7 +239,7 @@ export function ChatPage(): React.JSX.Element {
 
   return (
     <Page title="Chat" description="Ask your private HealthCurve AI questions about your recorded data. Answers are exploratory, not diagnoses or dosing advice.">
-      <Alert color="blue" variant="light" title="Private, read-only analysis" role="note">The chatbot can read only your approved HealthCurve data tools. It cannot change recorded facts or plans, and no health text is sent to a cloud AI service.</Alert>
+      <Alert color="blue" variant="light" title="Private, read-only analysis" role="note">The chatbot answers by running read-only queries over your HealthCurve data with the private model on this computer. It cannot change recorded facts or plans, and no health text is sent to a cloud AI service.</Alert>
       <div className="chat-history-controls">
         <Button
           variant="outline"
@@ -218,11 +256,11 @@ export function ChatPage(): React.JSX.Element {
           {conversations.isError ? <Alert color="red" role="alert">Conversations could not be loaded.</Alert> : null}
           {selected === null ? <div className="chat-welcome"><h2>Start a conversation</h2><p>Ask about a day, a trend, recorded symptoms, doses, episodes, sleep, or Garmin observations.</p><Button onClick={() => { createConversation.mutate(); }} loading={createConversation.isPending}>New chat</Button></div> : (
             <>
-              <header className="chat-panel__header"><div><h2>{selected.title}</h2><span className="category-label">AI conversation</span></div><Checkbox checked={selected.include_sensitive_text} label="Include sensitive diary and life-event text" onChange={(event) => { updateConversation.mutate({ id: selected.id, includeSensitiveText: event.currentTarget.checked }); }} /></header>
+              <header className="chat-panel__header"><div><h2>{selected.title}</h2><span className="category-label">AI conversation</span></div><Checkbox checked={selected.include_sensitive_text} label="Include diary, life-event, and note text" onChange={(event) => { updateConversation.mutate({ id: selected.id, includeSensitiveText: event.currentTarget.checked }); }} /></header>
               <div className="chat-messages" aria-live="polite" aria-busy={activeAssistant !== undefined}>
                 {messages.isPending ? <p role="status">Loading conversation…</p> : null}
                 {messages.isError ? <Alert color="red" role="alert">This conversation could not be loaded.</Alert> : null}
-                {orderedMessages.length === 0 && !messages.isPending ? <div className="chat-welcome"><h3>What would you like to understand?</h3><p>For example: “What was happening around my symptoms yesterday?” or “Compare my stress and heart rate over the last week.”</p></div> : null}
+                {orderedMessages.length === 0 && !messages.isPending ? <div className="chat-welcome"><h3>What would you like to understand?</h3><p>For example: “What was my average bedtime over the past 30 days?” or “When I had symptoms in the past 14 days, what was my heart rate in the hour before and after?”</p></div> : null}
                 {priorTurns.length > 0 ? (
                   <div className="chat-turn-controls">
                     <Button

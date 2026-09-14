@@ -95,6 +95,45 @@ describe("HealthCurve Chat page", () => {
     ).toEqual([]);
   });
 
+  it("shows the time period, each query, its views, and failed steps for analytical answers", async () => {
+    const sql = "SELECT count(steps), round(avg(steps), 0) FROM analytics.daily_wearables WHERE local_date BETWEEN DATE '2026-07-01' AND DATE '2026-07-30'";
+    renderChat([
+      message({
+        body: "You averaged **7234** steps per day on 26 days.",
+        source_scope: { time_scope: "2026-07-01 to 2026-07-30", timezone: "America/New_York", local_date: "2026-07-30", text_access: false },
+        source_manifest: [
+          { tool_name: "run_query", label: "run_query: Bad first attempt", ok: false, error_code: "query_invalid", views: [], arguments: { sql: "SELECT nope FROM analytics.daily_wearables", purpose: "Bad first attempt" } },
+          { tool_name: "run_query", label: "run_query: Average daily steps", ok: true, views: ["analytics.daily_wearables"], arguments: { sql, purpose: "Average daily steps" } },
+          { tool_name: "clock_time_stats", label: "clock_time_stats", ok: true, views: [], arguments: { source: "bedtime", date_from: "2026-07-01", date_to: "2026-07-30" } },
+        ],
+      }),
+    ]);
+    const user = userEvent.setup();
+    await user.click(await screen.findByText("Data used and AI details"));
+    expect(screen.getByText("7234").tagName).toBe("STRONG");
+    expect(screen.getByText("2026-07-01 to 2026-07-30")).toBeVisible();
+    expect(screen.getByText("Not included")).toBeVisible();
+    expect(screen.getByText("run query: Average daily steps")).toBeVisible();
+    expect(screen.getByText("Views: analytics.daily_wearables")).toBeVisible();
+    expect(screen.getByText(/did not succeed/)).toBeVisible();
+    expect(screen.getByText(/checked against these query results/)).toBeVisible();
+
+    const queries = screen.getAllByText("Query");
+    expect(queries).toHaveLength(2);
+    const successfulQuery = queries.at(1);
+    if (successfulQuery === undefined) throw new Error("successful query toggle missing");
+    await user.click(successfulQuery);
+    expect(screen.getByText(sql)).toBeVisible();
+    await user.click(screen.getByText("Parameters"));
+    expect(screen.getByText(/"source": "bedtime"/)).toBeVisible();
+  });
+
+  it("explains why an analytical answer could not be produced", async () => {
+    renderChat([message({ state: "unavailable", body: null, error_code: "chat_analysis_not_configured" })]);
+    expect(await screen.findByText(/Analysis queries are not configured/)).toBeVisible();
+    expect(screen.getByText(/Reference: chat_analysis_not_configured/)).toBeVisible();
+  });
+
   it("sends a natural-language question and preserves the sensitive-text opt-in", async () => {
     renderChat([]);
     vi.mocked(api.sendChatMessage).mockResolvedValue(message({ role: "user", content_category: "owner_authored", state: "accepted", body: "Compare stress and symptoms yesterday", sequence: 1 }));
@@ -104,7 +143,7 @@ describe("HealthCurve Chat page", () => {
     await user.type(composer, "Compare stress and symptoms yesterday");
     await user.keyboard("[Enter]");
     await waitFor(() => { expect(api.sendChatMessage).toHaveBeenCalledWith(conversation.id, "Compare stress and symptoms yesterday", expect.any(String)); });
-    await user.click(screen.getByLabelText("Include sensitive diary and life-event text"));
+    await user.click(screen.getByLabelText("Include diary, life-event, and note text"));
     await waitFor(() => { expect(api.updateChatConversation).toHaveBeenCalledWith(conversation.id, { include_sensitive_text: true }); });
   });
 
