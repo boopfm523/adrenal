@@ -97,6 +97,35 @@ to 366 days, keeps missing data explicit, and can optionally ask the private loc
 model to draft a cited descriptive summary. That draft remains labeled AI analysis;
 it cannot change facts, plans, or medication instructions.
 
+## Analytical chat
+
+The **Chat** page lets the owner ask open-ended questions about their own recorded
+data in plain language — for example, average bedtime over the last 30 days, or
+heart rate around recent symptom episodes. A local Ollama model answers using native
+tool calling over a curated, read-only `analytics` database schema, and can include
+diary and note free text only when that is explicitly enabled for the conversation.
+All arithmetic is computed by Postgres or Python, never invented by the model; the
+same tool catalog is also reachable from other local clients through a
+loopback-only MCP server. See [ADR-0036](docs/adr/0036-local-model-analytical-chat.md),
+[docs/analytics-views.md](docs/analytics-views.md), and
+[docs/local-mcp-server.md](docs/local-mcp-server.md).
+
+Chat is Ollama-only by design — no cloud or cloud-backed model is offered, even
+through a local Claude app. A per-conversation model picker lists only locally
+installed models that report tool-calling support, marks the default/evaluated
+model, and warns before switching to an unevaluated one. Each answer shows how long
+the model took to respond and a collapsible "Data used and AI details" panel with
+the model, generation time, stated time scope, and the exact views and SQL queries
+it ran. A synthetic-data evaluation harness
+([docs/chatbot-evaluation.md](docs/chatbot-evaluation.md)) grades answer accuracy
+before a model, prompt, or tool change ships.
+
+Like the rest of HealthCurve's AI analysis, chat is read-only and derived: it cannot
+create or edit a recorded fact or a physician-approved plan, cannot suggest dose or
+schedule changes, and never touches the emergency page. See
+[docs/safety-spec.md](docs/safety-spec.md) rules `SAFE-17`, `SAFE-19`, `SAFE-20`,
+`SAFE-22`, `SAFE-25`, and `SAFE-26`.
+
 ## The three categories
 
 Everything stored belongs to exactly one of three categories, kept separate in
@@ -118,6 +147,9 @@ CI fails if a rule marked `enforced` loses its coverage.
 |---|---|
 | [docs/HealthCurve_Project_Plan.md](docs/HealthCurve_Project_Plan.md) | Product intent and architecture (the source document) |
 | [docs/using-healthcurve.md](docs/using-healthcurve.md) | Current owner workflows, HealthCurve formulas, and shipped limitations |
+| [docs/analytics-views.md](docs/analytics-views.md) | Curated read-only analytics views and tools behind analytical chat |
+| [docs/chatbot-evaluation.md](docs/chatbot-evaluation.md) | Synthetic-data accuracy evaluation for the analytical chat model |
+| [docs/local-mcp-server.md](docs/local-mcp-server.md) | Loopback-only MCP server exposing the same analysis tools to local clients |
 | [docs/safety-spec.md](docs/safety-spec.md) | Normative safety rules `SAFE-01`…`SAFE-29` |
 | [docs/safety-rules.yaml](docs/safety-rules.yaml) | Machine-readable rule index used by the CI gate |
 | [docs/threat-model.md](docs/threat-model.md) | Threats `T1`…`T8` and data classification `C0`…`C15` |
@@ -161,8 +193,9 @@ open-source software.
 
 - [uv](https://docs.astral.sh/uv/) — provisions Python 3.13 (ADR-0006) and locks deps
 - Docker with Compose — PostgreSQL, Redis, Caddy, API, and background workers
-- Native [Ollama](https://ollama.com/) — optional private model-backed drafts;
-  deterministic recording, analytics, and emergency information work without it
+- Native [Ollama](https://ollama.com/) — optional private model-backed drafts and
+  analytical chat; deterministic recording, analytics, and emergency information
+  work without it
 - Node.js 24 or newer — builds and tests the locked React client
 - [Beads](https://github.com/gastownhall/beads) (`bd`) — issue tracking, mandatory
 
