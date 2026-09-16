@@ -221,7 +221,7 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .provenance-grid dt { color: #48554f; font-size: 0.85rem; font-weight: 700; }
 .provenance-grid dd { margin: 0.2rem 0 0; }
 .correction-form { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: 0.8rem; margin-top: 1rem; padding: 1rem; border: 1px solid #a86712; border-radius: 0.6rem; background: #fffbf3; }
-.correction-form label { display: grid; gap: 0.35rem; font-weight: 700; }
+.correction-form label:not(.checkbox-label):not(.mantine-InputWrapper-label) { display: grid; gap: 0.35rem; font-weight: 700; }
 .correction-form input, .correction-form select, .correction-form textarea { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
 .correction-form textarea { min-height: 5rem; resize: vertical; }
 .correction-warning, .form-wide { grid-column: 1 / -1; }
@@ -311,7 +311,7 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .episode-status--resolved { background: #e2f1e9; color: #174c3c; }
 .episode-status--escalated { background: #ffe8e2; color: #8a260f; }
 .episode-close-form { display: flex; align-items: end; gap: 0.75rem; margin-top: 1rem; border-top: 1px solid #ccd4ce; padding-top: 1rem; }
-.episode-close-form label { display: grid; gap: 0.35rem; font-weight: 700; }
+.episode-close-form label:not(.checkbox-label):not(.mantine-InputWrapper-label) { display: grid; gap: 0.35rem; font-weight: 700; }
 .episode-close-form input { min-height: 44px; border: 1px solid #68756f; border-radius: 0.4rem; padding: 0.55rem; }
 .episode-review-target { scroll-margin-top: 1rem; outline: 0.2rem solid #9b6a18; outline-offset: -0.2rem; }
 .episode-entry-form textarea { min-height: 6rem; }
