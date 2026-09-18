@@ -300,6 +300,21 @@ def test_numbers_not_derivable_from_results_are_still_rejected() -> None:
     assert "145" in client.requests[2]["messages"][-1]["content"]
 
 
+def test_safety_notes_the_answer_already_states_are_not_repeated() -> None:
+    client = _Client(
+        [
+            _turn(_call("run_query", {"sql": STEPS_SQL, "purpose": "steps"})),
+            _submit(f"You averaged 6421 steps on 5 days.\n\n{MISSINGNESS_NOTE}"),
+        ]
+    )
+    result, _, _ = _run(
+        "Average steps?", client, _Executor({"run_query": [_output("run_query", STEPS_DATA)]})
+    )
+    assert result.state is ChatMessageState.COMPLETED
+    assert result.body is not None
+    assert result.body.count(MISSINGNESS_NOTE) == 1
+
+
 def test_medication_guidance_is_rejected_but_a_refusal_completes() -> None:
     client = _Client(
         [

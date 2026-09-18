@@ -154,6 +154,12 @@ h1 { margin-top: 0; color: var(--hc-color-brand-navy, #113f73); font-size: clamp
 .chat-message__body--formatted p { margin: 0 0 0.55rem; white-space: pre-wrap; }
 .chat-message__body--formatted ul, .chat-message__body--formatted ol { margin: 0 0 0.55rem; padding-left: 1.25rem; }
 .chat-message__body--formatted > :last-child { margin-bottom: 0; }
+.chat-message__body--formatted code { border-radius: 0.25rem; padding: 0 0.25rem; background: var(--hc-color-surface-muted); font-size: 0.88em; }
+.chat-message__body--formatted hr { margin: 0.6rem 0; border: 0; border-top: 1px solid var(--hc-color-border); }
+.chat-answer-table { max-width: 100%; margin: 0 0 0.55rem; overflow-x: auto; }
+.chat-answer-table table { border-collapse: collapse; font-size: 0.9rem; overflow-wrap: normal; }
+.chat-answer-table th, .chat-answer-table td { border: 1px solid var(--hc-color-border); padding: 0.3rem 0.65rem; text-align: left; vertical-align: top; white-space: nowrap; }
+.chat-answer-table th { background: var(--hc-color-surface-muted); font-family: "Rubik-SemiBold", sans-serif; }
 .chat-composer { display: grid; gap: 0.65rem; padding: 1rem; border-top: 1px solid var(--hc-color-border); background: var(--hc-color-surface-muted); }
 .chat-composer__hint { color: var(--hc-color-text-muted); font-size: 0.8rem; }
 .chat-welcome { align-self: center; max-width: 36rem; margin: auto; padding: 2rem; text-align: center; }

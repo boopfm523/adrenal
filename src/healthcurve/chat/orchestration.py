@@ -504,6 +504,9 @@ def _render(answer: SubmittedAnswer, executions: list[ExecutedTool]) -> str:
         notes.append(CORRELATION_NOTE)
     if any(execution.tool_name == "modeled_exposure" for execution in used):
         notes.append(MODELED_NOTE)
+    # Models sometimes copy a note into the answer; state each note once.
+    stated = " ".join(answer.answer.split()).casefold()
+    notes = [note for note in notes if " ".join(note.split()).casefold() not in stated]
     if notes:
         parts.append("\n".join(notes))
     return "\n\n".join(parts)[:32_000]

@@ -31,6 +31,7 @@
   },
   "frontend_tables": {
     "frontend/src/components/AccessibleLineChart.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "inherits_parent", "reason": "Exact-value tables render only a bounded parent page or the analytics API's enforced 366-day range." },
+    "frontend/src/components/ChatAnswerText.tsx": { "status": "bounded_reference", "date_filter": "inherited_bounded", "sensitivity": "owner_scoped_sensitive_ai_working_state", "reason": "Renders tables written inside a single chat answer, which is length-limited and belongs to a paginated conversation." },
     "frontend/src/components/DailyPatternsTable.tsx": { "status": "bounded_reference", "date_filter": "selected_range", "sensitivity": "owner_scoped_health", "reason": "The exact-value comparison table and CSV are owner-scoped and the API rejects ranges longer than 366 inclusive local days." },
     "frontend/src/components/ContextSettings.tsx": { "status": "paginated", "issue": "hc-inbox.20.2", "semantic_table": true, "responsive_scroll": true, "url_state": true, "date_filter": "experienced_local", "sensitivity": "owner_scoped_health" },
     "frontend/src/components/DailyHealthCurve.tsx": { "status": "bounded_reference", "date_filter": "selected_range", "sensitivity": "owner_scoped_health", "reason": "The accessible exact-temperature table is restricted to the single local day selected for the HealthCurve." },
