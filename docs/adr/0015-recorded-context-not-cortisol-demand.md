@@ -1,6 +1,6 @@
 # ADR-0015: Recorded context overlays without inferred cortisol demand
 
-**Status:** Accepted — 2026-08-11
+**Status:** Accepted — 2026-08-11; amended by ADR-0037 (theoretical exercise response)
 
 ## Context
 

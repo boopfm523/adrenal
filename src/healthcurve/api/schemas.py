@@ -1580,6 +1580,111 @@ class WakeCoverageFeaturesOut(ApiModel):
         return None if value is None else str(value)
 
 
+class ExerciseResponseReferenceOut(ApiModel):
+    label: str
+    citation: str
+    url: str
+    use: str
+
+
+class ExerciseResponseModelOut(ApiModel):
+    id: Literal["hc-exercise-response-v1"]
+    revision: Literal["hc-exercise-response-v1.0.0"]
+    parameters: dict[str, Decimal]
+    carryover_hours: int = Field(ge=0)
+    references: list[ExerciseResponseReferenceOut]
+
+    @field_serializer("parameters")
+    def _parameters(self, value: dict[str, Decimal]) -> dict[str, str]:
+        return {key: str(item) for key, item in value.items()}
+
+
+class ExerciseResponseInputsOut(ApiModel):
+    resting_heart_rate_bpm: Decimal = Field(ge=0)
+    resting_heart_rate_source: Literal["garmin_daily", "median_prior_14_days"]
+    max_heart_rate_bpm: Decimal = Field(ge=0)
+    max_heart_rate_source: Literal["observed_peak", "age_estimate"]
+    age_estimated_max_heart_rate_bpm: Decimal = Field(ge=0)
+    observed_peak_heart_rate_bpm: Decimal | None = Field(default=None, ge=0)
+    age_years_assumption: Decimal = Field(ge=0)
+    heart_rate_sample_count: int = Field(ge=0)
+    heart_rate_observed_minutes: int = Field(ge=0)
+    heart_rate_unobserved_minutes: int = Field(ge=0)
+
+    @field_serializer(
+        "resting_heart_rate_bpm",
+        "max_heart_rate_bpm",
+        "age_estimated_max_heart_rate_bpm",
+        "observed_peak_heart_rate_bpm",
+        "age_years_assumption",
+    )
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class ExerciseResponseSummaryOut(ApiModel):
+    minutes_above_threshold: int = Field(ge=0)
+    peak_increment_fraction: Decimal = Field(ge=0)
+    peak_at: datetime
+    extra_median_free_nmol_l_hours: Decimal = Field(ge=0)
+
+    @field_serializer("peak_increment_fraction", "extra_median_free_nmol_l_hours")
+    def _values(self, value: Decimal) -> str:
+        return str(value)
+
+
+class ExerciseResponseActivityOut(ApiModel):
+    activity_id: str
+    sport: str
+    started_at: datetime
+    ended_at: datetime
+    duration_minutes: Decimal = Field(ge=0)
+    observed_heart_rate_minutes: int = Field(ge=0)
+    mean_intensity_hrr: Decimal | None = Field(default=None, ge=0)
+    minutes_above_threshold: int = Field(ge=0)
+    peak_increment_fraction: Decimal = Field(ge=0)
+
+    @field_serializer("duration_minutes", "mean_intensity_hrr", "peak_increment_fraction")
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class ExerciseResponseSampleOut(ApiModel):
+    occurred_at: datetime
+    intensity_hrr: Decimal | None = Field(default=None, ge=0)
+    increment_fraction: Decimal = Field(ge=0)
+    serum_free_p5_nmol_l: Decimal = Field(ge=0)
+    serum_free_p50_nmol_l: Decimal = Field(ge=0)
+    serum_free_p95_nmol_l: Decimal = Field(ge=0)
+
+    @field_serializer(
+        "intensity_hrr",
+        "increment_fraction",
+        "serum_free_p5_nmol_l",
+        "serum_free_p50_nmol_l",
+        "serum_free_p95_nmol_l",
+    )
+    def _values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
+
+
+class ExerciseResponseOut(ApiModel):
+    """Theoretical healthy-population response to heart-rate load (ADR-0037); not a dose."""
+
+    available: bool
+    date: date
+    timezone: str
+    series_unit: Literal["nmol/L"]
+    model: ExerciseResponseModelOut
+    missing_inputs: list[
+        Literal["wake_reference", "resting_heart_rate", "heart_rate_samples", "heart_rate_reserve"]
+    ]
+    inputs: ExerciseResponseInputsOut | None
+    summary: ExerciseResponseSummaryOut | None
+    activities: list[ExerciseResponseActivityOut]
+    samples: list[ExerciseResponseSampleOut]
+
+
 class WakeFreeCortisolCurveOut(ApiModel):
     date: date
     timezone: str
@@ -1600,6 +1705,7 @@ class WakeFreeCortisolCurveOut(ApiModel):
     context_band: CircadianContextBandOut
     wake_reference: WakeReferenceOut
     coverage_features: WakeCoverageFeaturesOut
+    exercise_response: ExerciseResponseOut | None = None
 
     @field_serializer("elapsed_hours")
     def _elapsed(self, value: Decimal) -> str:

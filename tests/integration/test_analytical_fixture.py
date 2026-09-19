@@ -10,16 +10,16 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
@@ -33,7 +33,16 @@ from healthcurve.analytical_evaluation import (
     generate_dataset,
     seed_database,
 )
+from healthcurve.analytics import exercise_response, wake_reference_inputs
 from healthcurve.config import get_settings
+from healthcurve.events import service as events
+from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.events.timekeeping import resolve_event_time
+from healthcurve.integrations.garmin.models import (
+    GarminMetricEvent,
+    GarminMetricType,
+    GarminSyncRun,
+)
 
 pytestmark = [pytest.mark.postgres, pytest.mark.slow]
 
@@ -199,3 +208,61 @@ def test_injection_diary_is_only_readable_through_text_access(access: AnalysisAc
     )
     rows = _query(text_access, "SELECT text FROM analytics_text.diary_entries")
     assert len(rows) == 1 and SYNTHETIC_MARKER in rows[0][0]
+
+
+def test_exercise_response_loads_current_garmin_facts_for_one_day(
+    postgres: PostgresContainer, access: AnalysisAccess
+) -> None:
+    """ADR-0037: the loader reads current heart rate, resting rate, and activities."""
+    activity = generate_dataset().activities[-1]
+    day = activity.start.date()
+    owner_id = access.owner_id
+    assert owner_id is not None
+    engine = _engine(postgres, "healthcurve")
+    try:
+        with Session(engine) as session, session.begin():
+            sync = session.scalars(
+                select(GarminSyncRun).where(GarminSyncRun.owner_id == owner_id)
+            ).first()
+            assert sync is not None
+            events.create_event(
+                session,
+                GarminMetricEvent,
+                owner_id=owner_id,
+                event_time=resolve_event_time(datetime.combine(day, time()), TIMEZONE),
+                source_type=SourceType.PROVIDER,
+                confirmation_state=ConfirmationState.PROVIDER_IMPORTED,
+                metric_type=GarminMetricType.RESTING_HEART_RATE,
+                value=Decimal(58),
+                unit="bpm",
+                aggregation="daily_summary",
+                garmin_field_name="restingHeartRate",
+                garmin_sync_run_id=sync.id,
+                garmin_source_member="synthetic",
+                garmin_manufacturer="Garmin",
+            )
+        with Session(engine) as session:
+            reference = wake_reference_inputs.reference_from_observed_facts_for_owner(
+                session, owner_id=owner_id, day=day, timezone=TIMEZONE
+            )
+            response = exercise_response.response_for_owner(
+                session, owner_id=owner_id, day=day, timezone=TIMEZONE, reference=reference
+            )
+    finally:
+        engine.dispose()
+
+    assert reference["available"] is True
+    assert response["available"] is True, response["missing_inputs"]
+    inputs = cast(dict[str, Any], response["inputs"])
+    assert inputs["resting_heart_rate_bpm"] == Decimal("58.0000")
+    assert inputs["resting_heart_rate_source"] == "garmin_daily"
+    assert inputs["max_heart_rate_source"] == "age_estimate"
+    assert inputs["heart_rate_sample_count"] > 0
+    assert [row["sport"] for row in cast(list[dict[str, Any]], response["activities"])] == [
+        activity.sport
+    ]
+    assert len(cast(list[object], response["samples"])) == len(
+        cast(list[object], reference["samples"])
+    )
+    # The synthetic heart rate stays near rest, so the healthy reference is not raised.
+    assert cast(dict[str, Any], response["summary"])["minutes_above_threshold"] == 0

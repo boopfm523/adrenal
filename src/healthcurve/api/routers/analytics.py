@@ -18,6 +18,7 @@ from healthcurve.analytics import (
     circadian_context,
     cortisol_features,
     day_analysis,
+    exercise_response,
     exposure,
     injectable_pharmacokinetics,
     patterns,
@@ -128,6 +129,13 @@ def steroid_exposure_curve(
             session,
             owner_id=owner.id,
             curve=curve,
+            reference=wake_reference,
+        )
+        curve["exercise_response"] = exercise_response.response_for_owner(
+            session,
+            owner_id=owner.id,
+            day=day,
+            timezone=zone_name,
             reference=wake_reference,
         )
         return curve

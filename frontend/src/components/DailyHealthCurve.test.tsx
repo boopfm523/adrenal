@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within, type RenderResult } from "@testing-l
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 
-import type { GarminRecord } from "../api/client";
+import type { GarminRecord, WakeFreeCortisolCurve } from "../api/client";
 import { HealthCurveProvider } from "./HealthCurveProvider";
 import { DailyHealthCurve, type DailyHealthCurveData } from "./DailyHealthCurve";
 
@@ -90,7 +90,7 @@ function physiologicalData(): DailyHealthCurveData {
   });
 }
 
-function wakeFreeData(referenceAvailable = true): DailyHealthCurveData {
+function wakeFreeData(referenceAvailable = true, exerciseResponse: WakeFreeCortisolCurve["exercise_response"] = null): DailyHealthCurveData {
   const base = physiologicalData();
   return data({
     exposure: {
@@ -228,9 +228,18 @@ function wakeFreeData(referenceAvailable = true): DailyHealthCurveData {
           reference_p95_nmol_l: "15.0000",
         }],
       },
+      exercise_response: exerciseResponse,
     },
   });
 }
+
+const EXERCISE_MODEL: NonNullable<WakeFreeCortisolCurve["exercise_response"]>["model"] = {
+  id: "hc-exercise-response-v1",
+  revision: "hc-exercise-response-v1.0.0",
+  carryover_hours: 4,
+  parameters: { intensity_threshold_hrr: "0.4000", increment_per_intensity: "2.0750", calibration_minutes: "30.0000", response_half_life_minutes: "75.0000", max_increment_fraction: "2.0000", sample_gap_factor: "2.0000" },
+  references: [{ label: "Hill et al. (2008)", citation: "Hill EE et al. J Endocrinol Invest. 2008;31:587-591.", url: "https://doi.org/10.1007/BF03345606", use: "intensity threshold and slope" }],
+};
 
 function sample(index: number): GarminRecord {
   const occurredAt = new Date(Date.parse("2026-03-08T05:00:00Z") + index * 60_000).toISOString();
@@ -617,6 +626,64 @@ describe("Daily HealthCurve", () => {
 
     const { tooltip } = hoverAt(2);
     expect(tooltip).toHaveTextContent("Respiration: 30 breaths/min");
+  });
+
+  it("draws the optional theoretical exercise demand layer and publishes its inputs", () => {
+    const raised = [
+      { occurred_at: "2026-03-08T05:00:00Z", intensity_hrr: null, increment_fraction: "0.0000", serum_free_p5_nmol_l: "1", serum_free_p50_nmol_l: "3", serum_free_p95_nmol_l: "5" },
+      { occurred_at: "2026-03-08T06:00:00Z", intensity_hrr: "0.7000", increment_fraction: "0.5000", serum_free_p5_nmol_l: "30", serum_free_p50_nmol_l: "55", serum_free_p95_nmol_l: "100" },
+      { occurred_at: "2026-03-09T04:00:00Z", intensity_hrr: null, increment_fraction: "0.0000", serum_free_p5_nmol_l: "1", serum_free_p50_nmol_l: "2", serum_free_p95_nmol_l: "5" },
+    ];
+    renderWithTheme(<DailyHealthCurve data={wakeFreeData(true, {
+      available: true,
+      date: "2026-03-08",
+      timezone: "America/New_York",
+      series_unit: "nmol/L",
+      model: EXERCISE_MODEL,
+      missing_inputs: [],
+      inputs: { resting_heart_rate_bpm: "58.0000", resting_heart_rate_source: "garmin_daily", max_heart_rate_bpm: "175.1000", max_heart_rate_source: "age_estimate", age_estimated_max_heart_rate_bpm: "175.1000", observed_peak_heart_rate_bpm: "150.0000", age_years_assumption: "47.0000", heart_rate_sample_count: 700, heart_rate_observed_minutes: 1300, heart_rate_unobserved_minutes: 80 },
+      summary: { minutes_above_threshold: 42, peak_increment_fraction: "0.5000", peak_at: "2026-03-08T06:00:00Z", extra_median_free_nmol_l_hours: "12.500000000" },
+      activities: [{ activity_id: "synthetic-run", sport: "trail_running", started_at: "2026-03-08T05:20:00Z", ended_at: "2026-03-08T06:00:00Z", duration_minutes: "40.0000", observed_heart_rate_minutes: 40, mean_intensity_hrr: "0.7000", minutes_above_threshold: 40, peak_increment_fraction: "0.5000" }],
+      samples: raised,
+    })} />);
+
+    expect(document.querySelector('[data-series="exercise-demand"]')).toBeNull();
+    const toggle = screen.getByRole("checkbox", { name: "Exercise demand (theoretical)" });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    const layer = document.querySelector('[data-series="exercise-demand"]');
+    expect(layer).not.toBeNull();
+    expect(layer?.querySelectorAll("path")).toHaveLength(3);
+    expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Exercise demand (theoretical) · raised healthy reference");
+
+    const details = screen.getByText("Exercise demand model: inputs, formula, and limits").parentElement;
+    if (details === null) throw new Error("exercise demand details missing");
+    expect(details).toHaveTextContent(/58(\.0+)? bpm · Garmin daily value/);
+    expect(details).toHaveTextContent("42 minutes above 40% heart-rate reserve");
+    expect(details).toHaveTextContent("+50% total cortisol");
+    expect(details).toHaveTextContent("80 unobserved minutes add no load");
+    expect(details).toHaveTextContent("trail running");
+    expect(details).toHaveTextContent("rise_after_30_min(I) = 2.075 × max(0, I - 0.4)");
+    expect(details).toHaveTextContent("not a measurement, personal requirement, or dose");
+    expect(within(details).getByRole("link", { name: "Hill et al. (2008)" })).toHaveAttribute("href", "https://doi.org/10.1007/BF03345606");
+  });
+
+  it("keeps the exercise demand layer off when its inputs are missing", () => {
+    renderWithTheme(<DailyHealthCurve data={wakeFreeData(true, {
+      available: false,
+      date: "2026-03-08",
+      timezone: "America/New_York",
+      series_unit: "nmol/L",
+      model: EXERCISE_MODEL,
+      missing_inputs: ["heart_rate_samples"],
+      inputs: null,
+      summary: null,
+      activities: [],
+      samples: [],
+    })} />);
+
+    expect(screen.getByRole("checkbox", { name: "Exercise demand (theoretical)" })).toBeDisabled();
+    expect(screen.getByText("Exercise demand model: inputs, formula, and limits").parentElement).toHaveTextContent("because no Garmin heart-rate samples were recorded");
   });
 
   it("publishes the executable formula, evidence, and absence of a needed-value model", () => {

@@ -44,6 +44,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0034](0034-garmin-nap-events.md) | Garmin nap events | Accepted |
 | [0035](0035-garmin-sleep-heart-rate-samples.md) | Garmin sleep-session heart-rate samples | Accepted; amends 0014 |
 | [0036](0036-local-model-analytical-chat.md) | Local-model analytical chat over curated read-only views | Accepted; supersedes part of 0025 |
+| [0037](0037-theoretical-exercise-cortisol-response.md) | Theoretical healthy cortisol response to measured exercise load | Accepted; amends 0015 |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

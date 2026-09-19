@@ -468,6 +468,11 @@ circle.chart-series--active { fill: #fff8da; stroke-width: 5; }
 .healthcurve-context-band { fill: rgb(139 145 142 / 22%); stroke: #777e7a; stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
 .healthcurve-wake-reference-band { fill: rgb(116 154 209 / 24%); stroke: #7192c4; stroke-width: 1; pointer-events: none; }
 .healthcurve-wake-reference-median { fill: none; stroke: #5579af; stroke-width: 1.4; stroke-dasharray: 5 3; pointer-events: none; }
+.healthcurve-exercise-demand-area { fill: rgb(230 145 56 / 34%); stroke: none; pointer-events: none; }
+.healthcurve-exercise-demand-edge { fill: none; stroke: #b86b1f; stroke-width: 1.2; stroke-dasharray: 4 3; pointer-events: none; }
+.healthcurve-key--exercise-demand { width: 1.6rem; height: 0.7rem; border: 1px dashed #b86b1f; background: rgb(230 145 56 / 34%); }
+.exercise-demand-values { margin-block: 1rem; }
+.exercise-demand-values .table-scroll { max-height: 24rem; }
 .healthcurve-expected-pre-wake { fill: rgb(139 145 142 / 11%); pointer-events: none; }
 .healthcurve-expected-pre-wake-label { fill: #65736d; font-size: 10px; font-weight: 700; pointer-events: none; }
 .healthcurve-secondary-scale-label { fill: #65736d; font-size: 10px; }

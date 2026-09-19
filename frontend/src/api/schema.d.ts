@@ -3042,6 +3042,155 @@ export interface components {
             /** Utc Offset Minutes */
             utc_offset_minutes: number;
         };
+        /** ExerciseResponseActivityOut */
+        ExerciseResponseActivityOut: {
+            /** Activity Id */
+            activity_id: string;
+            /** Duration Minutes */
+            duration_minutes: string | null;
+            /**
+             * Ended At
+             * Format: date-time
+             */
+            ended_at: string;
+            /** Mean Intensity Hrr */
+            mean_intensity_hrr?: string | null;
+            /** Minutes Above Threshold */
+            minutes_above_threshold: number;
+            /** Observed Heart Rate Minutes */
+            observed_heart_rate_minutes: number;
+            /** Peak Increment Fraction */
+            peak_increment_fraction: string | null;
+            /** Sport */
+            sport: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
+        /** ExerciseResponseInputsOut */
+        ExerciseResponseInputsOut: {
+            /** Age Estimated Max Heart Rate Bpm */
+            age_estimated_max_heart_rate_bpm: string | null;
+            /** Age Years Assumption */
+            age_years_assumption: string | null;
+            /** Heart Rate Observed Minutes */
+            heart_rate_observed_minutes: number;
+            /** Heart Rate Sample Count */
+            heart_rate_sample_count: number;
+            /** Heart Rate Unobserved Minutes */
+            heart_rate_unobserved_minutes: number;
+            /** Max Heart Rate Bpm */
+            max_heart_rate_bpm: string | null;
+            /**
+             * Max Heart Rate Source
+             * @enum {string}
+             */
+            max_heart_rate_source: "observed_peak" | "age_estimate";
+            /** Observed Peak Heart Rate Bpm */
+            observed_peak_heart_rate_bpm?: string | null;
+            /** Resting Heart Rate Bpm */
+            resting_heart_rate_bpm: string | null;
+            /**
+             * Resting Heart Rate Source
+             * @enum {string}
+             */
+            resting_heart_rate_source: "garmin_daily" | "median_prior_14_days";
+        };
+        /** ExerciseResponseModelOut */
+        ExerciseResponseModelOut: {
+            /** Carryover Hours */
+            carryover_hours: number;
+            /**
+             * Id
+             * @constant
+             */
+            id: "hc-exercise-response-v1";
+            /** Parameters */
+            parameters: {
+                [key: string]: string;
+            };
+            /** References */
+            references: components["schemas"]["ExerciseResponseReferenceOut"][];
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "hc-exercise-response-v1.0.0";
+        };
+        /**
+         * ExerciseResponseOut
+         * @description Theoretical healthy-population response to heart-rate load (ADR-0037); not a dose.
+         */
+        ExerciseResponseOut: {
+            /** Activities */
+            activities: components["schemas"]["ExerciseResponseActivityOut"][];
+            /** Available */
+            available: boolean;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            inputs: components["schemas"]["ExerciseResponseInputsOut"] | null;
+            /** Missing Inputs */
+            missing_inputs: ("wake_reference" | "resting_heart_rate" | "heart_rate_samples" | "heart_rate_reserve")[];
+            model: components["schemas"]["ExerciseResponseModelOut"];
+            /** Samples */
+            samples: components["schemas"]["ExerciseResponseSampleOut"][];
+            /**
+             * Series Unit
+             * @constant
+             */
+            series_unit: "nmol/L";
+            summary: components["schemas"]["ExerciseResponseSummaryOut"] | null;
+            /** Timezone */
+            timezone: string;
+        };
+        /** ExerciseResponseReferenceOut */
+        ExerciseResponseReferenceOut: {
+            /** Citation */
+            citation: string;
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+            /** Use */
+            use: string;
+        };
+        /** ExerciseResponseSampleOut */
+        ExerciseResponseSampleOut: {
+            /** Increment Fraction */
+            increment_fraction: string | null;
+            /** Intensity Hrr */
+            intensity_hrr?: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Serum Free P50 Nmol L */
+            serum_free_p50_nmol_l: string | null;
+            /** Serum Free P5 Nmol L */
+            serum_free_p5_nmol_l: string | null;
+            /** Serum Free P95 Nmol L */
+            serum_free_p95_nmol_l: string | null;
+        };
+        /** ExerciseResponseSummaryOut */
+        ExerciseResponseSummaryOut: {
+            /** Extra Median Free Nmol L Hours */
+            extra_median_free_nmol_l_hours: string;
+            /** Minutes Above Threshold */
+            minutes_above_threshold: number;
+            /**
+             * Peak At
+             * Format: date-time
+             */
+            peak_at: string;
+            /** Peak Increment Fraction */
+            peak_increment_fraction: string;
+        };
         /** GarminActivityWeatherOut */
         GarminActivityWeatherOut: {
             /** Apparent Temperature C */
@@ -5173,6 +5322,7 @@ export interface components {
             elapsed_hours: string;
             /** Excluded Dose Count */
             excluded_dose_count: number;
+            exercise_response?: components["schemas"]["ExerciseResponseOut"] | null;
             model: components["schemas"]["WakeFreeCortisolModelOut"];
             /** Safety Label */
             safety_label: string;

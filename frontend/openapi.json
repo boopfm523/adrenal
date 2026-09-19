@@ -4070,6 +4070,453 @@
         "title": "EventTimeOut",
         "type": "object"
       },
+      "ExerciseResponseActivityOut": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "mean_intensity_hrr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Intensity Hrr"
+          },
+          "minutes_above_threshold": {
+            "minimum": 0.0,
+            "title": "Minutes Above Threshold",
+            "type": "integer"
+          },
+          "observed_heart_rate_minutes": {
+            "minimum": 0.0,
+            "title": "Observed Heart Rate Minutes",
+            "type": "integer"
+          },
+          "peak_increment_fraction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Increment Fraction"
+          },
+          "sport": {
+            "title": "Sport",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "activity_id",
+          "sport",
+          "started_at",
+          "ended_at",
+          "duration_minutes",
+          "observed_heart_rate_minutes",
+          "minutes_above_threshold",
+          "peak_increment_fraction"
+        ],
+        "title": "ExerciseResponseActivityOut",
+        "type": "object"
+      },
+      "ExerciseResponseInputsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "age_estimated_max_heart_rate_bpm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Estimated Max Heart Rate Bpm"
+          },
+          "age_years_assumption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Years Assumption"
+          },
+          "heart_rate_observed_minutes": {
+            "minimum": 0.0,
+            "title": "Heart Rate Observed Minutes",
+            "type": "integer"
+          },
+          "heart_rate_sample_count": {
+            "minimum": 0.0,
+            "title": "Heart Rate Sample Count",
+            "type": "integer"
+          },
+          "heart_rate_unobserved_minutes": {
+            "minimum": 0.0,
+            "title": "Heart Rate Unobserved Minutes",
+            "type": "integer"
+          },
+          "max_heart_rate_bpm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Heart Rate Bpm"
+          },
+          "max_heart_rate_source": {
+            "enum": [
+              "observed_peak",
+              "age_estimate"
+            ],
+            "title": "Max Heart Rate Source",
+            "type": "string"
+          },
+          "observed_peak_heart_rate_bpm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Peak Heart Rate Bpm"
+          },
+          "resting_heart_rate_bpm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resting Heart Rate Bpm"
+          },
+          "resting_heart_rate_source": {
+            "enum": [
+              "garmin_daily",
+              "median_prior_14_days"
+            ],
+            "title": "Resting Heart Rate Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resting_heart_rate_bpm",
+          "resting_heart_rate_source",
+          "max_heart_rate_bpm",
+          "max_heart_rate_source",
+          "age_estimated_max_heart_rate_bpm",
+          "age_years_assumption",
+          "heart_rate_sample_count",
+          "heart_rate_observed_minutes",
+          "heart_rate_unobserved_minutes"
+        ],
+        "title": "ExerciseResponseInputsOut",
+        "type": "object"
+      },
+      "ExerciseResponseModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "carryover_hours": {
+            "minimum": 0.0,
+            "title": "Carryover Hours",
+            "type": "integer"
+          },
+          "id": {
+            "const": "hc-exercise-response-v1",
+            "title": "Id",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Parameters",
+            "type": "object"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ExerciseResponseReferenceOut"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "revision": {
+            "const": "hc-exercise-response-v1.0.0",
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "parameters",
+          "carryover_hours",
+          "references"
+        ],
+        "title": "ExerciseResponseModelOut",
+        "type": "object"
+      },
+      "ExerciseResponseOut": {
+        "additionalProperties": false,
+        "description": "Theoretical healthy-population response to heart-rate load (ADR-0037); not a dose.",
+        "properties": {
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/ExerciseResponseActivityOut"
+            },
+            "title": "Activities",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExerciseResponseInputsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing_inputs": {
+            "items": {
+              "enum": [
+                "wake_reference",
+                "resting_heart_rate",
+                "heart_rate_samples",
+                "heart_rate_reserve"
+              ],
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ExerciseResponseModelOut"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/ExerciseResponseSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "series_unit": {
+            "const": "nmol/L",
+            "title": "Series Unit",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExerciseResponseSummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "date",
+          "timezone",
+          "series_unit",
+          "model",
+          "missing_inputs",
+          "inputs",
+          "summary",
+          "activities",
+          "samples"
+        ],
+        "title": "ExerciseResponseOut",
+        "type": "object"
+      },
+      "ExerciseResponseReferenceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "use": {
+            "title": "Use",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "citation",
+          "url",
+          "use"
+        ],
+        "title": "ExerciseResponseReferenceOut",
+        "type": "object"
+      },
+      "ExerciseResponseSampleOut": {
+        "additionalProperties": false,
+        "properties": {
+          "increment_fraction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Increment Fraction"
+          },
+          "intensity_hrr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intensity Hrr"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "serum_free_p50_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serum Free P50 Nmol L"
+          },
+          "serum_free_p5_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serum Free P5 Nmol L"
+          },
+          "serum_free_p95_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serum Free P95 Nmol L"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "increment_fraction",
+          "serum_free_p5_nmol_l",
+          "serum_free_p50_nmol_l",
+          "serum_free_p95_nmol_l"
+        ],
+        "title": "ExerciseResponseSampleOut",
+        "type": "object"
+      },
+      "ExerciseResponseSummaryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "extra_median_free_nmol_l_hours": {
+            "title": "Extra Median Free Nmol L Hours",
+            "type": "string"
+          },
+          "minutes_above_threshold": {
+            "minimum": 0.0,
+            "title": "Minutes Above Threshold",
+            "type": "integer"
+          },
+          "peak_at": {
+            "format": "date-time",
+            "title": "Peak At",
+            "type": "string"
+          },
+          "peak_increment_fraction": {
+            "title": "Peak Increment Fraction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "minutes_above_threshold",
+          "peak_increment_fraction",
+          "peak_at",
+          "extra_median_free_nmol_l_hours"
+        ],
+        "title": "ExerciseResponseSummaryOut",
+        "type": "object"
+      },
       "GarminActivityWeatherOut": {
         "properties": {
           "apparent_temperature_c": {
@@ -10603,6 +11050,16 @@
             "minimum": 0.0,
             "title": "Excluded Dose Count",
             "type": "integer"
+          },
+          "exercise_response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExerciseResponseOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
             "$ref": "#/components/schemas/WakeFreeCortisolModelOut"
