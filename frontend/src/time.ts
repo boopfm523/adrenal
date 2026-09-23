@@ -105,3 +105,18 @@ export function formatUnzonedDateTime(value: string): string {
     minute: "2-digit",
   }).format(recorded);
 }
+
+/**
+ * The zone this browser believes it is in, or null when the platform cannot say.
+ *
+ * Only ever a suggestion: a device clock set wrong is a device clock set wrong, and
+ * acting on it unasked would reinterpret everything recorded afterwards.
+ */
+export function deviceTimezone(): string | null {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone === "" ? null : zone;
+  } catch {
+    return null;
+  }
+}

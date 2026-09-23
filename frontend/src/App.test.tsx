@@ -7,7 +7,7 @@ import { AuthContext, type AuthContextValue } from "./auth/context";
 
 const auth: AuthContextValue = {
   status: "authenticated",
-  session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: "Synthetic Owner", defaultTimezone: "America/New_York" } },
+  session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: "Synthetic Owner", defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } },
   signIn: vi.fn(),
   signOut: vi.fn(),
 };

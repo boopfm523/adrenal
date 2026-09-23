@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
@@ -12,7 +13,7 @@ const auth: AuthContextValue = {
     user: {
       email: "owner@example.test",
       displayName: "Synthetic Owner",
-      defaultTimezone: "America/New_York",
+      defaultTimezone: "America/New_York", currentTimezone: "America/New_York",
     },
   },
   signIn: vi.fn(),
@@ -20,7 +21,7 @@ const auth: AuthContextValue = {
 };
 
 function renderHelp(): void {
-  render(<AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/help"]}><App /></MemoryRouter></AuthContext.Provider>);
+  render(<AuthContext.Provider value={auth}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/help"]}><App /></MemoryRouter></QueryClientProvider></AuthContext.Provider>);
 }
 
 describe("Help page", () => {

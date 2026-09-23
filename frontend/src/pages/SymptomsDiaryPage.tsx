@@ -401,7 +401,7 @@ function MealCorrectionForm({ meal, close }: { meal: Meal; close: () => void }):
 
 export function SymptomsDiaryPage(): React.JSX.Element {
   const { session } = useAuth();
-  const profileTimezone = session?.user.defaultTimezone ?? "UTC";
+  const profileTimezone = session?.user.currentTimezone ?? "UTC";
   const [searchParams, setSearchParams] = useSearchParams();
   const appliedSearch = searchParams.toString();
   const view = useMemo(() => stateFromSearch(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);

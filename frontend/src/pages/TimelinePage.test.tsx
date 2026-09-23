@@ -10,7 +10,7 @@ import { TimelinePage } from "./TimelinePage";
 
 const session = {
   csrfToken: "synthetic-csrf",
-  user: { email: "owner@example.test", displayName: "Synthetic Owner", defaultTimezone: "America/New_York" },
+  user: { email: "owner@example.test", displayName: "Synthetic Owner", defaultTimezone: "America/New_York", currentTimezone: "America/New_York" },
 };
 
 function requestUrl(input: RequestInfo | URL): string {

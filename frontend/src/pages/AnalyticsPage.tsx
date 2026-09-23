@@ -147,7 +147,7 @@ function HealthCurveDateFilter({
 
 export function AnalyticsPage(): React.JSX.Element {
   const { session } = useAuth();
-  const profileTimezone = session?.user.defaultTimezone ?? "UTC";
+  const profileTimezone = session?.user.currentTimezone ?? "UTC";
   const [searchParams, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState(() => {
     const now = new Date();

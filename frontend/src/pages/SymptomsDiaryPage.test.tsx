@@ -20,7 +20,7 @@ describe("Symptoms and diary page", () => {
   afterEach(() => { sessionStore.clear(); });
 
   it("preserves symptom history and reveals sensitive text only after explicit action", async () => {
-    const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+    const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } };
     sessionStore.set(session);
     const prior = { id: "11111111-1111-4111-8111-111111111111", category: "fact", name: "Synthetic fatigue", severity: 4, body_area: null, tracking_category: null, tracking_category_revision: null, time, provenance, episode_id: null, notes: null };
     const current = { ...prior, id: "22222222-2222-4222-8222-222222222222", severity: 6, provenance: { ...provenance, supersedes_id: prior.id, correction_reason: "Synthetic correction", is_correction: true } };
@@ -153,7 +153,7 @@ describe("Symptoms and diary page", () => {
   }, 15_000);
 
   it("offers confirmed symptom deletion only from the open correction form", async () => {
-    const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+    const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } };
     sessionStore.set(session);
     const symptom = { id: "22222222-2222-4222-8222-222222222222", category: "fact", name: "Synthetic removable symptom", severity: 4, body_area: null, tracking_category: null, tracking_category_revision: null, time, provenance, episode_id: null, notes: null };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {

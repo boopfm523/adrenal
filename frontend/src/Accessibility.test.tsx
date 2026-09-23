@@ -13,7 +13,7 @@ import { PlanPage } from "./pages/PlanPage";
 
 const auth: AuthContextValue = {
   status: "authenticated",
-  session: { csrfToken: "synthetic-csrf-token", user: { email: "owner@example.test", displayName: "Synthetic Owner", defaultTimezone: "America/New_York" } },
+  session: { csrfToken: "synthetic-csrf-token", user: { email: "owner@example.test", displayName: "Synthetic Owner", defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } },
   signIn: vi.fn(),
   signOut: vi.fn(),
 };
@@ -105,7 +105,7 @@ describe("automated accessibility audit", () => {
   });
 
   it("activates every primary route by keyboard", async () => {
-    render(<HealthCurveProvider><AuthContext.Provider value={auth}><MemoryRouter initialEntries={["/today"]}><Routes><Route element={<AppLayout />}><Route path="*" element={<LocationProbe />} /></Route></Routes></MemoryRouter></AuthContext.Provider></HealthCurveProvider>);
+    render(<HealthCurveProvider><AuthContext.Provider value={auth}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/today"]}><Routes><Route element={<AppLayout />}><Route path="*" element={<LocationProbe />} /></Route></Routes></MemoryRouter></QueryClientProvider></AuthContext.Provider></HealthCurveProvider>);
     const routes = [
       ["Daily review", "/healthcurve"], ["Chat", "/chat"], ["Today", "/today"], ["Timeline", "/timeline"], ["Doses", "/doses"], ["Plan", "/plan"], ["Episodes", "/episodes"],
       ["Symptoms & Meals", "/symptoms-diary"], ["Health data", "/health-data"], ["Labs", "/labs"],

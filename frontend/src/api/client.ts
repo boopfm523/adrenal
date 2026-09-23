@@ -58,6 +58,9 @@ export type ReportPage = components["schemas"]["ReportPage"];
 export type ReportPreview = components["schemas"]["ReportPreviewOut"];
 export type ReportCreate = components["schemas"]["ReportCreateRequest"];
 export type ContextEvent = components["schemas"]["ContextOut"];
+export type TimezoneSettings = components["schemas"]["TimezoneSettingsOut"];
+export type TimezoneChange = components["schemas"]["TimezoneChangeOut"];
+export type TimezoneStay = components["schemas"]["TimezoneStayOut"];
 export type ContextPage = components["schemas"]["ContextPage"];
 export type ContextInput = components["schemas"]["ContextIn"];
 export type BloodPressure = components["schemas"]["BloodPressureOut"];
@@ -227,6 +230,7 @@ function toSession(response: LoginResponse | WhoAmI): ActiveSession {
       email: response.email,
       displayName: response.display_name,
       defaultTimezone: response.default_timezone,
+      currentTimezone: response.current_timezone,
     },
   };
 }
@@ -308,6 +312,29 @@ export async function logout(): Promise<void> {
   } finally {
     sessionStore.clear();
   }
+}
+
+export function getTimezoneSettings(): Promise<TimezoneSettings> {
+  return apiRequest<TimezoneSettings>("/settings/timezone");
+}
+
+/**
+ * Record a stay, then refresh the session so every view reads the new zone.
+ *
+ * The session carries the current zone, so leaving it stale would leave the app
+ * labelling today in the zone just left -- the exact confusion the ledger exists
+ * to remove.
+ */
+export async function recordTimezone(
+  timezone: string,
+  label?: string,
+): Promise<TimezoneChange> {
+  const change = await apiRequest<TimezoneChange>("/settings/timezone", {
+    method: "POST",
+    body: JSON.stringify(label === undefined || label === "" ? { timezone } : { timezone, label }),
+  });
+  await restoreSession();
+  return change;
 }
 
 export function getPlanComparison(day: string, timezone: string): Promise<PlanComparisonDay> {

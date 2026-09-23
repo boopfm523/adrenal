@@ -21,6 +21,7 @@ describe("central API client", () => {
         email: "owner@example.test",
         display_name: "Synthetic Owner",
         default_timezone: "America/New_York",
+      current_timezone: "America/New_York",
       }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
@@ -39,7 +40,7 @@ describe("central API client", () => {
   it("expires the central session on any 401 response", async () => {
     sessionStore.set({
       csrfToken: "synthetic-csrf",
-      user: { email: "owner@example.test", displayName: null, defaultTimezone: "UTC" },
+      user: { email: "owner@example.test", displayName: null, defaultTimezone: "UTC", currentTimezone: "UTC" },
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ detail: "not authenticated" }, 401));
 

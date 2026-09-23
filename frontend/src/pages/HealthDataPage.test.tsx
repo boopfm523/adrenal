@@ -8,7 +8,7 @@ import { AuthContext } from "../auth/context";
 import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { HealthDataPage } from "./HealthDataPage";
 
-const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } };
 const time = { occurred_at: "2026-08-09T12:15:00Z", local_time: "2026-08-09T08:15:00", timezone: "America/New_York", utc_offset_minutes: -240 };
 const provenance = { recorded_at: "2026-08-09T12:16:00Z", source_type: "telegram", confirmation_state: "confirmed_from_draft", supersedes_id: null, correction_reason: null, is_correction: false };
 const pressure = { id: "11111111-1111-4111-8111-111111111111", category: "fact", systolic_mmhg: 118, diastolic_mmhg: 76, pulse_bpm: 62, measurement_setting: "home", body_position: null, time, provenance, notes: null };

@@ -5,6 +5,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import protectiveHorizonLogo from "../../../design/logo-concepts/healthcurve-protective-horizon-concept.png";
 import { useAuth } from "../auth/context";
+import { TimezoneBanner } from "./TimezoneBanner";
 
 const navigation = [
   ["Daily review", "/healthcurve"],
@@ -132,6 +133,7 @@ export function AppLayout(): React.JSX.Element {
 
       <AppShell.Main component="main" id="main-content" tabIndex={-1}>
         <div className="main-content-inner">
+          <TimezoneBanner />
           <Outlet />
         </div>
       </AppShell.Main>

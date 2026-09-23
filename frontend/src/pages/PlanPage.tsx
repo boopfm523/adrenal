@@ -522,7 +522,7 @@ function PlanDeletionButton({ version, onDeleted }: { version: RegimenVersion; o
 }
 
 export function PlanPage(): React.JSX.Element {
-  const profileTimezone = useAuth().session?.user.defaultTimezone ?? "UTC";
+  const profileTimezone = useAuth().session?.user.currentTimezone ?? "UTC";
   const [searchParams, setSearchParams] = useSearchParams();
   const appliedSearch = searchParams.toString();
   const view = useMemo(() => planHistoryView(appliedSearch, profileTimezone), [appliedSearch, profileTimezone]);

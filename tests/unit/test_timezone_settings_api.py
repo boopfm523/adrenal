@@ -21,12 +21,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from healthcurve.api import deps
 from healthcurve.api.routers import timezone as timezone_router
 from healthcurve.identity import places
-from healthcurve.identity import service as auth
 from healthcurve.identity.models import Owner, TimezoneStay, TimezoneStaySource
 from tests.fixtures.identity_sqlite import identity_engine
 
 HOME = "Europe/London"
-PASSWORD = "correct-horse-battery-staple"
 
 
 @pytest.fixture
@@ -42,7 +40,7 @@ def owner(factory: sessionmaker[Session]) -> Owner:
         record = Owner(
             id=uuid.uuid4(),
             email="traveller@example.test",
-            password_hash=auth.hash_password(PASSWORD),
+            password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
             default_timezone=HOME,
         )
         session.add(record)

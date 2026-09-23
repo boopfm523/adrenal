@@ -352,7 +352,7 @@ function DocumentReview({ documentId, timezone, close }: { documentId: string; t
 }
 
 export function LabsPage(): React.JSX.Element {
-  const timezone = useAuth().session?.user.defaultTimezone ?? "UTC";
+  const timezone = useAuth().session?.user.currentTimezone ?? "UTC";
   const [searchParams, setSearchParams] = useSearchParams();
   const appliedSearch = searchParams.toString();
   const view = useMemo(() => labHistoryView(appliedSearch, timezone), [appliedSearch, timezone]);

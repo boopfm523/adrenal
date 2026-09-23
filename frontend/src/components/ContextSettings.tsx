@@ -58,7 +58,7 @@ function WeatherDetails({ event }: { event: ContextEvent }): React.JSX.Element {
 
 export function ContextSettings(): React.JSX.Element {
   const { session } = useAuth();
-  const profileTimezone = session?.user.defaultTimezone ?? "UTC";
+  const profileTimezone = session?.user.currentTimezone ?? "UTC";
   const queryClient = useQueryClient();
   const [precision, setPrecision] = useState<Precision>("coarse");
   const [exactConsent, setExactConsent] = useState(false);

@@ -7,7 +7,7 @@ import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { localDate, shiftIsoDate } from "../time";
 import { AnalyticsPage } from "./AnalyticsPage";
 
-const auth: AuthContextValue = { status: "authenticated", session: { csrfToken: "synthetic", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London" } }, signIn: vi.fn(), signOut: vi.fn() };
+const auth: AuthContextValue = { status: "authenticated", session: { csrfToken: "synthetic", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London", currentTimezone: "Europe/London" } }, signIn: vi.fn(), signOut: vi.fn() };
 function requestUrl(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 const provenance = { recorded_at: "2026-08-01T08:01:00Z", source_type: "provider", confirmation_state: "provider_imported", supersedes_id: null, correction_reason: null, is_correction: false };
 const eventTime = { occurred_at: "2026-08-01T08:00:00Z", local_time: "2026-08-01T09:00:00", timezone: "Europe/London", utc_offset_minutes: 60 };

@@ -8,7 +8,7 @@ import { AuthContext } from "../auth/context";
 import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { ReportsPage } from "./ReportsPage";
 
-const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London" } };
+const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London", currentTimezone: "Europe/London" } };
 function response(body: unknown, status = 200): Response { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
 function url(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }
 function report(overrides: Record<string, unknown> = {}): Record<string, unknown> { return { id: "11111111-1111-4111-8111-111111111111", date_from: "2026-07-11", date_to: "2026-08-09", timezone: "Europe/London", selected_sections: ["metrics", "doses", "approved_plan"], include_ai: false, canonical_sha256: "a".repeat(64), render_version: "report-v1", created_at: "2026-08-09T12:00:00Z", artifacts: [{ format: "pdf", media_type: "application/pdf", sha256: "b".repeat(64), byte_size: 100, download_url: "/api/v1/reports/11111111-1111-4111-8111-111111111111/artifacts/pdf" }], ...overrides }; }

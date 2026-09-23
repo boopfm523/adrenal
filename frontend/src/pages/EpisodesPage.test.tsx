@@ -8,7 +8,7 @@ import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { localDate, shiftIsoDate } from "../time";
 import { EpisodesPage } from "./EpisodesPage";
 
-const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London" } };
+const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "Europe/London", currentTimezone: "Europe/London" } };
 const auth: AuthContextValue = { status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() };
 
 function requestUrl(input: RequestInfo | URL): string { if (typeof input === "string") return input; if (input instanceof URL) return input.href; return input.url; }

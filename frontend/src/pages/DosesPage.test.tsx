@@ -8,7 +8,7 @@ import { AuthContext } from "../auth/context";
 import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { DosesPage } from "./DosesPage";
 
-const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } };
+const session = { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } };
 
 function renderPage(initialEntry = "/doses"): void {
   render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><DosesPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);

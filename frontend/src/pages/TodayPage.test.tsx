@@ -13,7 +13,7 @@ const session = {
   user: {
     email: "owner@example.test",
     displayName: "Synthetic Owner",
-    defaultTimezone: "America/New_York",
+    defaultTimezone: "America/New_York", currentTimezone: "America/New_York",
   },
 };
 

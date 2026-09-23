@@ -35,6 +35,7 @@ describe("central authentication", () => {
       email: "owner@example.test",
       display_name: null,
       default_timezone: "UTC",
+      current_timezone: "UTC",
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
     renderProtected();

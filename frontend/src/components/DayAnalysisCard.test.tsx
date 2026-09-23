@@ -28,7 +28,7 @@ function renderCard(): void {
 
 describe("day analysis card", () => {
   beforeEach(() => {
-    sessionStore.set({ csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } });
+    sessionStore.set({ csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } });
   });
 
   afterEach(() => { sessionStore.clear(); });

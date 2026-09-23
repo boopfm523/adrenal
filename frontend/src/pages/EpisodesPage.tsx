@@ -76,7 +76,7 @@ function InjectionTable({ injections }: { injections: Injection[] }): React.JSX.
 
 export function EpisodesPage(): React.JSX.Element {
   const auth = useAuth();
-  const profileTimezone = auth.session?.user.defaultTimezone ?? "UTC";
+  const profileTimezone = auth.session?.user.currentTimezone ?? "UTC";
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const appliedSearch = searchParams.toString();

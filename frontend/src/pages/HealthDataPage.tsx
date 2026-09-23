@@ -426,7 +426,7 @@ function TemperatureCorrection({ record, close }: { record: Temperature; close: 
 
 export function HealthDataPage(): React.JSX.Element {
   const { session } = useAuth();
-  const timezone = session?.user.defaultTimezone ?? "UTC";
+  const timezone = session?.user.currentTimezone ?? "UTC";
   const [searchParams, setSearchParams] = useSearchParams();
   const appliedSearch = searchParams.toString();
   const view = useMemo(() => viewStateFromSearch(appliedSearch, timezone), [appliedSearch, timezone]);

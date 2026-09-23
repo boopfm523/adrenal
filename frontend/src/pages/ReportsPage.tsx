@@ -137,7 +137,7 @@ function ReportPreviewPanel({ preview }: { preview: ReportPreview }): React.JSX.
 
 export function ReportsPage(): React.JSX.Element {
   const { session } = useAuth();
-  const timezone = session?.user.defaultTimezone ?? "UTC";
+  const timezone = session?.user.currentTimezone ?? "UTC";
   const [form, setForm] = useState(() => { const now = new Date(); return { dateFrom: localDate(new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000), timezone), dateTo: localDate(now, timezone), timezone, sections: defaultSections, includeAi: false, includeSensitive: false, csv: false, json: false }; });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();

@@ -7,7 +7,7 @@ import { AuthContext } from "../auth/context";
 import { HealthCurveProvider } from "../components/HealthCurveProvider";
 import { PlanPage } from "./PlanPage";
 
-const auth = { status: "authenticated" as const, session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York" } }, signIn: vi.fn(), signOut: vi.fn() };
+const auth = { status: "authenticated" as const, session: { csrfToken: "synthetic-csrf", user: { email: "owner@example.test", displayName: null, defaultTimezone: "America/New_York", currentTimezone: "America/New_York" } }, signIn: vi.fn(), signOut: vi.fn() };
 function renderPage(initialEntry = "/plan", client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) { return render(<HealthCurveProvider><QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={auth}><PlanPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>); }
 
 function version(id: string, label: string, status: "draft" | "approved" | "retired", effective: string | null, effectiveTo: string | null = null) {

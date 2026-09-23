@@ -107,7 +107,7 @@ function SlotRow({ slot, timezone, day }: { slot: Slot; timezone: string; day: s
 
 export function TodayPage(): React.JSX.Element {
   const { session } = useAuth();
-  const timezone = session?.user.defaultTimezone ?? "UTC";
+  const timezone = session?.user.currentTimezone ?? "UTC";
   const day = localDate(new Date(), timezone);
   const [searchParams, setSearchParams] = useSearchParams();
   const comparison = useQuery({

@@ -1,7 +1,10 @@
 export interface SessionUser {
   email: string;
   displayName: string | null;
+  /** Home zone. Where the owner lives, which travel does not change. */
   defaultTimezone: string;
+  /** The zone in force now per the stay ledger. What "today" means everywhere. */
+  currentTimezone: string;
 }
 
 export interface ActiveSession {

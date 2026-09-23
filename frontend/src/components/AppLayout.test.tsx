@@ -1,4 +1,5 @@
 import { DEFAULT_THEME } from "@mantine/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -18,7 +19,7 @@ const auth: AuthContextValue = {
     user: {
       email: "owner@example.test",
       displayName: "Synthetic Owner",
-      defaultTimezone: "America/New_York",
+      defaultTimezone: "America/New_York", currentTimezone: "America/New_York",
     },
   },
   signIn: vi.fn(),
@@ -42,9 +43,11 @@ function renderLayout(): void {
   render(
     <HealthCurveProvider>
       <AuthContext.Provider value={auth}>
-        <MemoryRouter initialEntries={["/healthcurve"]}>
-          <AppLayout />
-        </MemoryRouter>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <MemoryRouter initialEntries={["/healthcurve"]}>
+            <AppLayout />
+          </MemoryRouter>
+        </QueryClientProvider>
       </AuthContext.Provider>
     </HealthCurveProvider>,
   );
