@@ -284,6 +284,20 @@
         { "method": "POST", "path": "/api/v1/life-events" },
         { "method": "POST", "path": "/api/v1/emergency-injections" }
       ]
+    },
+    {
+      "id": "record-timezone",
+      "title": "Change the timezone you are recording in",
+      "availability": "Web page",
+      "webPath": "/settings",
+      "instructions": "Open Settings \u2192 Timezone while travelling and name where you are, as a place or an IANA zone. When your device disagrees with the recorded zone, a banner at the top of the page offers the same change.",
+      "example": "Synthetic example: record \u201cDenver\u201d on arrival, leaving the home zone unchanged.",
+      "result": "Timezone stay",
+      "confirmation": "HealthCurve never switches on the device's say-so. Nothing already recorded moves; only new entries and the meaning of \u201ctoday\u201d change.",
+      "endpoints": [
+        { "method": "GET", "path": "/api/v1/settings/timezone" },
+        { "method": "POST", "path": "/api/v1/settings/timezone" }
+      ]
     }
   ],
   "importWorkflows": [

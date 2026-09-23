@@ -127,6 +127,8 @@ class TimezoneStay(IdentityBase):
     converted using the home offset, putting the instant hours from where the dose
     actually happened.
 
+    ADR-0038 records why this is a ledger rather than an editable field.
+
     A stay has no end. It ends when the next one begins, which makes the ledger a step
     function over time and removes the possibility of a gap or an overlap being
     representable at all. An instant *before* the first stay resolves to the home zone,

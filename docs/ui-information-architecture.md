@@ -258,16 +258,23 @@ that no findings means the record is clinically complete.
 
 ### 4.12 Settings and privacy (`/settings`)
 
-**Purpose:** control integrations, authentication, retention, location precision,
-exports, deletion, session security, backup status, and audit visibility.
+**Purpose:** control integrations, authentication, retention, location precision, the
+timezone new entries are recorded in, exports, deletion, session security, backup
+status, and audit visibility.
 
 **Primary actions:** connect/disconnect provider; revoke sessions; configure coarse/exact
-location consent; request export; configure retention; initiate reviewed deletion;
-inspect backup/restore status and security activity.
+location consent; record the timezone you are in and review recent stays; request
+export; configure retention; initiate reviewed deletion; inspect backup/restore status
+and security activity.
 
 **States:** provider disconnected/connected/stale/error; token requires reauthorization;
 backup status unknown/stale/healthy; deletion unavailable or pending confirmation;
-feature not configured. Secrets and raw tokens are never displayed after entry.
+feature not configured; recorded zone at home or away, with no travel yet recorded as a
+distinct empty state. Secrets and raw tokens are never displayed after entry.
+
+**Timezone:** the home zone and the zone currently recorded in are shown as separate
+facts, never merged. A place name that matches nothing, or matches zones that genuinely
+differ, produces different messages and changes nothing (ADR-0038).
 
 ### 4.13 Emergency plan (`/emergency`)
 
@@ -310,6 +317,9 @@ The following requirements apply from the first component, not as later remediat
 - Error summaries receive focus, link to invalid fields, and do not discard input.
 - Dynamic success/error/loading updates use appropriately restrained live regions.
 - Buttons use action names (“Record dose”), not ambiguous labels (“Submit” or icon only).
+- When the device timezone differs from the recorded one, the app shell offers to
+  switch in a dismissible, keyboard-reachable banner. It never switches on its own, and
+  the dismissal is remembered per device zone.
 - Date/time controls expose timezone and do not rely on the browser interpreting a naive
   local timestamp.
 - Touch targets are at least 44 by 44 CSS pixels where practical.

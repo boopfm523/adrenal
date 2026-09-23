@@ -12,6 +12,9 @@ function over time with no representable gap or overlap. There is no backfill: a
 instant before the first stay resolves to ``owner.default_timezone``, which is exactly
 today's behaviour, so introducing the ledger reinterprets no existing event.
 
+See ADR-0038 for why this is a ledger rather than an editable field, why there is no
+backfill, and what a local day means across a trip.
+
 This module sits in ``identity``, which is below ``events`` in the ADR-0002 layering,
 so it cannot reach :mod:`healthcurve.events.timekeeping` and works with
 :class:`zoneinfo.ZoneInfo` directly. The duplication is one validating call, and the

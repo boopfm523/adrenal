@@ -399,6 +399,73 @@ retries missing previews. Unconfirmed drafts never appear in trends or physician
 
 ---
 
+## Travelling: the timezone you record in
+
+HealthCurve keeps two different facts about your timezone, and shows both wherever
+either appears:
+
+- **Home timezone** — where you live. Set when your account was created. Travel never
+  changes it.
+- **Recording in** — the zone in force right now, from the stay ledger. This is what
+  "today" means, what a stated time like "took it at 8am" is converted with, and what
+  a local-date filter uses when you do not name a zone.
+
+Until you record a trip, the two are the same and nothing behaves differently from
+before.
+
+### Changing it from Telegram
+
+Say where you are in plain language — "I'm in Chicago", "back in Baltimore", "just
+landed in Denver" — or use the command:
+
+```text
+/tz                  Show the current zone, the home zone, and recent stays
+/tz Denver           Record that you are now in Denver
+/tz America/Denver   The same, by IANA name
+```
+
+The reply names the zone, its abbreviation, and the local time, so a wrong match is
+visible before the next dose is recorded against it. A place HealthCurve does not know
+resolves to nothing and it asks for a larger city nearby or the IANA name — it never
+guesses. Place names resolve entirely offline; no geocoding request is made, because
+that would tell a third party where you are.
+
+### Changing it from the web app
+
+When your device's timezone differs from the recorded one, a banner appears at the top
+of the page offering to switch. It is an offer: HealthCurve never switches on the
+device's say-so, because a device clock set wrong would silently reinterpret everything
+recorded afterwards. Declining is remembered for that device zone, so saying no in
+Denver does not also say no to your next destination.
+
+**Settings & privacy → Timezone while travelling** shows where you are, where home is,
+and your recent stays with the surface each was recorded from, and lets you set the
+zone directly with a place name or an IANA zone.
+
+```text
+GET  /api/v1/settings/timezone    Current zone, home zone, and recent stays
+POST /api/v1/settings/timezone    Record a stay: {"timezone": "Denver", "label": "..."}
+```
+
+### What travel does and does not change
+
+- **Nothing already recorded moves.** A dose taken in Chicago keeps reading back as
+  the Chicago wall time after you fly home. An instant before your first recorded stay
+  resolves to your home zone, exactly as it did before stays existed.
+- **New entries use the zone in force.** That includes doses, symptoms, diary entries,
+  and the coarse location context a shared Telegram location produces.
+- **Dose reminders follow the local clock.** A 09:00 slot is 09:00 where you are. A
+  slot the move jumped past never comes due, and the bot says so at the time of the
+  change rather than letting the reminder age out in silence.
+- **Analytics grouped by local day group by the day you were living in.** A westward
+  flight can produce a longer local day and an eastward one a shorter day, and two
+  doses can share a local hour across the boundary. That is correct: the alternative is
+  a uniform day matching no lived day at either end.
+- **A trip you never mention is recorded in the previous zone**, as it would have been
+  before. HealthCurve under-records rather than inferring.
+
+See [ADR-0038](adr/0038-timezone-stay-ledger.md) for the design and its limits.
+
 ## Location, timezone, and weather context
 
 Authenticated clients can record contextual observations through

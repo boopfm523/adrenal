@@ -232,6 +232,9 @@ Everything below runs inside the `api` container, which is on the private networ
 
 ```bash
 # 1. Your account. HealthCurve is single-owner; this can only be run once.
+#    --timezone is your *home* zone. While travelling, tell the bot ("/tz Denver")
+#    or the Settings page where you are; entries are then recorded in that zone and
+#    nothing already recorded moves. See ADR-0038.
 docker compose run --rm api python -m healthcurve.cli create-owner \
     --email you@example.com --timezone Europe/London
 
