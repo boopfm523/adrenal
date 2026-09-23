@@ -29,7 +29,8 @@ from healthcurve.events.models import (
     SymptomEvent,
     SymptomTrackingCategory,
 )
-from healthcurve.identity.models import Owner
+from healthcurve.identity import timezones
+from healthcurve.identity.models import Owner, TimezoneStaySource
 from healthcurve.integrations.telegram import location
 from healthcurve.integrations.telegram.handlers import (
     confirm_draft,
@@ -783,3 +784,65 @@ def test_phone_location_is_rounded_linked_and_consumed_with_draft(engine: Engine
         assert stored_request.state.value == "used"
         assert stored_request.rounded_latitude is None
         assert home is not None and home.latitude == Decimal("40.7")
+        # Saved at home, so the saved place's zone and the home zone agree.
+        assert home.timezone == "America/New_York"
+
+
+def test_home_area_saved_while_travelling_carries_the_zone_it_was_saved_in(
+    engine: Engine,
+) -> None:
+    """The stored zone describes the coordinates, not where the owner lives.
+
+    A Home area saved during a move would otherwise pair coordinates on one
+    continent with a zone on another, and nothing downstream could tell.
+    """
+    owner = Owner(
+        id=uuid.uuid4(),
+        email="relocating-home@example.test",
+        password_hash=f"{SYNTHETIC_MARKER}-hash",
+        default_timezone="America/New_York",
+    )
+    with Session(engine) as session, session.begin():
+        location_now = datetime.now(UTC)
+        session.add(owner)
+        session.flush()
+        timezones.record_stay(
+            session,
+            owner,
+            "Europe/Lisbon",
+            source=TimezoneStaySource.TELEGRAM,
+            started_at=location_now - timedelta(days=1),
+        )
+        draft = ExtractionDraft(
+            owner_id=owner.id,
+            candidates=[],
+            raw_text=f"{SYNTHETIC_MARKER} relocation note",
+            source="telegram",
+            prompt_version="synthetic-test-v1",
+            schema_version="synthetic-test-v1",
+        )
+        session.add(draft)
+        session.flush()
+
+        assert (
+            location.begin_request(
+                session, owner, chat_id=4343, draft_id=draft.id, now=location_now
+            )
+            is not None
+        )
+        assert (
+            location.attach_phone_location(
+                session, owner, chat_id=4343, latitude=38.7223, longitude=-9.1393, now=location_now
+            )
+            is location.LocationResult.ATTACHED
+        )
+        assert location.save_attached_as_home(session, owner, draft_id=draft.id)
+        session.flush()
+
+        home = session.scalar(
+            select(SavedCoarseLocation).where(SavedCoarseLocation.owner_id == owner.id)
+        )
+        assert home is not None
+        assert home.timezone == "Europe/Lisbon"
+        # The home zone on the profile is a separate fact and does not move.
+        assert owner.default_timezone == "America/New_York"

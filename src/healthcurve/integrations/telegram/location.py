@@ -146,9 +146,19 @@ def cancel_request(
 
 
 def save_attached_as_home(session: Session, owner: Owner, *, draft_id: uuid.UUID) -> bool:
+    """Save the attached coordinates as the Home area.
+
+    The stored zone describes *the saved place*, so it is the zone in force when the
+    coordinates were shared -- which is the zone of the phone that produced them.
+    ``owner.default_timezone`` would be right only while the owner is at home; saving
+    a Home area during a move or a long stay abroad would otherwise pair coordinates
+    on one continent with a zone on another. At home the two are the same value, so
+    the ordinary case is unchanged.
+    """
     request = _for_draft(session, owner.id, draft_id, LocationRequestState.ATTACHED)
     if request is None or request.rounded_latitude is None or request.rounded_longitude is None:
         return False
+    zone = timezones.zone_at(session, owner, request.requested_at)
     home = session.scalar(
         select(SavedCoarseLocation).where(
             SavedCoarseLocation.owner_id == owner.id,
@@ -162,13 +172,13 @@ def save_attached_as_home(session: Session, owner: Owner, *, draft_id: uuid.UUID
             label="Home area",
             latitude=request.rounded_latitude,
             longitude=request.rounded_longitude,
-            timezone=owner.default_timezone,
+            timezone=zone,
         )
         session.add(home)
     else:
         home.latitude = request.rounded_latitude
         home.longitude = request.rounded_longitude
-        home.timezone = owner.default_timezone
+        home.timezone = zone
     return True
 
 
