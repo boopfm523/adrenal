@@ -21,6 +21,7 @@ from healthcurve.integrations.telegram.models import (
     LocationRequestState,
     TelegramLocationRequest,
 )
+from tests.fixtures.telegram_session import telegram_session
 
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000101")
 DRAFT_ID = uuid.UUID("00000000-0000-4000-8000-000000000102")
@@ -65,7 +66,7 @@ def _request(
 
 
 def _session() -> tuple[Session, MagicMock]:
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     return cast(Session, mocked), mocked
 
 
@@ -166,7 +167,9 @@ def test_confirm_creates_only_coarse_context_then_purges_request(
     request.rounded_latitude = Decimal("40.7")
     request.rounded_longitude = Decimal("-74.0")
     request.location_label = "Approximate phone location"
-    mocked.scalar.return_value = request
+    # Two lookups now: the pending request, then the zone the owner was in when they
+    # shared it. No stay recorded means the home zone, which is what _owner() has.
+    mocked.scalar.side_effect = [request, None]
     context = MagicMock(spec=ContextEvent)
     context.id = uuid.UUID("00000000-0000-4000-8000-000000000103")
     create = MagicMock(return_value=context)

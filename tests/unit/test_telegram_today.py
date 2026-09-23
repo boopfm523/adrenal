@@ -14,6 +14,7 @@ from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import handlers
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseTimingMode, DoseUnit, Route
+from tests.fixtures.telegram_session import telegram_session
 
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 
@@ -109,9 +110,7 @@ def _display_times(reply: handlers.Reply) -> list[str]:
 
 
 def _today(owner: Owner, *, now: datetime) -> handlers.Reply:
-    return handlers.handle_message(
-        cast(Session, MagicMock(spec=Session)), owner, text="/today", now=now
-    )
+    return handlers.handle_message(cast(Session, telegram_session()), owner, text="/today", now=now)
 
 
 def test_today_interleaves_mixed_rows_by_displayed_experienced_or_scheduled_time(

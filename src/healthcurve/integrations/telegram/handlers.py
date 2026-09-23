@@ -62,7 +62,8 @@ from healthcurve.events.timekeeping import (
     resolve_event_time,
     timezone_abbreviation,
 )
-from healthcurve.identity.models import Owner
+from healthcurve.identity import places, timezones
+from healthcurve.identity.models import Owner, TimezoneStaySource
 from healthcurve.integrations.telegram import conversation, location
 from healthcurve.integrations.telegram.beads_operations import (
     BeadsOperation,
@@ -207,6 +208,24 @@ _BEADS_ADD_PHRASE: Final = re.compile(
     r"(?:\s+(?:that|to|for)\b|\s*[:.\-])?\s*(?P<request>.+)$",
     re.IGNORECASE,
 )
+#: "I'm in Chicago", "back in Baltimore", "I've just landed in Denver".
+#:
+#: Deliberately loose, because the *place* is what decides whether this is a travel
+#: statement at all: "I'm in pain" matches this pattern and resolves to nowhere, so it
+#: falls through to extraction untouched. Tightening the grammar instead would mean
+#: guessing which phrasings the owner uses; letting the gazetteer decide means the
+#: only way to be wrong is to name a real place while meaning something else.
+_TIMEZONE_PHRASE: Final = re.compile(
+    r"^(?:"
+    r"(?:i\s*['\u2019]m|i\s+am|im|i\s*['\u2019]ve|i\s+have|ive)\s+"
+    r"(?:just\s+)?(?:(?:now|back|home|landed|arrived|got)\s+)*"
+    r"|"
+    r"(?:just\s+)?(?:back|landed|arrived)\s+"
+    r")"
+    r"in\s+(?P<place>[^,.!?]+?)"
+    r"(?:\s+(?:now|today|again))?[.!]?$",
+    re.IGNORECASE,
+)
 _REMOVE_DUPLICATE_DOSE_PHRASE: Final = re.compile(
     r"^(?:(?:please|can you|could you)\s+)?(?:correct\s+(?:this\s+)?(?:by\s+)?)?"
     r"(?:remove|delete|void|correct)\s+(?:(?:one|the|my|an?)\s+)?"
@@ -239,6 +258,7 @@ SUPPORTED_TELEGRAM_COMMANDS: Final[frozenset[str]] = frozenset(
         "symptom",
         "today",
         "temperature",
+        "tz",
         "undo",
         "weight",
     }
@@ -269,6 +289,7 @@ Recording commands (these work even if the language model is offline):
 /episode end - close the open episode
 /today - what's recorded today vs your plan
 /location - add optional coarse location to the pending draft
+/tz [place] - show or change the timezone new entries are recorded in
 /edit <number> <field> <value> - correct amount, unit, time, or medication
 /removedose [YYYY-MM-DD] [HH:MM] - review one exact duplicate dose for removal
 /undo - cancel the pending draft
@@ -404,18 +425,22 @@ def handle_message(
 
 
 def _is_conversational_shortcut(text: str) -> bool:
-    return _looks_like_planned_dose_shorthand(text) or any(
-        pattern.fullmatch(text) is not None
-        for pattern in (
-            _EPISODE_END_PHRASE,
-            _EPISODE_START_PHRASE,
-            _BEADS_LIST_PHRASE,
-            _BEADS_STATUS_PHRASE,
-            _BEADS_ADD_PHRASE,
-            _REMOVE_DUPLICATE_DOSE_PHRASE,
-            _WEIGHT_ONLY_PHRASE,
-            _MEAL_PHRASE,
-            _SYMPTOM_PHRASE,
+    return (
+        _spoken_timezone_change(text) is not None
+        or _looks_like_planned_dose_shorthand(text)
+        or any(
+            pattern.fullmatch(text) is not None
+            for pattern in (
+                _EPISODE_END_PHRASE,
+                _EPISODE_START_PHRASE,
+                _BEADS_LIST_PHRASE,
+                _BEADS_STATUS_PHRASE,
+                _BEADS_ADD_PHRASE,
+                _REMOVE_DUPLICATE_DOSE_PHRASE,
+                _WEIGHT_ONLY_PHRASE,
+                _MEAL_PHRASE,
+                _SYMPTOM_PHRASE,
+            )
         )
     )
 
@@ -433,6 +458,9 @@ def _handle_conversational_shortcut(
     chat_id: int | None,
 ) -> Reply | None:
     """Handle only narrow, unambiguous phrases; everything else uses extraction."""
+    spoken_zone = _spoken_timezone_change(text)
+    if spoken_zone is not None:
+        return _change_timezone(session, owner, spoken_zone, now=now)
     if _EPISODE_END_PHRASE.fullmatch(text):
         return _cmd_episode(session, owner, ["end"], now=now)
     episode = _EPISODE_START_PHRASE.fullmatch(text)
@@ -472,7 +500,7 @@ def _handle_conversational_shortcut(
             session,
             owner_id=owner.id,
             message=text,
-            timezone=owner.default_timezone,
+            timezone=_zone_now(session, owner, now),
             now=now,
         )
         if deterministic is not None:
@@ -502,7 +530,7 @@ def _handle_conversational_shortcut(
     explicit_weight = find_explicit_weight(text) if _WEIGHT_ONLY_PHRASE.fullmatch(text) else None
     if explicit_weight is not None:
         raw_value, unit = explicit_weight
-        local = _local_now(owner, now)
+        local = _local_now(session, owner, now)
         stated_time = find_time_expression(text)
         flags: list[FlagCode] = []
         if stated_time is not None:
@@ -518,7 +546,7 @@ def _handle_conversational_shortcut(
             weight_unit=unit,
             measurement_setting=explicit_measurement_setting(text),
             local_time=local,
-            timezone=owner.default_timezone,
+            timezone=_zone_for(session, owner, local, now),
             confidence=1.0,
             flags=flags,
         )
@@ -531,7 +559,7 @@ def _handle_conversational_shortcut(
     if meal is not None:
         raw_size = meal.group("size") or meal.group("trailing_size")
         size = _meal_size(raw_size) if raw_size else None
-        local = _local_now(owner, now)
+        local = _local_now(session, owner, now)
         flags = []
         if meal.group("time"):
             parsed = _parse_time_token(meal.group("time"), local)
@@ -544,7 +572,7 @@ def _handle_conversational_shortcut(
             type=CandidateType.MEAL,
             meal_size=size,
             local_time=local,
-            timezone=owner.default_timezone,
+            timezone=_zone_for(session, owner, local, now),
             confidence=1.0,
             flags=flags,
         )
@@ -556,7 +584,7 @@ def _handle_conversational_shortcut(
     symptom = _SYMPTOM_PHRASE.fullmatch(text)
     if symptom is not None:
         name = symptom.group("name").strip(" .")
-        local = _local_now(owner, now)
+        local = _local_now(session, owner, now)
         flags = []
         if symptom.group("time"):
             parsed = _parse_time_token(symptom.group("time"), local)
@@ -569,7 +597,7 @@ def _handle_conversational_shortcut(
             type=CandidateType.SYMPTOM,
             symptom_name=name,
             local_time=local,
-            timezone=owner.default_timezone,
+            timezone=_zone_for(session, owner, local, now),
             confidence=1.0,
             flags=flags,
         )
@@ -595,7 +623,7 @@ def _planned_dose_draft(
         return None
     description = match.group("description").strip()
 
-    local = _local_now(owner, now)
+    local = _local_now(session, owner, now)
     flags: list[FlagCode] = []
     stated_time = find_time_expression(text)
     if stated_time is None:
@@ -608,9 +636,10 @@ def _planned_dose_draft(
                 "recorded; include the time as HH:MM."
             )
         local = parsed
-        if is_nonexistent(local, owner.default_timezone):
+        stated_zone = _zone_for(session, owner, local, now)
+        if is_nonexistent(local, stated_zone):
             flags.append(FlagCode.NONEXISTENT_TIME)
-        elif is_ambiguous(local, owner.default_timezone):
+        elif is_ambiguous(local, stated_zone):
             flags.append(FlagCode.AMBIGUOUS_TIME)
 
     period = _planned_dose_period(description, local.time())
@@ -668,7 +697,7 @@ def _planned_dose_draft(
             route=slot.route.value,
             dose_category=DoseCategory.SCHEDULED,
             local_time=local,
-            timezone=owner.default_timezone,
+            timezone=_zone_for(session, owner, local, now),
             confidence=1.0,
             flags=flags,
             is_actionable=not bool(BLOCKING_FLAGS & set(flags)),
@@ -797,7 +826,9 @@ def _begin_duplicate_dose_removal(
     )
     groups: dict[tuple[object, ...], list[DoseEvent]] = {}
     for dose in rows:
-        local = from_instant(dose.occurred_at, owner.default_timezone).local_time
+        local = from_instant(
+            dose.occurred_at, _zone_then(session, owner, dose.occurred_at)
+        ).local_time
         if selected_date is not None and local.date() != selected_date:
             continue
         if selected_hour_minute is not None and (local.hour, local.minute) != selected_hour_minute:
@@ -826,7 +857,9 @@ def _begin_duplicate_dose_removal(
 
     duplicate_group = duplicates[0]
     target = max(duplicate_group, key=lambda item: (item.recorded_at, str(item.id)))
-    local = from_instant(target.occurred_at, owner.default_timezone).local_time
+    local = from_instant(
+        target.occurred_at, _zone_then(session, owner, target.occurred_at)
+    ).local_time
     question = (
         f"Remove one of {len(duplicate_group)} identical "
         f"{_display_decimal(target.amount)} {target.unit.value} {target.medication.name} "
@@ -919,6 +952,8 @@ def _handle_command(
             return _cmd_injection(session, owner, args, now=now)
         case "episode":
             return _cmd_episode(session, owner, args, now=now)
+        case "tz":
+            return _cmd_tz(session, owner, raw_argument, now=now)
         case "today":
             return _cmd_today(session, owner, now=now)
         case "location":
@@ -1035,7 +1070,9 @@ def _resume_pending_intent(
             conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
             return Reply("That dose was already corrected. Nothing else was changed.")
         conversation.clear_context(session, owner_id=owner.id, chat_id=chat_id)
-        local = from_instant(tombstone.occurred_at, owner.default_timezone).local_time
+        local = from_instant(
+            tombstone.occurred_at, _zone_then(session, owner, tombstone.occurred_at)
+        ).local_time
         return Reply(
             f"Removed one duplicate {_display_decimal(tombstone.amount)} "
             f"{tombstone.unit.value} {tombstone.medication.name} entry at {local:%Y-%m-%d %H:%M}. "
@@ -1167,7 +1204,7 @@ def _cmd_dose(session: Session, owner: Owner, args: list[str], *, now: datetime)
         known = _known_medication_names(session, owner.id)
         return Reply(f"I don't know '{name}'. Your medications are: {known or 'none recorded yet'}")
 
-    local = _local_now(owner, now)
+    local = _local_now(session, owner, now)
     if time_token:
         parsed = _parse_time_token(time_token, local)
         if parsed is None:
@@ -1183,7 +1220,7 @@ def _cmd_dose(session: Session, owner: Owner, args: list[str], *, now: datetime)
         route=medication.default_route.value,
         dose_category=DoseCategory.SCHEDULED,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
         flags=[],
     )
@@ -1225,8 +1262,8 @@ def _cmd_symptom(session: Session, owner: Owner, args: list[str], *, now: dateti
         symptom_name=name,
         severity=severity,
         symptom_tracking_category=category,
-        local_time=_local_now(owner, now),
-        timezone=owner.default_timezone,
+        local_time=_local_now(session, owner, now),
+        timezone=_zone_now(session, owner, now),
         confidence=1.0,
         flags=[],
     )
@@ -1238,7 +1275,7 @@ def _cmd_meal(session: Session, owner: Owner, args: list[str], *, now: datetime)
     usage = "Usage: /meal [XS|S|M|L|XL|XXL] [HH:MM]\nExample: /meal L 12:30"
     if len(args) > 2:
         return Reply(usage)
-    local = _local_now(owner, now)
+    local = _local_now(session, owner, now)
     size: MealSize | None = None
     has_explicit_time = False
     for token in args:
@@ -1257,7 +1294,7 @@ def _cmd_meal(session: Session, owner: Owner, args: list[str], *, now: datetime)
         type=CandidateType.MEAL,
         meal_size=size,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
         flags=[] if has_explicit_time else [FlagCode.ASSUMED_TIME],
     )
@@ -1298,7 +1335,7 @@ def _cmd_diary(session: Session, owner: Owner, args: list[str], *, now: datetime
         "Usage: /diary <text> [--time=HH:MM] [--sensitive]\n"
         "Example: /diary Slept poorly --time=07:30 --sensitive"
     )
-    parsed = _context_command_parts(args, _local_now(owner, now))
+    parsed = _context_command_parts(args, _local_now(session, owner, now))
     if parsed is None:
         return Reply(usage)
     content, local, sensitive, has_explicit_time = parsed
@@ -1310,7 +1347,7 @@ def _cmd_diary(session: Session, owner: Owner, args: list[str], *, now: datetime
         text=entry,
         is_sensitive=sensitive,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
         flags=[] if has_explicit_time else [FlagCode.ASSUMED_TIME],
     )
@@ -1325,7 +1362,7 @@ def _cmd_life_event(session: Session, owner: Owner, args: list[str], *, now: dat
         "medical_appointment, other\n"
         "Example: /lifeevent travel Overnight flight --time=22:15"
     )
-    parsed = _context_command_parts(args, _local_now(owner, now))
+    parsed = _context_command_parts(args, _local_now(session, owner, now))
     if parsed is None:
         return Reply(usage)
     content, local, sensitive, has_explicit_time = parsed
@@ -1344,7 +1381,7 @@ def _cmd_life_event(session: Session, owner: Owner, args: list[str], *, now: dat
         is_sensitive=sensitive,
         life_event_category=category,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
         flags=[] if has_explicit_time else [FlagCode.ASSUMED_TIME],
     )
@@ -1400,7 +1437,7 @@ def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now:
     if pulse is not None and not 1 <= pulse <= 500:
         return Reply("Pulse must be a positive whole number at most 500 bpm.")
 
-    local = _local_now(owner, now)
+    local = _local_now(session, owner, now)
     if time_token:
         parsed = _parse_time_token(time_token, local)
         if parsed is None:
@@ -1414,7 +1451,7 @@ def _cmd_blood_pressure(session: Session, owner: Owner, args: list[str], *, now:
         measurement_setting=MeasurementSetting.HOME,
         body_position=body_position,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
     )
     draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
@@ -1441,7 +1478,7 @@ def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetim
     if len(args) > 3:
         return Reply(usage)
     time_token = args[2] if len(args) == 3 else None
-    local = _local_now(owner, now)
+    local = _local_now(session, owner, now)
     if time_token:
         parsed = _parse_time_token(time_token, local)
         if parsed is None:
@@ -1453,7 +1490,7 @@ def _cmd_weight(session: Session, owner: Owner, args: list[str], *, now: datetim
         weight_unit=unit,
         measurement_setting=MeasurementSetting.HOME,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
     )
     draft = _store_draft(session, owner, [candidate], raw_text=None, source="telegram_command")
@@ -1490,7 +1527,7 @@ def _cmd_temperature(session: Session, owner: Owner, args: list[str], *, now: da
     if len(remaining) > 1:
         return Reply(usage)
     time_token = remaining[0] if remaining else None
-    local = _local_now(owner, now)
+    local = _local_now(session, owner, now)
     if time_token:
         parsed = _parse_time_token(time_token, local)
         if parsed is None:
@@ -1501,7 +1538,7 @@ def _cmd_temperature(session: Session, owner: Owner, args: list[str], *, now: da
         temperature_value=value,
         temperature_unit=unit,
         local_time=local,
-        timezone=owner.default_timezone,
+        timezone=_zone_for(session, owner, local, now),
         confidence=1.0,
         flags=[FlagCode.INFERRED_TEMPERATURE_UNIT] if inferred_unit else [],
     )
@@ -1539,7 +1576,7 @@ def _cmd_injection(session: Session, owner: Owner, args: list[str], *, now: date
         session,
         EmergencyInjectionEvent,
         owner_id=owner.id,
-        event_time=from_instant(now, owner.default_timezone),
+        event_time=from_instant(now, _zone_now(session, owner, now)),
         source_type=SourceType.TELEGRAM,
         confirmation_state=ConfirmationState.DIRECT,
         medication_id=medication.id,
@@ -1578,7 +1615,7 @@ def _cmd_episode(session: Session, owner: Owner, args: list[str], *, now: dateti
             trigger=trigger,
             status=EpisodeStatus.OPEN,
             started_at=now,
-            timezone=owner.default_timezone,
+            timezone=_zone_now(session, owner, now),
             recorded_at=now,
         )
         session.add(episode)
@@ -1597,15 +1634,94 @@ def _cmd_episode(session: Session, owner: Owner, args: list[str], *, now: dateti
     return Reply("Usage: /episode start <trigger>  |  /episode end")
 
 
-def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
-    """Today against the plan. Deterministic -- no model, no charts."""
-    local_today = _local_now(owner, now).date()
-    comparison = meds.compare_day(
-        session, owner_id=owner.id, day=local_today, timezone=owner.default_timezone
+def _spoken_timezone_change(text: str) -> str | None:
+    """The place a travel statement names, when that place is one we can resolve.
+
+    Returns the *place* rather than the zone so the caller can re-resolve and report
+    an ambiguity properly. ``None`` means this is not a travel statement -- including
+    the common case of a sentence that merely looks like one ("I'm in pain"), which
+    must reach extraction unchanged.
+    """
+    match = _TIMEZONE_PHRASE.fullmatch(text.strip())
+    if match is None:
+        return None
+    place = match.group("place")
+    try:
+        resolved = places.resolve(place)
+    except places.AmbiguousPlaceError:
+        return place
+    return place if resolved is not None else None
+
+
+def _describe_zone(zone: str, now: datetime) -> str:
+    """Zone, abbreviation and local time, so a wrong guess is obvious on sight."""
+    local = from_instant(now, zone).local_time
+    return f"{zone} ({timezone_abbreviation(zone, now)}), local time {local:%H:%M}"
+
+
+def _change_timezone(session: Session, owner: Owner, place: str, *, now: datetime) -> Reply:
+    """Record a new stay, or explain why nothing was recorded."""
+    try:
+        zone = places.resolve(place, at=now)
+    except places.AmbiguousPlaceError as exc:
+        options = ", ".join(exc.candidates)
+        return Reply(
+            f"'{exc.place}' matches more than one timezone: {options}. Nothing changed; "
+            f"tell me which one, e.g. /tz {exc.candidates[0]}."
+        )
+
+    if zone is None:
+        return Reply(
+            f"I don't know a timezone for '{place.strip()}'. Nothing changed; name a larger "
+            "city nearby, or the IANA zone directly, e.g. /tz America/Denver."
+        )
+
+    stay = timezones.record_stay(
+        session, owner, zone, source=TimezoneStaySource.TELEGRAM, started_at=now
+    )
+    described = _describe_zone(zone, now)
+    if stay is None:
+        return Reply(f"You're already recorded as being in {described}. Nothing changed.")
+    return Reply(
+        f"Recorded: you're in {described}. New entries use this zone until you tell me "
+        f"otherwise. Your home zone is still {owner.default_timezone}, and nothing already "
+        "recorded has moved."
     )
 
+
+def _cmd_tz(session: Session, owner: Owner, argument: str, *, now: datetime) -> Reply:
+    """Show the current zone, or change it."""
+    if argument.strip():
+        return _change_timezone(session, owner, argument, now=now)
+
     lines = [
-        f"Today ({local_today.isoformat()}, {timezone_abbreviation(owner.default_timezone, now)})",
+        f"Current zone: {_describe_zone(_zone_now(session, owner, now), now)}",
+        f"Home zone: {owner.default_timezone}",
+    ]
+    stays = timezones.history(session, owner, limit=5)
+    if not stays:
+        lines.append("")
+        lines.append("No travel recorded, so everything resolves to your home zone.")
+        return Reply("\n".join(lines))
+
+    lines.append("")
+    lines.append("Recent changes:")
+    lines.extend(
+        f"- {from_instant(stay.started_at, stay.timezone).local_time:%Y-%m-%d %H:%M} "
+        f"{stay.timezone} ({stay.source.value})"
+        for stay in stays
+    )
+    return Reply("\n".join(lines))
+
+
+def _cmd_today(session: Session, owner: Owner, *, now: datetime) -> Reply:
+    """Today against the plan. Deterministic -- no model, no charts."""
+    zone = _zone_now(session, owner, now)
+    local_today = _local_now(session, owner, now).date()
+    comparison = meds.compare_day(session, owner_id=owner.id, day=local_today, timezone=zone)
+
+    lines = [
+        f"Today ({local_today.isoformat()}, {timezone_abbreviation(zone, now)})",
         "",
     ]
     slots = cast(list[meds.SlotComparison], comparison["slots"])
@@ -1709,6 +1825,7 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
         CandidateType.TEMPERATURE,
     }:
         return _edit_vital_candidate(
+            session,
             draft,
             candidates,
             index,
@@ -1729,6 +1846,7 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
         )
     if candidate.type is CandidateType.MEAL:
         return _edit_meal_candidate(
+            session,
             draft,
             candidates,
             index,
@@ -1772,11 +1890,11 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
         changes.update(medication_id=medication.id, medication_name=medication.name)
         _remove_flags(flags, FlagCode.UNKNOWN_MEDICATION)
     elif field == "time":
-        local = _parse_time_token(value, _local_now(owner, now))
+        local = _parse_time_token(value, _local_now(session, owner, now))
         if local is None:
             return Reply("I couldn't read that time. Use 24-hour HH:MM, e.g. /edit 1 time 07:05")
         try:
-            resolved = resolve_event_time(local, owner.default_timezone)
+            resolved = resolve_event_time(local, _zone_for(session, owner, local, now))
         except AmbiguousLocalTimeError:
             return Reply("That time happened twice when the clocks changed; use the web editor.")
         except NonExistentLocalTimeError:
@@ -1816,6 +1934,7 @@ def _cmd_edit(session: Session, owner: Owner, args: list[str], *, now: datetime)
 
 
 def _edit_vital_candidate(
+    session: Session,
     draft: ExtractionDraft,
     candidates: list[ValidatedCandidate],
     index: int,
@@ -1827,11 +1946,11 @@ def _edit_vital_candidate(
 ) -> Reply:
     changes: dict[str, object] = {}
     if field == "time":
-        local = _parse_time_token(value, _local_now(owner, now))
+        local = _parse_time_token(value, _local_now(session, owner, now))
         if local is None:
             return Reply("I couldn't read that time. Use 24-hour HH:MM, e.g. /edit 1 time 08:15")
         try:
-            resolved = resolve_event_time(local, owner.default_timezone)
+            resolved = resolve_event_time(local, _zone_for(session, owner, local, now))
         except AmbiguousLocalTimeError:
             return Reply("That time happened twice when the clocks changed; use the web editor.")
         except NonExistentLocalTimeError:
@@ -1989,6 +2108,7 @@ def _edit_symptom_candidate(
 
 
 def _edit_meal_candidate(
+    session: Session,
     draft: ExtractionDraft,
     candidates: list[ValidatedCandidate],
     index: int,
@@ -2008,7 +2128,7 @@ def _edit_meal_candidate(
                 return Reply("Meal size must be XS, S, M, L, XL, XXL, or none.")
             changes["meal_size"] = size
     elif field == "time":
-        local = _parse_time_token(value, _local_now(owner, now))
+        local = _parse_time_token(value, _local_now(session, owner, now))
         if local is None:
             return Reply("I couldn't read that time. Use 24-hour HH:MM.")
         changes["local_time"] = local
@@ -2107,7 +2227,7 @@ def _handle_free_text(
         session,
         owner_id=owner.id,
         message=text,
-        timezone=owner.default_timezone,
+        timezone=_zone_now(session, owner, now),
         now=now,
         client=client,
     )
@@ -2714,8 +2834,32 @@ def _known_medication_names(session: Session, owner_id: uuid.UUID) -> str:
     return ", ".join(names)
 
 
-def _local_now(owner: Owner, now: datetime) -> datetime:
-    return from_instant(now, owner.default_timezone).local_time
+def _zone_now(session: Session, owner: Owner, now: datetime) -> str:
+    """The zone to record something happening *now* in."""
+    return timezones.current_zone(session, owner, now=now)
+
+
+def _zone_then(session: Session, owner: Owner, instant: datetime) -> str:
+    """The zone an already-recorded instant was experienced in.
+
+    Used for display. A dose taken in Chicago keeps reading back as the Chicago wall
+    time after the owner flies home, which is what makes "I took it at 8" still true.
+    """
+    return timezones.zone_at(session, owner, instant)
+
+
+def _zone_for(session: Session, owner: Owner, local: datetime, now: datetime) -> str:
+    """The zone a stated wall time belongs to.
+
+    Distinct from :func:`_zone_now` because a message can describe something earlier
+    than itself: "took it at 8am" sent shortly after landing refers to 8am in the zone
+    that was in force then, not the one the message was typed in.
+    """
+    return timezones.zone_for_local_time(session, owner, local, now=now)
+
+
+def _local_now(session: Session, owner: Owner, now: datetime) -> datetime:
+    return from_instant(now, _zone_now(session, owner, now)).local_time
 
 
 def _looks_like_time(token: str) -> bool:
@@ -2748,7 +2892,3 @@ def _parse_time_token(token: str, local_reference: datetime) -> datetime | None:
         # "at 23:30" sent at 00:10 means last night, not tonight.
         candidate -= timedelta(days=1)
     return candidate
-
-
-def today_local(owner: Owner, now: datetime) -> date:
-    return _local_now(owner, now).date()

@@ -20,6 +20,7 @@ from healthcurve.medications.models import (
     RegimenDoseSlot,
     Route,
 )
+from tests.fixtures.telegram_session import telegram_session
 
 
 def _owner() -> Owner:
@@ -95,7 +96,7 @@ def _resolve(
 
     monkeypatch.setattr(handlers, "_draft_reply", fake_draft_reply)
     reply = handlers._planned_dose_draft(  # pyright: ignore[reportPrivateUsage]
-        cast(Session, MagicMock(spec=Session)), _owner(), text, now=sent_at
+        cast(Session, telegram_session()), _owner(), text, now=sent_at
     )
     return reply, captured, active
 

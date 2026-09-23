@@ -22,6 +22,7 @@ from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram import handlers
 from healthcurve.medications.models import DoseUnit, Medication, Route
 from healthcurve.vitals.models import BodyPosition, MeasurementSetting, TemperatureUnit, WeightUnit
+from tests.fixtures.telegram_session import telegram_session
 
 NOW = datetime(2026, 8, 27, 20, 0, tzinfo=UTC)
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000901")
@@ -48,7 +49,7 @@ def _medication() -> Medication:
 
 
 def _session() -> tuple[Session, MagicMock]:
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalars.return_value = [_medication()]
     mocked.scalar.return_value = None
     return cast(Session, mocked), mocked

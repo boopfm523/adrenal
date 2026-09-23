@@ -28,6 +28,7 @@ from healthcurve.operations.rate_limit import (
     RateLimitResult,
 )
 from tests.fixtures.synthetic import SYNTHETIC_MARKER
+from tests.fixtures.telegram_session import telegram_session
 
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 DRAFT_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
@@ -76,7 +77,7 @@ def _owner() -> Owner:
 
 
 def _empty_session() -> tuple[Session, MagicMock]:
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalars.return_value = []
     return cast(Session, mocked), mocked
 
@@ -131,7 +132,7 @@ def test_schema_valid_output_creates_only_a_pending_draft(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session, privileged = _empty_session()
-    restricted = MagicMock(spec=Session)
+    restricted = telegram_session()
     restricted.scalar.return_value = None
     restricted.begin.return_value = nullcontext()
 
@@ -188,7 +189,7 @@ def test_natural_language_vitals_create_only_confirmation_required_draft(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session, privileged = _empty_session()
-    restricted = MagicMock(spec=Session)
+    restricted = telegram_session()
     restricted.scalar.return_value = None
     restricted.begin.return_value = nullcontext()
 
@@ -303,7 +304,7 @@ def test_natural_language_dose_category_requires_explicit_stress_language(
     medication.normalized_name = "synthetic hydrocortisone"
     privileged.scalars.return_value = [medication]
     privileged.scalar.return_value = None
-    restricted = MagicMock(spec=Session)
+    restricted = telegram_session()
     restricted.scalar.return_value = None
     restricted.begin.return_value = nullcontext()
 
@@ -407,7 +408,7 @@ def _handle_weight_candidate(
     monkeypatch: pytest.MonkeyPatch, message: str
 ) -> tuple[Any, ExtractionDraft, MagicMock]:
     session, privileged = _empty_session()
-    restricted = MagicMock(spec=Session)
+    restricted = telegram_session()
     restricted.scalar.return_value = None
     restricted.begin.return_value = nullcontext()
 

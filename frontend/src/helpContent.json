@@ -145,6 +145,14 @@
       "confirmation": "No data is created. “Not recorded” never means a zero dose or proves that a dose was missed."
     },
     {
+      "command": "/tz",
+      "syntax": "/tz [place or IANA zone]",
+      "example": "/tz Chicago",
+      "purpose": "Show the timezone new entries are recorded in, or change it after travelling.",
+      "result": "Timezone stay",
+      "confirmation": "Recorded immediately and echoed back with its local time so a wrong match is visible. Nothing already recorded changes zone."
+    },
+    {
       "command": "/location",
       "syntax": "/location",
       "example": "/location",

@@ -20,6 +20,7 @@ from healthcurve.context.models import ContextEvent, LocationPrecision, SavedCoa
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
+from healthcurve.identity import timezones
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram.models import LocationRequestState, TelegramLocationRequest
 from healthcurve.integrations.weather.jobs import enqueue_weather_enrichment
@@ -190,7 +191,12 @@ def consume_for_confirm(
         session,
         ContextEvent,
         owner_id=owner.id,
-        event_time=from_instant(request.requested_at, owner.default_timezone),
+        event_time=from_instant(
+            request.requested_at,
+            # Where the owner was when they shared it, not where they live: the
+            # point of a travel location is that the two differ.
+            timezones.zone_at(session, owner, request.requested_at),
+        ),
         source_type=SourceType.TELEGRAM,
         confirmation_state=ConfirmationState.CONFIRMED_FROM_DRAFT,
         location_precision=LocationPrecision.COARSE,

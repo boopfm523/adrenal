@@ -69,6 +69,7 @@ While you're still in BotFather, harden the bot:
   injection - Log an emergency injection
   episode - /episode start <trigger> or /episode end
   today - What's recorded today vs your plan
+  tz - Show or change the timezone new entries are recorded in
   location - Explain how to add location to a pending draft
   edit - Correct a pending draft field
   undo - Cancel the pending draft

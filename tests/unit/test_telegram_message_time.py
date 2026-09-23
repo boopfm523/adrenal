@@ -18,6 +18,7 @@ from healthcurve.integrations.telegram.dispatch import (
     process_update,
 )
 from healthcurve.integrations.telegram.models import TelegramUpdate
+from tests.fixtures.telegram_session import telegram_session
 
 PROCESSING_TIME = datetime(2026, 8, 13, 18, 0, tzinfo=UTC)
 SENT_TIME = datetime(2026, 8, 13, 12, 30, tzinfo=UTC)
@@ -52,7 +53,7 @@ def test_dispatch_uses_delayed_message_send_time_for_all_text_paths(
     monkeypatch: pytest.MonkeyPatch, text: str
 ) -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.side_effect = [None, owner]
     captured: dict[str, Any] = {}
 
@@ -97,7 +98,7 @@ def test_invalid_or_missing_message_date_uses_processing_time_fallback(
     monkeypatch: pytest.MonkeyPatch, date_value: object
 ) -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.side_effect = [None, owner]
     captured: dict[str, Any] = {}
 
@@ -144,7 +145,7 @@ def test_future_message_date_is_not_used_as_health_event_time() -> None:
 
 def test_explicit_command_time_remains_authoritative_over_send_time() -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.return_value = None
 
     handlers.handle_message(
@@ -161,7 +162,7 @@ def test_explicit_command_time_remains_authoritative_over_send_time() -> None:
 
 def test_no_time_command_uses_send_time_in_owner_timezone() -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.return_value = None
 
     handlers.handle_message(
@@ -189,7 +190,7 @@ def test_no_time_command_uses_send_time_in_owner_timezone() -> None:
 )
 def test_invalid_diary_and_life_event_commands_create_nothing(text: str) -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
 
     reply = handlers.handle_message(
         cast(Session, mocked),
@@ -207,7 +208,7 @@ def test_dispatch_schedules_reminder_only_after_confirmation_is_delivered(
 ) -> None:
     owner = _owner()
     draft_id = uuid.uuid4()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.side_effect = [None, owner]
     scheduled: list[tuple[uuid.UUID, datetime]] = []
 
@@ -257,7 +258,7 @@ def test_dispatch_does_not_schedule_reminder_for_non_draft_reply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.side_effect = [None, owner]
     schedule = MagicMock()
 
@@ -297,7 +298,7 @@ def test_dispatch_does_not_schedule_reminder_when_confirmation_delivery_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     owner = _owner()
-    mocked = MagicMock(spec=Session)
+    mocked = telegram_session()
     mocked.scalar.side_effect = [None, owner]
     schedule = MagicMock()
 
