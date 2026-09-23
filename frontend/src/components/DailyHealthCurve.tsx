@@ -1124,6 +1124,18 @@ export function DailyHealthCurve({
     || Math.abs(Date.parse(nearestWakeReferenceSample.occurred_at) - cursorTime) > data.exposure.model.sample_interval_minutes * 30_000
     ? undefined
     : nearestWakeReferenceSample;
+  const nearestExerciseSample = visibleExerciseSamples.length === 0
+    ? undefined
+    : visibleExerciseSamples.reduce<typeof visibleExerciseSamples[number] | undefined>((nearest, sample) => {
+      if (nearest === undefined) return sample;
+      return Math.abs(Date.parse(sample.occurred_at) - cursorTime) < Math.abs(Date.parse(nearest.occurred_at) - cursorTime)
+        ? sample
+        : nearest;
+    }, undefined);
+  const cursorExerciseSample = nearestExerciseSample === undefined
+    || Math.abs(Date.parse(nearestExerciseSample.occurred_at) - cursorTime) > data.exposure.model.sample_interval_minutes * 30_000
+    ? undefined
+    : nearestExerciseSample;
   const unscoredSymptoms = useMemo(() => missingSeverityObservations(data.symptoms), [data.symptoms]);
   const cursorUnscoredSymptoms = visible.symptoms
     ? nearbySymptomObservations(unscoredSymptoms, cursorTime)
@@ -1168,6 +1180,11 @@ export function DailyHealthCurve({
       key: `wake-reference-${cursorWakeReferenceSample.occurred_at}`,
       series: "Wake-anchored healthy reference",
       value: `P5 ${Number(cursorWakeReferenceSample.serum_free_p5_nmol_l).toFixed(1)} · median ${Number(cursorWakeReferenceSample.serum_free_p50_nmol_l).toFixed(1)} · P95 ${Number(cursorWakeReferenceSample.serum_free_p95_nmol_l).toFixed(1)} nmol/L free`,
+    }]),
+    ...(cursorExerciseSample === undefined ? [] : [{
+      key: `exercise-demand-${cursorExerciseSample.occurred_at}`,
+      series: "Exercise demand (theoretical)",
+      value: `P5 ${Number(cursorExerciseSample.serum_free_p5_nmol_l).toFixed(1)} · median ${Number(cursorExerciseSample.serum_free_p50_nmol_l).toFixed(1)} · P95 ${Number(cursorExerciseSample.serum_free_p95_nmol_l).toFixed(1)} nmol/L free`,
     }]),
     ...cursorUnscoredSymptoms.map((symptom) => ({
       key: `unscored-symptom-${symptom.id}`,

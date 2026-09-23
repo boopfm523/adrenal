@@ -655,6 +655,7 @@ describe("Daily HealthCurve", () => {
     expect(layer).not.toBeNull();
     expect(layer?.querySelectorAll("path")).toHaveLength(3);
     expect(screen.getByLabelText("Overlay series legend")).toHaveTextContent("Exercise demand (theoretical) · raised healthy reference");
+    expect(hoverAt(60).tooltip).toHaveTextContent("Exercise demand (theoretical): P5 30.0 · median 55.0 · P95 100.0 nmol/L free");
 
     const details = screen.getByText("Exercise demand model: inputs, formula, and limits").parentElement;
     if (details === null) throw new Error("exercise demand details missing");
