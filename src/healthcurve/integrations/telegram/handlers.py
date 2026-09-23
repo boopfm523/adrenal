@@ -64,7 +64,7 @@ from healthcurve.events.timekeeping import (
 )
 from healthcurve.identity import places, timezones
 from healthcurve.identity.models import Owner, TimezoneStaySource
-from healthcurve.integrations.telegram import conversation, location
+from healthcurve.integrations.telegram import conversation, dose_reminders, location
 from healthcurve.integrations.telegram.beads_operations import (
     BeadsOperation,
     classify_beads_intent,
@@ -1676,17 +1676,34 @@ def _change_timezone(session: Session, owner: Owner, place: str, *, now: datetim
             "city nearby, or the IANA zone directly, e.g. /tz America/Denver."
         )
 
+    previous = timezones.current_zone(session, owner, now=now)
     stay = timezones.record_stay(
         session, owner, zone, source=TimezoneStaySource.TELEGRAM, started_at=now
     )
     described = _describe_zone(zone, now)
     if stay is None:
         return Reply(f"You're already recorded as being in {described}. Nothing changed.")
-    return Reply(
+
+    lines = [
         f"Recorded: you're in {described}. New entries use this zone until you tell me "
         f"otherwise. Your home zone is still {owner.default_timezone}, and nothing already "
         "recorded has moved."
+    ]
+    # Said here because here is the only place the owner will see it. A slot the move
+    # jumped past never comes due, so its reminder would otherwise age out in silence.
+    skipped = dose_reminders.slots_skipped_by_zone_change(
+        session, owner, previous_zone=previous, new_zone=zone, now=now
     )
+    if skipped:
+        lines.append("")
+        lines.append(
+            "Moving forward skipped today's plan slot(s): "
+            + "; ".join(skipped)
+            + ". You won't be reminded about them, because that local time did not "
+            "happen for you today. This is about record completeness, not advice to "
+            "take medication."
+        )
+    return Reply("\n".join(lines))
 
 
 def _cmd_tz(session: Session, owner: Owner, argument: str, *, now: datetime) -> Reply:

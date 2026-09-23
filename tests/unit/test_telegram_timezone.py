@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from healthcurve.identity import timezones
 from healthcurve.identity.models import Owner, TimezoneStaySource
-from healthcurve.integrations.telegram import handlers
+from healthcurve.integrations.telegram import dose_reminders, handlers
 from tests.fixtures.identity_sqlite import identity_engine
 
 HOME = "America/New_York"
@@ -31,6 +31,21 @@ def session() -> Iterator[Session]:
             yield opened
     finally:
         engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def no_skipped_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep these tests about the zone reply.
+
+    Reporting a skipped plan slot needs the plan tables, which the identity-only
+    stand-in does not carry. The reporting itself is covered against real PostgreSQL
+    in tests/integration/test_telegram_dose_reminders.py.
+    """
+
+    def none_skipped(*_args: object, **_kwargs: object) -> list[str]:
+        return []
+
+    monkeypatch.setattr(dose_reminders, "slots_skipped_by_zone_change", none_skipped)
 
 
 @pytest.fixture
@@ -210,3 +225,30 @@ def test_tz_is_a_documented_command(session: Session, owner: Owner) -> None:
     """The help drift gate checks the manifest; this checks the in-chat help."""
     assert "tz" in handlers.SUPPORTED_TELEGRAM_COMMANDS
     assert "/tz" in handlers.HELP_TEXT
+
+
+def test_a_move_that_skips_a_plan_slot_says_so(
+    session: Session, owner: Owner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The slot never comes due, so the confirmation is the only chance to say it."""
+
+    def one_skipped(*_args: object, **_kwargs: object) -> list[str]:
+        return ["Synthetic hydrocortisone 10 mg at 08:00"]
+
+    monkeypatch.setattr(dose_reminders, "slots_skipped_by_zone_change", one_skipped)
+
+    reply = handlers._change_timezone(  # pyright: ignore[reportPrivateUsage]
+        session, owner, "Tokyo", now=NOW
+    )
+
+    assert "skipped today's plan slot(s)" in reply.text
+    assert "Synthetic hydrocortisone 10 mg at 08:00" in reply.text
+    assert "not advice to take medication" in reply.text
+
+
+def test_an_ordinary_move_does_not_mention_skipped_slots(session: Session, owner: Owner) -> None:
+    reply = handlers._change_timezone(  # pyright: ignore[reportPrivateUsage]
+        session, owner, "Chicago", now=NOW
+    )
+
+    assert "skipped" not in reply.text

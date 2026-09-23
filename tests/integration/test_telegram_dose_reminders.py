@@ -21,13 +21,15 @@ from healthcurve.db import SCHEMAS, Base
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import resolve_event_time
-from healthcurve.identity.models import Owner
+from healthcurve.identity import timezones
+from healthcurve.identity.models import Owner, TimezoneStaySource
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.dose_reminders import (
     REMINDER_DELAY,
     handle_action,
     schedule_due_reminders,
     send_due_reminders,
+    slots_skipped_by_zone_change,
 )
 from healthcurve.integrations.telegram.handlers import cancel_draft, confirm_draft
 from healthcurve.integrations.telegram.models import DoseReminderState, TelegramDoseReminder
@@ -531,3 +533,126 @@ def test_snooze_dismiss_and_record_actions_are_durable(
         cancelled = cancel_draft(session, third_owner, third.draft_id)
         assert cancelled.text == "Cancelled. Nothing was recorded."
         assert third.state is DoseReminderState.DISMISSED
+
+
+def _record_stay(session: Session, owner: Owner, zone: str, at: datetime) -> None:
+    timezones.record_stay(session, owner, zone, source=TimezoneStaySource.TELEGRAM, started_at=at)
+    session.flush()
+
+
+def test_a_slot_fires_at_its_local_wall_time_in_the_zone_the_owner_is_in(
+    factory: sessionmaker[Session],
+) -> None:
+    """The owner's decision: 07:00 means 07:00 wherever they are.
+
+    Without the ledger this slot fires at 11:00 UTC forever, because that is 07:00 in
+    the zone the plan was written in.
+    """
+    with factory() as session, session.begin():
+        owner, _, _ = _approved_plan(session, timezone="America/New_York", clocks=(time(7),))
+        _record_stay(session, owner, "America/Los_Angeles", datetime(2026, 8, 11, tzinfo=UTC))
+
+        # 07:00 New York + 30 min. Nothing is due there any more; the owner is west.
+        assert schedule_due_reminders(session, datetime(2026, 8, 12, 11, 30, tzinfo=UTC)) == 0
+
+        # 07:00 Los Angeles + 30 min.
+        assert schedule_due_reminders(session, datetime(2026, 8, 12, 14, 30, tzinfo=UTC)) == 1
+
+
+def test_a_westward_move_does_not_fire_a_slot_twice(factory: sessionmaker[Session]) -> None:
+    """The occurrence is (owner, slot, local date), so re-cutting the day cannot repeat it."""
+    with factory() as session, session.begin():
+        owner, _, _ = _approved_plan(session, timezone="America/New_York", clocks=(time(7),))
+
+        fired = datetime(2026, 8, 12, 11, 30, tzinfo=UTC)  # 07:30 New York
+        assert schedule_due_reminders(session, fired) == 1
+
+        # Fly west mid-morning. 07:00 Los Angeles on the same local date is still ahead
+        # in UTC terms, so a naive scheduler would queue the slot a second time.
+        _record_stay(session, owner, "America/Los_Angeles", fired + timedelta(minutes=5))
+        assert schedule_due_reminders(session, datetime(2026, 8, 12, 14, 30, tzinfo=UTC)) == 0
+
+        count = session.scalar(
+            select(func.count()).select_from(TelegramDoseReminder)  # pyright: ignore[reportUnknownArgumentType]
+        )
+        assert count == 1
+
+
+def test_an_eastward_move_reports_the_slot_it_jumped_past(
+    factory: sessionmaker[Session],
+) -> None:
+    """The skipped slot must be named, because its reminder will never come due."""
+    with factory() as session, session.begin():
+        owner, _, _ = _approved_plan(session, timezone="America/Chicago", clocks=(time(8),))
+
+        # 06:00 Chicago is 20:00 Tokyo the same date: 08:00 never arrives for the owner.
+        now = datetime(2026, 8, 12, 11, 0, tzinfo=UTC)
+        skipped = slots_skipped_by_zone_change(
+            session,
+            owner,
+            previous_zone="America/Chicago",
+            new_zone="Asia/Tokyo",
+            now=now,
+        )
+
+        assert len(skipped) == 1
+        assert "08:00" in skipped[0]
+        assert "Synthetic hydrocortisone" in skipped[0]
+
+
+def test_a_westward_move_reports_nothing_because_it_skips_nothing(
+    factory: sessionmaker[Session],
+) -> None:
+    with factory() as session, session.begin():
+        owner, _, _ = _approved_plan(session, timezone="America/New_York", clocks=(time(8),))
+
+        assert (
+            slots_skipped_by_zone_change(
+                session,
+                owner,
+                previous_zone="America/New_York",
+                new_zone="America/Los_Angeles",
+                now=datetime(2026, 8, 12, 10, 0, tzinfo=UTC),
+            )
+            == []
+        )
+
+
+def test_a_slot_already_past_in_both_zones_is_not_reported_as_skipped(
+    factory: sessionmaker[Session],
+) -> None:
+    """Only a slot the move itself jumped past counts; the rest is ordinary lateness."""
+    with factory() as session, session.begin():
+        owner, _, _ = _approved_plan(session, timezone="America/Chicago", clocks=(time(8),))
+
+        assert (
+            slots_skipped_by_zone_change(
+                session,
+                owner,
+                previous_zone="America/Chicago",
+                new_zone="America/New_York",
+                # 19:00 Chicago: 08:00 is long gone in both zones.
+                now=datetime(2026, 8, 13, 0, 0, tzinfo=UTC),
+            )
+            == []
+        )
+
+
+def test_recording_a_reminder_captures_the_travelling_local_time(
+    factory: sessionmaker[Session],
+) -> None:
+    """ "Record taken" must not stamp the dose with the home zone."""
+    with factory() as session, session.begin():
+        owner, _, _ = _approved_plan(session, timezone="America/New_York", clocks=(time(7),))
+        _record_stay(session, owner, "Asia/Tokyo", datetime(2026, 8, 11, tzinfo=UTC))
+
+        now = datetime(2026, 8, 12, 22, 30, tzinfo=UTC)  # 07:30 Tokyo on the 13th
+        assert schedule_due_reminders(session, now) == 1
+        reminder = session.scalars(select(TelegramDoseReminder)).one()
+
+        message, _ = handle_action(session, owner, reminder.id, "record", now=now)
+        assert "07:30" in message
+
+        draft = session.get(ExtractionDraft, reminder.draft_id)
+        assert draft is not None
+        assert draft.candidates[0]["timezone"] == "Asia/Tokyo"

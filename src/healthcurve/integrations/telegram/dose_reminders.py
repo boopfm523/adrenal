@@ -20,10 +20,12 @@ from healthcurve.ai.extraction import (
 )
 from healthcurve.ai.models import DraftState, ExtractionDraft
 from healthcurve.events.timekeeping import (
+    AmbiguousLocalTimeError,
     NonExistentLocalTimeError,
     from_instant,
     resolve_event_time,
 )
+from healthcurve.identity import timezones
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.telegram.client import TelegramClient
 from healthcurve.integrations.telegram.models import DoseReminderState, TelegramDoseReminder
@@ -33,7 +35,6 @@ from healthcurve.medications.models import (
     DoseCategory,
     DoseTimingMode,
     RegimenDoseSlot,
-    RegimenStatus,
     RegimenVersion,
 )
 from healthcurve.operations.jobs import Job, JobQueueError, enqueue
@@ -69,23 +70,13 @@ def schedule_due_reminders(session: Session, now: datetime) -> int:
         raise JobQueueError("dose_reminder_schedule_invalid")
     count = 0
     for owner in session.scalars(select(Owner).order_by(Owner.id)):
-        plan_timezones = {
-            timezone
-            for timezone in session.scalars(
-                select(RegimenVersion.effective_timezone).where(
-                    RegimenVersion.owner_id == owner.id,
-                    RegimenVersion.status == RegimenStatus.APPROVED,
-                    RegimenVersion.effective_timezone.is_not(None),
-                )
-            )
-            if timezone is not None
-        }
-        plan_timezones.add(owner.default_timezone)
-        for timezone in sorted(plan_timezones):
-            zone = ZoneInfo(timezone)
-            local_now = now.astimezone(zone)
-            for local_day in {local_now.date(), local_now.date() - timedelta(days=1)}:
-                count += _schedule_day(session, owner, local_day, timezone, now)
+        # One zone: the one the owner is in. A plan's effective_timezone records when
+        # that plan took effect, not where its doses are taken, and scheduling against
+        # it would keep firing an 08:00 slot on the zone the plan was written in.
+        timezone = timezones.current_zone(session, owner, now=now)
+        local_now = now.astimezone(ZoneInfo(timezone))
+        for local_day in {local_now.date(), local_now.date() - timedelta(days=1)}:
+            count += _schedule_day(session, owner, local_day, timezone, now)
     return count
 
 
@@ -105,9 +96,6 @@ def _schedule_day(
         version = session.get(RegimenVersion, item.regimen_version_id)
         if version is None:
             continue
-        plan_timezone = version.effective_timezone or owner.default_timezone
-        if plan_timezone != timezone:
-            continue
         local_threshold = (
             item.reminder_local_time
             if item.timing_mode is DoseTimingMode.WAKE
@@ -118,7 +106,7 @@ def _schedule_day(
         try:
             scheduled = resolve_event_time(
                 datetime.combine(local_day, local_threshold),
-                plan_timezone,
+                timezone,
                 fold=0,
             ).occurred_at
         except NonExistentLocalTimeError:
@@ -151,6 +139,66 @@ def _schedule_day(
     return count
 
 
+def slots_skipped_by_zone_change(
+    session: Session,
+    owner: Owner,
+    *,
+    previous_zone: str,
+    new_zone: str,
+    now: datetime,
+) -> list[str]:
+    """Plan slots that an eastward move jumped straight past.
+
+    Moving east shortens the day: a clock that read 07:00 in Chicago reads 20:00 in
+    Tokyo, and an 08:00 slot in between never arrives. Nothing is wrong with the
+    ledger -- the slot genuinely did not occur -- but the reminder for it would age
+    out against MAX_REMINDER_AGE and vanish without the owner ever being told, which
+    is the one outcome a record-completeness reminder must not produce.
+
+    A slot counts as skipped when it had not yet come due under the old zone and is
+    already in the past under the new one. Moving west can only push a slot later, so
+    that direction returns nothing rather than needing a separate guard.
+
+    Returns descriptions, not facts. Nothing here records or suppresses anything.
+    """
+    if previous_zone == new_zone:
+        return []
+
+    candidate_days = {
+        now.astimezone(ZoneInfo(new_zone)).date(),
+        now.astimezone(ZoneInfo(previous_zone)).date(),
+    }
+    skipped: dict[uuid.UUID, str] = {}
+    for local_day in sorted(candidate_days):
+        comparison = medications.compare_day(
+            session, owner_id=owner.id, day=local_day, timezone=new_zone
+        )
+        for item in cast(list[medications.SlotComparison], comparison["slots"]):
+            if item.status != "missing" or item.slot_id is None or item.slot_id in skipped:
+                continue
+            local_threshold = (
+                item.reminder_local_time
+                if item.timing_mode is DoseTimingMode.WAKE
+                else item.scheduled_local_time
+            )
+            if not isinstance(local_threshold, time):
+                continue
+            local_time = datetime.combine(local_day, local_threshold)
+            try:
+                before = resolve_event_time(local_time, previous_zone, fold=0).occurred_at
+                after = resolve_event_time(local_time, new_zone, fold=0).occurred_at
+            except (AmbiguousLocalTimeError, NonExistentLocalTimeError):
+                # A slot the clock change itself makes unreachable is the DST case
+                # already reported by _schedule_day; not this function's business.
+                continue
+            if after <= now.astimezone(UTC) < before:
+                skipped[item.slot_id] = (
+                    f"{item.medication_name} {item.planned_amount} {item.unit} "
+                    f"at {local_threshold:%H:%M}"
+                )
+    return list(skipped.values())
+
+
 def send_due_reminders(
     session: Session,
     *,
@@ -180,13 +228,10 @@ def send_due_reminders(
             reminder.state = DoseReminderState.SATISFIED
             reminder.resolved_at = now
             continue
-        version = session.get(RegimenVersion, reminder.regimen_version_id)
-        timezone = (
-            version.effective_timezone
-            if version is not None and version.effective_timezone
-            else owner.default_timezone
-        )
-        scheduled = from_instant(reminder.scheduled_at, timezone).local_time
+        scheduled = from_instant(
+            reminder.scheduled_at,
+            timezones.zone_at(session, owner, reminder.scheduled_at),
+        ).local_time
         if slot.timing_mode is DoseTimingMode.WAKE:
             message = (
                 f"When-you-wake dose appears unrecorded: {slot.medication.name} "
@@ -269,7 +314,7 @@ def handle_action(
     slot = session.get(RegimenDoseSlot, reminder.slot_id)
     if slot is None:
         return "The referenced plan slot is no longer available.", None
-    captured = from_instant(now, owner.default_timezone)
+    captured = from_instant(now, timezones.current_zone(session, owner, now=now))
     candidate = ValidatedCandidate(
         type=CandidateType.DOSE,
         medication_id=slot.medication_id,
@@ -315,17 +360,13 @@ def handle_action(
 
 
 def _slot_is_recorded(session: Session, reminder: TelegramDoseReminder, owner: Owner) -> bool:
-    version = session.get(RegimenVersion, reminder.regimen_version_id)
-    timezone = (
-        version.effective_timezone
-        if version is not None and version.effective_timezone
-        else owner.default_timezone
-    )
+    # The day is judged in the zone the slot was scheduled in, not the current one:
+    # flying home must not re-open yesterday's slot by re-cutting the day boundary.
     result = medications.compare_day(
         session,
         owner_id=owner.id,
         day=reminder.local_date,
-        timezone=timezone,
+        timezone=timezones.zone_at(session, owner, reminder.scheduled_at),
     )
     slots = cast(list[medications.SlotComparison], result["slots"])
     return any(item.slot_id == reminder.slot_id and item.status != "missing" for item in slots)
