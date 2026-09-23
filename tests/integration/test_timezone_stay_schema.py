@@ -82,7 +82,7 @@ def owner(engine: Engine) -> Iterator[Owner]:
         row = Owner(
             id=uuid.uuid4(),
             email=f"traveller-{uuid.uuid4().hex[:8]}@example.test",
-            password_hash="synthetic-not-a-real-hash",
+            password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
             default_timezone=HOME,
         )
         session.add(row)
@@ -135,7 +135,7 @@ def test_deleting_the_owner_takes_the_ledger_with_it(engine: Engine) -> None:
             Owner(
                 id=owner_id,
                 email=f"erased-{uuid.uuid4().hex[:8]}@example.test",
-                password_hash="synthetic-not-a-real-hash",
+                password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
                 default_timezone=HOME,
             )
         )

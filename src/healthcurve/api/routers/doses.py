@@ -34,6 +34,7 @@ from healthcurve.events.timekeeping import (
     NonExistentLocalTimeError,
     UnknownTimezoneError,
 )
+from healthcurve.identity import timezones
 from healthcurve.medications import service as meds
 from healthcurve.medications.models import DoseEvent, Medication
 
@@ -89,7 +90,7 @@ def list_doses(
     timezone: str | None = None,
 ):
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -126,7 +127,7 @@ def list_voided_doses(
 ):
     """List retained tombstones for entries removed through dose correction."""
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -241,7 +242,7 @@ def plan_comparison(
     Missing slots are derived from the absence of a dose. No zero-dose row exists or is
     created (SAFE-10).
     """
-    zone = timezone or owner.default_timezone
+    zone = timezone or timezones.current_zone(session, owner)
     try:
         result = meds.compare_day(session, owner_id=owner.id, day=day, timezone=zone)
         observed_wake, _ = observed_sleep_timing_for_day(

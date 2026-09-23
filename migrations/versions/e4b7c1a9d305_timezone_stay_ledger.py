@@ -14,7 +14,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "e4b7c1a9d305"
+revision: str = "e4b7c1a9d305"  # pragma: allowlist secret - Alembic revision ID
 down_revision: Union[str, Sequence[str], None] = "b6d2e8f4a371"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

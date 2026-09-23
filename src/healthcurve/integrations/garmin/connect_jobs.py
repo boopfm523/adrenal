@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from healthcurve.config import Settings
+from healthcurve.identity import timezones
 from healthcurve.identity.models import Owner
 from healthcurve.integrations.garmin.connect_client import (
     GarminIntradayReadClient,
@@ -163,7 +164,10 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
         .where(GarminConnection.state == GarminConnectionState.CONNECTED)
     )
     for connection, owner in rows:
-        owner_zone = ZoneInfo(owner.default_timezone)
+        # The zone the owner is in now, not the one they live in: a sync day is a
+        # local calendar day, and while travelling that day is the traveller's.
+        zone_name = timezones.current_zone(session, owner, now=now)
+        owner_zone = ZoneInfo(zone_name)
         local_now = now.astimezone(owner_zone)
         due_hour = _latest_due_hour(
             local_now,
@@ -197,7 +201,7 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
             select(GarminSyncRun.id)
             .where(
                 GarminSyncRun.owner_id == owner.id,
-                GarminSyncRun.timezone == owner.default_timezone,
+                GarminSyncRun.timezone == zone_name,
                 GarminSyncRun.requested_start_date <= first,
                 GarminSyncRun.requested_end_date >= local_day,
                 GarminSyncRun.status.in_(
@@ -214,7 +218,7 @@ def schedule_garmin_sync(session: Session, now: datetime, *, settings: Settings)
             owner_id=owner.id,
             start_date=first,
             end_date=local_day,
-            timezone=owner.default_timezone,
+            timezone=zone_name,
             idempotency_key=slot_key,
             origin=GarminSyncOrigin.SCHEDULED,
             now=now,

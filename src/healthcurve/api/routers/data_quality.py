@@ -11,6 +11,7 @@ from healthcurve.api.deps import CurrentOwner, DbSession, require_csrf
 from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.schemas import PageMetadata
 from healthcurve.data_quality import findings_for_owner
+from healthcurve.identity import timezones
 from healthcurve.integrations.garmin.models import GarminSyncRun
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditEntry
@@ -67,7 +68,7 @@ def data_quality(session: DbSession, owner: CurrentOwner, pagination: Pagination
             for finding in visible
         ],
         page=metadata,
-        timezone=owner.default_timezone,
+        timezone=timezones.current_zone(session, owner),
     )
 
 

@@ -29,6 +29,7 @@ from healthcurve.chat.models import (
     ChatToolOutcome,
 )
 from healthcurve.config import Settings
+from healthcurve.identity import timezones
 from healthcurve.identity.models import Owner
 from healthcurve.logging import get_logger
 from healthcurve.operations import audit
@@ -220,15 +221,17 @@ def make_chat_response_handler(
             owner = identity_session.get(Owner, owner_id)
             if owner is None:
                 raise JobQueueError("chat_owner_missing")
-            default_timezone = owner.default_timezone
-        current_local_datetime = datetime.now(ZoneInfo(default_timezone))
+            # "Today" in an answer means the day the asker is living in, which while
+            # travelling is not the day at home.
+            owner_timezone = timezones.current_zone(identity_session, owner)
+        current_local_datetime = datetime.now(ZoneInfo(owner_timezone))
 
         access = AnalysisAccess(
             engine=analyst_engine,
             text_engine=analyst_text_engine,
             allow_text=include_text,
             owner_id=owner_id,
-            timezone=default_timezone,
+            timezone=owner_timezone,
             model_session_factory=factory,
         )
         query_engine = analyst_text_engine if include_text else analyst_engine
@@ -299,7 +302,7 @@ def make_chat_response_handler(
                     execute_tool=run_tool,
                     client=choice.client,
                     current_local_datetime=current_local_datetime,
-                    default_timezone=default_timezone,
+                    default_timezone=owner_timezone,
                     allow_text=include_text,
                     analysis_configured=query_engine is not None,
                     think=choice.think,

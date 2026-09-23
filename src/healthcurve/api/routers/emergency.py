@@ -36,6 +36,7 @@ from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import from_instant
 from healthcurve.identity import service as auth
+from healthcurve.identity import timezones
 from healthcurve.medications.models import (
     ApprovedInstruction,
     DoseUnit,
@@ -271,7 +272,7 @@ def log_injection_form(
         session,
         EmergencyInjectionEvent,
         owner_id=owner.id,
-        event_time=from_instant(now, owner.default_timezone),
+        event_time=from_instant(now, timezones.current_zone(session, owner)),
         source_type=SourceType.WEB,
         confirmation_state=ConfirmationState.DIRECT,
         medication_id=medication.id,

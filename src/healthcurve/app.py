@@ -33,6 +33,7 @@ from healthcurve.api.routers import (
     private_documents,
     reports,
     telegram,
+    timezone,
     vitals,
 )
 from healthcurve.config import Environment, Settings, get_settings
@@ -117,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         garmin.router,
         labs.router,
         telegram.router,
+        timezone.router,
         vitals.router,
     ):
         app.include_router(router, prefix=API_PREFIX)

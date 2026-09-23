@@ -23,6 +23,7 @@ from healthcurve.api.pagination import Pagination, page_metadata, paginate_curre
 from healthcurve.api.routers.events import provenance_out, time_out
 from healthcurve.api.schemas import EventTimeOut, PageMetadata, ProvenanceOut
 from healthcurve.context.models import ContextEvent
+from healthcurve.identity import timezones
 from healthcurve.integrations.garmin.connect_jobs import GarminSyncDisposition, enqueue_sync
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -231,7 +232,7 @@ def request_sync(
         or connection.state is not GarminConnectionState.CONNECTED
     ):
         raise HTTPException(status_code=409, detail={"code": "garmin_connection_not_enabled"})
-    local_today = datetime.now(ZoneInfo(owner.default_timezone)).date()
+    local_today = datetime.now(ZoneInfo(timezones.current_zone(session, owner))).date()
     end = date_to or local_today
     start = date_from or (end - timedelta(days=connection.sync_lookback_days - 1))
     if end > local_today:
@@ -243,7 +244,7 @@ def request_sync(
             owner_id=owner.id,
             start_date=start,
             end_date=end,
-            timezone=owner.default_timezone,
+            timezone=timezones.current_zone(session, owner),
             idempotency_key=f"manual:{owner.id}:{idempotency_key}",
             force_refresh=refresh,
             origin=origin,
@@ -275,7 +276,7 @@ def records(
     timezone: str | None = None,
 ) -> GarminRecordsOut:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -333,7 +334,7 @@ def samples(
     """Return one bounded local day of current intraday Garmin samples."""
 
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=day,
         date_to=day,
@@ -369,7 +370,7 @@ def list_sleep_records(
     """Return current sleep sessions that overlap one bounded local day."""
 
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=day,
         date_to=day,
@@ -574,12 +575,13 @@ async def _parse(file: UploadFile, timezone: str) -> ParsedGarminImport:
 
 @router.post("/imports/preview", dependencies=[Depends(require_csrf)])
 async def preview_import(
+    session: DbSession,
     owner: CurrentOwner,
     file: Annotated[UploadFile, File()],
     timezone: Annotated[str | None, Form()] = None,
 ) -> dict[str, Any]:
     """Parse locally and return candidates; this endpoint creates no facts."""
-    parsed = await _parse(file, timezone or owner.default_timezone)
+    parsed = await _parse(file, timezone or timezones.current_zone(session, owner))
     return _preview_payload(parsed)
 
 
@@ -592,7 +594,7 @@ async def confirm_import_route(
     timezone: Annotated[str | None, Form()] = None,
 ) -> dict[str, Any]:
     """Reparse and confirm an unchanged preview as immutable recorded facts."""
-    parsed = await _parse(file, timezone or owner.default_timezone)
+    parsed = await _parse(file, timezone or timezones.current_zone(session, owner))
     if not hmac.compare_digest(parsed.source_sha256, expected_sha256.casefold()):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -48,6 +48,7 @@ from healthcurve.events.models import (
     SymptomEvent,
 )
 from healthcurve.events.timekeeping import timezone_abbreviation
+from healthcurve.identity import timezones
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
     GarminMetricEvent,
@@ -132,7 +133,7 @@ def list_symptoms(
     timezone: str | None = None,
 ):
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -272,7 +273,7 @@ def list_diary(
     timezone: str | None = None,
 ) -> DiaryPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -345,7 +346,7 @@ def list_meals(
     timezone: str | None = None,
 ) -> MealPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -450,7 +451,7 @@ def list_life_events(
     timezone: str | None = None,
 ) -> LifeEventPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -537,7 +538,7 @@ def timeline(
     (``occurred_at``), never insertion or recording time. Equal instants are ordered
     deterministically by event type and stable record id.
     """
-    zone_name = timezone or owner.default_timezone
+    zone_name = timezone or timezones.current_zone(session, owner)
     try:
         zone = ZoneInfo(zone_name)
     except ZoneInfoNotFoundError as exc:

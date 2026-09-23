@@ -33,6 +33,7 @@ from healthcurve.context.models import (
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity import service as auth
+from healthcurve.identity import timezones
 from healthcurve.operations import audit
 
 router = APIRouter(prefix="/context-events", tags=["context"])
@@ -206,7 +207,7 @@ def list_context(
     timezone: str | None = None,
 ) -> ContextPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,

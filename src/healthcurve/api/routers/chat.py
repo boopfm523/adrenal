@@ -37,6 +37,7 @@ from healthcurve.chat.jobs import check_source_staleness, enqueue_chat_response
 from healthcurve.chat.models import ChatConversation, ChatMessage, ChatMessageState, ChatRole
 from healthcurve.config import Settings
 from healthcurve.db import get_analyst_engine, get_analyst_text_engine
+from healthcurve.identity import timezones
 from healthcurve.identity.models import Owner
 from healthcurve.operations import audit
 from healthcurve.operations.audit import AuditAction
@@ -331,7 +332,9 @@ def get_message_staleness(
         ai_factory,
         owner_id=owner.id,
         assistant_message_id=message_id,
-        access_for=_analysis_access(owner, ai_factory),
+        access_for=_analysis_access(
+            owner, ai_factory, timezone=timezones.current_zone(session, owner)
+        ),
     )
     return ChatMessageStalenessOut(
         status=result.status,
@@ -341,7 +344,7 @@ def get_message_staleness(
 
 
 def _analysis_access(
-    owner: Owner, ai_factory: sessionmaker[Session]
+    owner: Owner, ai_factory: sessionmaker[Session], *, timezone: str
 ) -> Callable[[bool], AnalysisAccess]:
     """View-only analyst access for replaying an answer's tool calls (ADR-0036)."""
 
@@ -351,7 +354,7 @@ def _analysis_access(
             text_engine=get_analyst_text_engine(),
             allow_text=allow_text,
             owner_id=owner.id,
-            timezone=owner.default_timezone,
+            timezone=timezone,
             model_session_factory=ai_factory,
         )
 

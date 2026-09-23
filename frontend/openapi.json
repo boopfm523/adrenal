@@ -6292,6 +6292,10 @@
             "title": "Csrf Token",
             "type": "string"
           },
+          "current_timezone": {
+            "title": "Current Timezone",
+            "type": "string"
+          },
           "default_timezone": {
             "title": "Default Timezone",
             "type": "string"
@@ -6316,7 +6320,8 @@
           "csrf_token",
           "email",
           "display_name",
-          "default_timezone"
+          "default_timezone",
+          "current_timezone"
         ],
         "title": "LoginResponse",
         "type": "object"
@@ -10137,6 +10142,212 @@
         "title": "TimelinePage",
         "type": "object"
       },
+      "TimezoneChangeIn": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "timezone": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone"
+        ],
+        "title": "TimezoneChangeIn",
+        "type": "object"
+      },
+      "TimezoneChangeOut": {
+        "properties": {
+          "current_abbreviation": {
+            "title": "Current Abbreviation",
+            "type": "string"
+          },
+          "current_local_time": {
+            "format": "date-time",
+            "title": "Current Local Time",
+            "type": "string"
+          },
+          "current_timezone": {
+            "title": "Current Timezone",
+            "type": "string"
+          },
+          "current_utc_offset_minutes": {
+            "title": "Current Utc Offset Minutes",
+            "type": "integer"
+          },
+          "home_timezone": {
+            "title": "Home Timezone",
+            "type": "string"
+          },
+          "is_home": {
+            "title": "Is Home",
+            "type": "boolean"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          },
+          "stays": {
+            "items": {
+              "$ref": "#/components/schemas/TimezoneStayOut"
+            },
+            "title": "Stays",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current_timezone",
+          "current_abbreviation",
+          "current_local_time",
+          "current_utc_offset_minutes",
+          "home_timezone",
+          "is_home",
+          "stays",
+          "recorded"
+        ],
+        "title": "TimezoneChangeOut",
+        "type": "object"
+      },
+      "TimezoneSettingsOut": {
+        "description": "Where the owner is now, where home is, and how they got here.",
+        "properties": {
+          "current_abbreviation": {
+            "title": "Current Abbreviation",
+            "type": "string"
+          },
+          "current_local_time": {
+            "format": "date-time",
+            "title": "Current Local Time",
+            "type": "string"
+          },
+          "current_timezone": {
+            "title": "Current Timezone",
+            "type": "string"
+          },
+          "current_utc_offset_minutes": {
+            "title": "Current Utc Offset Minutes",
+            "type": "integer"
+          },
+          "home_timezone": {
+            "title": "Home Timezone",
+            "type": "string"
+          },
+          "is_home": {
+            "title": "Is Home",
+            "type": "boolean"
+          },
+          "stays": {
+            "items": {
+              "$ref": "#/components/schemas/TimezoneStayOut"
+            },
+            "title": "Stays",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current_timezone",
+          "current_abbreviation",
+          "current_local_time",
+          "current_utc_offset_minutes",
+          "home_timezone",
+          "is_home",
+          "stays"
+        ],
+        "title": "TimezoneSettingsOut",
+        "type": "object"
+      },
+      "TimezoneStayOut": {
+        "properties": {
+          "abbreviation": {
+            "title": "Abbreviation",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TimezoneStaySource"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "started_at_local": {
+            "format": "date-time",
+            "title": "Started At Local",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "utc_offset_minutes": {
+            "title": "Utc Offset Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "timezone",
+          "abbreviation",
+          "started_at",
+          "started_at_local",
+          "utc_offset_minutes",
+          "source",
+          "label"
+        ],
+        "title": "TimezoneStayOut",
+        "type": "object"
+      },
+      "TimezoneStaySource": {
+        "description": "How a stay came to be recorded. Nothing here is inferred without confirmation.",
+        "enum": [
+          "telegram",
+          "web",
+          "cli"
+        ],
+        "title": "TimezoneStaySource",
+        "type": "string"
+      },
       "TimingMetric": {
         "additionalProperties": false,
         "properties": {
@@ -12243,6 +12454,10 @@
             "title": "Csrf Token",
             "type": "string"
           },
+          "current_timezone": {
+            "title": "Current Timezone",
+            "type": "string"
+          },
           "default_timezone": {
             "title": "Default Timezone",
             "type": "string"
@@ -12267,6 +12482,7 @@
           "email",
           "display_name",
           "default_timezone",
+          "current_timezone",
           "csrf_token"
         ],
         "title": "WhoAmI",
@@ -20130,6 +20346,129 @@
         "summary": "Download Report",
         "tags": [
           "reports"
+        ]
+      }
+    },
+    "/api/v1/settings/timezone": {
+      "get": {
+        "operationId": "read_timezone_api_v1_settings_timezone_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimezoneSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Timezone",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "description": "Record a stay from ``started_at`` onwards.\n\nRejects before writing anything: an unknown place or a start in the future leaves\nthe ledger exactly as it was.",
+        "operationId": "record_timezone_api_v1_settings_timezone_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimezoneChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimezoneChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Timezone",
+        "tags": [
+          "settings"
         ]
       }
     },

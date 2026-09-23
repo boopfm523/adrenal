@@ -30,6 +30,7 @@ from healthcurve.episodes.models import (
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import SymptomEvent
+from healthcurve.identity import timezones
 from healthcurve.medications.models import DoseEvent, Medication
 
 router = APIRouter(tags=["episodes"])
@@ -75,7 +76,7 @@ def list_episodes(
     episode_id: uuid.UUID | None = None,
 ) -> EpisodePage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -189,7 +190,7 @@ def list_injections(
     timezone: str | None = None,
 ) -> InjectionPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,

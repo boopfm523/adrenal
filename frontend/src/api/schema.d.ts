@@ -1440,6 +1440,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/timezone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Timezone */
+        get: operations["read_timezone_api_v1_settings_timezone_get"];
+        put?: never;
+        /**
+         * Record Timezone
+         * @description Record a stay from ``started_at`` onwards.
+         *
+         *     Rejects before writing anything: an unknown place or a start in the future leaves
+         *     the ledger exactly as it was.
+         */
+        post: operations["record_timezone_api_v1_settings_timezone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stress-episodes": {
         parameters: {
             query?: never;
@@ -3771,6 +3795,8 @@ export interface components {
         LoginResponse: {
             /** Csrf Token */
             csrf_token: string;
+            /** Current Timezone */
+            current_timezone: string;
             /** Default Timezone */
             default_timezone: string;
             /** Display Name */
@@ -5037,6 +5063,93 @@ export interface components {
             /** Timezone */
             timezone: string;
         };
+        /** TimezoneChangeIn */
+        TimezoneChangeIn: {
+            /** Label */
+            label?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Timezone */
+            timezone: string;
+        };
+        /** TimezoneChangeOut */
+        TimezoneChangeOut: {
+            /** Current Abbreviation */
+            current_abbreviation: string;
+            /**
+             * Current Local Time
+             * Format: date-time
+             */
+            current_local_time: string;
+            /** Current Timezone */
+            current_timezone: string;
+            /** Current Utc Offset Minutes */
+            current_utc_offset_minutes: number;
+            /** Home Timezone */
+            home_timezone: string;
+            /** Is Home */
+            is_home: boolean;
+            /** Recorded */
+            recorded: boolean;
+            /** Stays */
+            stays: components["schemas"]["TimezoneStayOut"][];
+        };
+        /**
+         * TimezoneSettingsOut
+         * @description Where the owner is now, where home is, and how they got here.
+         */
+        TimezoneSettingsOut: {
+            /** Current Abbreviation */
+            current_abbreviation: string;
+            /**
+             * Current Local Time
+             * Format: date-time
+             */
+            current_local_time: string;
+            /** Current Timezone */
+            current_timezone: string;
+            /** Current Utc Offset Minutes */
+            current_utc_offset_minutes: number;
+            /** Home Timezone */
+            home_timezone: string;
+            /** Is Home */
+            is_home: boolean;
+            /** Stays */
+            stays: components["schemas"]["TimezoneStayOut"][];
+        };
+        /** TimezoneStayOut */
+        TimezoneStayOut: {
+            /** Abbreviation */
+            abbreviation: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string | null;
+            source: components["schemas"]["TimezoneStaySource"];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Started At Local
+             * Format: date-time
+             */
+            started_at_local: string;
+            /** Timezone */
+            timezone: string;
+            /** Utc Offset Minutes */
+            utc_offset_minutes: number;
+        };
+        /**
+         * TimezoneStaySource
+         * @description How a stay came to be recorded. Nothing here is inferred without confirmation.
+         * @enum {string}
+         */
+        TimezoneStaySource: "telegram" | "web" | "cli";
         /** TimingMetric */
         TimingMetric: {
             /** Average Absolute Deviation Minutes */
@@ -5717,6 +5830,8 @@ export interface components {
         WhoAmI: {
             /** Csrf Token */
             csrf_token: string;
+            /** Current Timezone */
+            current_timezone: string;
             /** Default Timezone */
             default_timezone: string;
             /** Display Name */
@@ -9180,6 +9295,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_timezone_api_v1_settings_timezone_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimezoneSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_timezone_api_v1_settings_timezone_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimezoneChangeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimezoneChangeOut"];
                 };
             };
             /** @description Validation Error */

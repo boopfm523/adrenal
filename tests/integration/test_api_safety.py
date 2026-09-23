@@ -76,7 +76,7 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.models import DiaryEvent, SymptomEvent
 from healthcurve.events.timekeeping import from_instant, resolve_event_time
 from healthcurve.identity import service as auth
-from healthcurve.identity.models import AuthSession, Owner
+from healthcurve.identity.models import AuthSession, Owner, TimezoneStay
 from healthcurve.identity.recovery import recover_owner_access
 from healthcurve.integrations.garmin.connect_intraday import map_intraday_day
 from healthcurve.integrations.garmin.connect_jobs import (
@@ -9434,3 +9434,52 @@ def test_database_rejects_completed_chat_answer_without_full_provenance(engine: 
         )
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+@pytest.mark.safety("SAFE-09", "SAFE-13")
+def test_recorded_travel_moves_the_whole_api_onto_the_local_zone(
+    client: TestClient, logged_in: dict[str, str], engine: Engine
+) -> None:
+    """A recorded stay is what "now" means everywhere, not just where it was set.
+
+    The failure this guards against is partial adoption: the bot records in Chicago
+    while the API still labels the day in London, so the same dose reads back at two
+    different times depending on which surface asks.
+    """
+    home = client.get("/api/v1/auth/me").json()
+    assert home["default_timezone"] == "Europe/London"
+    assert home["current_timezone"] == "Europe/London"
+    assert client.get("/api/v1/data-quality").json()["timezone"] == "Europe/London"
+
+    # A cookie alone must not be able to move the owner across the world (T1).
+    assert client.post("/api/v1/settings/timezone", json={"timezone": "Denver"}).status_code == 403
+
+    try:
+        moved = client.post(
+            "/api/v1/settings/timezone",
+            headers=logged_in,
+            json={"timezone": "Denver", "label": "Synthetic trip"},
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["current_timezone"] == "America/Denver"
+
+        whoami = client.get("/api/v1/auth/me").json()
+        assert whoami["current_timezone"] == "America/Denver"
+        # Home is where the owner lives. Travel does not move it.
+        assert whoami["default_timezone"] == "Europe/London"
+        assert client.get("/api/v1/data-quality").json()["timezone"] == "America/Denver"
+
+        rejected = client.post(
+            "/api/v1/settings/timezone", headers=logged_in, json={"timezone": "Mars/Olympus"}
+        )
+        assert rejected.status_code == 422
+        assert rejected.json()["detail"]["code"] == "invalid_timezone"
+        # A rejected request records nothing, so the zone in force is untouched.
+        assert client.get("/api/v1/auth/me").json()["current_timezone"] == "America/Denver"
+    finally:
+        # Module-scoped client: leave the ledger as it was found, or every test after
+        # this one silently runs in Denver.
+        with Session(engine) as session, session.begin():
+            session.query(TimezoneStay).delete()
+
+    assert client.get("/api/v1/auth/me").json()["current_timezone"] == "Europe/London"

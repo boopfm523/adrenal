@@ -22,6 +22,7 @@ from healthcurve.api.deps import (
 )
 from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.schemas import PageMetadata
+from healthcurve.identity import timezones
 from healthcurve.operations import audit
 from healthcurve.operations.rate_limit import RateLimitPolicy
 from healthcurve.reports import builder, rendering, storage
@@ -147,7 +148,7 @@ def create_report(
         identity=str(owner.id),
         policy=RateLimitPolicy(settings.report_rate_limit, settings.report_rate_window_s),
     )
-    zone_name = payload.timezone or owner.default_timezone
+    zone_name = payload.timezone or timezones.current_zone(session, owner)
     try:
         ZoneInfo(zone_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
@@ -211,7 +212,7 @@ def list_reports(
     timezone: str | None = None,
 ) -> ReportPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,

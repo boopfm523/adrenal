@@ -53,7 +53,7 @@ def owner(session: Session) -> Owner:
     row = Owner(
         id=uuid.uuid4(),
         email="traveller@example.test",
-        password_hash="synthetic-not-a-real-hash",
+        password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
         default_timezone=HOME,
     )
     session.add(row)

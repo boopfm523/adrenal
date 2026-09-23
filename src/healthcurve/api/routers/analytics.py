@@ -41,6 +41,7 @@ from healthcurve.api.schemas import (
     WakeFreePkParametersIn,
     WakeFreePkSettingsOut,
 )
+from healthcurve.identity import timezones
 from healthcurve.operations import audit
 
 router = APIRouter(tags=["analytics"])
@@ -48,9 +49,9 @@ MAX_RANGE_DAYS = 366
 
 
 def _validated_range(
-    *, date_from: date, date_to: date, timezone: str | None, default_timezone: str
+    *, date_from: date, date_to: date, timezone: str | None, profile_timezone: str
 ) -> str:
-    zone_name = timezone or default_timezone
+    zone_name = timezone or profile_timezone
     try:
         ZoneInfo(zone_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
@@ -81,7 +82,7 @@ def steroid_exposure_curve(
     ] = ("hc-mixed-route-free-v4"),
 ):
     """Return the selected deterministic model from current owner-scoped dose facts."""
-    zone_name = timezone or owner.default_timezone
+    zone_name = timezone or timezones.current_zone(session, owner)
     try:
         ZoneInfo(zone_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
@@ -213,7 +214,7 @@ def analytics_summary(
         date_from=date_from,
         date_to=date_to,
         timezone=timezone,
-        default_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
     )
     return service.summary_for_owner(
         session,
@@ -237,7 +238,7 @@ def daily_patterns(
         date_from=date_from,
         date_to=date_to,
         timezone=timezone,
-        default_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
     )
     return patterns.daily_patterns_for_owner(
         session,
@@ -350,7 +351,7 @@ def get_day_analysis(
         date_from=day,
         date_to=day,
         timezone=timezone,
-        default_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
     )
     row = _latest_day_analysis(session, owner_id=owner.id, day=day, timezone=zone_name)
     if row is None:
@@ -382,7 +383,7 @@ def generate_day_analysis(
         date_from=day,
         date_to=day,
         timezone=timezone,
-        default_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
     )
     projection = day_analysis.build_projection(
         session, owner_id=owner.id, day=day, timezone=zone_name
@@ -457,7 +458,7 @@ def generate_pattern_analysis(
         date_from=date_from,
         date_to=date_to,
         timezone=timezone,
-        default_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
     )
     projection = DailyPatternsOut.model_validate(
         patterns.daily_patterns_for_owner(
@@ -555,7 +556,7 @@ def list_pattern_analyses(
             date_from=date_from,
             date_to=date_to,
             timezone=timezone,
-            default_timezone=owner.default_timezone,
+            profile_timezone=timezones.current_zone(session, owner),
         )
         zone = ZoneInfo(zone_name)
         range_start = datetime.combine(date_from, time.min, tzinfo=zone).astimezone(UTC)
@@ -628,7 +629,7 @@ def daily_patterns_csv(
         date_from=date_from,
         date_to=date_to,
         timezone=timezone,
-        default_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
     )
     result = DailyPatternsOut.model_validate(
         patterns.daily_patterns_for_owner(

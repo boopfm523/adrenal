@@ -36,6 +36,7 @@ from healthcurve.api.schemas import ApiModel, EventTimeIn, LabResultOut, LabResu
 from healthcurve.config import Settings
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity import service as auth
+from healthcurve.identity import timezones
 from healthcurve.labs.cleanup_jobs import enqueue_document_cleanup
 from healthcurve.labs.documents import (
     DocumentLayout,
@@ -78,7 +79,7 @@ def list_lab_results(
         .where(LabResult.owner_id == owner.id, LabPanel.owner_id == owner.id)
     )
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -350,7 +351,7 @@ def list_lab_documents(
         LabDocument.status != LabDocumentStatus.DELETED,
     )
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -870,6 +871,7 @@ async def _parse_csv(
 
 @router.post("/imports/csv/preview", dependencies=[Depends(require_csrf)])
 async def preview_csv(
+    session: DbSession,
     owner: CurrentOwner,
     file: Annotated[UploadFile, File()],
     mapping_json: Annotated[str, Form()],
@@ -884,7 +886,7 @@ async def preview_csv(
         analyte_map_json=analyte_map_json,
         specimen_local=specimen_local,
         report_local=report_local,
-        timezone=timezone or owner.default_timezone,
+        timezone=timezone or timezones.current_zone(session, owner),
     )
     return {
         "creates_facts": False,
@@ -914,7 +916,7 @@ async def confirm_csv_route(
         analyte_map_json=analyte_map_json,
         specimen_local=specimen_local,
         report_local=report_local,
-        timezone=timezone or owner.default_timezone,
+        timezone=timezone or timezones.current_zone(session, owner),
     )
     if not hmac.compare_digest(parsed.source_sha256, expected_sha256.casefold()):
         raise HTTPException(status_code=409, detail={"code": "preview_checksum_mismatch"})

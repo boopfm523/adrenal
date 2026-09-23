@@ -34,6 +34,7 @@ from healthcurve.api.schemas import (
 )
 from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.identity import timezones
 from healthcurve.vitals import service as vitals
 from healthcurve.vitals.models import (
     BloodPressureEvent,
@@ -85,7 +86,7 @@ def list_blood_pressure(
     timezone: str | None = None,
 ):
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -162,7 +163,7 @@ def list_weight(
     timezone: str | None = None,
 ):
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -251,7 +252,7 @@ def list_temperature(
     timezone: str | None = None,
 ):
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,

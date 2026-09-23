@@ -40,7 +40,7 @@ def owner(session: Session) -> Owner:
     row = Owner(
         id=uuid.uuid4(),
         email="traveller@example.test",
-        password_hash="synthetic-not-a-real-hash",
+        password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
         default_timezone=HOME,
     )
     session.add(row)
@@ -218,7 +218,7 @@ def test_a_stated_wall_time_always_resolves_to_a_zone_that_contains_it(
         owner = Owner(
             id=uuid.uuid4(),
             email="property@example.test",
-            password_hash="synthetic-not-a-real-hash",
+            password_hash="synthetic-not-a-real-hash",  # pragma: allowlist secret
             default_timezone=HOME,
         )
         session.add(owner)

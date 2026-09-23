@@ -19,6 +19,7 @@ from healthcurve.api.deps import (
 )
 from healthcurve.config import Environment, get_settings
 from healthcurve.identity import service as auth
+from healthcurve.identity import timezones
 from healthcurve.operations import audit
 from healthcurve.operations.rate_limit import RateLimitPolicy
 from healthcurve.operations.telemetry import OperationalEvent
@@ -36,13 +37,19 @@ class LoginResponse(BaseModel):
     csrf_token: str
     email: str
     display_name: str | None
+    #: Home zone. Where the owner lives, not necessarily where they are.
     default_timezone: str
+    #: The zone in force right now per the stay ledger. Equal to ``default_timezone``
+    #: unless travel has been recorded; clients should prefer this one for anything
+    #: they label "today".
+    current_timezone: str
 
 
 class WhoAmI(BaseModel):
     email: str
     display_name: str | None
     default_timezone: str
+    current_timezone: str
     csrf_token: str
 
 
@@ -124,6 +131,7 @@ def login(
         email=owner.email,
         display_name=owner.display_name,
         default_timezone=owner.default_timezone,
+        current_timezone=timezones.current_zone(session, owner),
     )
 
 
@@ -160,11 +168,12 @@ def logout_everywhere(response: Response, session: DbSession, owner: CurrentOwne
 
 
 @router.get("/me", response_model=WhoAmI)
-def me(owner: CurrentOwner, auth_session: CurrentSession) -> WhoAmI:
+def me(session: DbSession, owner: CurrentOwner, auth_session: CurrentSession) -> WhoAmI:
     return WhoAmI(
         email=owner.email,
         display_name=owner.display_name,
         default_timezone=owner.default_timezone,
+        current_timezone=timezones.current_zone(session, owner),
         csrf_token=auth_session.csrf_token,
     )
 

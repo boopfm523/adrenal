@@ -27,6 +27,7 @@ from healthcurve.api.schemas import (
     RegimenVersionPage,
 )
 from healthcurve.config import Environment
+from healthcurve.identity import timezones
 from healthcurve.medications import service
 from healthcurve.medications.models import (
     ApprovedInstruction,
@@ -115,7 +116,7 @@ def list_regimens(
     timezone: str | None = None,
 ) -> RegimenVersionPage:
     window = local_date_window(
-        profile_timezone=owner.default_timezone,
+        profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
         date_from=local_date_from,
         date_to=local_date_to,
@@ -185,7 +186,7 @@ def create_regimen(
             version_label=payload.version_label,
             effective_from=payload.effective_from,
             effective_to=payload.effective_to,
-            effective_timezone=payload.effective_timezone or owner.default_timezone,
+            effective_timezone=payload.effective_timezone or timezones.current_zone(session, owner),
             effective_from_fold=payload.effective_from_fold,
             effective_to_fold=payload.effective_to_fold,
             notes=payload.notes,
@@ -273,7 +274,7 @@ def update_regimen_draft(
             version_label=payload.version_label,
             effective_from=payload.effective_from,
             effective_to=payload.effective_to,
-            effective_timezone=payload.effective_timezone or owner.default_timezone,
+            effective_timezone=payload.effective_timezone or timezones.current_zone(session, owner),
             effective_from_fold=payload.effective_from_fold,
             effective_to_fold=payload.effective_to_fold,
             notes=payload.notes,
@@ -350,7 +351,9 @@ def approve_regimen(
             approved_at=payload.approved_at,
             source_document_checksum=payload.source_document_checksum,
             activation_local_time=payload.activation_local_time,
-            activation_timezone=payload.activation_timezone or owner.default_timezone,
+            activation_timezone=(
+                payload.activation_timezone or timezones.current_zone(session, owner)
+            ),
             activation_fold=payload.activation_fold,
         )
     except service.PlanError as exc:
