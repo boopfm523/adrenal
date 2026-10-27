@@ -16,8 +16,11 @@ from healthcurve.integrations.garmin.models import (
 )
 from healthcurve.public_site.exporter import (
     PUBLIC_ACTIVITY_START_DATE,
+    PUBLIC_CURVE_PROJECTION,
+    PUBLIC_EXERCISE_DEMAND_START_DATE,
     PUBLIC_SCHEMA_VERSION,
     PublicIds,
+    _restrict_exercise_response,
     eligibility_cutoff,
     project_public,
     public_activity_records,
@@ -222,3 +225,70 @@ def test_static_activity_projection_excludes_private_location_and_weather() -> N
     assert "activity_environment" not in projected
     assert "activity_weather" not in projected
     assert "Private Synthetic Place" not in encoded
+
+
+def _exercise_response(**changes: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "available": True,
+        "date": "2026-10-25",
+        "timezone": "America/New_York",
+        "series_unit": "nmol/L",
+        "model": {"id": "hc-exercise-response-v1"},
+        "missing_inputs": [],
+        "inputs": {"resting_heart_rate_bpm": "55"},
+        "summary": {"minutes_above_threshold": 12},
+        "activities": [
+            {"activity_id": "walk-row-id", "sport": "walking"},
+            {"activity_id": "lift-row-id", "sport": "strength_training"},
+        ],
+        "samples": [],
+    }
+    values.update(changes)
+    return values
+
+
+def test_exercise_demand_is_withheld_before_its_public_start_date() -> None:
+    curve = {"exercise_response": _exercise_response()}
+    _restrict_exercise_response(curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE.replace(day=24))
+    assert curve["exercise_response"] is None
+
+
+def test_exercise_demand_keeps_only_reviewed_activity_families_from_its_start_date() -> None:
+    curve = {"exercise_response": _exercise_response()}
+    _restrict_exercise_response(curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE)
+    activities = curve["exercise_response"]["activities"]
+    assert [activity["sport"] for activity in activities] == ["walking"]
+
+
+def test_exercise_demand_restriction_tolerates_unavailable_response() -> None:
+    curve = {"exercise_response": _exercise_response(available=False, activities=[])}
+    _restrict_exercise_response(curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE)
+    assert curve["exercise_response"]["available"] is False
+
+    curve_none = {"exercise_response": None}
+    _restrict_exercise_response(curve_none, day=PUBLIC_EXERCISE_DEMAND_START_DATE)
+    assert curve_none["exercise_response"] is None
+
+
+def test_exercise_demand_projection_maps_activity_id_and_omits_unlisted_fields() -> None:
+    ids = PublicIds()
+    public_garmin_record_id = ids.map("walk-row-id", "garmin")
+    projected = project_public(
+        {
+            "available": True,
+            "activities": [
+                {
+                    "activity_id": "walk-row-id",
+                    "sport": "walking",
+                    "started_at": "2026-10-25T10:00:00Z",
+                    "notes": "must not leave",
+                }
+            ],
+        },
+        PUBLIC_CURVE_PROJECTION["exercise_response"],
+        ids,
+    )
+    encoded = json.dumps(projected)
+    assert projected["activities"][0]["activity_id"] == public_garmin_record_id
+    assert "walk-row-id" not in encoded
+    assert "notes" not in encoded

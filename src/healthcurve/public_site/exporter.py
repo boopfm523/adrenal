@@ -37,6 +37,7 @@ from healthcurve.integrations.garmin.models import (
 PUBLIC_SCHEMA_VERSION: Final = "healthcurve-public-v1"
 PUBLIC_MODEL: Final = "hc-mixed-route-free-v4"
 PUBLIC_ACTIVITY_START_DATE: Final = date(2026, 8, 28)
+PUBLIC_EXERCISE_DEMAND_START_DATE: Final = date(2026, 10, 25)
 SUCCESSFUL_SYNC_STATUSES: Final = frozenset(
     {GarminSyncStatus.COMPLETED, GarminSyncStatus.COMPLETED_WITH_WARNINGS}
 )
@@ -299,6 +300,57 @@ PUBLIC_CURVE_PROJECTION: Final[Projection] = {
             "reference_p95_nmol_l": True,
         },
     },
+    "exercise_response": {
+        "available": True,
+        "date": True,
+        "timezone": True,
+        "series_unit": True,
+        "model": {
+            "id": True,
+            "revision": True,
+            "parameters": True,
+            "carryover_hours": True,
+            "references": True,
+        },
+        "missing_inputs": True,
+        "inputs": {
+            "resting_heart_rate_bpm": True,
+            "resting_heart_rate_source": True,
+            "max_heart_rate_bpm": True,
+            "max_heart_rate_source": True,
+            "age_estimated_max_heart_rate_bpm": True,
+            "observed_peak_heart_rate_bpm": True,
+            "age_years_assumption": True,
+            "heart_rate_sample_count": True,
+            "heart_rate_observed_minutes": True,
+            "heart_rate_unobserved_minutes": True,
+        },
+        "summary": {
+            "minutes_above_threshold": True,
+            "peak_increment_fraction": True,
+            "peak_at": True,
+            "extra_median_free_nmol_l_hours": True,
+        },
+        "activities": {
+            "activity_id": True,
+            "sport": True,
+            "started_at": True,
+            "ended_at": True,
+            "duration_minutes": True,
+            "observed_heart_rate_minutes": True,
+            "mean_intensity_hrr": True,
+            "minutes_above_threshold": True,
+            "peak_increment_fraction": True,
+        },
+        "samples": {
+            "occurred_at": True,
+            "intensity_hrr": True,
+            "increment_fraction": True,
+            "serum_free_p5_nmol_l": True,
+            "serum_free_p50_nmol_l": True,
+            "serum_free_p95_nmol_l": True,
+        },
+    },
 }
 
 PRIVATE_IDENTIFIER_FIELDS: Final = frozenset(
@@ -307,8 +359,10 @@ PRIVATE_IDENTIFIER_FIELDS: Final = frozenset(
         "previous_dose_event_id",
         "next_dose_event_id",
         "symptom_event_id",
+        "activity_id",
     }
 )
+PRIVATE_IDENTIFIER_KINDS: Final = {"activity_id": "garmin"}
 PRIVATE_IDENTIFIER_LIST_FIELDS: Final = frozenset({"previous_supported_dose_event_ids"})
 FORBIDDEN_PUBLIC_KEYS: Final = frozenset(
     {
@@ -412,7 +466,8 @@ def project_public(
 ) -> Any:
     if projection is True:
         if field_name in PRIVATE_IDENTIFIER_FIELDS:
-            return ids.map(value, field_name.removesuffix("_event_id"))
+            kind = PRIVATE_IDENTIFIER_KINDS.get(field_name, field_name.removesuffix("_event_id"))
+            return ids.map(value, kind)
         if field_name in PRIVATE_IDENTIFIER_LIST_FIELDS:
             return [ids.map(item, "dose") for item in cast(list[object], value)]
         return value
@@ -674,6 +729,26 @@ def _adjacent_vitals(session: Session, owner: Owner, day: date) -> tuple[list[An
     return pressure, temperature
 
 
+def _restrict_exercise_response(curve: dict[str, Any], *, day: date) -> None:
+    """Gate the exercise-demand overlay to its reviewed start date and activity allow-list.
+
+    Mirrors ``public_activity_records``: a forward-only start date and the reviewed
+    sport allow-list, applied here because the response's own activity list is not
+    otherwise filtered by ``analytics.exercise_response``.
+    """
+    if day < PUBLIC_EXERCISE_DEMAND_START_DATE:
+        curve["exercise_response"] = None
+        return
+    response = curve.get("exercise_response")
+    if response is None:
+        return
+    response["activities"] = [
+        activity
+        for activity in response["activities"]
+        if supported_activity_type(activity.get("sport"))
+    ]
+
+
 def build_public_day(session: Session, *, owner: Owner, day: date) -> dict[str, Any]:
     """Build and privacy-validate one selected-day display payload."""
     raw_curve = analytics.steroid_exposure_curve(
@@ -685,6 +760,7 @@ def build_public_day(session: Session, *, owner: Owner, day: date) -> dict[str, 
     )
     curve_model = WakeFreeCortisolCurveOut.model_validate(raw_curve)
     curve = curve_model.model_dump(mode="json")
+    _restrict_exercise_response(curve, day=day)
     ids = PublicIds()
     garmin_rows, symptoms, pressure, temperature, episode_rows = _day_records(session, owner, day)
     adjacent_pressure, adjacent_temperature = _adjacent_vitals(session, owner, day)
