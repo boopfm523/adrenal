@@ -4,11 +4,13 @@ import json
 import uuid
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from healthcurve.api.schemas import EventTimeOut, ProvenanceOut
 from healthcurve.events.base import ConfirmationState, SourceType
+from healthcurve.public_site import exporter as exporter_module
 from healthcurve.integrations.garmin.models import (
     GarminSyncOrigin,
     GarminSyncRun,
@@ -20,7 +22,6 @@ from healthcurve.public_site.exporter import (
     PUBLIC_EXERCISE_DEMAND_START_DATE,
     PUBLIC_SCHEMA_VERSION,
     PublicIds,
-    _restrict_exercise_response,
     eligibility_cutoff,
     project_public,
     public_activity_records,
@@ -249,24 +250,33 @@ def _exercise_response(**changes: object) -> dict[str, object]:
 
 def test_exercise_demand_is_withheld_before_its_public_start_date() -> None:
     curve = {"exercise_response": _exercise_response()}
-    _restrict_exercise_response(curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE.replace(day=24))
+    exporter_module._restrict_exercise_response(  # pyright: ignore[reportPrivateUsage]
+        curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE.replace(day=24)
+    )
     assert curve["exercise_response"] is None
 
 
 def test_exercise_demand_keeps_only_reviewed_activity_families_from_its_start_date() -> None:
     curve = {"exercise_response": _exercise_response()}
-    _restrict_exercise_response(curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE)
-    activities = curve["exercise_response"]["activities"]
+    exporter_module._restrict_exercise_response(  # pyright: ignore[reportPrivateUsage]
+        curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE
+    )
+    response = curve["exercise_response"]
+    activities = cast(list[dict[str, object]], response["activities"])
     assert [activity["sport"] for activity in activities] == ["walking"]
 
 
 def test_exercise_demand_restriction_tolerates_unavailable_response() -> None:
     curve = {"exercise_response": _exercise_response(available=False, activities=[])}
-    _restrict_exercise_response(curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE)
+    exporter_module._restrict_exercise_response(  # pyright: ignore[reportPrivateUsage]
+        curve, day=PUBLIC_EXERCISE_DEMAND_START_DATE
+    )
     assert curve["exercise_response"]["available"] is False
 
     curve_none = {"exercise_response": None}
-    _restrict_exercise_response(curve_none, day=PUBLIC_EXERCISE_DEMAND_START_DATE)
+    exporter_module._restrict_exercise_response(  # pyright: ignore[reportPrivateUsage]
+        curve_none, day=PUBLIC_EXERCISE_DEMAND_START_DATE
+    )
     assert curve_none["exercise_response"] is None
 
 
