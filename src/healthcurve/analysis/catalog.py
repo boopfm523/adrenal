@@ -559,7 +559,7 @@ VIEWS: Final[tuple[View, ...]] = (
                 "category",
                 "text",
                 "travel, illness, work, exercise, sleep_disruption, stress, "
-                "medical_appointment, or other",
+                "medical_appointment, surgery, or other",
             ),
             _c("title", "text"),
             _c("description", "text"),

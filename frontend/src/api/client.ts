@@ -610,6 +610,11 @@ export function createLifeEvent(payload: LifeEventInput): Promise<LifeEvent> {
   return apiRequest<LifeEvent>("/life-events", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export function getProcedureTimeline(timezone: string, page = 1): Promise<LifeEventPage> {
+  const params = new URLSearchParams({ timezone, page: page.toString(), category: "surgery", include_sensitive: "true" });
+  return apiRequest<LifeEventPage>(`/life-events?${params.toString()}`);
+}
+
 export function getRegimens(filters: RecordedHistoryFilters, page = 1): Promise<RegimenVersionPage> {
   return apiRequest<RegimenVersionPage>(`/regimens?${recordedHistoryQuery(filters, page).toString()}`);
 }

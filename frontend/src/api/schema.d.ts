@@ -3728,7 +3728,7 @@ export interface components {
          * @description Context that helps explain a pattern without asserting it caused anything.
          * @enum {string}
          */
-        LifeEventCategory: "travel" | "illness" | "work" | "exercise" | "sleep_disruption" | "stress" | "medical_appointment" | "other";
+        LifeEventCategory: "travel" | "illness" | "work" | "exercise" | "sleep_disruption" | "stress" | "medical_appointment" | "surgery" | "other";
         /** LifeEventIn */
         LifeEventIn: {
             category: components["schemas"]["LifeEventCategory"];
@@ -8349,6 +8349,7 @@ export interface operations {
                 local_date_from?: string | null;
                 local_date_to?: string | null;
                 timezone?: string | null;
+                category?: components["schemas"]["LifeEventCategory"] | null;
                 page?: number;
                 page_size?: number;
             };

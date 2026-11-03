@@ -124,6 +124,7 @@ class LifeEventCategory(StrEnum):
     SLEEP_DISRUPTION = "sleep_disruption"
     STRESS = "stress"
     MEDICAL_APPOINTMENT = "medical_appointment"
+    SURGERY = "surgery"
     OTHER = "other"
 
 

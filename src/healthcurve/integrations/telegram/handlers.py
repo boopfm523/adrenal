@@ -1359,7 +1359,7 @@ def _cmd_life_event(session: Session, owner: Owner, args: list[str], *, now: dat
     usage = (
         "Usage: /lifeevent <category> <title> [--time=HH:MM] [--sensitive]\n"
         "Categories: travel, illness, work, exercise, sleep_disruption, stress, "
-        "medical_appointment, other\n"
+        "medical_appointment, surgery, other\n"
         "Example: /lifeevent travel Overnight flight --time=22:15"
     )
     parsed = _context_command_parts(args, _local_now(session, owner, now))

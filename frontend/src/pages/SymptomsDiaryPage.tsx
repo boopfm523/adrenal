@@ -220,6 +220,7 @@ const lifeEventCategoryOptions = [
   { value: "sleep_disruption", label: "Sleep disruption" },
   { value: "stress", label: "Stress" },
   { value: "medical_appointment", label: "Medical appointment" },
+  { value: "surgery", label: "Surgery / procedure" },
   { value: "other", label: "Other" },
 ];
 

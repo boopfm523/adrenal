@@ -15,6 +15,7 @@ const DosesPage = lazy(() => import("./pages/DosesPage").then((module) => ({ def
 const SymptomsDiaryPage = lazy(() => import("./pages/SymptomsDiaryPage").then((module) => ({ default: module.SymptomsDiaryPage })));
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
 const EpisodesPage = lazy(() => import("./pages/EpisodesPage").then((module) => ({ default: module.EpisodesPage })));
+const ProceduresPage = lazy(() => import("./pages/ProceduresPage").then((module) => ({ default: module.ProceduresPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const DataQualityPage = lazy(() => import("./pages/DataQualityPage").then((module) => ({ default: module.DataQualityPage })));
 const ReportsPage = lazy(() => import("./pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
@@ -48,6 +49,7 @@ export function App(): React.JSX.Element {
             <Route path="/symptoms-diary" element={route(<SymptomsDiaryPage />)} />
             <Route path="/plan" element={route(<PlanPage />)} />
             <Route path="/episodes" element={route(<EpisodesPage />)} />
+            <Route path="/procedures" element={route(<ProceduresPage />)} />
             <Route path="/analytics" element={<Navigate to="/healthcurve" replace />} />
             <Route path="/settings" element={route(<SettingsPage />)} />
             <Route path="/data-quality" element={route(<DataQualityPage />)} />

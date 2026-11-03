@@ -44,6 +44,7 @@ from healthcurve.events.models import (
     SYMPTOM_TRACKING_CATEGORY_REVISION,
     DiaryEvent,
     LifeEvent,
+    LifeEventCategory,
     MealEvent,
     SymptomEvent,
 )
@@ -449,6 +450,7 @@ def list_life_events(
     local_date_from: date | None = None,
     local_date_to: date | None = None,
     timezone: str | None = None,
+    category: LifeEventCategory | None = None,
 ) -> LifeEventPage:
     window = local_date_window(
         profile_timezone=timezones.current_zone(session, owner),
@@ -459,6 +461,8 @@ def list_life_events(
     predicates: list[ColumnElement[bool]] = (
         [] if include_sensitive else [LifeEvent.is_sensitive.is_(False)]
     )
+    if category is not None:
+        predicates.append(LifeEvent.category == category)
     if window.start is not None:
         predicates.append(LifeEvent.occurred_at >= window.start)
     if window.end_exclusive is not None:
