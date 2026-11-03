@@ -128,7 +128,7 @@ PROCEDURES: tuple[ProcedureRecord, ...] = (
     ),
     ProcedureRecord(
         date(2026, 1, 29),
-        "Posterolateral thoracotomy with a plueralectomy, decortation and plication of my right "
+        "Posterolateral thoracotomy with a plueralectomy, decortation and plication of the right "
         "diaphraghm",
         "National Institues of Health - Dr David Schrump",
     ),
