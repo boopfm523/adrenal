@@ -49,24 +49,31 @@ function lifeEvent(overrides: Record<string, unknown>): Record<string, unknown> 
 }
 
 describe("Procedures page", () => {
-  it("requests only the surgery category and renders dates, titles, and facilities", async () => {
+  it("requests only the surgery category and groups entries under year markers", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       items: [
         lifeEvent({ id: "11111111-1111-4111-8111-111111111111", title: "Earlier procedure", description: "Hospital A - Dr A", time: { ...lifeEvent({}).time as object, local_time: "2020-02-20T12:00:00" } }),
+        lifeEvent({ id: "33333333-3333-4333-8333-333333333333", title: "Same-year procedure", description: "Hospital C - Dr C", time: { ...lifeEvent({}).time as object, local_time: "2020-07-07T12:00:00" } }),
         lifeEvent({ id: "22222222-2222-4222-8222-222222222222", title: "Later procedure", description: "Hospital B - Dr B", time: { ...lifeEvent({}).time as object, local_time: "2026-08-18T12:00:00" } }),
       ],
       revisions: [],
-      page: { page: 1, page_size: 25, total_items: 2, total_pages: 1 },
+      page: { page: 1, page_size: 25, total_items: 3, total_pages: 1 },
     }), { status: 200 }));
 
     renderPage();
 
     await waitFor(() => { expect(screen.getByText("Earlier procedure")).toBeInTheDocument(); });
+    expect(screen.getByText("Same-year procedure")).toBeInTheDocument();
     expect(screen.getByText("Later procedure")).toBeInTheDocument();
     expect(screen.getByText("Hospital A - Dr A")).toBeInTheDocument();
     expect(screen.getByText("Hospital B - Dr B")).toBeInTheDocument();
-    expect(screen.getByText("February 20, 2020")).toBeInTheDocument();
-    expect(screen.getByText("August 18, 2026")).toBeInTheDocument();
+    expect(screen.getByText("February 20")).toBeInTheDocument();
+    expect(screen.getByText("July 7")).toBeInTheDocument();
+    expect(screen.getByText("August 18")).toBeInTheDocument();
+
+    // One year marker per distinct year, not per entry.
+    expect(screen.getByRole("heading", { name: "2020" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "2026" })).toBeInTheDocument();
 
     const requested = new URL(fetchMock.mock.calls[0]?.[0] as string, "http://localhost");
     expect(requested.pathname.endsWith("/life-events")).toBe(true);
