@@ -177,11 +177,16 @@ function isAbsoluteCortisolCurve(exposure: SteroidExposureCurve): exposure is Ex
 
 function isWakeFreeCurve(exposure: SteroidExposureCurve): exposure is WakeFreeCortisolCurve {
   return "series_kind" in exposure
-    && exposure.series_kind === "modeled_serum_free_cortisol_scenario";
+    && (exposure.series_kind === "modeled_serum_free_cortisol_scenario"
+      || exposure.series_kind === "modeled_free_glucocorticoid_equivalent_scenario");
 }
 
 function isMixedRouteCurve(exposure: SteroidExposureCurve): boolean {
   return isWakeFreeCurve(exposure) && exposure.model.id === "hc-mixed-route-free-v4";
+}
+
+function isFullGlucocorticoidCurve(exposure: SteroidExposureCurve): boolean {
+  return isWakeFreeCurve(exposure) && exposure.model.id === "hc-full-glucocorticoid-v5";
 }
 
 function supportedDoseDescription(exposure: WakeFreeCortisolCurve): string {
@@ -216,6 +221,18 @@ function stressExposureValue(sample: SteroidExposureCurve["samples"][number]): s
   return "stress_modeled_free_cortisol_nmol_l" in sample
     ? sample.stress_modeled_free_cortisol_nmol_l
     : sample.stress_exposure_reu;
+}
+
+function hydrocortisoneShareValue(sample: SteroidExposureCurve["samples"][number]): string | null {
+  return "hydrocortisone_modeled_free_cortisol_nmol_l" in sample
+    ? sample.hydrocortisone_modeled_free_cortisol_nmol_l ?? null
+    : null;
+}
+
+function prednisoneShareValue(sample: SteroidExposureCurve["samples"][number]): string | null {
+  return "prednisone_modeled_free_cortisol_equivalent_nmol_l" in sample
+    ? sample.prednisone_modeled_free_cortisol_equivalent_nmol_l ?? null
+    : null;
 }
 
 function presetVisibility(keys: readonly LaneKey[]): Record<LaneKey, boolean> {
@@ -1170,6 +1187,23 @@ export function DailyHealthCurve({
         series: "Stress-dose contribution",
         value: `${Number(stressExposureValue(cursorExposureSample)).toFixed(3)} ${data.exposure.series_unit}`,
       }] : []),
+      ...(() => {
+        const hydrocortisoneShare = hydrocortisoneShareValue(cursorExposureSample);
+        const prednisoneShare = prednisoneShareValue(cursorExposureSample);
+        if (hydrocortisoneShare === null && prednisoneShare === null) return [];
+        return [
+          ...(hydrocortisoneShare !== null && Number(hydrocortisoneShare) > 0 ? [{
+            key: `hydrocortisone-share-${cursorExposureSample.occurred_at}`,
+            series: "From hydrocortisone",
+            value: `${Number(hydrocortisoneShare).toFixed(3)} ${data.exposure.series_unit}`,
+          }] : []),
+          ...(prednisoneShare !== null && Number(prednisoneShare) > 0 ? [{
+            key: `prednisone-share-${cursorExposureSample.occurred_at}`,
+            series: "From prednisone (glucocorticoid-equivalent)",
+            value: `${Number(prednisoneShare).toFixed(3)} ${data.exposure.series_unit}`,
+          }] : []),
+        ];
+      })(),
     ]),
     ...(cursorContextBandSample === undefined ? [] : [{
       key: `context-band-${cursorContextBandSample.occurred_at}`,
@@ -1258,7 +1292,7 @@ export function DailyHealthCurve({
     </details>
     <Stack className="healthcurve-controls" gap="sm" aria-label="HealthCurve chart controls"><Group className="healthcurve-focus" gap="xs" role="group" aria-label="Choose a focused HealthCurve comparison"><Text fw={750}>Quick focus:</Text>{FOCUS_PRESETS.map((preset) => <Button key={preset.label} type="button" size="sm" variant={isPresetVisible(visible, preset.keys) ? "filled" : "outline"} aria-pressed={isPresetVisible(visible, preset.keys)} onClick={() => { setVisible(presetVisibility(preset.keys)); }}>{preset.label}</Button>)}</Group>
       <Paper component="fieldset" className="curve-toggles" withBorder radius="md" p="md"><legend>Show or hide chart series</legend><SimpleGrid cols={{ base: 1, xs: 2, md: 3 }}>{Object.entries({
-        exposure: isMixedRouteCurve(data.exposure) ? "Full cortisol model (v4) and actual doses" : isWakeFreeCurve(data.exposure) ? "Wake-anchored oral free-cortisol model and actual doses" : isAbsoluteCortisolCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
+        exposure: isFullGlucocorticoidCurve(data.exposure) ? "Full glucocorticoid model (v5: hydrocortisone + prednisone) and actual doses" : isMixedRouteCurve(data.exposure) ? "Full cortisol model (v4) and actual doses" : isWakeFreeCurve(data.exposure) ? "Wake-anchored oral free-cortisol model and actual doses" : isAbsoluteCortisolCurve(data.exposure) ? "Physiological scenario and actual doses" : "Theoretical exposure and actual doses",
         stress: "Garmin stress",
         heart_rate: "Heart rate",
         hrv: "HRV",
@@ -1541,7 +1575,11 @@ raised_free_pX(t) = free_from_total(raised_total_pX(t))`}</code></pre>
       <h3>Exact implemented exposure formula</h3>
       <p><strong>{exposureModelVersion(data.exposure)}</strong> supports only {isWakeFreeCurve(data.exposure) ? supportedDoseDescription(data.exposure) : `${data.exposure.model.supported_formulation} ${data.exposure.model.supported_route} ${data.exposure.model.supported_medication}`} recorded in {data.exposure.model.amount_unit}.</p>
       {isWakeFreeCurve(data.exposure) ? <>
-        <pre><code>{isMixedRouteCurve(data.exposure) ? `oral_free(t) = unchanged hc-wake-free-v3 oral contribution
+        <pre><code>{isFullGlucocorticoidCurve(data.exposure) ? `hydrocortisone_total(t) = unchanged hc-mixed-route-free-v4 oral + IV-push total
+prednisone_total(t) = total_from_free(prednisolone_shape(t) × dose_mg × 4.0-mg-hydrocortisone-equivalent × calibrated dose contribution)
+combined_total(t) = hydrocortisone_total(t) + prednisone_total(t)
+combined_free(t) = free_from_total(combined_total(t))
+hydrocortisone_free(t), prednisone_free(t) = combined_free(t) split proportionally to each drug's total share` : isMixedRouteCurve(data.exposure) ? `oral_free(t) = unchanged hc-wake-free-v3 oral contribution
 iv_total(t) = 1,347 × (dose_mg / 50) × exp(-0.27 × elapsed_hours) nmol/L for each exact 50 mg or 100 mg IV push
 combined_total(t) = total_from_free(oral_free(t)) + sum(iv_total(t))
 combined_free(t) = free_from_total(combined_total(t))` : `ka = ${formatDecimal(data.exposure.model.parameters.absorption_rate_per_hour)} per hour
@@ -1549,7 +1587,7 @@ ke = ln(2) / ${formatDecimal(data.exposure.model.parameters.elimination_half_lif
 t_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.parameters.peak_time_hours)} hours
 free(t) = calibrated dose contribution × ka/(ka-ke) × (exp(-ke×t) - exp(-ka×t)) nmol/L
 display total(t) = one-site CBG saturation + linear albumin binding applied to free(t)`}</code></pre>
-        <p>{isMixedRouteCurve(data.exposure) ? "The full model leaves every oral v3 calculation unchanged, adds exact 50 mg and 100 mg intravenous-push facts in the total-cortisol domain, then performs one nonlinear binding conversion back to serum-free cortisol. The 50 mg contribution uses the published population fit; 100 mg is a disclosed 2× dose-proportional scenario rather than a separately fitted curve. Repeated injections add rather than reset one another. Other amounts and non-intravenous routes remain visible recorded markers but are not modeled." : "This wake-anchored model runs and sums every oral dose in serum free cortisol."} Its population defaults are user-editable in settings: half-life {formatDecimal(data.exposure.model.parameters.elimination_half_life_hours)} hours, peak time {formatDecimal(data.exposure.model.parameters.peak_time_hours)} hours, distribution volume {formatDecimal(data.exposure.model.parameters.distribution_volume_liters)} L, and oral bioavailability {formatDecimal(data.exposure.model.parameters.oral_bioavailability)}. Derived total cortisol is display-only. Samples occur every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots.</p>
+        <p>{isFullGlucocorticoidCurve(data.exposure) ? "The full glucocorticoid model leaves every v4 hydrocortisone calculation unchanged and adds a separately shaped prednisone contribution using prednisolone's own published absorption/elimination timing (peak at 1.5 hours, elimination half-life 3.5 hours), scaled in amplitude by a disclosed clinical hydrocortisone dose-equivalence (1 mg prednisone ≈ 4 mg hydrocortisone). The combined line is therefore a modeled free-cortisol-equivalent scenario, not a literal cortisol or prednisolone assay; the hydrocortisone and prednisone shares always sum exactly to the plotted total and are both available in the hover tooltip." : isMixedRouteCurve(data.exposure) ? "The full model leaves every oral v3 calculation unchanged, adds exact 50 mg and 100 mg intravenous-push facts in the total-cortisol domain, then performs one nonlinear binding conversion back to serum-free cortisol. The 50 mg contribution uses the published population fit; 100 mg is a disclosed 2× dose-proportional scenario rather than a separately fitted curve. Repeated injections add rather than reset one another. Other amounts and non-intravenous routes remain visible recorded markers but are not modeled." : "This wake-anchored model runs and sums every oral dose in serum free cortisol."} Its population defaults are user-editable in settings: half-life {formatDecimal(data.exposure.model.parameters.elimination_half_life_hours)} hours, peak time {formatDecimal(data.exposure.model.parameters.peak_time_hours)} hours, distribution volume {formatDecimal(data.exposure.model.parameters.distribution_volume_liters)} L, and oral bioavailability {formatDecimal(data.exposure.model.parameters.oral_bioavailability)}. Derived total cortisol is display-only. Samples occur every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots.</p>
       </> : isPhysiologicalCurve(data.exposure) ? <>
         <pre><code>{`ka = ${formatDecimal(data.exposure.model.absorption_rate_per_hour)} per hour\nke = clearance / distribution volume = ${formatDecimal(data.exposure.model.elimination_rate_per_hour)} per hour\nt_peak = ln(ka / ke) / (ka - ke) = ${formatDecimal(data.exposure.model.peak_time_hours)} hours\nC(t) = (F × dose / V) × (1,000,000 / molecular weight) × ka/(ka-ke) × (exp(-ke×t) - exp(-ka×t)) nmol/L`}</code></pre>
         <p>This is a population-parameter plasma-free-cortisol scenario. It is not a measured value, personal target, medication-adequacy test, or dosing guide. Contributions from close or simultaneous doses are summed and sampled every {data.exposure.model.sample_interval_minutes.toString()} elapsed minutes plus exact administration and modeled-peak knots.</p>
@@ -1560,7 +1598,7 @@ display total(t) = one-site CBG saturation + linear albumin binding applied to f
       <h3>Why these parameters are used</h3>
       <ul>{data.exposure.model.references.map((href) => { const detail = EXPOSURE_REFERENCE_DETAILS[href]; return <li key={href}><a href={href} target="_blank" rel="noreferrer">{detail?.label ?? "Model source"}</a>{detail === undefined ? null : ` — ${detail.use}.`}</li>; })}</ul>
       <h3>Model comparison</h3>
-      <div className="table-scroll" tabIndex={0} role="region" aria-label="HealthCurve exposure model comparison"><table><caption>The four selectable models remain separate and versioned.</caption><thead><tr><th scope="col">Model</th><th scope="col">Output</th><th scope="col">Unit</th><th scope="col">Interpretation boundary</th></tr></thead><tbody><tr><th scope="row">hc-exposure-v1</th><td>Normalized oral-dose exposure shape</td><td>REU</td><td>Relative visualization; not cortisol concentration</td></tr><tr><th scope="row">hc-physiology-v2</th><td>Population-parameter plasma-free-cortisol scenario</td><td>nmol/L</td><td>Modeled scenario; not measured or personalized cortisol</td></tr><tr><th scope="row">hc-wake-free-v3</th><td>Binding-aware oral serum-free-cortisol model with wake-anchored healthy reference</td><td>nmol/L free</td><td>Modeled and reference context; not measured cortisol, a personal target, or a dosing guide</td></tr><tr><th scope="row">hc-mixed-route-free-v4</th><td>Unchanged v3 oral model plus exact 50 mg and 100 mg IV-push facts</td><td>nmol/L free</td><td>50 mg fitted population reference and disclosed 2× 100 mg scenario; not measured cortisol, a personal target, or a dosing guide</td></tr></tbody></table></div>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="HealthCurve exposure model comparison"><table><caption>The five selectable models remain separate and versioned.</caption><thead><tr><th scope="col">Model</th><th scope="col">Output</th><th scope="col">Unit</th><th scope="col">Interpretation boundary</th></tr></thead><tbody><tr><th scope="row">hc-exposure-v1</th><td>Normalized oral-dose exposure shape</td><td>REU</td><td>Relative visualization; not cortisol concentration</td></tr><tr><th scope="row">hc-physiology-v2</th><td>Population-parameter plasma-free-cortisol scenario</td><td>nmol/L</td><td>Modeled scenario; not measured or personalized cortisol</td></tr><tr><th scope="row">hc-wake-free-v3</th><td>Binding-aware oral serum-free-cortisol model with wake-anchored healthy reference</td><td>nmol/L free</td><td>Modeled and reference context; not measured cortisol, a personal target, or a dosing guide</td></tr><tr><th scope="row">hc-mixed-route-free-v4</th><td>Unchanged v3 oral model plus exact 50 mg and 100 mg IV-push facts</td><td>nmol/L free</td><td>50 mg fitted population reference and disclosed 2× 100 mg scenario; not measured cortisol, a personal target, or a dosing guide</td></tr><tr><th scope="row">hc-full-glucocorticoid-v5</th><td>Unchanged v4 hydrocortisone model plus a prednisolone-timed, clinically-equivalent-scaled prednisone contribution</td><td>nmol/L free-cortisol-equivalent</td><td>Combined glucocorticoid-equivalence scenario, decomposed by drug; not a literal cortisol or prednisolone assay, a personal target, or a dosing guide</td></tr></tbody></table></div>
       <>
         <h3>Illustrative circadian context band</h3>
         <pre><code>{`center(t) = shape-preserving PCHIP interpolation of versioned local-clock anchors\nlower(t) = 0.8 × center(t)\nupper(t) = 1.2 × center(t)`}</code></pre>

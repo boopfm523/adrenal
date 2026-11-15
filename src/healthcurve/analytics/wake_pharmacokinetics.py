@@ -142,6 +142,13 @@ def _absorption_rate_for_timing(
     return result
 
 
+def absorption_rate_for_timing(elimination_half_life_hours: float, peak_time_hours: float) -> float:
+    """Expose the bisection solver so sibling formulation-specific PK models (for
+    example a second steroid with its own published tmax/half-life) can derive their
+    own absorption rate without duplicating the numerically-fragile solver."""
+    return _absorption_rate_for_timing(elimination_half_life_hours, peak_time_hours)
+
+
 def parameters_from_revision(row: CortisolPkParameterRevision) -> WakeFreeParameters:
     return WakeFreeParameters(
         elimination_half_life_hours=float(row.elimination_half_life_hours),

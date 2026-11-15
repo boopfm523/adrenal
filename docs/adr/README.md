@@ -35,7 +35,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0025](0025-private-health-data-chatbot.md) | Private health-data chatbot uses bounded read-only domain tools | Accepted; partially superseded by 0036 |
 | [0026](0026-wake-anchored-free-cortisol-reference-and-meals.md) | Wake-anchored free-cortisol reference and observed meal context | Accepted |
 | [0027](0027-evidence-versioned-50mg-iv-push-hydrocortisone-model.md) | Evidence-versioned 50 mg and 100 mg IV-push hydrocortisone model | Accepted |
-| [0028](0028-full-cortisol-model-default.md) | Full cortisol model v4 as the Daily Review default | Accepted |
+| [0028](0028-full-cortisol-model-default.md) | Full cortisol model v4 as the Daily Review default | Accepted; default-selection portion superseded by 0039 |
 | [0029](0029-public-static-healthcurve.md) | One-way public static HealthCurve mirror | Accepted; amended by 0032 |
 | [0030](0030-qwen38-text-model-candidate.md) | Qualification-gated Qwen3.8 text-model candidate | Accepted |
 | [0031](0031-synthetic-multimodal-workflow-contract.md) | Synthetic contract before image/PDF workflow replacement | Accepted |
@@ -46,6 +46,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0036](0036-local-model-analytical-chat.md) | Local-model analytical chat over curated read-only views | Accepted; supersedes part of 0025 |
 | [0037](0037-theoretical-exercise-cortisol-response.md) | Theoretical healthy cortisol response to measured exercise load | Accepted; amends 0015 |
 | [0038](0038-timezone-stay-ledger.md) | The owner's timezone is a ledger over time, not a field | Accepted |
+| [0039](0039-prednisone-glucocorticoid-equivalence-model.md) | Combined hydrocortisone + prednisone glucocorticoid-equivalence model (v5) | Accepted; default-selection portion of 0028 superseded |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

@@ -5443,14 +5443,14 @@ export interface components {
             samples: components["schemas"]["WakeFreeCortisolSampleOut"][];
             /**
              * Series Kind
-             * @constant
+             * @enum {string}
              */
-            series_kind: "modeled_serum_free_cortisol_scenario";
+            series_kind: "modeled_serum_free_cortisol_scenario" | "modeled_free_glucocorticoid_equivalent_scenario";
             /**
              * Series Name
-             * @constant
+             * @enum {string}
              */
-            series_name: "Modeled serum-free-cortisol scenario";
+            series_name: "Modeled serum-free-cortisol scenario" | "Modeled free-cortisol-equivalent scenario (hydrocortisone + prednisone)";
             /**
              * Series Unit
              * @constant
@@ -5482,7 +5482,7 @@ export interface components {
              * Id
              * @enum {string}
              */
-            id: "hc-wake-free-v3" | "hc-mixed-route-free-v4";
+            id: "hc-wake-free-v3" | "hc-mixed-route-free-v4" | "hc-full-glucocorticoid-v5";
             /** Iv Push Elimination Half Life Hours */
             iv_push_elimination_half_life_hours?: string | null;
             /** Iv Push Elimination Rate Per Hour */
@@ -5496,6 +5496,18 @@ export interface components {
             /** Iv Push Supported Amounts Mg */
             iv_push_supported_amounts_mg?: string[] | null;
             parameters: components["schemas"]["WakeFreePkParametersOut"];
+            /** Prednisolone Absorption Rate Per Hour */
+            prednisolone_absorption_rate_per_hour?: string | null;
+            /** Prednisolone Elimination Half Life Hours */
+            prednisolone_elimination_half_life_hours?: string | null;
+            /** Prednisolone Elimination Rate Per Hour */
+            prednisolone_elimination_rate_per_hour?: string | null;
+            /** Prednisolone Peak Time Hours */
+            prednisolone_peak_time_hours?: string | null;
+            /** Prednisone Contribution Horizon Hours */
+            prednisone_contribution_horizon_hours?: number | null;
+            /** Prednisone Hydrocortisone Equivalence Mg Per Mg */
+            prednisone_hydrocortisone_equivalence_mg_per_mg?: string | null;
             /** Reference Absorption Duration Hours */
             reference_absorption_duration_hours: string | null;
             /** Reference Clearance Liters Per Hour */
@@ -5506,7 +5518,7 @@ export interface components {
              * Revision
              * @enum {string}
              */
-            revision: "hc-wake-free-v3.0.0" | "hc-mixed-route-free-v4.0.0" | "hc-mixed-route-free-v4.1.0";
+            revision: "hc-wake-free-v3.0.0" | "hc-mixed-route-free-v4.0.0" | "hc-mixed-route-free-v4.1.0" | "hc-full-glucocorticoid-v5.0.0";
             /** Sample Interval Minutes */
             sample_interval_minutes: number;
             /** Supported Formulation */
@@ -5525,6 +5537,8 @@ export interface components {
         WakeFreeCortisolSampleOut: {
             /** Derived Total Cortisol Nmol L Display */
             derived_total_cortisol_nmol_l_display: string;
+            /** Hydrocortisone Modeled Free Cortisol Nmol L */
+            hydrocortisone_modeled_free_cortisol_nmol_l?: string | null;
             /**
              * Local Time
              * Format: date-time
@@ -5537,6 +5551,8 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
+            /** Prednisone Modeled Free Cortisol Equivalent Nmol L */
+            prednisone_modeled_free_cortisol_equivalent_nmol_l?: string | null;
             /** Regular Modeled Free Cortisol Nmol L */
             regular_modeled_free_cortisol_nmol_l: string;
             /** Stress Modeled Free Cortisol Nmol L */
@@ -6098,7 +6114,7 @@ export interface operations {
             query: {
                 day: string;
                 timezone?: string | null;
-                model?: "hc-exposure-v1" | "hc-physiology-v2" | "hc-wake-free-v3" | "hc-mixed-route-free-v4";
+                model?: "hc-exposure-v1" | "hc-physiology-v2" | "hc-wake-free-v3" | "hc-mixed-route-free-v4" | "hc-full-glucocorticoid-v5";
             };
             header?: never;
             path?: never;

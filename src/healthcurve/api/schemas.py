@@ -1295,11 +1295,12 @@ class WakeFreePkSettingsOut(ApiModel):
 
 
 class WakeFreeCortisolModelOut(ApiModel):
-    id: Literal["hc-wake-free-v3", "hc-mixed-route-free-v4"]
+    id: Literal["hc-wake-free-v3", "hc-mixed-route-free-v4", "hc-full-glucocorticoid-v5"]
     revision: Literal[
         "hc-wake-free-v3.0.0",
         "hc-mixed-route-free-v4.0.0",
         "hc-mixed-route-free-v4.1.0",
+        "hc-full-glucocorticoid-v5.0.0",
     ]
     supported_medication: str
     supported_formulation: str
@@ -1320,6 +1321,12 @@ class WakeFreeCortisolModelOut(ApiModel):
     iv_push_initial_total_cortisol_nmol_l: Decimal | None = None
     iv_push_elimination_rate_per_hour: Decimal | None = None
     iv_push_elimination_half_life_hours: Decimal | None = None
+    prednisone_hydrocortisone_equivalence_mg_per_mg: Decimal | None = None
+    prednisolone_absorption_rate_per_hour: Decimal | None = None
+    prednisolone_elimination_rate_per_hour: Decimal | None = None
+    prednisolone_elimination_half_life_hours: Decimal | None = None
+    prednisolone_peak_time_hours: Decimal | None = None
+    prednisone_contribution_horizon_hours: int | None = Field(default=None, gt=0)
     contribution_horizon_hours: int = Field(gt=0)
     sample_interval_minutes: int = Field(gt=0)
     references: list[str]
@@ -1332,6 +1339,11 @@ class WakeFreeCortisolModelOut(ApiModel):
         "iv_push_initial_total_cortisol_nmol_l",
         "iv_push_elimination_rate_per_hour",
         "iv_push_elimination_half_life_hours",
+        "prednisone_hydrocortisone_equivalence_mg_per_mg",
+        "prednisolone_absorption_rate_per_hour",
+        "prednisolone_elimination_rate_per_hour",
+        "prednisolone_elimination_half_life_hours",
+        "prednisolone_peak_time_hours",
     )
     def _parameters(self, value: Decimal | None) -> str | None:
         return None if value is None else str(value)
@@ -1348,6 +1360,8 @@ class WakeFreeCortisolSampleOut(ApiModel):
     modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
     regular_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
     stress_modeled_free_cortisol_nmol_l: Decimal = Field(ge=0)
+    hydrocortisone_modeled_free_cortisol_nmol_l: Decimal | None = Field(default=None, ge=0)
+    prednisone_modeled_free_cortisol_equivalent_nmol_l: Decimal | None = Field(default=None, ge=0)
     derived_total_cortisol_nmol_l_display: Decimal = Field(ge=0)
 
     @field_serializer(
@@ -1358,6 +1372,13 @@ class WakeFreeCortisolSampleOut(ApiModel):
     )
     def _values(self, value: Decimal) -> str:
         return str(value)
+
+    @field_serializer(
+        "hydrocortisone_modeled_free_cortisol_nmol_l",
+        "prednisone_modeled_free_cortisol_equivalent_nmol_l",
+    )
+    def _optional_values(self, value: Decimal | None) -> str | None:
+        return None if value is None else str(value)
 
 
 class WakeReferenceCitationOut(ApiModel):
@@ -1691,8 +1712,14 @@ class WakeFreeCortisolCurveOut(ApiModel):
     day_start: datetime
     day_end: datetime
     elapsed_hours: Decimal
-    series_kind: Literal["modeled_serum_free_cortisol_scenario"]
-    series_name: Literal["Modeled serum-free-cortisol scenario"]
+    series_kind: Literal[
+        "modeled_serum_free_cortisol_scenario",
+        "modeled_free_glucocorticoid_equivalent_scenario",
+    ]
+    series_name: Literal[
+        "Modeled serum-free-cortisol scenario",
+        "Modeled free-cortisol-equivalent scenario (hydrocortisone + prednisone)",
+    ]
     series_unit: Literal["nmol/L"]
     safety_label: str
     definition: str

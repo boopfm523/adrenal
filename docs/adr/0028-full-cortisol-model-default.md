@@ -1,6 +1,6 @@
 # ADR-0028: Full cortisol model v4 as the Daily Review default
 
-Status: Accepted
+Status: Accepted; default-selection portion superseded by ADR-0039
 
 ## Context
 

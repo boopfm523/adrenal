@@ -20,6 +20,7 @@ from healthcurve.analytics import (
     day_analysis,
     exercise_response,
     exposure,
+    full_glucocorticoid_pharmacokinetics,
     injectable_pharmacokinetics,
     patterns,
     physiology,
@@ -79,7 +80,8 @@ def steroid_exposure_curve(
         "hc-physiology-v2",
         "hc-wake-free-v3",
         "hc-mixed-route-free-v4",
-    ] = ("hc-mixed-route-free-v4"),
+        "hc-full-glucocorticoid-v5",
+    ] = ("hc-full-glucocorticoid-v5"),
 ):
     """Return the selected deterministic model from current owner-scoped dose facts."""
     zone_name = timezone or timezones.current_zone(session, owner)
@@ -99,10 +101,12 @@ def steroid_exposure_curve(
             sample_instants=sample_instants,
         )
         return curve
-    if model in {"hc-wake-free-v3", "hc-mixed-route-free-v4"}:
-        curve_service = (
-            wake_pharmacokinetics if model == "hc-wake-free-v3" else injectable_pharmacokinetics
-        )
+    if model in {"hc-wake-free-v3", "hc-mixed-route-free-v4", "hc-full-glucocorticoid-v5"}:
+        curve_service = {
+            "hc-wake-free-v3": wake_pharmacokinetics,
+            "hc-mixed-route-free-v4": injectable_pharmacokinetics,
+            "hc-full-glucocorticoid-v5": full_glucocorticoid_pharmacokinetics,
+        }[model]
         curve = curve_service.curve_for_owner(
             session,
             owner_id=owner.id,

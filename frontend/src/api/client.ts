@@ -46,7 +46,8 @@ export type HealthCurveModel =
   | "hc-exposure-v1"
   | "hc-physiology-v2"
   | "hc-wake-free-v3"
-  | "hc-mixed-route-free-v4";
+  | "hc-mixed-route-free-v4"
+  | "hc-full-glucocorticoid-v5";
 export type DailyPatterns = components["schemas"]["DailyPatternsOut"];
 export type PatternAnalysis = components["schemas"]["PatternAnalysisOut"];
 export type PatternAnalysisGeneration = components["schemas"]["PatternAnalysisGenerationOut"];
@@ -662,7 +663,7 @@ export function getAnalyticsSummary(dateFrom: string, dateTo: string, timezone: 
   return apiRequest<AnalyticsSummary>(`/analytics/summary?${params.toString()}`);
 }
 
-export function getSteroidExposure(day: string, timezone: string, model: HealthCurveModel = "hc-mixed-route-free-v4"): Promise<SteroidExposureCurve> {
+export function getSteroidExposure(day: string, timezone: string, model: HealthCurveModel = "hc-full-glucocorticoid-v5"): Promise<SteroidExposureCurve> {
   const params = new URLSearchParams({ day, timezone, model });
   return apiRequest<SteroidExposureCurve>(`/analytics/steroid-exposure?${params.toString()}`);
 }

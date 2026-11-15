@@ -11288,12 +11288,18 @@
             "type": "array"
           },
           "series_kind": {
-            "const": "modeled_serum_free_cortisol_scenario",
+            "enum": [
+              "modeled_serum_free_cortisol_scenario",
+              "modeled_free_glucocorticoid_equivalent_scenario"
+            ],
             "title": "Series Kind",
             "type": "string"
           },
           "series_name": {
-            "const": "Modeled serum-free-cortisol scenario",
+            "enum": [
+              "Modeled serum-free-cortisol scenario",
+              "Modeled free-cortisol-equivalent scenario (hydrocortisone + prednisone)"
+            ],
             "title": "Series Name",
             "type": "string"
           },
@@ -11378,7 +11384,8 @@
           "id": {
             "enum": [
               "hc-wake-free-v3",
-              "hc-mixed-route-free-v4"
+              "hc-mixed-route-free-v4",
+              "hc-full-glucocorticoid-v5"
             ],
             "title": "Id",
             "type": "string"
@@ -11455,6 +11462,73 @@
           "parameters": {
             "$ref": "#/components/schemas/WakeFreePkParametersOut"
           },
+          "prednisolone_absorption_rate_per_hour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisolone Absorption Rate Per Hour"
+          },
+          "prednisolone_elimination_half_life_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisolone Elimination Half Life Hours"
+          },
+          "prednisolone_elimination_rate_per_hour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisolone Elimination Rate Per Hour"
+          },
+          "prednisolone_peak_time_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisolone Peak Time Hours"
+          },
+          "prednisone_contribution_horizon_hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisone Contribution Horizon Hours"
+          },
+          "prednisone_hydrocortisone_equivalence_mg_per_mg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisone Hydrocortisone Equivalence Mg Per Mg"
+          },
           "reference_absorption_duration_hours": {
             "anyOf": [
               {
@@ -11488,7 +11562,8 @@
             "enum": [
               "hc-wake-free-v3.0.0",
               "hc-mixed-route-free-v4.0.0",
-              "hc-mixed-route-free-v4.1.0"
+              "hc-mixed-route-free-v4.1.0",
+              "hc-full-glucocorticoid-v5.0.0"
             ],
             "title": "Revision",
             "type": "string"
@@ -11579,6 +11654,17 @@
             "title": "Derived Total Cortisol Nmol L Display",
             "type": "string"
           },
+          "hydrocortisone_modeled_free_cortisol_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hydrocortisone Modeled Free Cortisol Nmol L"
+          },
           "local_time": {
             "format": "date-time",
             "title": "Local Time",
@@ -11592,6 +11678,17 @@
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
+          },
+          "prednisone_modeled_free_cortisol_equivalent_nmol_l": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prednisone Modeled Free Cortisol Equivalent Nmol L"
           },
           "regular_modeled_free_cortisol_nmol_l": {
             "title": "Regular Modeled Free Cortisol Nmol L",
@@ -13147,12 +13244,13 @@
             "name": "model",
             "required": false,
             "schema": {
-              "default": "hc-mixed-route-free-v4",
+              "default": "hc-full-glucocorticoid-v5",
               "enum": [
                 "hc-exposure-v1",
                 "hc-physiology-v2",
                 "hc-wake-free-v3",
-                "hc-mixed-route-free-v4"
+                "hc-mixed-route-free-v4",
+                "hc-full-glucocorticoid-v5"
               ],
               "title": "Model",
               "type": "string"

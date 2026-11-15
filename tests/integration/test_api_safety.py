@@ -6939,7 +6939,7 @@ def test_steroid_exposure_uses_current_actual_doses_and_sums_close_records(
         params={"day": selected_day, "timezone": "UTC"},
     )
     assert default_response.status_code == 200, default_response.text
-    assert default_response.json()["model"]["id"] == "hc-mixed-route-free-v4"
+    assert default_response.json()["model"]["id"] == "hc-full-glucocorticoid-v5"
 
     invalid = client.get(
         "/api/v1/analytics/steroid-exposure",
@@ -7179,6 +7179,136 @@ def test_wake_free_parameters_are_versioned_owner_scoped_and_audited(
     assert active.status_code == 200, active.text
     assert active.json()["parameters"]["revision_number"] == 2
     assert active.json()["parameters"]["elimination_half_life_hours"] == "2.1"
+
+
+def test_full_glucocorticoid_model_combines_prednisone_and_hydrocortisone(
+    client: TestClient,
+    logged_in: dict[str, str],
+) -> None:
+    selected_day = "2024-03-01"
+    hc_medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Hydrocortisone",
+            "formulation": "tablet",
+            "strength": "10.4567",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "oral",
+        },
+        headers=logged_in,
+    )
+    assert hc_medication.status_code == 201, hc_medication.text
+    prednisone_medication = client.post(
+        "/api/v1/medications",
+        json={
+            "name": "Prednisone",
+            "formulation": "tablet",
+            "strength": "5.6543",
+            "strength_unit": "mg",
+            "default_unit": "mg",
+            "default_route": "oral",
+        },
+        headers=logged_in,
+    )
+    assert prednisone_medication.status_code == 201, prednisone_medication.text
+
+    prednisone_dose = client.post(
+        "/api/v1/doses",
+        json={
+            "medication_id": prednisone_medication.json()["id"],
+            "amount": "5",
+            "unit": "mg",
+            "route": "oral",
+            "category": "scheduled",
+            "time": {"local_time": f"{selected_day}T07:00:00", "timezone": "UTC"},
+        },
+        headers=logged_in,
+    )
+    assert prednisone_dose.status_code == 201, prednisone_dose.text
+    hydrocortisone_dose = client.post(
+        "/api/v1/doses",
+        json={
+            "medication_id": hc_medication.json()["id"],
+            "amount": "10",
+            "unit": "mg",
+            "route": "oral",
+            "category": "scheduled",
+            "time": {"local_time": f"{selected_day}T16:00:00", "timezone": "UTC"},
+        },
+        headers=logged_in,
+    )
+    assert hydrocortisone_dose.status_code == 201, hydrocortisone_dose.text
+
+    default_response = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "UTC"},
+    )
+    assert default_response.status_code == 200, default_response.text
+    assert default_response.json()["model"]["id"] == "hc-full-glucocorticoid-v5"
+
+    response = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "UTC", "model": "hc-full-glucocorticoid-v5"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["model"]["id"] == "hc-full-glucocorticoid-v5"
+    assert "prednisone" in body["model"]["supported_medications"]
+    assert body["supported_dose_count"] == 2
+    assert body["excluded_dose_count"] == 0
+
+    prednisone_marker = next(
+        row for row in body["dose_markers"] if row["dose_event_id"] == prednisone_dose.json()["id"]
+    )
+    assert prednisone_marker["supported"] is True
+    hydrocortisone_marker = next(
+        row
+        for row in body["dose_markers"]
+        if row["dose_event_id"] == hydrocortisone_dose.json()["id"]
+    )
+    assert hydrocortisone_marker["supported"] is True
+
+    prednisone_peak_sample = next(
+        row for row in body["samples"] if row["occurred_at"] == prednisone_marker["modeled_peak_at"]
+    )
+    assert Decimal(prednisone_peak_sample["prednisone_modeled_free_cortisol_equivalent_nmol_l"]) > 0
+    assert Decimal(prednisone_peak_sample["hydrocortisone_modeled_free_cortisol_nmol_l"]) == 0
+
+    hydrocortisone_peak_sample = next(
+        row
+        for row in body["samples"]
+        if row["occurred_at"] == hydrocortisone_marker["modeled_peak_at"]
+    )
+    assert Decimal(hydrocortisone_peak_sample["hydrocortisone_modeled_free_cortisol_nmol_l"]) > 0
+    # Both contributions are still active at the hydrocortisone peak, so the tooltip's two
+    # per-drug numbers must sum exactly to the combined line that gets plotted.
+    assert (
+        Decimal(hydrocortisone_peak_sample["prednisone_modeled_free_cortisol_equivalent_nmol_l"])
+        > 0
+    )
+    assert Decimal(hydrocortisone_peak_sample["modeled_free_cortisol_nmol_l"]) == (
+        Decimal(hydrocortisone_peak_sample["hydrocortisone_modeled_free_cortisol_nmol_l"])
+        + Decimal(hydrocortisone_peak_sample["prednisone_modeled_free_cortisol_equivalent_nmol_l"])
+    )
+
+    # The unchanged v4 model never gained prednisone support: the same fact is still
+    # excluded there, with no hydrocortisone-equivalent multiplier applied.
+    v4_response = client.get(
+        "/api/v1/analytics/steroid-exposure",
+        params={"day": selected_day, "timezone": "UTC", "model": "hc-mixed-route-free-v4"},
+    )
+    assert v4_response.status_code == 200, v4_response.text
+    v4_body = v4_response.json()
+    assert v4_body["supported_dose_count"] == 1
+    assert v4_body["excluded_dose_count"] == 1
+    v4_prednisone_marker = next(
+        row
+        for row in v4_body["dose_markers"]
+        if row["dose_event_id"] == prednisone_dose.json()["id"]
+    )
+    assert v4_prednisone_marker["supported"] is False
+    assert v4_prednisone_marker["exclusion_reason"] == "unsupported_medication"
 
 
 def test_daily_patterns_recompute_current_facts_and_export_dst_safe_features(

@@ -233,6 +233,31 @@ function wakeFreeData(referenceAvailable = true, exerciseResponse: WakeFreeCorti
   });
 }
 
+function fullGlucocorticoidData(): DailyHealthCurveData {
+  const base = wakeFreeData();
+  const exposure = base.exposure as WakeFreeCortisolCurve;
+  return data({
+    ...base,
+    exposure: {
+      ...exposure,
+      series_kind: "modeled_free_glucocorticoid_equivalent_scenario",
+      series_name: "Modeled free-cortisol-equivalent scenario (hydrocortisone + prednisone)",
+      safety_label: "Modeled free-cortisol-equivalent scenario from hydrocortisone and prednisone facts—not a measurement or dosing guide.",
+      model: {
+        ...exposure.model,
+        id: "hc-full-glucocorticoid-v5",
+        revision: "hc-full-glucocorticoid-v5.0.0",
+        supported_medications: ["hydrocortisone", "Hydrocortisone Inj Dose", "prednisone"],
+      },
+      samples: [
+        { occurred_at: "2026-03-08T05:00:00Z", local_time: "2026-03-08T00:00:00", utc_offset_minutes: -300, modeled_free_cortisol_nmol_l: "0", regular_modeled_free_cortisol_nmol_l: "0", stress_modeled_free_cortisol_nmol_l: "0", hydrocortisone_modeled_free_cortisol_nmol_l: "0", prednisone_modeled_free_cortisol_equivalent_nmol_l: "0", derived_total_cortisol_nmol_l_display: "0" },
+        { occurred_at: "2026-03-08T06:00:00Z", local_time: "2026-03-08T01:00:00", utc_offset_minutes: -300, modeled_free_cortisol_nmol_l: "40", regular_modeled_free_cortisol_nmol_l: "25", stress_modeled_free_cortisol_nmol_l: "0", hydrocortisone_modeled_free_cortisol_nmol_l: "25", prednisone_modeled_free_cortisol_equivalent_nmol_l: "15", derived_total_cortisol_nmol_l_display: "490" },
+        { occurred_at: "2026-03-09T04:00:00Z", local_time: "2026-03-09T00:00:00", utc_offset_minutes: -240, modeled_free_cortisol_nmol_l: "1", regular_modeled_free_cortisol_nmol_l: "1", stress_modeled_free_cortisol_nmol_l: "0", hydrocortisone_modeled_free_cortisol_nmol_l: "1", prednisone_modeled_free_cortisol_equivalent_nmol_l: "0", derived_total_cortisol_nmol_l_display: "25" },
+      ],
+    },
+  });
+}
+
 const EXERCISE_MODEL: NonNullable<WakeFreeCortisolCurve["exercise_response"]>["model"] = {
   id: "hc-exercise-response-v1",
   revision: "hc-exercise-response-v1.0.0",
@@ -461,8 +486,23 @@ describe("Daily HealthCurve", () => {
     const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
     if (methodology === null) throw new Error("model methodology disclosure missing");
     expect(methodology).toHaveTextContent("hc-wake-free-v3.0.0");
-    expect(methodology).toHaveTextContent("The four selectable models remain separate and versioned");
+    expect(methodology).toHaveTextContent("The five selectable models remain separate and versioned");
     expect(methodology).toHaveTextContent("neither is independently normalized");
+  });
+
+  it("breaks the combined full-glucocorticoid line into its hydrocortisone and prednisone shares on hover", () => {
+    renderWithTheme(<DailyHealthCurve data={fullGlucocorticoidData()} />);
+
+    const tooltip = hoverAt(60).tooltip;
+    expect(tooltip).toHaveTextContent("Modeled free-cortisol-equivalent scenario (hydrocortisone + prednisone): 40.000 nmol/L");
+    expect(tooltip).toHaveTextContent("From hydrocortisone: 25.000 nmol/L");
+    expect(tooltip).toHaveTextContent("From prednisone (glucocorticoid-equivalent): 15.000 nmol/L");
+
+    const methodology = screen.getByText("How this model works: formulas, sources, and limits").parentElement;
+    if (methodology === null) throw new Error("model methodology disclosure missing");
+    expect(methodology).toHaveTextContent("hc-full-glucocorticoid-v5.0.0");
+    expect(methodology).toHaveTextContent("prednisolone's own published absorption/elimination timing");
+    expect(methodology).toHaveTextContent("1 mg prednisone ≈ 4 mg hydrocortisone");
   });
 
   it("can hide only the introductory safety copy for the public static presentation", () => {
