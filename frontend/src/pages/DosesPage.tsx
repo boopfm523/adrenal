@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { correctDose, getDoses, getMedications, getOpenEpisodes, getVoidedDoses, recordDose, voidDose, type Dose, type DoseCorrectionInput, type DoseInput, type Medication, type RecordedHistoryFilters } from "../api/client";
 import { useAuth } from "../auth/context";
+import { MedicationCreator } from "../components/MedicationCreator";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatMeasurement } from "../format";
@@ -123,6 +124,7 @@ function RecordDoseForm({ timezone }: { timezone: string }): React.JSX.Element {
   return <Paper component="section" className="metric-card" withBorder radius="lg" p={{ base: "md", sm: "xl" }} aria-labelledby="record-dose-heading">
     <Title order={2} id="record-dose-heading">Record a dose taken</Title>
     <Text mt="xs">This records what happened; it does not change your physician-approved plan. A dose is regular unless you explicitly select Stress dose.</Text>
+    <MedicationCreator onCreated={(medication) => { chooseMedication(medication); }} />
     <form className="aligned-form-grid plan-form-grid" aria-label="Record a dose taken" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
       <NativeSelect label="Medication" aria-label="Medication" required value={values.medicationId} onChange={(event) => { chooseMedication(medications.data?.find((item) => item.id === event.target.value)); }}><option value="">Choose medication</option>{(medications.data ?? []).map((medication) => <option value={medication.id} key={medication.id}>{medication.name}{medication.formulation === null ? "" : ` · ${medication.formulation}`}</option>)}</NativeSelect>
       <TextInput label="Amount" aria-label="Amount" required inputMode="decimal" value={values.amount} onChange={(event) => { setValues({ ...values, amount: event.target.value }); }} />
