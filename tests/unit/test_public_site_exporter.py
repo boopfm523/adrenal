@@ -10,12 +10,12 @@ import pytest
 
 from healthcurve.api.schemas import EventTimeOut, ProvenanceOut
 from healthcurve.events.base import ConfirmationState, SourceType
-from healthcurve.public_site import exporter as exporter_module
 from healthcurve.integrations.garmin.models import (
     GarminSyncOrigin,
     GarminSyncRun,
     GarminSyncStatus,
 )
+from healthcurve.public_site import exporter as exporter_module
 from healthcurve.public_site.exporter import (
     PUBLIC_ACTIVITY_START_DATE,
     PUBLIC_CURVE_PROJECTION,
