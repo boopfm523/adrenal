@@ -9,6 +9,14 @@ export interface ChartValue {
   unit?: string | null;
 }
 
+/** A dated event (for example a procedure) drawn as a vertical line between points. */
+export interface ChartMarker {
+  /** Fractional point index: 2.5 sits halfway between the third and fourth points. */
+  position: number;
+  date: string;
+  label: string;
+}
+
 export interface ChartSeries {
   name: string;
   source: string;
@@ -31,6 +39,8 @@ interface AccessibleLineChartProps {
   includeZero?: boolean;
   yPadding?: number;
   compactPlot?: boolean;
+  markers?: ChartMarker[];
+  markerHeading?: string;
 }
 
 interface Point {
@@ -165,6 +175,8 @@ export function AccessibleLineChart({
   includeZero = false,
   yPadding = 0,
   compactPlot = false,
+  markers = [],
+  markerHeading = "Events marked on this chart",
 }: AccessibleLineChartProps): React.JSX.Element {
   const headingId = useId();
   const interactionInstructionsId = useId();
@@ -209,6 +221,7 @@ export function AccessibleLineChart({
     {series.length > 1 ? <aside className="association-caution"><strong>Association does not establish causation.</strong> Overlaid series share a time axis for comparison only.</aside> : null}
     <div className="chart-legend" aria-label="Chart series">{series.map((item, index) => <span key={item.name}><i className={`series-key series-key--${(index % 3).toString()}`} aria-hidden="true" />{item.name} · source: {item.source}</span>)}</div>
     <p className="chart-axis-description">{axisDescription}</p>
+    {markers.length === 0 ? null : <div className="chart-markers"><strong>{markerHeading}</strong> (dashed lines; points are evenly spaced, so a line shows order, not elapsed time):<ul>{markers.map((marker) => <li key={`${marker.date}-${marker.label}`}>{marker.date}: {marker.label}</li>)}</ul></div>}
     {mixedUnits ? <p className="chart-unit-warning" role="status"><strong>Graph not plotted:</strong> these values use different units and cannot share one reliable Y-axis. Use the exact-value table below.</p> : <><p id={interactionInstructionsId} className="chart-interaction-instructions">Hover across the chart to inspect a date. For keyboard access, focus the chart and use the left and right arrow keys.</p><div className={`chart-plot-scroll${compactPlot ? " chart-plot-scroll--compact" : ""}`} tabIndex={0} role="region" aria-label={`${title} interactive graph`} aria-describedby={interactionInstructionsId} onFocus={() => { if (activeIndex === null && labels.length > 0) setActiveIndex(0); }} onBlur={() => { setActiveIndex(null); }} onKeyDown={inspectKeyboard}>
       <div className="chart-plot-canvas">
       <svg className="line-chart" viewBox={`0 0 ${WIDTH.toString()} ${HEIGHT.toString()}`} role="img" aria-label={`${title}. ${summary} ${axisDescription}`} onMouseMove={inspectPointer} onMouseLeave={() => { setActiveIndex(null); }}>
@@ -226,6 +239,11 @@ export function AccessibleLineChart({
         <line x1={LEFT} y1={TOP} x2={LEFT} y2={PLOT_BOTTOM} className="chart-axis" />
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezoneLabel})</text>
         <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({displayedUnit})</text>
+        {markers.map((marker) => {
+          const x = LEFT + Math.max(0, Math.min(labels.length - 1, marker.position)) / Math.max(labels.length - 1, 1) * PLOT_WIDTH;
+          const short = marker.label.length > 28 ? `${marker.label.slice(0, 27)}…` : marker.label;
+          return <g key={`marker-${marker.date}-${marker.label}`} className="chart-event-marker" aria-hidden="true"><line x1={x} y1={TOP} x2={x} y2={PLOT_BOTTOM} /><text x={x + 4} y={TOP + 12}>{marker.date} {short}</text></g>;
+        })}
         {activeIndex === null ? null : <line className="chart-inspection-line" x1={LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH} y1={TOP} x2={LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH} y2={PLOT_BOTTOM} />}
         {series.map((item, seriesIndex) => {
           const segments = plottedSegments(item.values, scale);

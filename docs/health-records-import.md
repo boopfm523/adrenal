@@ -111,6 +111,13 @@ inside the dataset root, always as downloads, and never rendered inside HealthCu
   lab's own unit, one chart per unit. Without a test chosen, charts cover only the
   current page. The picker uses an opaque key, so test names never appear in URLs or
   access logs.
+- **Specimens on charts.** The dataset marks every non-blood specimen in the test name,
+  for example `Glucose (urine)`. So an imported result with no recorded specimen and no
+  such suffix charts as **Blood**, together with results recorded as "Blood (…)". NIH
+  records no specimen at all. The table still shows each specimen exactly as recorded.
+- **Procedure markers.** Surgeries from the Procedures page are drawn on lab charts as
+  dashed lines, between the results before and after them. Points are evenly spaced, so
+  a line shows order, not elapsed time.
 - **Rows without a value.** Source rows with no value at all are kept as source records
   only.
 

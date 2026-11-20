@@ -14,6 +14,7 @@ import {
   getLabResults,
   getLabTestHistory,
   getLabTests,
+  getProcedureTimeline,
   uploadLabDocument,
   type LabCandidateConfirmation,
   type LabDocument,
@@ -24,7 +25,7 @@ import {
   type RecordedHistoryFilters,
 } from "../api/client";
 import { useAuth } from "../auth/context";
-import { AccessibleLineChart } from "../components/AccessibleLineChart";
+import { AccessibleLineChart, type ChartMarker } from "../components/AccessibleLineChart";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatDecimal, formatMeasurement } from "../format";
@@ -63,6 +64,17 @@ function specimenLabel(result: LabResult): string {
   return specimen === undefined || specimen === "" ? "Specimen type not recorded" : specimen;
 }
 
+/** Specimen used to group a chart. The external dataset marks every non-blood specimen
+ * with a suffix such as "Glucose (urine)" (ADR-0040), so an imported result without a
+ * recorded specimen and without that suffix is blood. Recorded blood specimens
+ * ("Blood (Blood, peripheral)") also chart together. The table keeps the recorded text. */
+function chartSpecimen(result: LabResult): string {
+  const recorded = result.specimen_type?.trim() ?? "";
+  if (/^blood\b/iu.test(recorded)) return "Blood";
+  if (recorded === "" && result.source_type === "health_records_import" && !/\([^()]*\)\s*$/u.test(result.source_normalized_name ?? "")) return "Blood";
+  return recorded === "" ? "Specimen type not recorded" : recorded;
+}
+
 function trendGroups(results: LabResult[], options: { sourceUnits: boolean } = { sourceUnits: false }): TrendGroup[] {
   const groups = new Map<string, TrendGroup>();
   const add = (key: string, make: () => Omit<TrendGroup, "values">, result: LabResult): void => {
@@ -73,7 +85,7 @@ function trendGroups(results: LabResult[], options: { sourceUnits: boolean } = {
   results.forEach((result) => {
     // A result the source has since withdrawn stays in the table, marked, but is not charted.
     if (result.source_state === "no_longer_in_source") return;
-    const specimen = specimenLabel(result);
+    const specimen = chartSpecimen(result);
     if (result.normalized_analyte_code !== null && result.normalized_value !== null && result.normalized_unit !== null) {
       const code = result.normalized_analyte_code;
       const unit = result.normalized_unit;
@@ -92,6 +104,26 @@ function trendGroups(results: LabResult[], options: { sourceUnits: boolean } = {
   return [...groups.values()]
     .map((group) => ({ ...group, values: [...group.values].sort((a, b) => a.specimen_time.occurred_at.localeCompare(b.specimen_time.occurred_at)) }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+interface Procedure { occurredAt: string; date: string; title: string }
+
+/** Place each procedure between the two results around it (charts space points evenly). */
+function procedureMarkers(values: LabResult[], procedures: Procedure[]): ChartMarker[] {
+  const times = values.map((result) => Date.parse(result.specimen_time.occurred_at));
+  const first = times[0];
+  const last = times.at(-1);
+  if (first === undefined || last === undefined) return [];
+  return procedures.flatMap((procedure) => {
+    const at = Date.parse(procedure.occurredAt);
+    if (!Number.isFinite(at) || at < first || at > last) return [];
+    const next = times.findIndex((time) => time >= at);
+    if (next <= 0) return [{ position: 0, date: procedure.date, label: procedure.title }];
+    const before = times[next - 1] ?? at;
+    const after = times[next] ?? at;
+    const fraction = after === before ? 0 : (at - before) / (after - before);
+    return [{ position: next - 1 + fraction, date: procedure.date, label: procedure.title }];
+  });
 }
 
 function dateLabel(result: LabResult): string {
@@ -390,6 +422,8 @@ export function LabsPage(): React.JSX.Element {
   const testKey = view.testKey ?? "";
   const resultsQuery = useQuery({ queryKey: ["lab-results", filters, view.resultPage, testKey], queryFn: () => getLabResults(filters, view.resultPage, testKey), enabled: !invalidRange });
   const testsQuery = useQuery({ queryKey: ["lab-tests"], queryFn: getLabTests });
+  const proceduresQuery = useQuery({ queryKey: ["lab-chart-procedures", timezone], queryFn: () => getProcedureTimeline(timezone) });
+  const procedures: Procedure[] = (proceduresQuery.data?.items ?? []).map((item) => ({ occurredAt: item.time.occurred_at, date: item.time.local_time.slice(0, 10), title: item.title }));
   const historyQuery = useQuery({ queryKey: ["lab-test-history", testKey], queryFn: () => getLabTestHistory(testKey), enabled: testKey !== "" });
   const documentsQuery = useQuery({ queryKey: ["lab-documents", filters, view.documentPage], queryFn: () => getLabDocuments(filters, view.documentPage), enabled: !invalidRange });
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -417,7 +451,7 @@ export function LabsPage(): React.JSX.Element {
     {resultsQuery.isFetching ? <p role="status">Loading laboratory facts…</p> : null}
     {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}
     {!resultsQuery.isFetching && !resultsQuery.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
-    {groups.map((group) => <AccessibleLineChart key={group.key} title={group.basis === "source" ? `${group.name} — ${group.specimen} (${group.unit})` : `${group.name} — ${group.specimen}`} summary={testKey === "" ? "Each point is one recorded specimen on the visible results page. Choose a test above to chart its full history. Lines are descriptive only; missing intervals are not inferred." : "Each point is one recorded specimen in this test's full history, across every organization. Lines are descriptive only; missing intervals are not inferred."} unit={group.unit} timezone={timezone} timezoneReferenceDate={group.values.at(-1)?.specimen_time.local_time.slice(0, 10)} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={group.basis === "derived" ? `Values use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match.` : `Values are the laboratory's own numbers in ${group.unit}, not converted. Results are grouped only when test name, specimen type, and unit match exactly; other units appear in their own chart.`} sampleCount={group.values.length} missingCount={0} series={[{ name: group.name, source: group.basis === "derived" ? "recorded lab facts with deterministic derivation" : "recorded lab facts in the source unit", values: group.values.map((result) => ({ label: dateLabel(result), value: chartValue(group, result) ?? "" })) }]} />)}
+    {groups.map((group) => <AccessibleLineChart key={group.key} title={group.basis === "source" ? `${group.name} — ${group.specimen} (${group.unit})` : `${group.name} — ${group.specimen}`} summary={testKey === "" ? "Each point is one recorded specimen on the visible results page. Choose a test above to chart its full history. Lines are descriptive only; missing intervals are not inferred." : "Each point is one recorded specimen in this test's full history, across every organization. Lines are descriptive only; missing intervals are not inferred."} unit={group.unit} timezone={timezone} timezoneReferenceDate={group.values.at(-1)?.specimen_time.local_time.slice(0, 10)} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={group.basis === "derived" ? `Values use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match. Imported results with no recorded specimen count as blood, because the source marks every non-blood specimen in the test name.` : `Values are the laboratory's own numbers in ${group.unit}, not converted. Results are grouped only when test name, specimen type, and unit match exactly; other units appear in their own chart. Imported results with no recorded specimen count as blood, because the source marks every non-blood specimen in the test name.`} sampleCount={group.values.length} missingCount={0} markers={procedureMarkers(group.values, procedures)} markerHeading="Procedures marked on this chart" series={[{ name: group.name, source: group.basis === "derived" ? "recorded lab facts with deterministic derivation" : "recorded lab facts in the source unit", values: group.values.map((result) => ({ label: dateLabel(result), value: chartValue(group, result) ?? "" })) }]} />)}
     {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : formatMeasurement(result.normalized_value, result.normalized_unit)}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_organization == null ? null : <><br />From {result.source_organization}</>}{result.panel_name == null ? null : <><br />Panel: {result.panel_name}</>}{result.source_state === "no_longer_in_source" ? <><br /><strong>No longer in source</strong></> : null}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div>{resultsQuery.data === undefined ? null : <PaginationControls label="Laboratory result records" metadata={resultsQuery.data.page} onPageChange={(resultPage) => { setSearchParams(labHistorySearch({ ...view, resultPage })); }} />}</section>}
   </Page>;
 }

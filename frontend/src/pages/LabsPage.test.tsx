@@ -28,6 +28,7 @@ function page(items: unknown[]): Record<string, unknown> { return { items, page:
 
 let labTests: unknown[] = [];
 let labTestHistory: unknown[] = [];
+let procedures: unknown[] = [];
 
 /** Answer the test index and history requests for every test's own fetch mock. */
 function withLabTestRoutes(): void {
@@ -37,6 +38,7 @@ function withLabTestRoutes(): void {
     const url = requestUrl(input);
     if (url.endsWith("/labs/tests")) return Promise.resolve(json(labTests));
     if (url.includes("/labs/tests/") && url.endsWith("/history")) return Promise.resolve(json(labTestHistory));
+    if (url.includes("/life-events?")) return Promise.resolve(json(page(procedures)));
     if (previous === undefined) return Promise.resolve(json(page([])));
     return previous(input, init);
   });
@@ -49,7 +51,7 @@ function renderPage(initialEntry = "/labs"): void {
 }
 
 describe("Labs page", () => {
-  afterEach(() => { sessionStore.clear(); labTests = []; labTestHistory = []; });
+  afterEach(() => { sessionStore.clear(); labTests = []; labTestHistory = []; procedures = []; });
 
   it("explains that a PDF must be selected instead of silently ignoring submit", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(page(requestUrl(input).includes("/labs/documents?") ? [] : []))));
@@ -245,11 +247,33 @@ describe("Labs page", () => {
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Test" }), "0123456789abcdef");
 
     expect(await screen.findByText(/Showing all 3 results for ACTH, from every organization/)).toBeVisible();
-    expect(await screen.findByRole("heading", { name: "ACTH — Specimen type not recorded (pg/mL)" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "ACTH — Specimen type not recorded (pmol/L)" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "ACTH — Specimen type not recorded (pg/mL) data table" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "ACTH — Blood (pg/mL)" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "ACTH — Blood (pmol/L)" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "ACTH — Blood (pg/mL) data table" })).toBeInTheDocument();
     expect(location).toContain("test=0123456789abcdef");
     expect(location).not.toMatch(/acth/iu);
     expect(requests.some((url) => url.includes("/labs/results?") && url.includes("test_key=0123456789abcdef"))).toBe(true);
+  });
+  it("charts blood results from both organizations together and marks a procedure between them", async () => {
+    const acth = { ...base, source_type: "health_records_import", analyte_name: "ACTH", source_normalized_name: "ACTH", normalized_analyte_code: null, normalized_analyte_name: null, normalized_value: null, normalized_unit: null, normalization_method: null, original_unit: "pg/mL", source_state: "present" };
+    const urine = { ...acth, id: "d4d4d4d4-d4d4-4d4d-8d4d-d4d4d4d4d4d4", source_normalized_name: "ACTH (urine)", specimen_type: null, original_value: "5" };
+    labTests = [{ key: "0123456789abcdef", name: "ACTH", result_count: 3, latest_collected_at: "2026-08-12T12:00:00Z" }];
+    labTestHistory = [
+      { ...acth, id: "a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1", specimen_type: null, source_organization: "NIH Clinical Center", original_value: "30", specimen_time: { ...base.specimen_time, occurred_at: "2026-08-01T12:00:00Z", local_time: "2026-08-01T08:00:00" } },
+      { ...acth, id: "b2b2b2b2-b2b2-4b2b-8b2b-b2b2b2b2b2b2", specimen_type: "Blood (Blood, peripheral)", source_organization: "Johns Hopkins Medicine", original_value: "20", specimen_time: { ...base.specimen_time, occurred_at: "2026-08-20T12:00:00Z", local_time: "2026-08-20T08:00:00" } },
+      urine,
+    ];
+    procedures = [{ id: "e5e5e5e5-e5e5-4e5e-8e5e-e5e5e5e5e5e5", title: "Synthetic surgery", category: "surgery", time: { occurred_at: "2026-08-10T16:00:00Z", local_time: "2026-08-10T12:00:00", timezone: "America/New_York", utc_offset_minutes: -240 } }];
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(json(page([]))));
+    renderPage("/labs?test=0123456789abcdef");
+
+    expect(await screen.findByRole("heading", { name: "ACTH — Blood (pg/mL)" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: /ACTH — Specimen type not recorded/ })).not.toBeInTheDocument();
+    // A suffixed name is a different specimen and never joins the blood chart.
+    expect(screen.getByRole("heading", { name: "ACTH (urine) — Specimen type not recorded (pg/mL)" })).toBeVisible();
+    const bloodChart = screen.getByRole("heading", { name: "ACTH — Blood (pg/mL)" }).closest("section");
+    if (bloodChart === null) throw new Error("chart section missing");
+    expect(within(bloodChart).getByText("2026-08-10: Synthetic surgery")).toBeVisible();
+    expect(within(bloodChart).getByText("Procedures marked on this chart")).toBeVisible();
   });
 });
