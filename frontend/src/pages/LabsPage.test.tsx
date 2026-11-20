@@ -273,7 +273,9 @@ describe("Labs page", () => {
     expect(screen.getByRole("heading", { name: "ACTH (urine) — Specimen type not recorded (pg/mL)" })).toBeVisible();
     const bloodChart = screen.getByRole("heading", { name: "ACTH — Blood (pg/mL)" }).closest("section");
     if (bloodChart === null) throw new Error("chart section missing");
-    expect(within(bloodChart).getByText("2026-08-10: Synthetic surgery")).toBeVisible();
+    const markerList = bloodChart.querySelector(".chart-markers");
+    if (!(markerList instanceof HTMLElement)) throw new Error("marker list missing");
+    expect(within(markerList).getByText("2026-08-10: Synthetic surgery")).toBeVisible();
     expect(within(bloodChart).getByText("Procedures marked on this chart")).toBeVisible();
   });
 });

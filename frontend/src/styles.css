@@ -873,7 +873,8 @@ circle.chart-series--active { fill: #fff8da; stroke-width: 5; }
 .health-record-table td[data-label="Details"] { min-width: 14rem; }
 
 /* Procedure markers on lab charts (ADR-0040 follow-up). */
-.chart-event-marker line { stroke: #8a5a00; stroke-width: 1.5; stroke-dasharray: 6 4; }
-.chart-event-marker text { fill: #6b4600; font-size: 12px; font-weight: 600; }
+.chart-event-marker line:not(.chart-event-marker-hit) { stroke: #8a5a00; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.chart-event-marker-hit { stroke: transparent; stroke-width: 12; stroke-dasharray: none; pointer-events: stroke; }
+.chart-tooltip-marker { color: #6b4600; font-weight: 600; }
 .chart-markers { font-size: 0.9rem; margin: 0.25rem 0 0.5rem; }
 .chart-markers ul { margin: 0.25rem 0 0; padding-left: 1.25rem; }

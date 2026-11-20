@@ -143,6 +143,15 @@ function plottedSegments(values: ChartValue[], scale: Scale): Point[][] {
   return segments;
 }
 
+function markerX(marker: ChartMarker, pointCount: number): number {
+  return LEFT + Math.max(0, Math.min(pointCount - 1, marker.position)) / Math.max(pointCount - 1, 1) * PLOT_WIDTH;
+}
+
+/** Markers that fall after the previous point and up to this one. */
+function markersBefore(markers: ChartMarker[], index: number): ChartMarker[] {
+  return markers.filter((marker) => marker.position <= index && marker.position > index - 1);
+}
+
 function path(points: Point[]): string {
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
 }
@@ -240,9 +249,10 @@ export function AccessibleLineChart({
         <text x={LEFT + PLOT_WIDTH / 2} y={HEIGHT - 9} textAnchor="middle" className="chart-axis-title">{xAxisLabel} ({timezoneLabel})</text>
         <text transform={`translate(17 ${String(TOP + PLOT_HEIGHT / 2)}) rotate(-90)`} textAnchor="middle" className="chart-axis-title">{yAxisLabel} ({displayedUnit})</text>
         {markers.map((marker) => {
-          const x = LEFT + Math.max(0, Math.min(labels.length - 1, marker.position)) / Math.max(labels.length - 1, 1) * PLOT_WIDTH;
-          const short = marker.label.length > 28 ? `${marker.label.slice(0, 27)}…` : marker.label;
-          return <g key={`marker-${marker.date}-${marker.label}`} className="chart-event-marker" aria-hidden="true"><line x1={x} y1={TOP} x2={x} y2={PLOT_BOTTOM} /><text x={x + 4} y={TOP + 12}>{marker.date} {short}</text></g>;
+          const x = markerX(marker, labels.length);
+          // No text on the plot: several procedures close together would overprint.
+          // The line carries a hover title; the tooltip and the list above name it.
+          return <g key={`marker-${marker.date}-${marker.label}`} className="chart-event-marker"><line x1={x} y1={TOP} x2={x} y2={PLOT_BOTTOM} aria-hidden="true" /><line className="chart-event-marker-hit" x1={x} y1={TOP} x2={x} y2={PLOT_BOTTOM}><title>{marker.date}: {marker.label}</title></line></g>;
         })}
         {activeIndex === null ? null : <line className="chart-inspection-line" x1={LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH} y1={TOP} x2={LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH} y2={PLOT_BOTTOM} />}
         {series.map((item, seriesIndex) => {
@@ -253,7 +263,7 @@ export function AccessibleLineChart({
       {activeIndex === null || activeLabel === null ? null : <output className="chart-inspection-tooltip" aria-live="polite" style={{ left: `${Math.max(18, Math.min(82, (LEFT + activeIndex / Math.max(labels.length - 1, 1) * PLOT_WIDTH) / WIDTH * 100)).toString()}%` }}><strong>{activeLabel}</strong>{series.map((item) => {
         const inspected = item.values[activeIndex];
         return <span key={item.name}>{item.name}: {inspected?.value == null ? "Gap—no value" : formatMeasurement(inspected.value, inspected.unit ?? effectiveUnit)}</span>;
-      })}</output>}
+      })}{markersBefore(markers, activeIndex).map((marker) => <span key={`tip-${marker.date}-${marker.label}`} className="chart-tooltip-marker">Since previous result: {marker.date} {marker.label}</span>)}</output>}
       </div>
     </div></>}
     <details className="chart-table"><summary>View data table</summary><div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} data table`}><table><thead><tr><th scope="col">Date / time</th>{series.map((item) => <th scope="col" key={item.name}>{item.name} ({mixedUnits ? "unit shown per value" : displayedUnit})</th>)}</tr></thead><tbody>{labels.map((label, index) => <tr key={label}><th scope="row">{label}</th>{series.map((item) => <td key={item.name}>{tableValue(item.values[index], mixedUnits, unit)}</td>)}</tr>)}</tbody></table></div></details>

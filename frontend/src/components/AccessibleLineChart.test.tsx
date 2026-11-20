@@ -99,4 +99,32 @@ describe("Accessible line chart", () => {
     expect(within(table).getByRole("cell", { name: "1 mg" })).toBeInTheDocument();
     expect(within(table).getByRole("cell", { name: "2 mL" })).toBeInTheDocument();
   });
+  it("names procedures in the tooltip and list instead of overprinting text on the plot", () => {
+    const markers = [
+      { position: 0.5, date: "2026-08-01", label: "Synthetic surgery with a long descriptive procedure name" },
+      { position: 0.6, date: "2026-08-02", label: "Second synthetic procedure the same week" },
+      { position: 3.2, date: "2026-08-04", label: "Third synthetic procedure" },
+    ];
+    const { container } = render(chart({ markers, markerHeading: "Procedures marked on this chart" }));
+
+    // Lines are drawn, but no marker text is printed on the plot.
+    expect(container.querySelectorAll(".chart-event-marker")).toHaveLength(3);
+    expect(container.querySelectorAll(".chart-event-marker text")).toHaveLength(0);
+    // Hovering a line names its procedure.
+    expect(container.querySelector(".chart-event-marker-hit title")).toHaveTextContent("2026-08-01: Synthetic surgery with a long descriptive procedure name");
+    // The full descriptions stay in the list above the chart.
+    expect(screen.getByText("Procedures marked on this chart")).toBeVisible();
+    const list = container.querySelector(".chart-markers");
+    if (!(list instanceof HTMLElement)) throw new Error("marker list missing");
+    expect(within(list).getByText("2026-08-02: Second synthetic procedure the same week")).toBeVisible();
+
+    // Inspecting the second result names both procedures since the first result.
+    const graph = screen.getByRole("region", { name: "Synthetic chart interactive graph" });
+    fireEvent.focus(graph);
+    fireEvent.keyDown(graph, { key: "ArrowRight" });
+    const tooltip = container.querySelector(".chart-inspection-tooltip");
+    expect(tooltip).toHaveTextContent("Since previous result: 2026-08-01 Synthetic surgery with a long descriptive procedure name");
+    expect(tooltip).toHaveTextContent("Since previous result: 2026-08-02 Second synthetic procedure the same week");
+    expect(tooltip).not.toHaveTextContent("Third synthetic procedure");
+  });
 });
