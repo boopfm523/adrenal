@@ -111,6 +111,13 @@ inside the dataset root, always as downloads, and never rendered inside HealthCu
   lab's own unit, one chart per unit. Without a test chosen, charts cover only the
   current page. The picker uses an opaque key, so test names never appear in URLs or
   access logs.
+- **Grouped picker and "About this test".** The test picker groups tests by category
+  (adrenal and pituitary, thyroid, chemistry, blood counts, urine, pulmonary function
+  tests, ECG and echo, and others), alphabetically within each group. Choosing a test
+  shows a plain-language description of what it measures and why it is checked, from
+  the fixed, versioned guide in `frontend/src/labTestGuide.ts` (`hc-lab-test-guide-v1`),
+  with a link to the matching MedlinePlus page. The guide is general education. It
+  never interprets the owner's values and no model writes it.
 - **Specimens on charts.** The dataset marks every non-blood specimen in the test name,
   for example `Glucose (urine)`. So an imported result with no recorded specimen and no
   such suffix charts as **Blood**, together with results recorded as "Blood (…)". NIH

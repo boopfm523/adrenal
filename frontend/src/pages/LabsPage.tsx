@@ -1,5 +1,5 @@
 import { useMemo, useState, type SyntheticEvent } from "react";
-import { Alert, Button, FileInput, Group, NativeSelect, Paper, SimpleGrid, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, FileInput, Group, NativeSelect, Paper, SimpleGrid, Text, TextInput, Title, type ComboboxStringGroupData } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import {
   getLabTestHistory,
   getLabTests,
   getProcedureTimeline,
+  type LabTest,
   uploadLabDocument,
   type LabCandidateConfirmation,
   type LabDocument,
@@ -26,6 +27,7 @@ import {
 } from "../api/client";
 import { useAuth } from "../auth/context";
 import { AccessibleLineChart, type ChartMarker } from "../components/AccessibleLineChart";
+import { LAB_CATEGORIES, LAB_TEST_GUIDE_VERSION, categorize, guideFor } from "../labTestGuide";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 import { formatDecimal, formatMeasurement } from "../format";
@@ -124,6 +126,35 @@ function procedureMarkers(values: LabResult[], procedures: Procedure[]): ChartMa
     const fraction = after === before ? 0 : (at - before) / (after - before);
     return [{ position: next - 1 + fraction, date: procedure.date, label: procedure.title }];
   });
+}
+
+/** Tests grouped by category in a fixed order, alphabetical within each group. */
+function testOptions(tests: LabTest[] | undefined): ComboboxStringGroupData {
+  const all = { value: "", label: `All tests${tests === undefined ? "" : ` (${String(tests.length)} tests)`}` };
+  const groups = LAB_CATEGORIES.flatMap((category) => {
+    const items = (tests ?? [])
+      .filter((test) => categorize(test.name) === category)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }))
+      .map((test) => ({ value: test.key, label: `${test.name} (${String(test.result_count)})` }));
+    return items.length === 0 ? [] : [{ group: `${category} (${String(items.length)})`, items }];
+  });
+  return [all, ...groups];
+}
+
+function TestGuide({ name }: { name: string }): React.JSX.Element {
+  const guide = guideFor(name);
+  return (
+    <section className="lab-test-guide" aria-labelledby="lab-test-guide-heading">
+      <Title order={3} id="lab-test-guide-heading" mt="md">About this test{guide === null ? "" : `: ${guide.title}`}</Title>
+      {guide === null ? <Text mt="xs">There is no description for “{name}” yet.</Text> : <>
+        <Text mt="xs"><strong>What it measures.</strong> {guide.measures}</Text>
+        <Text mt="xs"><strong>Why it is checked.</strong> {guide.why}</Text>
+        {guide.notes === undefined ? null : <Text mt="xs"><strong>Good to know.</strong> {guide.notes}</Text>}
+        {guide.source === undefined ? null : <Text mt="xs"><a href={guide.source.url} target="_blank" rel="noopener noreferrer">{guide.source.label}</a> (opens the U.S. National Library of Medicine site)</Text>}
+      </>}
+      <Text c="dimmed" size="sm" mt="xs">General information about the test, not an interpretation of your results. Ask your care team what your results mean for you. ({LAB_TEST_GUIDE_VERSION})</Text>
+    </section>
+  );
 }
 
 function dateLabel(result: LabResult): string {
@@ -444,9 +475,10 @@ export function LabsPage(): React.JSX.Element {
     <hr />
     <Paper component="section" withBorder p="lg" my="xl" radius="lg" aria-labelledby="lab-test-heading">
       <Title order={2} id="lab-test-heading" mb="sm">Show one test</Title>
-      <NativeSelect label="Test" value={testKey} onChange={(event) => { setSearchParams(labHistorySearch({ ...view, testKey: event.currentTarget.value, resultPage: 1 })); }} data={[{ value: "", label: `All tests${testsQuery.data === undefined ? "" : ` (${String(testsQuery.data.length)} tests)`}` }, ...(testsQuery.data ?? []).map((test) => ({ value: test.key, label: `${test.name} (${String(test.result_count)})` }))]} />
+      <NativeSelect label="Test" value={testKey} onChange={(event) => { setSearchParams(labHistorySearch({ ...view, testKey: event.currentTarget.value, resultPage: 1 })); }} data={testOptions(testsQuery.data)} />
       <Text c="dimmed" mt="sm">{testKey === "" ? "Without a test chosen, charts show only the results on the current page." : selectedTest === undefined ? "Loading this test…" : `Showing all ${String(selectedTest.result_count)} results for ${selectedTest.name}, from every organization. Values in different units are charted separately.`}</Text>
       {historyQuery.isError ? <Alert color="red" role="alert" mt="sm">This test&apos;s history could not be loaded.</Alert> : null}
+      {selectedTest === undefined ? null : <TestGuide name={selectedTest.name} />}
     </Paper>
     {resultsQuery.isFetching ? <p role="status">Loading laboratory facts…</p> : null}
     {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}

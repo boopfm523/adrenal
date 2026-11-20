@@ -244,9 +244,13 @@ describe("Labs page", () => {
     render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/labs"]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() } as never}><LabsPage /><LocationProbe /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 
     await screen.findByRole("option", { name: "ACTH (3)" });
+    expect(screen.getByRole("group", { name: "Adrenal and pituitary (1)" })).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Test" }), "0123456789abcdef");
 
     expect(await screen.findByText(/Showing all 3 results for ACTH, from every organization/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "About this test: ACTH (adrenocorticotropic hormone)" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "MedlinePlus: Adrenocorticotropic Hormone (ACTH)" })).toHaveAttribute("href", "https://medlineplus.gov/lab-tests/adrenocorticotropic-hormone-acth/");
+    expect(screen.getByText(/not an interpretation of your results/)).toBeVisible();
     expect(await screen.findByRole("heading", { name: "ACTH — Blood (pg/mL)" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "ACTH — Blood (pmol/L)" })).toBeVisible();
     expect(screen.getByRole("region", { name: "ACTH — Blood (pg/mL) data table" })).toBeInTheDocument();
