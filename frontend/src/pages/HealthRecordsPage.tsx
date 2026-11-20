@@ -14,6 +14,7 @@ import {
   type HealthRecordState,
   type HealthRecordTable,
 } from "../api/client";
+import { HealthRecordImportPanel } from "../components/HealthRecordImportPanel";
 import { Page } from "../components/Page";
 import { PaginationControls } from "../components/PaginationControls";
 
@@ -136,7 +137,7 @@ function RecordDetail({ recordId, close }: { recordId: string; close: () => void
 function LatestImport(): React.JSX.Element | null {
   const batches = useQuery({ queryKey: ["health-record-batches"], queryFn: () => getHealthRecordBatches() });
   const latest = batches.data?.items[0];
-  if (latest === undefined) return batches.isFetched ? <Alert color="blue" mb="lg">No health records have been imported yet. See Help for how to run the import.</Alert> : null;
+  if (latest === undefined) return batches.isFetched ? <Alert color="blue" mb="lg">No health records have been imported yet. Use Import now below.</Alert> : null;
   const exported = Object.entries(latest.source_exported_at).map(([source, date]) => `${source} on ${date}`).join("; ");
   return (
     <Text c="dimmed" mb="md">
@@ -184,6 +185,7 @@ export function HealthRecordsPage(): React.JSX.Element {
         <strong>Hidden from chat and AI by default.</strong> Choose which categories chat may read in <Link to="/settings">Settings &amp; privacy</Link>. Lab results from these sources are on <Link to="/labs">Labs</Link>.
       </Alert>
       <LatestImport />
+      <HealthRecordImportPanel />
       <Paper component="form" withBorder p="lg" my="xl" radius="lg" onSubmit={apply} aria-labelledby="health-record-filter-heading">
         <Title order={2} mb="md" id="health-record-filter-heading">Filter health records</Title>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>

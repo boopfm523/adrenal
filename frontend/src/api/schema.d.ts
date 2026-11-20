@@ -754,6 +754,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/health-records/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Health Record Import
+         * @description Import (or, with dry_run, only diff) the read-only dataset snapshot now.
+         */
+        post: operations["run_health_record_import_api_v1_health_records_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health-records/organizations": {
         parameters: {
             query?: never;
@@ -1169,6 +1189,46 @@ export interface paths {
          * @description Return source facts and derived values together, never conflated.
          */
         get: operations["list_lab_results_api_v1_labs_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labs/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lab Test Index
+         * @description Every test with current results, for the Labs page's test picker.
+         */
+        get: operations["lab_test_index_api_v1_labs_tests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/labs/tests/{test_key}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lab Test History
+         * @description All current results for one test, oldest first, for its full trend.
+         */
+        get: operations["lab_test_history_api_v1_labs_tests__test_key__history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3790,6 +3850,39 @@ export interface components {
             /** Revision */
             revision: number;
         };
+        /** ImportRunOut */
+        ImportRunOut: {
+            /** Batch Id */
+            batch_id: string | null;
+            /** Dataset Generated At */
+            dataset_generated_at: string;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Lab Panels Corrected */
+            lab_panels_corrected: number;
+            /** Lab Panels Created */
+            lab_panels_created: number;
+            /** Source Exported At */
+            source_exported_at: {
+                [key: string]: string;
+            };
+            /** Tables */
+            tables: components["schemas"]["ImportTableCounts"][];
+        };
+        /** ImportTableCounts */
+        ImportTableCounts: {
+            /** Changed */
+            changed: number;
+            /** New */
+            new: number;
+            /** No Longer In Source */
+            no_longer_in_source: number;
+            /** Returned */
+            returned: number;
+            table: components["schemas"]["DatasetTable"];
+            /** Unchanged */
+            unchanged: number;
+        };
         /**
          * InjectionIn
          * @description Emergency injection. Only the clinical essentials are required (SAFE-23).
@@ -4090,6 +4183,20 @@ export interface components {
             /** Items */
             items: components["schemas"]["LabResultOut"][];
             page: components["schemas"]["PageMetadata"];
+        };
+        /** LabTestOut */
+        LabTestOut: {
+            /** Key */
+            key: string;
+            /**
+             * Latest Collected At
+             * Format: date-time
+             */
+            latest_collected_at: string;
+            /** Name */
+            name: string;
+            /** Result Count */
+            result_count: number;
         };
         /**
          * LifeEventCategory
@@ -8087,6 +8194,41 @@ export interface operations {
             };
         };
     };
+    run_health_record_import_api_v1_health_records_imports_post: {
+        parameters: {
+            query?: {
+                dry_run?: boolean;
+            };
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_record_organizations_api_v1_health_records_organizations_get: {
         parameters: {
             query?: never;
@@ -8948,6 +9090,7 @@ export interface operations {
                 local_date_from?: string | null;
                 local_date_to?: string | null;
                 timezone?: string | null;
+                test_key?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -8966,6 +9109,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabResultPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lab_test_index_api_v1_labs_tests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabTestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lab_test_history_api_v1_labs_tests__test_key__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_key: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabResultOut"][];
                 };
             };
             /** @description Validation Error */

@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import hmac
 import uuid
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from pydantic import Field, model_validator
 from sqlalchemy import func, select, text
@@ -69,6 +81,101 @@ from healthcurve.operations.rate_limit import RateLimitPolicy
 router = APIRouter(prefix="/labs", tags=["labs"])
 
 
+#: A lab "test" groups results that HealthCurve may show together: the curated
+#: registry code when normalized, else the source dataset's cross-lab name, else the
+#: lab's own analyte name. Values are still never merged across units (ADR-0040).
+_TEST_GROUP = func.coalesce(
+    LabResult.normalized_analyte_code, LabResult.source_normalized_name, LabResult.analyte_name
+)
+#: Upper bound for one test's full history; far above any realistic single analyte.
+MAX_TEST_HISTORY = 2_000
+
+
+def lab_test_key(owner_id: uuid.UUID, group: str) -> str:
+    """Opaque per-owner key, so which tests the owner has had never enters a URL or
+    an access log."""
+    return hashlib.sha256(f"lab-test:{owner_id}:{group}".encode()).hexdigest()[:16]
+
+
+def _current_results(owner_id: uuid.UUID) -> Any:
+    return (
+        select(LabResult, LabPanel)
+        .join(LabPanel, LabPanel.id == LabResult.panel_id)
+        .where(
+            LabResult.owner_id == owner_id,
+            LabPanel.owner_id == owner_id,
+            # A corrected panel (an imported source revision, ADR-0040) is history,
+            # not a second current result.
+            events.current_fact_predicate(LabPanel, owner_id=owner_id),
+        )
+    )
+
+
+def _test_groups(session: Any, owner_id: uuid.UUID) -> list[tuple[str, int, datetime]]:
+    current = _current_results(owner_id).subquery()
+    group = func.coalesce(
+        current.c.normalized_analyte_code,
+        current.c.source_normalized_name,
+        current.c.analyte_name,
+    )
+    return [
+        (str(name), int(count), latest)
+        for name, count, latest in session.execute(
+            select(group, func.count(), func.max(current.c.occurred_at))
+            .group_by(group)
+            .order_by(group)
+        ).tuples()
+    ]
+
+
+def _group_for_key(session: Any, owner_id: uuid.UUID, key: str) -> str:
+    for name, _, _ in _test_groups(session, owner_id):
+        if lab_test_key(owner_id, name) == key:
+            return name
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="lab test not found")
+
+
+class LabTestOut(ApiModel):
+    key: str
+    name: str
+    result_count: int
+    latest_collected_at: datetime
+
+
+@router.get("/tests", response_model=list[LabTestOut])
+def lab_test_index(session: DbSession, owner: CurrentOwner) -> list[LabTestOut]:
+    """Every test with current results, for the Labs page's test picker."""
+    out: list[LabTestOut] = []
+    for name, count, latest in _test_groups(session, owner.id):
+        definition = analyte_definition(name)
+        out.append(
+            LabTestOut(
+                key=lab_test_key(owner.id, name),
+                name=definition.display_name if definition is not None else name,
+                result_count=count,
+                latest_collected_at=latest,
+            )
+        )
+    return sorted(out, key=lambda item: (item.name.casefold(), item.key))
+
+
+@router.get("/tests/{test_key}/history", response_model=list[LabResultOut])
+def lab_test_history(
+    test_key: Annotated[str, Path(pattern="^[0-9a-f]{16}$")],
+    session: DbSession,
+    owner: CurrentOwner,
+) -> list[LabResultOut]:
+    """All current results for one test, oldest first, for its full trend."""
+    group = _group_for_key(session, owner.id, test_key)
+    rows = session.execute(
+        _current_results(owner.id)
+        .where(_TEST_GROUP == group)
+        .order_by(LabPanel.occurred_at, LabResult.id)
+        .limit(MAX_TEST_HISTORY)
+    ).all()
+    return _results_out(session, owner.id, rows)
+
+
 @router.get("/results", response_model=LabResultPage)
 def list_lab_results(
     session: DbSession,
@@ -77,19 +184,12 @@ def list_lab_results(
     local_date_from: date | None = None,
     local_date_to: date | None = None,
     timezone: str | None = None,
+    test_key: Annotated[str | None, Query(pattern="^[0-9a-f]{16}$")] = None,
 ) -> LabResultPage:
     """Return source facts and derived values together, never conflated."""
-    query = (
-        select(LabResult, LabPanel)
-        .join(LabPanel, LabPanel.id == LabResult.panel_id)
-        .where(
-            LabResult.owner_id == owner.id,
-            LabPanel.owner_id == owner.id,
-            # A corrected panel (an imported source revision, ADR-0040) is history,
-            # not a second current result.
-            events.current_fact_predicate(LabPanel, owner_id=owner.id),
-        )
-    )
+    query = _current_results(owner.id)
+    if test_key is not None:
+        query = query.where(_TEST_GROUP == _group_for_key(session, owner.id, test_key))
     window = local_date_window(
         profile_timezone=timezones.current_zone(session, owner),
         timezone=timezone,
@@ -107,9 +207,13 @@ def list_lab_results(
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).all()
+    return LabResultPage(items=_results_out(session, owner.id, rows), page=metadata)
+
+
+def _results_out(session: Any, owner_id: uuid.UUID, rows: Any) -> list[LabResultOut]:
     withdrawn = _withdrawn_record_ids(
         session,
-        owner_id=owner.id,
+        owner_id=owner_id,
         record_ids={r.source_record_id for r, _ in rows if r.source_record_id is not None},
     )
     payload: list[LabResultOut] = []
@@ -152,7 +256,7 @@ def list_lab_results(
                 ),
             )
         )
-    return LabResultPage(items=payload, page=metadata)
+    return payload
 
 
 def _withdrawn_record_ids(session: Any, *, owner_id: uuid.UUID, record_ids: set[str]) -> set[str]:

@@ -10,16 +10,23 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from pydantic import Field
 from sqlalchemy import func, select
 
-from healthcurve.api.deps import AppSettings, CurrentOwner, DbSession, require_csrf
+from healthcurve.api.deps import (
+    AppRateLimiter,
+    AppSettings,
+    CurrentOwner,
+    DbSession,
+    enforce_rate_limit,
+    require_csrf,
+)
 from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.schemas import ApiModel, FactResource, PageMetadata
 from healthcurve.integrations.health_records import visibility
@@ -31,6 +38,9 @@ from healthcurve.integrations.health_records.models import (
     HealthRecordRevision,
     RecordState,
 )
+from healthcurve.integrations.health_records.reader import DatasetError, read_snapshot
+from healthcurve.integrations.health_records.service import import_snapshot
+from healthcurve.operations.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/health-records", tags=["health-records"])
 
@@ -184,11 +194,13 @@ def list_health_records(
     owner: CurrentOwner,
     pagination: Pagination,
     dataset_table: DatasetTable | None = None,
-    organization_key: str | None = Query(
-        default=None,
-        pattern="^[0-9a-f]{16}$",
-        description="Opaque key from /health-records/organizations; names stay out of URLs",
-    ),
+    organization_key: Annotated[
+        str | None,
+        Query(
+            pattern="^[0-9a-f]{16}$",
+            description="Opaque key from /health-records/organizations; names stay out of URLs",
+        ),
+    ] = None,
     state: RecordState | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -278,6 +290,86 @@ def list_health_record_batches(
     return HealthRecordBatchPage(
         items=[HealthRecordBatchOut.model_validate(row, from_attributes=True) for row in rows],
         page=page_metadata(total, pagination),
+    )
+
+
+class ImportTableCounts(ApiModel):
+    table: DatasetTable
+    new: int
+    changed: int
+    unchanged: int
+    no_longer_in_source: int
+    returned: int
+
+
+class ImportRunOut(ApiModel):
+    dry_run: bool
+    batch_id: uuid.UUID | None
+    dataset_generated_at: str
+    source_exported_at: dict[str, str]
+    tables: list[ImportTableCounts]
+    lab_panels_created: int
+    lab_panels_corrected: int
+
+
+#: Each run reads and diffs the whole snapshot (seconds). This bounds accidental
+#: repeat clicks without getting in the way of re-importing after a rebuild.
+IMPORT_RATE_POLICY = RateLimitPolicy(30, 3600)
+
+
+@router.post(
+    "/imports",
+    response_model=ImportRunOut,
+    dependencies=[Depends(require_csrf)],
+)
+def run_health_record_import(
+    response: Response,
+    session: DbSession,
+    owner: CurrentOwner,
+    settings: AppSettings,
+    limiter: AppRateLimiter,
+    dry_run: bool = False,
+) -> ImportRunOut:
+    """Import (or, with dry_run, only diff) the read-only dataset snapshot now."""
+    if settings.health_records_root is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The health-records dataset is not configured (HC_HEALTH_RECORDS_DIR).",
+        )
+    enforce_rate_limit(
+        response,
+        limiter,
+        scope="health_records_import",
+        identity=str(owner.id),
+        policy=IMPORT_RATE_POLICY,
+    )
+    started = datetime.now(UTC)
+    try:
+        snapshot = read_snapshot(settings.health_records_root)
+    except DatasetError as exc:
+        # Messages name only tables, columns, and versions, never record contents.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Import refused; nothing was written: {exc}",
+        ) from exc
+    result = import_snapshot(
+        session, owner_id=owner.id, snapshot=snapshot, dry_run=dry_run, started_at=started
+    )
+    if dry_run:
+        session.rollback()
+    else:
+        session.commit()
+    return ImportRunOut(
+        dry_run=dry_run,
+        batch_id=result.batch_id,
+        dataset_generated_at=snapshot.generated_at,
+        source_exported_at=snapshot.source_exported_at,
+        tables=[
+            ImportTableCounts(table=table, **counts.as_dict())
+            for table, counts in result.tables.items()
+        ],
+        lab_panels_created=result.labs.panels_created,
+        lab_panels_corrected=result.labs.panels_corrected,
     )
 
 

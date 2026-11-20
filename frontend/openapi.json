@@ -5930,6 +5930,102 @@
         "title": "HealthRecordRevisionOut",
         "type": "object"
       },
+      "ImportRunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "dataset_generated_at": {
+            "title": "Dataset Generated At",
+            "type": "string"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "lab_panels_corrected": {
+            "title": "Lab Panels Corrected",
+            "type": "integer"
+          },
+          "lab_panels_created": {
+            "title": "Lab Panels Created",
+            "type": "integer"
+          },
+          "source_exported_at": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Source Exported At",
+            "type": "object"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/ImportTableCounts"
+            },
+            "title": "Tables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "batch_id",
+          "dataset_generated_at",
+          "source_exported_at",
+          "tables",
+          "lab_panels_created",
+          "lab_panels_corrected"
+        ],
+        "title": "ImportRunOut",
+        "type": "object"
+      },
+      "ImportTableCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "no_longer_in_source": {
+            "title": "No Longer In Source",
+            "type": "integer"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "table": {
+            "$ref": "#/components/schemas/DatasetTable"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "table",
+          "new",
+          "changed",
+          "unchanged",
+          "no_longer_in_source",
+          "returned"
+        ],
+        "title": "ImportTableCounts",
+        "type": "object"
+      },
       "InjectionIn": {
         "additionalProperties": false,
         "description": "Emergency injection. Only the clinical essentials are required (SAFE-23).",
@@ -6877,6 +6973,36 @@
           "page"
         ],
         "title": "LabResultPage",
+        "type": "object"
+      },
+      "LabTestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "latest_collected_at": {
+            "format": "date-time",
+            "title": "Latest Collected At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "result_count": {
+            "title": "Result Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "result_count",
+          "latest_collected_at"
+        ],
+        "title": "LabTestOut",
         "type": "object"
       },
       "LifeEventCategory": {
@@ -17679,6 +17805,82 @@
         ]
       }
     },
+    "/api/v1/health-records/imports": {
+      "post": {
+        "description": "Import (or, with dry_run, only diff) the read-only dataset snapshot now.",
+        "operationId": "run_health_record_import_api_v1_health_records_imports_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Health Record Import",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
     "/api/v1/health-records/organizations": {
       "get": {
         "description": "Distinct producing organizations with opaque keys for the \"from\" filter.",
@@ -19567,6 +19769,23 @@
           },
           {
             "in": "query",
+            "name": "test_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{16}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Key"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": false,
             "schema": {
@@ -19628,6 +19847,124 @@
           }
         },
         "summary": "List Lab Results",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/tests": {
+      "get": {
+        "description": "Every test with current results, for the Labs page's test picker.",
+        "operationId": "lab_test_index_api_v1_labs_tests_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LabTestOut"
+                  },
+                  "title": "Response Lab Test Index Api V1 Labs Tests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lab Test Index",
+        "tags": [
+          "labs"
+        ]
+      }
+    },
+    "/api/v1/labs/tests/{test_key}/history": {
+      "get": {
+        "description": "All current results for one test, oldest first, for its full trend.",
+        "operationId": "lab_test_history_api_v1_labs_tests__test_key__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_key",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Test Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LabResultOut"
+                  },
+                  "title": "Response Lab Test History Api V1 Labs Tests  Test Key  History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lab Test History",
         "tags": [
           "labs"
         ]

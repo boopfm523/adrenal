@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { sessionStore } from "../api/session";
 import { AuthContext } from "../auth/context";
@@ -26,13 +26,30 @@ function json(body: unknown, status = 200): Response {
 }
 function page(items: unknown[]): Record<string, unknown> { return { items, page: { page: 1, page_size: 25, total_items: items.length, total_pages: 1 } }; }
 
+let labTests: unknown[] = [];
+let labTestHistory: unknown[] = [];
+
+/** Answer the test index and history requests for every test's own fetch mock. */
+function withLabTestRoutes(): void {
+  const spy = vi.mocked(globalThis.fetch);
+  const previous = spy.getMockImplementation();
+  spy.mockImplementation((input, init) => {
+    const url = requestUrl(input);
+    if (url.endsWith("/labs/tests")) return Promise.resolve(json(labTests));
+    if (url.includes("/labs/tests/") && url.endsWith("/history")) return Promise.resolve(json(labTestHistory));
+    if (previous === undefined) return Promise.resolve(json(page([])));
+    return previous(input, init);
+  });
+}
+
 function renderPage(initialEntry = "/labs"): void {
   sessionStore.set(session);
+  withLabTestRoutes();
   render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[initialEntry]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() }}><LabsPage /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
 }
 
 describe("Labs page", () => {
-  afterEach(() => { sessionStore.clear(); });
+  afterEach(() => { sessionStore.clear(); labTests = []; labTestHistory = []; });
 
   it("explains that a PDF must be selected instead of silently ignoring submit", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(page(requestUrl(input).includes("/labs/documents?") ? [] : []))));
@@ -207,5 +224,32 @@ describe("Labs page", () => {
     // Only the current source value is charted.
     expect(screen.getByRole("region", { name: "Cortisol — Serum data table" })).toBeInTheDocument();
     expect(screen.queryAllByText(/^358\.8/).length).toBe(1);
+  });
+  it("charts one chosen test's full history in its own units without merging units", async () => {
+    const acth = { ...base, source_type: "health_records_import", analyte_name: "ACTH", source_normalized_name: "ACTH", normalized_analyte_code: null, normalized_analyte_name: null, normalized_value: null, normalized_unit: null, normalization_method: null, original_unit: "pg/mL", specimen_type: null, source_organization: "NIH Clinical Center", source_state: "present" };
+    labTests = [{ key: "0123456789abcdef", name: "ACTH", result_count: 3, latest_collected_at: "2026-08-12T12:00:00Z" }];
+    labTestHistory = [
+      { ...acth, id: "a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1", original_value: "12", specimen_time: { ...base.specimen_time, occurred_at: "2026-08-08T12:00:00Z", local_time: "2026-08-08T08:00:00" } },
+      { ...acth, id: "b2b2b2b2-b2b2-4b2b-8b2b-b2b2b2b2b2b2", original_value: "15" },
+      { ...acth, id: "c3c3c3c3-c3c3-4c3c-8c3c-c3c3c3c3c3c3", original_value: "3.1", original_unit: "pmol/L" },
+    ];
+    const requests: string[] = [];
+    let location = "";
+    function LocationProbe(): null { location = useLocation().search; return null; }
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => { requests.push(requestUrl(input)); return Promise.resolve(json(page([]))); });
+    withLabTestRoutes();
+    sessionStore.set(session);
+    render(<HealthCurveProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/labs"]}><AuthContext.Provider value={{ status: "authenticated", session, signIn: vi.fn(), signOut: vi.fn() } as never}><LabsPage /><LocationProbe /></AuthContext.Provider></MemoryRouter></QueryClientProvider></HealthCurveProvider>);
+
+    await screen.findByRole("option", { name: "ACTH (3)" });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Test" }), "0123456789abcdef");
+
+    expect(await screen.findByText(/Showing all 3 results for ACTH, from every organization/)).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "ACTH — Specimen type not recorded (pg/mL)" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "ACTH — Specimen type not recorded (pmol/L)" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "ACTH — Specimen type not recorded (pg/mL) data table" })).toBeInTheDocument();
+    expect(location).toContain("test=0123456789abcdef");
+    expect(location).not.toMatch(/acth/iu);
+    expect(requests.some((url) => url.includes("/labs/results?") && url.includes("test_key=0123456789abcdef"))).toBe(true);
   });
 });

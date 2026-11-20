@@ -479,8 +479,22 @@ export function getWeight(filters: HealthDataFilters, page = 1): Promise<WeightP
   return apiRequest<WeightPage>(`/weight?${healthDataQuery(filters, page)}`);
 }
 
-export function getLabResults(filters: RecordedHistoryFilters, page = 1): Promise<LabResultPage> {
-  return apiRequest<LabResultPage>(`/labs/results?${recordedHistoryQuery(filters, page).toString()}`);
+export function getLabResults(filters: RecordedHistoryFilters, page = 1, testKey = ""): Promise<LabResultPage> {
+  const params = recordedHistoryQuery(filters, page);
+  if (testKey !== "") params.set("test_key", testKey);
+  return apiRequest<LabResultPage>(`/labs/results?${params.toString()}`);
+}
+
+export type LabTest = components["schemas"]["LabTestOut"];
+
+/** Every test with results; keys are opaque so test names never enter URLs. */
+export function getLabTests(): Promise<LabTest[]> {
+  return apiRequest<LabTest[]>("/labs/tests");
+}
+
+/** One test's full history, oldest first, for its trend across all dates. */
+export function getLabTestHistory(testKey: string): Promise<LabResult[]> {
+  return apiRequest<LabResult[]>(`/labs/tests/${encodeURIComponent(testKey)}/history`);
 }
 
 export interface HealthRecordFilters {
@@ -515,6 +529,12 @@ export function getHealthRecordBatches(page = 1): Promise<HealthRecordBatchPage>
 
 export function healthRecordFileUrl(recordId: string, index: number): string {
   return `/api/v1/health-records/${encodeURIComponent(recordId)}/files/${String(index)}`;
+}
+
+export type HealthRecordImportRun = components["schemas"]["ImportRunOut"];
+
+export function runHealthRecordImport(dryRun: boolean): Promise<HealthRecordImportRun> {
+  return apiRequest<HealthRecordImportRun>(`/health-records/imports?dry_run=${dryRun ? "true" : "false"}`, { method: "POST" });
 }
 
 export function getAiVisibility(): Promise<AiVisibilityPage> {

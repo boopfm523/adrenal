@@ -556,3 +556,73 @@ def test_organization_filter_uses_an_opaque_per_owner_key(engine: Engine, tmp_pa
             item.key != mayo.key
             for item in health_record_organizations(session, session.get(Owner, other_owner))  # type: ignore[arg-type]
         )
+
+
+def test_lab_test_index_history_and_filter_cover_every_result(
+    engine: Engine, tmp_path: Path
+) -> None:
+    from healthcurve.api.routers.labs import lab_test_history, lab_test_index
+
+    owner_id = _new_owner(engine)
+    _import(engine, owner_id, write_dataset(tmp_path))
+    with Session(engine) as session:
+        owner = session.get(Owner, owner_id)
+        assert owner is not None
+        tests = {item.name: item for item in lab_test_index(session, owner)}
+        # Registry analytes use their display name; others keep the dataset name.
+        assert {"Hemoglobin", "Cortisol", "ACTH", "Glucose (urine)"} <= set(tests)
+        assert all("acth" not in item.key.lower() for item in tests.values())
+        assert sum(item.result_count for item in tests.values()) == 6
+
+        acth = lab_test_history(tests["ACTH"].key, session, owner)
+        assert [item.analyte_name for item in acth] == ["ACTH"]
+        assert acth[0].source_organization == ("University of Maryland Medical System (UMMS)")
+        page = list_lab_results(
+            session, owner, PageRequest(page=1, page_size=100), test_key=tests["Cortisol"].key
+        )
+        assert [item.analyte_name for item in page.items] == ["Cortisol, Serum"]
+
+
+def test_import_endpoint_dry_run_then_import(engine: Engine, tmp_path: Path) -> None:
+    from fastapi import HTTPException, Response
+
+    from healthcurve.api.routers.health_records import run_health_record_import
+    from healthcurve.operations.rate_limit import RateLimiter
+
+    owner_id = _new_owner(engine)
+    root = write_dataset(tmp_path)
+    limiter = RateLimiter(None)
+    configured = get_settings().model_copy(update={"health_records_root": root})
+    with Session(engine) as session:
+        owner = session.get(Owner, owner_id)
+        assert owner is not None
+        preview = run_health_record_import(
+            Response(), session, owner, configured, limiter, dry_run=True
+        )
+        assert preview.batch_id is None
+        assert next(row for row in preview.tables if row.table is DatasetTable.LAB_RESULTS).new == 7
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(HealthRecord)
+                .where(HealthRecord.owner_id == owner_id)
+            )
+            == 0
+        )
+
+        done = run_health_record_import(Response(), session, owner, configured, limiter)
+        assert done.batch_id is not None
+        assert done.lab_panels_created == 5
+
+        unconfigured = get_settings().model_copy(update={"health_records_root": None})
+        with pytest.raises(HTTPException) as missing:
+            run_health_record_import(Response(), session, owner, unconfigured, limiter)
+        assert missing.value.status_code == 409
+
+        broken = tmp_path / "broken"
+        write_dataset(broken, meta={"schema_version": "3", "generated_at": "x"})
+        refused = get_settings().model_copy(update={"health_records_root": broken})
+        with pytest.raises(HTTPException) as unsupported:
+            run_health_record_import(Response(), session, owner, refused, limiter)
+        assert unsupported.value.status_code == 409
+        assert "schema_version 3" in str(unsupported.value.detail)

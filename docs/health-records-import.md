@@ -24,6 +24,15 @@ dataset's own contract is `DATASET.md` in the collector project (schema version 
 
 ## Run the import
 
+From the app, use **Health records** (or **Settings & privacy**) → **Import from your
+patient portals**:
+
+- **Check for changes** diffs the snapshot and writes nothing.
+- **Import now** runs one import batch.
+
+Both are CSRF-protected and rate-limited (30 runs an hour), and both show per-table
+counts. Or from a terminal:
+
 ```bash
 make import-health-records-dry-run   # shows what would change; writes nothing
 make import-health-records           # one import batch
@@ -96,6 +105,12 @@ inside the dataset root, always as downloads, and never rendered inside HealthCu
   and the earlier one stays in history.
 - **Withdrawn results.** Results that are no longer in the source stay on the Labs page
   with a marker. They are not charted.
+- **Seeing every result.** Labs → **Show one test** lists every test with its result
+  count. Choosing one lists only that test and charts its whole history across every
+  organization. Tests outside the curated registry, such as ACTH, are charted in the
+  lab's own unit, one chart per unit. Without a test chosen, charts cover only the
+  current page. The picker uses an opaque key, so test names never appear in URLs or
+  access logs.
 - **Rows without a value.** Source rows with no value at all are kept as source records
   only.
 

@@ -1,5 +1,5 @@
 import { useMemo, useState, type SyntheticEvent } from "react";
-import { Alert, Button, FileInput, Group, Paper, SimpleGrid, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, FileInput, Group, NativeSelect, Paper, SimpleGrid, Text, TextInput, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
@@ -12,6 +12,8 @@ import {
   getLabDocuments,
   getLabExtraction,
   getLabResults,
+  getLabTestHistory,
+  getLabTests,
   uploadLabDocument,
   type LabCandidateConfirmation,
   type LabDocument,
@@ -33,13 +35,23 @@ interface TrendGroup {
   name: string;
   specimen: string;
   unit: string;
+  /** "derived": the curated registry's converted value; "source": the lab's own number. */
+  basis: "derived" | "source";
   values: LabResult[];
 }
 
-interface LabHistoryView extends RecordedHistoryFilters { resultPage: number; documentPage: number }
+const NUMERIC = /^-?\d+(?:\.\d+)?$/u;
+
+function chartValue(group: TrendGroup, result: LabResult): string | null {
+  if (group.basis === "derived") return result.normalized_value;
+  const value = result.original_value?.trim() ?? "";
+  return NUMERIC.test(value) ? value : null;
+}
+
+interface LabHistoryView extends RecordedHistoryFilters { resultPage: number; documentPage: number; testKey?: string }
 function labPage(params: URLSearchParams, name: string): number { const value = params.get(name) ?? ""; return /^\d+$/.test(value) && Number(value) >= 1 ? Number(value) : 1; }
-function labHistoryView(search: string, profileTimezone: string): LabHistoryView { const params = new URLSearchParams(search); return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, resultPage: labPage(params, "result_page"), documentPage: labPage(params, "document_page") }; }
-function labHistorySearch(view: LabHistoryView): URLSearchParams { const params = new URLSearchParams({ timezone: view.timezone }); if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom); if (view.dateTo !== "") params.set("local_date_to", view.dateTo); if (view.resultPage > 1) params.set("result_page", view.resultPage.toString()); if (view.documentPage > 1) params.set("document_page", view.documentPage.toString()); return params; }
+function labHistoryView(search: string, profileTimezone: string): LabHistoryView { const params = new URLSearchParams(search); return { dateFrom: params.get("local_date_from") ?? "", dateTo: params.get("local_date_to") ?? "", timezone: params.get("timezone") ?? profileTimezone, resultPage: labPage(params, "result_page"), documentPage: labPage(params, "document_page"), testKey: /^[0-9a-f]{16}$/u.test(params.get("test") ?? "") ? params.get("test") ?? "" : "" }; }
+function labHistorySearch(view: LabHistoryView): URLSearchParams { const params = new URLSearchParams({ timezone: view.timezone }); if (view.dateFrom !== "") params.set("local_date_from", view.dateFrom); if (view.dateTo !== "") params.set("local_date_to", view.dateTo); if (view.resultPage > 1) params.set("result_page", view.resultPage.toString()); if (view.documentPage > 1) params.set("document_page", view.documentPage.toString()); if (view.testKey !== undefined && view.testKey !== "") params.set("test", view.testKey); return params; }
 
 function displayedSourceValue(result: LabResult): string {
   if (result.original_value !== null) return result.original_unit === null ? formatDecimal(result.original_value) : formatMeasurement(result.original_value, result.original_unit);
@@ -51,20 +63,31 @@ function specimenLabel(result: LabResult): string {
   return specimen === undefined || specimen === "" ? "Specimen type not recorded" : specimen;
 }
 
-function trendGroups(results: LabResult[]): TrendGroup[] {
+function trendGroups(results: LabResult[], options: { sourceUnits: boolean } = { sourceUnits: false }): TrendGroup[] {
   const groups = new Map<string, TrendGroup>();
+  const add = (key: string, make: () => Omit<TrendGroup, "values">, result: LabResult): void => {
+    const existing = groups.get(key);
+    if (existing === undefined) groups.set(key, { ...make(), values: [result] });
+    else existing.values.push(result);
+  };
   results.forEach((result) => {
-    if (result.normalized_analyte_code === null || result.normalized_value === null || result.normalized_unit === null) return;
     // A result the source has since withdrawn stays in the table, marked, but is not charted.
     if (result.source_state === "no_longer_in_source") return;
     const specimen = specimenLabel(result);
-    const key = [result.normalized_analyte_code, specimen.toLocaleLowerCase(), result.normalized_unit].join("|");
-    const existing = groups.get(key);
-    if (existing === undefined) {
-      groups.set(key, { key, name: result.normalized_analyte_name ?? result.normalized_analyte_code, specimen, unit: result.normalized_unit, values: [result] });
-    } else {
-      existing.values.push(result);
+    if (result.normalized_analyte_code !== null && result.normalized_value !== null && result.normalized_unit !== null) {
+      const code = result.normalized_analyte_code;
+      const unit = result.normalized_unit;
+      add([code, specimen.toLocaleLowerCase(), unit].join("|"), () => ({ key: [code, specimen.toLocaleLowerCase(), unit].join("|"), name: result.normalized_analyte_name ?? code, specimen, unit, basis: "derived" }), result);
+      return;
     }
+    // Outside the curated registry, a test's own numbers are charted only in their own
+    // unit: one chart per name, specimen, and unit, so differing units never merge.
+    const value = result.original_value?.trim() ?? "";
+    if (!options.sourceUnits || result.original_unit === null || !NUMERIC.test(value)) return;
+    const name = result.source_normalized_name ?? result.analyte_name;
+    const unit = result.original_unit;
+    const key = ["source", name.toLocaleLowerCase(), specimen.toLocaleLowerCase(), unit].join("|");
+    add(key, () => ({ key, name, specimen, unit, basis: "source" }), result);
   });
   return [...groups.values()]
     .map((group) => ({ ...group, values: [...group.values].sort((a, b) => a.specimen_time.occurred_at.localeCompare(b.specimen_time.occurred_at)) }))
@@ -364,25 +387,37 @@ export function LabsPage(): React.JSX.Element {
   const setDraft = (next: RecordedHistoryFilters): void => { setDraftState({ search: appliedSearch, filters: next }); };
   const invalidRange = filters.dateFrom !== "" && filters.dateTo !== "" && filters.dateFrom > filters.dateTo;
   const [validation, setValidation] = useState<string | null>(null);
-  const resultsQuery = useQuery({ queryKey: ["lab-results", filters, view.resultPage], queryFn: () => getLabResults(filters, view.resultPage), enabled: !invalidRange });
+  const testKey = view.testKey ?? "";
+  const resultsQuery = useQuery({ queryKey: ["lab-results", filters, view.resultPage, testKey], queryFn: () => getLabResults(filters, view.resultPage, testKey), enabled: !invalidRange });
+  const testsQuery = useQuery({ queryKey: ["lab-tests"], queryFn: getLabTests });
+  const historyQuery = useQuery({ queryKey: ["lab-test-history", testKey], queryFn: () => getLabTestHistory(testKey), enabled: testKey !== "" });
   const documentsQuery = useQuery({ queryKey: ["lab-documents", filters, view.documentPage], queryFn: () => getLabDocuments(filters, view.documentPage), enabled: !invalidRange });
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const results = resultsQuery.data?.items ?? [];
-  const groups = trendGroups(results);
+  // With a test chosen, chart its whole history (any page, every organization), using the
+  // lab's own units where the curated registry has no conversion.
+  const groups = testKey === "" ? trendGroups(results) : trendGroups(historyQuery.data ?? [], { sourceUnits: true });
+  const selectedTest = testsQuery.data?.find((test) => test.key === testKey);
   return <Page title="Laboratory results" description="Review private PDF extraction drafts, then view recorded source facts and deterministic trends. HealthCurve does not diagnose, interpret cortisol, or recommend treatment.">
     <Alert color="orange" mb="xl"><strong>Descriptive records only.</strong> Reference ranges are preserved exactly from each source and are never invented or used here to diagnose. Cortisol collection time and specimen type materially affect context; discuss interpretation with your physician.</Alert>
     <UploadPanel onUploaded={(document) => { setSelectedDocumentId(document.document_id); }} />
     {selectedDocumentId === null ? null : <DocumentReview documentId={selectedDocumentId} timezone={timezone} close={() => { setSelectedDocumentId(null); }} />}
-    <Paper component="form" withBorder p="lg" my="xl" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...draft, resultPage: 1, documentPage: 1 })); }}><Title order={2} mb="md">Filter laboratory history</Title><SimpleGrid cols={{base:1,sm:3}}><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="History IANA timezone" required aria-label="History IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>{validation === null && !invalidRange ? null : <Alert color="red" mt="md" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}<Group mt="md"><Button type="submit">Apply history filters</Button><Button variant="outline" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone }; setValidation(null); setSelectedDocumentId(null); setDraftState({ search: "", filters: reset }); setSearchParams(new URLSearchParams()); }}>Clear history filters</Button></Group></Paper>
+    <Paper component="form" withBorder p="lg" my="xl" radius="lg" onSubmit={(event) => { event.preventDefault(); if (draft.dateFrom !== "" && draft.dateTo !== "" && draft.dateFrom > draft.dateTo) { setValidation("From date must be on or before Through date."); return; } setValidation(null); setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...draft, resultPage: 1, documentPage: 1, testKey: view.testKey ?? "" })); }}><Title order={2} mb="md">Filter laboratory history</Title><SimpleGrid cols={{base:1,sm:3}}><TextInput label="From date" type="date" value={draft.dateFrom} onChange={(event) => { setDraft({ ...draft, dateFrom: event.target.value }); }} /><TextInput label="Through date" type="date" value={draft.dateTo} onChange={(event) => { setDraft({ ...draft, dateTo: event.target.value }); }} /><TextInput label="History IANA timezone" required aria-label="History IANA timezone" value={draft.timezone} onChange={(event) => { setDraft({ ...draft, timezone: event.target.value }); }} /></SimpleGrid>{validation === null && !invalidRange ? null : <Alert color="red" mt="md" role="alert">{validation ?? "From date must be on or before Through date."}</Alert>}<Group mt="md"><Button type="submit">Apply history filters</Button><Button variant="outline" type="button" onClick={() => { const reset = { dateFrom: "", dateTo: "", timezone }; setValidation(null); setSelectedDocumentId(null); setDraftState({ search: "", filters: reset }); setSearchParams(new URLSearchParams()); }}>Clear history filters</Button></Group></Paper>
     <Text c="dimmed" my="md">Inclusive dates use {timezoneAbbreviation(filters.timezone)}. Result dates mean specimen collection; document dates mean private upload time.</Text>
     {documentsQuery.isFetching ? <Text role="status">Loading lab documents…</Text> : null}
     {documentsQuery.isError ? <Alert color="red" role="alert">Lab documents could not be loaded.</Alert> : null}
     {documentsQuery.data === undefined ? null : <><DocumentList documents={documentsQuery.data.items} selectedId={selectedDocumentId} select={setSelectedDocumentId} onDeleted={(id) => { if (selectedDocumentId === id) setSelectedDocumentId(null); if (view.documentPage > 1 && documentsQuery.data.items.length === 1) setSearchParams(labHistorySearch({ ...view, documentPage: view.documentPage - 1 })); }} /><PaginationControls label="Lab document history" metadata={documentsQuery.data.page} onPageChange={(documentPage) => { setSelectedDocumentId(null); setSearchParams(labHistorySearch({ ...view, documentPage })); }} /></>}
     <hr />
+    <Paper component="section" withBorder p="lg" my="xl" radius="lg" aria-labelledby="lab-test-heading">
+      <Title order={2} id="lab-test-heading" mb="sm">Show one test</Title>
+      <NativeSelect label="Test" value={testKey} onChange={(event) => { setSearchParams(labHistorySearch({ ...view, testKey: event.currentTarget.value, resultPage: 1 })); }} data={[{ value: "", label: `All tests${testsQuery.data === undefined ? "" : ` (${String(testsQuery.data.length)} tests)`}` }, ...(testsQuery.data ?? []).map((test) => ({ value: test.key, label: `${test.name} (${String(test.result_count)})` }))]} />
+      <Text c="dimmed" mt="sm">{testKey === "" ? "Without a test chosen, charts show only the results on the current page." : selectedTest === undefined ? "Loading this test…" : `Showing all ${String(selectedTest.result_count)} results for ${selectedTest.name}, from every organization. Values in different units are charted separately.`}</Text>
+      {historyQuery.isError ? <Alert color="red" role="alert" mt="sm">This test&apos;s history could not be loaded.</Alert> : null}
+    </Paper>
     {resultsQuery.isFetching ? <p role="status">Loading laboratory facts…</p> : null}
     {resultsQuery.isError ? <p role="alert" className="error-summary">Laboratory facts could not be loaded.</p> : null}
     {!resultsQuery.isFetching && !resultsQuery.isError && results.length === 0 ? <p>No laboratory facts recorded.</p> : null}
-    {groups.map((group) => <AccessibleLineChart key={group.key} title={`${group.name} — ${group.specimen}`} summary="Each point is one recorded specimen on the visible results page. Lines are descriptive only; missing intervals are not inferred." unit={group.unit} timezone={timezone} timezoneReferenceDate={group.values.at(-1)?.specimen_time.local_time.slice(0, 10)} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={`Values on this results page use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match.`} sampleCount={group.values.length} missingCount={0} series={[{ name: group.name, source: "recorded lab facts with deterministic derivation", values: group.values.map((result) => ({ label: dateLabel(result), value: result.normalized_value })) }]} />)}
+    {groups.map((group) => <AccessibleLineChart key={group.key} title={group.basis === "source" ? `${group.name} — ${group.specimen} (${group.unit})` : `${group.name} — ${group.specimen}`} summary={testKey === "" ? "Each point is one recorded specimen on the visible results page. Choose a test above to chart its full history. Lines are descriptive only; missing intervals are not inferred." : "Each point is one recorded specimen in this test's full history, across every organization. Lines are descriptive only; missing intervals are not inferred."} unit={group.unit} timezone={timezone} timezoneReferenceDate={group.values.at(-1)?.specimen_time.local_time.slice(0, 10)} dateRange={`${group.values[0]?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"} through ${group.values.at(-1)?.specimen_time.local_time.slice(0, 10) ?? "Unavailable"}`} definition={group.basis === "derived" ? `Values use ${group.values[0]?.normalization_method ?? "the recorded deterministic normalization rule"}. Results are grouped only when canonical analyte, specimen type, and normalized unit match.` : `Values are the laboratory's own numbers in ${group.unit}, not converted. Results are grouped only when test name, specimen type, and unit match exactly; other units appear in their own chart.`} sampleCount={group.values.length} missingCount={0} series={[{ name: group.name, source: group.basis === "derived" ? "recorded lab facts with deterministic derivation" : "recorded lab facts in the source unit", values: group.values.map((result) => ({ label: dateLabel(result), value: chartValue(group, result) ?? "" })) }]} />)}
     {results.length === 0 ? null : <section aria-labelledby="lab-records-heading"><h2 id="lab-records-heading">Source facts and derived values</h2><p>The source-report columns are authoritative for what was recorded. Derived columns are reproducible conveniences and never overwrite the source.</p><div className="table-scroll" tabIndex={0} role="region" aria-label="Laboratory source facts and derived values"><table><thead><tr><th scope="col">Collected</th><th scope="col">Specimen</th><th scope="col">Source analyte</th><th scope="col">Source result</th><th scope="col">Source range / flag</th><th scope="col">Derived analyte</th><th scope="col">Derived result</th><th scope="col">Provenance</th></tr></thead><tbody>{results.map((result) => <tr key={result.id}><td>{dateLabel(result)}</td><td>{specimenLabel(result)}</td><th scope="row">{result.analyte_name}</th><td>{displayedSourceValue(result)}</td><td>{result.original_reference_range ?? "Not reported"}{result.abnormal_flag === null ? "" : ` · source flag ${result.abnormal_flag}`}</td><td>{result.normalized_analyte_name ?? "Not in curated allow-list"}</td><td>{result.normalized_value === null || result.normalized_unit === null ? "Not derived—original preserved" : formatMeasurement(result.normalized_value, result.normalized_unit)}</td><td>{result.source_type.replaceAll("_", " ")} · {result.confirmation_state.replaceAll("_", " ")}{result.laboratory_name === null ? "" : ` · ${result.laboratory_name}`}{result.source_organization == null ? null : <><br />From {result.source_organization}</>}{result.panel_name == null ? null : <><br />Panel: {result.panel_name}</>}{result.source_state === "no_longer_in_source" ? <><br /><strong>No longer in source</strong></> : null}{result.source_document_id === null ? "" : <><br />{result.source_page_number === null ? <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a> : <><a href={sourcePreviewUrl(result.source_document_id, result.source_page_number)} target="_blank" rel="noreferrer">View source page {String(result.source_page_number)}</a> · <a href={sourceDownloadUrl(result.source_document_id)}>Download original PDF</a></>}</>}</td></tr>)}</tbody></table></div>{resultsQuery.data === undefined ? null : <PaginationControls label="Laboratory result records" metadata={resultsQuery.data.page} onPageChange={(resultPage) => { setSearchParams(labHistorySearch({ ...view, resultPage })); }} />}</section>}
   </Page>;
 }
