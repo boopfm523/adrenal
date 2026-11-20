@@ -85,9 +85,12 @@ services:
       HC_PUBLIC_BASE_URL: ${HC_PUBLIC_BASE_URL:-}
       HC_UPLOADS_DIR: /data/uploads
       HC_REPORT_ARTIFACTS_DIR: /data/reports
+      # The owner's external health-records dataset (ADR-0040), read-only.
+      HC_HEALTH_RECORDS_ROOT: /import/health-records
     volumes:
       - ${HC_UPLOADS_DIR:-./var/uploads}:/data/uploads
       - ${HC_REPORT_ARTIFACTS_DIR:-./var/reports}:/data/reports
+      - ${HC_HEALTH_RECORDS_DIR:-./var/health-records}:/import/health-records:ro
     networks: [hc-internal]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health/live')"]

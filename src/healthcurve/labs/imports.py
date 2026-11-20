@@ -58,6 +58,10 @@ class LabCandidate(BaseModel):
     normalized_value: Decimal | None = None
     normalized_unit: str | None = None
     normalization_method: str | None = None
+    #: Imported results only (ADR-0040): the dataset's cross-lab name, which is also
+    #: tried as a normalization alias, and its stable source record identifier.
+    source_normalized_name: str | None = None
+    source_record_id: str | None = None
     flags: list[str] = Field(default_factory=list)
 
 

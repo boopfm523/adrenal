@@ -15,7 +15,11 @@ from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.events.timekeeping import EventTime
 from healthcurve.labs.imports import LabCandidate, ParsedLabImport
 from healthcurve.labs.models import LabPanel, LabResult
-from healthcurve.labs.normalization import NORMALIZATION_VERSION, normalize_lab_value
+from healthcurve.labs.normalization import (
+    NORMALIZATION_VERSION,
+    normalize_lab_value,
+    normalize_lab_value_with_alias,
+)
 from healthcurve.operations import audit
 
 
@@ -46,6 +50,12 @@ def create_panel(
     specimen_type: str | None = None,
     report_status: str | None = None,
     source_document_id: uuid.UUID | None = None,
+    panel_name: str | None = None,
+    source_organization: str | None = None,
+    ordered_by: str | None = None,
+    supersedes_id: uuid.UUID | None = None,
+    correction_reason: str | None = None,
+    import_batch_id: uuid.UUID | None = None,
 ) -> LabPanel:
     if not candidates or any("missing_result" in candidate.flags for candidate in candidates):
         raise LabConfirmationError("lab_candidates_incomplete")
@@ -69,12 +79,21 @@ def create_panel(
         accession_id=accession_id,
         specimen_type=specimen_type,
         report_status=report_status,
+        panel_name=panel_name,
+        source_organization=source_organization,
+        ordered_by=ordered_by,
+        supersedes_id=supersedes_id,
+        correction_reason=correction_reason,
+        import_batch_id=import_batch_id,
     )
     session.add(panel)
     session.flush([panel])
     for candidate in candidates:
-        normalized = normalize_lab_value(
-            candidate.analyte_name, candidate.original_value, candidate.original_unit
+        normalized = normalize_lab_value_with_alias(
+            candidate.analyte_name,
+            candidate.source_normalized_name,
+            candidate.original_value,
+            candidate.original_unit,
         )
         session.add(
             LabResult(
@@ -97,12 +116,18 @@ def create_panel(
                 normalized_value=normalized.value if normalized is not None else None,
                 normalized_unit=normalized.unit if normalized is not None else None,
                 normalization_method=normalized.method if normalized is not None else None,
+                source_normalized_name=candidate.source_normalized_name,
+                source_record_id=candidate.source_record_id,
             )
         )
     audit.record(
         session,
         actor=audit.actor_for_owner(owner_id),
-        action=audit.AuditAction.RECORD_CREATED,
+        action=(
+            audit.AuditAction.RECORD_CORRECTED
+            if supersedes_id is not None
+            else audit.AuditAction.RECORD_CREATED
+        ),
         target_type="lab_panel",
         target_id=panel.id,
         change_summary=f"results={len(candidates)};source={source_type.value}",
@@ -147,8 +172,11 @@ def backfill_normalizations(session: Session, *, owner_id: uuid.UUID) -> int:
     for result in session.scalars(
         select(LabResult).where(LabResult.owner_id == owner_id).order_by(LabResult.id)
     ):
-        normalized = normalize_lab_value(
-            result.analyte_name, result.original_value, result.original_unit
+        normalized = normalize_lab_value_with_alias(
+            result.analyte_name,
+            result.source_normalized_name,
+            result.original_value,
+            result.original_unit,
         )
         if normalized is None:
             continue

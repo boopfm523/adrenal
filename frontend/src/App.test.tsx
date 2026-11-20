@@ -56,6 +56,7 @@ describe("primary HealthCurve route", () => {
     ["/help", "Help"],
     ["/health-data", "Health data"],
     ["/labs", "Laboratory results"],
+    ["/health-records", "Health records"],
   ])("supports authenticated direct navigation to %s", async (entry, heading) => {
     renderApp(entry);
     expect(await screen.findByRole("heading", { name: heading, level: 1 })).toBeVisible();

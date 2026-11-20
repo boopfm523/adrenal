@@ -28,6 +28,7 @@ does not depend on JavaScript.
 | Get all your data out | Settings → Export, or `POST /api/v1/privacy/export` |
 | Sync Garmin Connect | Connect once locally, then review status/sync in Settings and observations in Health data; see [Garmin Connect](garmin-connect.md) |
 | Import an exported Garmin FIT/CSV/ZIP | Preview then confirm through the API as a durable fallback; see [Garmin import](garmin-import.md) |
+| Bring in portal labs, imaging, visits and documents | `make import-health-records` from the read-only dataset mount; view on Labs and Health records; see [Health-records import](health-records-import.md) |
 | Check encrypted backups | `python -m healthcurve.backup_status` in `backup-worker` |
 | Answer a question the API can't | SQL — see [Analytics](#analytics) |
 | Show someone what to do in a crisis | `http://localhost:8080/emergency` |

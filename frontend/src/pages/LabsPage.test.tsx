@@ -196,4 +196,16 @@ describe("Labs page", () => {
     expect(deletionCsrf).toBe("synthetic-csrf");
     expect(deletionBody).toEqual({ password: submittedPassword, confirmation: deletionPreview.confirmation_phrase });
   });
+  it("shows where an imported result came from and marks one the source withdrew", async () => {
+    const imported = { ...base, source_type: "health_records_import", confirmation_state: "provider_imported", source_organization: "Mayo Clinic", panel_name: "SYNTHETIC CORTISOL AM", ordered_by: "Dr. Synthetic Orderer", source_normalized_name: "Cortisol", source_state: "present" };
+    const withdrawn = { ...imported, id: "66666666-6666-4666-8666-666666666666", original_value: "13", normalized_value: "358.8000000000", source_state: "no_longer_in_source" };
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(json(requestUrl(input).includes("/labs/documents?") ? page([]) : page([imported, withdrawn]))));
+    renderPage();
+    expect((await screen.findAllByText(/From Mayo Clinic/)).length).toBe(2);
+    expect(screen.getAllByText(/Panel: SYNTHETIC CORTISOL AM/).length).toBe(2);
+    expect(screen.getByText("No longer in source")).toBeVisible();
+    // Only the current source value is charted.
+    expect(screen.getByRole("region", { name: "Cortisol — Serum data table" })).toBeInTheDocument();
+    expect(screen.queryAllByText(/^358\.8/).length).toBe(1);
+  });
 });

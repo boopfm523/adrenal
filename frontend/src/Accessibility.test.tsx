@@ -109,7 +109,7 @@ describe("automated accessibility audit", () => {
     const routes = [
       ["Daily review", "/healthcurve"], ["Chat", "/chat"], ["Today", "/today"], ["Timeline", "/timeline"], ["Doses", "/doses"], ["Plan", "/plan"], ["Episodes", "/episodes"],
       ["Symptoms & Meals", "/symptoms-diary"], ["Health data", "/health-data"], ["Labs", "/labs"],
-      ["Reports", "/reports"], ["Data quality", "/data-quality"], ["Settings & privacy", "/settings"], ["Help", "/help"],
+      ["Health records", "/health-records"], ["Reports", "/reports"], ["Data quality", "/data-quality"], ["Settings & privacy", "/settings"], ["Help", "/help"],
     ] as const;
     const user = userEvent.setup();
     for (const [label, path] of routes) {

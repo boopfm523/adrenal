@@ -532,6 +532,12 @@ class LabResultOut(FactResource):
     laboratory_name: str | None
     source_type: SourceType
     confirmation_state: ConfirmationState
+    #: Imported results only (ADR-0040); null for owner-entered labs.
+    panel_name: str | None = None
+    source_organization: str | None = None
+    ordered_by: str | None = None
+    source_normalized_name: str | None = None
+    source_state: Literal["present", "no_longer_in_source"] | None = None
 
     @field_serializer("normalized_value")
     def _normalized_value(self, value: Decimal | None) -> str | None:

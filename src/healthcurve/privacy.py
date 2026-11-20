@@ -29,6 +29,12 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncRun,
     WearableDailySummary,
 )
+from healthcurve.integrations.health_records.models import (
+    HealthRecord,
+    HealthRecordAiVisibility,
+    HealthRecordImportBatch,
+    HealthRecordRevision,
+)
 from healthcurve.integrations.telegram.models import TelegramLocationRequest, TelegramUpdate
 from healthcurve.labs.documents import DocumentLayout, mark_deleted
 from healthcurve.labs.models import LabDocument, LabPanel, LabResult
@@ -400,9 +406,17 @@ def delete_account(
         AIAnalysis,
         ExtractionDraft,
         TelegramConversationContext,
-        LabPanel,
-        LabDocument,
-        ReportSnapshot,
+    ):
+        session.execute(delete(model).where(model.owner_id == owner_id))
+    # Imported panels form correction chains (ADR-0040), deleted newest first.
+    _delete_event_chains(session, LabPanel, owner_id)
+    for model in (LabDocument, ReportSnapshot):
+        session.execute(delete(model).where(model.owner_id == owner_id))
+    for model in (
+        HealthRecordRevision,
+        HealthRecord,
+        HealthRecordImportBatch,
+        HealthRecordAiVisibility,
     ):
         session.execute(delete(model).where(model.owner_id == owner_id))
     for model in (GarminMetricEvent, GarminSleepEvent, GarminActivityEvent):

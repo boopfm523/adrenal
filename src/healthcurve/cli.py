@@ -707,6 +707,58 @@ def normalize_labs(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# import-health-records (ADR-0040)
+# ---------------------------------------------------------------------------
+
+
+def import_health_records(args: argparse.Namespace) -> int:
+    """Import one snapshot of the owner's external health-records dataset."""
+    from datetime import UTC
+
+    from healthcurve.integrations.health_records.reader import DatasetError, read_snapshot
+    from healthcurve.integrations.health_records.service import import_snapshot
+
+    root = args.dataset_root or get_settings().health_records_root
+    if root is None:
+        sys.exit("Set HC_HEALTH_RECORDS_ROOT or pass --dataset-root.")
+    started = datetime.now(UTC)
+    try:
+        snapshot = read_snapshot(Path(root))
+    except DatasetError as exc:
+        sys.exit(f"Health-records import refused; nothing was written: {exc}")
+    factory = get_session_factory()
+    with factory() as session, session.begin():
+        owner = _owner(session)
+        result = import_snapshot(
+            session,
+            owner_id=owner.id,
+            snapshot=snapshot,
+            dry_run=args.dry_run,
+            started_at=started,
+        )
+        if args.dry_run:
+            session.rollback()
+    heading = "Dry run (nothing written)" if args.dry_run else f"Import batch {result.batch_id}"
+    print(f"{heading}: dataset schema {snapshot.schema_version}, generated {snapshot.generated_at}")
+    for source, exported in snapshot.source_exported_at.items():
+        print(f"  exported {exported}: {source}")
+    print(f"  {'table':<18} {'new':>6} {'changed':>8} {'same':>6} {'gone':>6} {'back':>6}")
+    for table, counts in result.tables.items():
+        print(
+            f"  {table.value:<18} {counts.new:>6} {counts.changed:>8} {counts.unchanged:>6} "
+            f"{counts.no_longer_in_source:>6} {counts.returned:>6}"
+        )
+    if not args.dry_run:
+        labs = result.labs
+        print(
+            f"  lab panels: {labs.panels_created} created, {labs.panels_corrected} corrected, "
+            f"{labs.panels_unchanged} unchanged; "
+            f"{labs.results_without_value} source rows without a value kept as records only"
+        )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 
 
 def _as_datetime(value: Any) -> datetime:
@@ -824,6 +876,21 @@ def main(argv: list[str] | None = None) -> int:
         "normalize-labs", help="Recompute versioned derived fields for existing lab facts"
     )
     p.set_defaults(func=normalize_labs)
+
+    p = sub.add_parser(
+        "import-health-records",
+        help="Import the external health-records dataset (read-only, idempotent; ADR-0040)",
+    )
+    p.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=None,
+        help="Dataset root holding data/health.db (default: HC_HEALTH_RECORDS_ROOT)",
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="Report what would change without writing"
+    )
+    p.set_defaults(func=import_health_records)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help setup fmt lint types imports env-check pagination-check test test-fast test-pg eval eval-analytical-live audit secrets frontend-generate frontend-check check up down logs migrate ready qwen38-preflight qwen38-qualify qwen38-activate qwen3-rollback
+.PHONY: help setup fmt lint types imports env-check pagination-check test test-fast test-pg eval eval-analytical-live audit secrets frontend-generate frontend-check check up down logs migrate ready import-health-records import-health-records-dry-run qwen38-preflight qwen38-qualify qwen38-activate qwen3-rollback
 
 QWEN38_MODEL := qwen3.8:27b-q8_0
 QWEN38_QUALIFICATION := evals/candidates/qwen3.8-27b-q8_0/qualification.json
@@ -56,6 +56,12 @@ eval: ## Verify the checked-in local-model extraction regression baseline
 eval-analytical-live: ## Record the analytical chat eval (Docker + local Ollama; synthetic data)
 	HC_OLLAMA_BASE_URL=$${HC_OLLAMA_HOST_URL:-http://127.0.0.1:11434} \
 		uv run python scripts/evaluate_analytical_chat.py --record --thinking both
+
+import-health-records: ## Import the external health-records dataset (read-only mount; ADR-0040)
+	docker compose run --rm api python -m healthcurve.cli import-health-records
+
+import-health-records-dry-run: ## Show what a health-records import would change, writing nothing
+	docker compose run --rm api python -m healthcurve.cli import-health-records --dry-run
 
 qwen38-preflight: ## Check the non-default Qwen3.8 Q8 candidate locally
 	uv run python scripts/preflight_ollama_candidate.py --model $(QWEN38_MODEL)

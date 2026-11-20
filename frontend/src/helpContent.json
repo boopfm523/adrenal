@@ -355,6 +355,21 @@
         { "method": "POST", "path": "/api/v1/integrations/garmin/imports/preview" },
         { "method": "POST", "path": "/api/v1/integrations/garmin/imports/confirm" }
       ]
+    },
+    {
+      "id": "health-records",
+      "title": "Import your portal health records",
+      "availability": "Command line, Health records, Labs, and Settings",
+      "instructions": "Mount the separate health-records dataset read-only and run make import-health-records (or make import-health-records-dry-run first). Imported labs appear on Labs with the organization they came from; everything else is on Health records. Each category stays hidden from chat and AI until you switch it on in Settings; imported medication lists can never be switched on.",
+      "example": "Synthetic run: make import-health-records-dry-run",
+      "result": "One import batch of read-only reference records, with labs added to your lab history",
+      "confirmation": "Every run is idempotent: unchanged records stay unchanged, corrections keep the earlier version, and records the source no longer has are marked, never deleted.",
+      "endpoints": [
+        { "method": "GET", "path": "/api/v1/health-records" },
+        { "method": "GET", "path": "/api/v1/health-records/batches" },
+        { "method": "GET", "path": "/api/v1/health-records/ai-visibility" },
+        { "method": "PUT", "path": "/api/v1/health-records/ai-visibility/{category}" }
+      ]
     }
   ]
 }

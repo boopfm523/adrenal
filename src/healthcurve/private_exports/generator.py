@@ -34,6 +34,12 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncRun,
     WearableDailySummary,
 )
+from healthcurve.integrations.health_records.models import (
+    HealthRecord,
+    HealthRecordAiVisibility,
+    HealthRecordImportBatch,
+    HealthRecordRevision,
+)
 from healthcurve.labs.documents import DocumentLayout
 from healthcurve.labs.models import LabDocument, LabDocumentStatus, LabPanel, LabResult
 from healthcurve.medications.models import (
@@ -104,6 +110,14 @@ def _collections(
         report_snapshots = report_snapshots.where(text("false"))
         report_artifacts = report_artifacts.where(text("false"))
 
+    # Imported clinical text (notes, letters, reports) is sensitive; envelopes carry
+    # only titles, dates, and provenance (ADR-0040).
+    health_record_revisions: list[ExportCollection] = []
+    if include_sensitive:
+        health_record_revisions.append(
+            ExportCollection("health_record_revisions", _direct(HealthRecordRevision, owner_id))
+        )
+
     saved_locations: list[ExportCollection] = []
     if include_sensitive:
         saved_locations.append(
@@ -161,12 +175,20 @@ def _collections(
             ExportCollection("lab_documents", _direct(LabDocument, owner_id)),
             ExportCollection("lab_panels", _direct(LabPanel, owner_id)),
             ExportCollection("lab_results", _direct(LabResult, owner_id)),
+            ExportCollection(
+                "health_record_import_batches", _direct(HealthRecordImportBatch, owner_id)
+            ),
+            ExportCollection("health_records", _direct(HealthRecord, owner_id)),
+            *health_record_revisions,
         ],
         "integrations": [
             *saved_locations,
             ExportCollection("garmin_connection_state", _direct(GarminConnection, owner_id)),
             ExportCollection("garmin_sync_runs", _direct(GarminSyncRun, owner_id)),
             ExportCollection("wearable_daily_summaries", _direct(WearableDailySummary, owner_id)),
+            ExportCollection(
+                "health_record_ai_visibility", _direct(HealthRecordAiVisibility, owner_id)
+            ),
         ],
         "ai": ai_rows,
         "reports": [

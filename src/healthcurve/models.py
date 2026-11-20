@@ -34,6 +34,12 @@ from healthcurve.integrations.garmin.models import (
     GarminSyncRun,
     WearableDailySummary,
 )
+from healthcurve.integrations.health_records.models import (
+    HealthRecord,
+    HealthRecordAiVisibility,
+    HealthRecordImportBatch,
+    HealthRecordRevision,
+)
 from healthcurve.integrations.telegram.models import (
     TelegramDoseReminder,
     TelegramLocationRequest,
@@ -77,6 +83,10 @@ __all__ = [
     "GarminSleepEvent",
     "GarminSleepStageInterval",
     "GarminSyncRun",
+    "HealthRecord",
+    "HealthRecordAiVisibility",
+    "HealthRecordImportBatch",
+    "HealthRecordRevision",
     "IntegrationCredential",
     "Job",
     "LabDocument",
@@ -108,4 +118,4 @@ __all__ = [
 
 #: Every table the application owns. Asserted in tests so a new model that is not
 #: imported here fails the build rather than silently vanishing from migrations.
-EXPECTED_TABLE_COUNT = 48
+EXPECTED_TABLE_COUNT = 52

@@ -16,6 +16,7 @@ from healthcurve.analytics import service as analytics
 from healthcurve.analytics import wearable_summaries
 from healthcurve.episodes.models import EmergencyInjectionEvent, StressEpisode
 from healthcurve.events import service as events
+from healthcurve.events.base import SourceType
 from healthcurve.events.models import DiaryEvent, LifeEvent, SymptomEvent
 from healthcurve.integrations.garmin.models import (
     GarminActivityEvent,
@@ -276,6 +277,9 @@ def build_snapshot(
                 LabPanel.owner_id == owner_id,
                 LabPanel.occurred_at >= start,
                 LabPanel.occurred_at < end,
+                # Imported health records stay out of physician reports for now
+                # (ADR-0040); including them needs its own owner choice.
+                LabPanel.source_type != SourceType.HEALTH_RECORDS_IMPORT,
             )
             .order_by(LabPanel.occurred_at, LabPanel.id)
         )

@@ -210,6 +210,9 @@ class Settings(BaseSettings):
     uploads_dir: Path = Path("var/uploads")
     #: Generated report artifacts are private files, never part of the Caddy web root.
     report_artifacts_dir: Path = Path("var/reports")
+    #: Root of the owner's external health-records dataset (ADR-0040), mounted
+    #: read-only. HealthCurve never writes there; unset disables the import.
+    health_records_root: Path | None = None
 
     @model_validator(mode="before")
     @classmethod

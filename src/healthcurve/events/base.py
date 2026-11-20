@@ -89,6 +89,9 @@ class SourceType(StrEnum):
     FILE_IMPORT = "file_import"  # confirmed local FIT/archive import
     PROVIDER = "provider"  # pulled from an integration (Garmin, weather)
     MIGRATION = "migration"  # created by a data migration, with provenance
+    #: Imported from the owner's external health-records dataset (ADR-0040). Hidden
+    #: from chat and AI unless the owner opts the category in.
+    HEALTH_RECORDS_IMPORT = "health_records_import"
 
 
 class ConfirmationState(StrEnum):

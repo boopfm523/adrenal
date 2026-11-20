@@ -21,6 +21,91 @@
         "title": "AccountDeletionRequest",
         "type": "object"
       },
+      "AiVisibilityCategory": {
+        "description": "Categories the owner can opt in to chat/AI. All default to hidden.\n\nImported medication lists have no category on purpose: they can never enlarge the\nchat's medication vocabulary or be read as the plan or as doses (ADR-0040).",
+        "enum": [
+          "labs",
+          "imaging_impressions",
+          "imaging_reports",
+          "encounters",
+          "conditions",
+          "immunizations",
+          "allergies",
+          "vitals",
+          "surgical_history",
+          "clinical_notes",
+          "visit_summaries",
+          "letters_and_admin",
+          "other_documents"
+        ],
+        "title": "AiVisibilityCategory",
+        "type": "string"
+      },
+      "AiVisibilityIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "AiVisibilityIn",
+        "type": "object"
+      },
+      "AiVisibilityOut": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/AiVisibilityCategory"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "has_ai_path": {
+            "description": "False when no chat or AI feature reads this category yet",
+            "title": "Has Ai Path",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "label",
+          "enabled",
+          "has_ai_path"
+        ],
+        "title": "AiVisibilityOut",
+        "type": "object"
+      },
+      "AiVisibilityPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiVisibilityOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "medications_note": {
+            "title": "Medications Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "medications_note"
+        ],
+        "title": "AiVisibilityPage",
+        "type": "object"
+      },
       "AnalyticsSummaryOut": {
         "additionalProperties": false,
         "properties": {
@@ -2731,6 +2816,23 @@
         "title": "DataQualityOut",
         "type": "object"
       },
+      "DatasetTable": {
+        "description": "Dataset tables HealthCurve imports. Values are the dataset's own table names.",
+        "enum": [
+          "lab_results",
+          "imaging_studies",
+          "documents",
+          "encounters",
+          "medications",
+          "conditions",
+          "immunizations",
+          "allergies",
+          "vitals",
+          "surgical_history"
+        ],
+        "title": "DatasetTable",
+        "type": "string"
+      },
       "DayAnalysisGenerationOut": {
         "additionalProperties": false,
         "properties": {
@@ -5215,6 +5317,619 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HealthRecordBatchOut": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "counts": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "dataset_generated_at": {
+            "title": "Dataset Generated At",
+            "type": "string"
+          },
+          "dataset_schema_version": {
+            "title": "Dataset Schema Version",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "source_exported_at": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Source Exported At",
+            "type": "object"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dataset_schema_version",
+          "dataset_generated_at",
+          "source_exported_at",
+          "started_at",
+          "completed_at",
+          "counts"
+        ],
+        "title": "HealthRecordBatchOut",
+        "type": "object"
+      },
+      "HealthRecordBatchPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HealthRecordBatchOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "HealthRecordBatchPage",
+        "type": "object"
+      },
+      "HealthRecordDetailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiVisibilityCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "category": {
+            "const": "fact",
+            "default": "fact",
+            "title": "Category",
+            "type": "string"
+          },
+          "category_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Label"
+          },
+          "dataset_table": {
+            "$ref": "#/components/schemas/DatasetTable"
+          },
+          "date_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "file_count": {
+            "title": "File Count",
+            "type": "integer"
+          },
+          "file_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "File Paths",
+            "type": "array"
+          },
+          "has_full_text": {
+            "title": "Has Full Text",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "local_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Time"
+          },
+          "ordered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordered By"
+          },
+          "organization": {
+            "description": "The health system that produced it (shown as 'from')",
+            "title": "Organization",
+            "type": "string"
+          },
+          "performing_lab": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performing Lab"
+          },
+          "prescriber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescriber"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "reading_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading Provider"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/HealthRecordRevisionOut"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "source": {
+            "description": "The channel it came through, kept for audit",
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RecordState"
+          },
+          "summary_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Text"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "timezone_assumed": {
+            "title": "Timezone Assumed",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dataset_table",
+          "record_id",
+          "title",
+          "category_label",
+          "kind",
+          "record_date",
+          "date_text",
+          "local_time",
+          "timezone",
+          "timezone_assumed",
+          "organization",
+          "source",
+          "state",
+          "ai_category",
+          "provider",
+          "ordered_by",
+          "reading_provider",
+          "performing_lab",
+          "prescriber",
+          "summary_text",
+          "has_full_text",
+          "file_count",
+          "revision",
+          "body_text",
+          "file_paths",
+          "revisions"
+        ],
+        "title": "HealthRecordDetailOut",
+        "type": "object"
+      },
+      "HealthRecordOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiVisibilityCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "const": "fact",
+            "default": "fact",
+            "title": "Category",
+            "type": "string"
+          },
+          "category_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Label"
+          },
+          "dataset_table": {
+            "$ref": "#/components/schemas/DatasetTable"
+          },
+          "date_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "file_count": {
+            "title": "File Count",
+            "type": "integer"
+          },
+          "has_full_text": {
+            "title": "Has Full Text",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "local_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Time"
+          },
+          "ordered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordered By"
+          },
+          "organization": {
+            "description": "The health system that produced it (shown as 'from')",
+            "title": "Organization",
+            "type": "string"
+          },
+          "performing_lab": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performing Lab"
+          },
+          "prescriber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescriber"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "reading_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading Provider"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source": {
+            "description": "The channel it came through, kept for audit",
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RecordState"
+          },
+          "summary_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Text"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "timezone_assumed": {
+            "title": "Timezone Assumed",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dataset_table",
+          "record_id",
+          "title",
+          "category_label",
+          "kind",
+          "record_date",
+          "date_text",
+          "local_time",
+          "timezone",
+          "timezone_assumed",
+          "organization",
+          "source",
+          "state",
+          "ai_category",
+          "provider",
+          "ordered_by",
+          "reading_provider",
+          "performing_lab",
+          "prescriber",
+          "summary_text",
+          "has_full_text",
+          "file_count",
+          "revision"
+        ],
+        "title": "HealthRecordOut",
+        "type": "object"
+      },
+      "HealthRecordPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HealthRecordOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "HealthRecordPage",
+        "type": "object"
+      },
+      "HealthRecordRevisionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "content_sha256": {
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "batch_id",
+          "content_sha256",
+          "created_at"
+        ],
+        "title": "HealthRecordRevisionOut",
+        "type": "object"
+      },
       "InjectionIn": {
         "additionalProperties": false,
         "description": "Emergency injection. Only the clinical essentials are required (SAFE-23).",
@@ -5969,6 +6684,17 @@
             ],
             "title": "Normalized Value"
           },
+          "ordered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordered By"
+          },
           "original_reference_range": {
             "anyOf": [
               {
@@ -6007,6 +6733,17 @@
             "title": "Panel Id",
             "type": "string"
           },
+          "panel_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Name"
+          },
           "qualitative_result": {
             "anyOf": [
               {
@@ -6030,6 +6767,28 @@
             ],
             "title": "Source Document Id"
           },
+          "source_normalized_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Normalized Name"
+          },
+          "source_organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Organization"
+          },
           "source_page_number": {
             "anyOf": [
               {
@@ -6040,6 +6799,21 @@
               }
             ],
             "title": "Source Page Number"
+          },
+          "source_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "present",
+                  "no_longer_in_source"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source State"
           },
           "source_type": {
             "$ref": "#/components/schemas/SourceType"
@@ -7089,6 +7863,25 @@
           "exposure_model_version"
         ],
         "title": "ModelVersionPeriodOut",
+        "type": "object"
+      },
+      "OrganizationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "OrganizationOut",
         "type": "object"
       },
       "PageMetadata": {
@@ -8342,6 +9135,14 @@
         "title": "ReauthenticatedRequest",
         "type": "object"
       },
+      "RecordState": {
+        "enum": [
+          "present",
+          "no_longer_in_source"
+        ],
+        "title": "RecordState",
+        "type": "string"
+      },
       "RecordedStressContextOut": {
         "additionalProperties": false,
         "properties": {
@@ -9105,7 +9906,8 @@
           "csv_import",
           "file_import",
           "provider",
-          "migration"
+          "migration",
+          "health_records_import"
         ],
         "title": "SourceType",
         "type": "string"
@@ -16498,6 +17300,556 @@
         "summary": "Log Injection",
         "tags": [
           "episodes"
+        ]
+      }
+    },
+    "/api/v1/health-records": {
+      "get": {
+        "description": "Imported records, newest source date first. Dates are the source's own dates.",
+        "operationId": "list_health_records_api_v1_health_records_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dataset_table",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DatasetTable"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Table"
+            }
+          },
+          {
+            "description": "Opaque key from /health-records/organizations; names stay out of URLs",
+            "in": "query",
+            "name": "organization_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{16}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque key from /health-records/organizations; names stay out of URLs",
+              "title": "Organization Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RecordState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sort Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthRecordPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Health Records",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
+    "/api/v1/health-records/ai-visibility": {
+      "get": {
+        "operationId": "get_ai_visibility_api_v1_health_records_ai_visibility_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVisibilityPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Visibility",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
+    "/api/v1/health-records/ai-visibility/{category}": {
+      "put": {
+        "operationId": "set_ai_visibility_api_v1_health_records_ai_visibility__category__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiVisibilityCategory"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiVisibilityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVisibilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Ai Visibility",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
+    "/api/v1/health-records/batches": {
+      "get": {
+        "operationId": "list_health_record_batches_api_v1_health_records_batches_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthRecordBatchPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Health Record Batches",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
+    "/api/v1/health-records/organizations": {
+      "get": {
+        "description": "Distinct producing organizations with opaque keys for the \"from\" filter.",
+        "operationId": "health_record_organizations_api_v1_health_records_organizations_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationOut"
+                  },
+                  "title": "Response Health Record Organizations Api V1 Health Records Organizations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Health Record Organizations",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
+    "/api/v1/health-records/{record_id}": {
+      "get": {
+        "operationId": "get_health_record_api_v1_health_records__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthRecordDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Health Record",
+        "tags": [
+          "health-records"
+        ]
+      }
+    },
+    "/api/v1/health-records/{record_id}/files/{index}": {
+      "get": {
+        "operationId": "download_health_record_file_api_v1_health_records__record_id__files__index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "hc_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hc Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Health Record File",
+        "tags": [
+          "health-records"
         ]
       }
     },

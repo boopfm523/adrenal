@@ -683,6 +683,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/health-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Health Records
+         * @description Imported records, newest source date first. Dates are the source's own dates.
+         */
+        get: operations["list_health_records_api_v1_health_records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health-records/ai-visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ai Visibility */
+        get: operations["get_ai_visibility_api_v1_health_records_ai_visibility_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health-records/ai-visibility/{category}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Ai Visibility */
+        put: operations["set_ai_visibility_api_v1_health_records_ai_visibility__category__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health-records/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Health Record Batches */
+        get: operations["list_health_record_batches_api_v1_health_records_batches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health-records/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Record Organizations
+         * @description Distinct producing organizations with opaque keys for the "from" filter.
+         */
+        get: operations["health_record_organizations_api_v1_health_records_organizations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health-records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Health Record */
+        get: operations["get_health_record_api_v1_health_records__record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health-records/{record_id}/files/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Health Record File */
+        get: operations["download_health_record_file_api_v1_health_records__record_id__files__index__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/garmin/disconnect-preview": {
         parameters: {
             query?: never;
@@ -1745,6 +1870,40 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * AiVisibilityCategory
+         * @description Categories the owner can opt in to chat/AI. All default to hidden.
+         *
+         *     Imported medication lists have no category on purpose: they can never enlarge the
+         *     chat's medication vocabulary or be read as the plan or as doses (ADR-0040).
+         * @enum {string}
+         */
+        AiVisibilityCategory: "labs" | "imaging_impressions" | "imaging_reports" | "encounters" | "conditions" | "immunizations" | "allergies" | "vitals" | "surgical_history" | "clinical_notes" | "visit_summaries" | "letters_and_admin" | "other_documents";
+        /** AiVisibilityIn */
+        AiVisibilityIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** AiVisibilityOut */
+        AiVisibilityOut: {
+            category: components["schemas"]["AiVisibilityCategory"];
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Has Ai Path
+             * @description False when no chat or AI feature reads this category yet
+             */
+            has_ai_path: boolean;
+            /** Label */
+            label: string;
+        };
+        /** AiVisibilityPage */
+        AiVisibilityPage: {
+            /** Items */
+            items: components["schemas"]["AiVisibilityOut"][];
+            /** Medications Note */
+            medications_note: string;
+        };
         /** AnalyticsSummaryOut */
         AnalyticsSummaryOut: {
             daily_doses: components["schemas"]["DailyDoseMetric"];
@@ -2618,6 +2777,12 @@ export interface components {
             /** Timezone */
             timezone: string;
         };
+        /**
+         * DatasetTable
+         * @description Dataset tables HealthCurve imports. Values are the dataset's own table names.
+         * @enum {string}
+         */
+        DatasetTable: "lab_results" | "imaging_studies" | "documents" | "encounters" | "medications" | "conditions" | "immunizations" | "allergies" | "vitals" | "surgical_history";
         /** DayAnalysisGenerationOut */
         DayAnalysisGenerationOut: {
             analysis?: components["schemas"]["DayAnalysisOut"] | null;
@@ -3432,6 +3597,199 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthRecordBatchOut */
+        HealthRecordBatchOut: {
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /** Counts */
+            counts: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Dataset Generated At */
+            dataset_generated_at: string;
+            /** Dataset Schema Version */
+            dataset_schema_version: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Source Exported At */
+            source_exported_at: {
+                [key: string]: string;
+            };
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
+        /** HealthRecordBatchPage */
+        HealthRecordBatchPage: {
+            /** Items */
+            items: components["schemas"]["HealthRecordBatchOut"][];
+            page: components["schemas"]["PageMetadata"];
+        };
+        /** HealthRecordDetailOut */
+        HealthRecordDetailOut: {
+            ai_category: components["schemas"]["AiVisibilityCategory"] | null;
+            /** Body Text */
+            body_text: string | null;
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /** Category Label */
+            category_label: string | null;
+            dataset_table: components["schemas"]["DatasetTable"];
+            /** Date Text */
+            date_text: string | null;
+            /** File Count */
+            file_count: number;
+            /** File Paths */
+            file_paths: string[];
+            /** Has Full Text */
+            has_full_text: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string | null;
+            /** Local Time */
+            local_time: string | null;
+            /** Ordered By */
+            ordered_by: string | null;
+            /**
+             * Organization
+             * @description The health system that produced it (shown as 'from')
+             */
+            organization: string;
+            /** Performing Lab */
+            performing_lab: string | null;
+            /** Prescriber */
+            prescriber: string | null;
+            /** Provider */
+            provider: string | null;
+            /** Reading Provider */
+            reading_provider: string | null;
+            /** Record Date */
+            record_date: string | null;
+            /** Record Id */
+            record_id: string;
+            /** Revision */
+            revision: number;
+            /** Revisions */
+            revisions: components["schemas"]["HealthRecordRevisionOut"][];
+            /**
+             * Source
+             * @description The channel it came through, kept for audit
+             */
+            source: string;
+            state: components["schemas"]["RecordState"];
+            /** Summary Text */
+            summary_text: string | null;
+            /** Timezone */
+            timezone: string | null;
+            /** Timezone Assumed */
+            timezone_assumed: boolean;
+            /** Title */
+            title: string;
+        };
+        /** HealthRecordOut */
+        HealthRecordOut: {
+            ai_category: components["schemas"]["AiVisibilityCategory"] | null;
+            /**
+             * Category
+             * @default fact
+             * @constant
+             */
+            category: "fact";
+            /** Category Label */
+            category_label: string | null;
+            dataset_table: components["schemas"]["DatasetTable"];
+            /** Date Text */
+            date_text: string | null;
+            /** File Count */
+            file_count: number;
+            /** Has Full Text */
+            has_full_text: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string | null;
+            /** Local Time */
+            local_time: string | null;
+            /** Ordered By */
+            ordered_by: string | null;
+            /**
+             * Organization
+             * @description The health system that produced it (shown as 'from')
+             */
+            organization: string;
+            /** Performing Lab */
+            performing_lab: string | null;
+            /** Prescriber */
+            prescriber: string | null;
+            /** Provider */
+            provider: string | null;
+            /** Reading Provider */
+            reading_provider: string | null;
+            /** Record Date */
+            record_date: string | null;
+            /** Record Id */
+            record_id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Source
+             * @description The channel it came through, kept for audit
+             */
+            source: string;
+            state: components["schemas"]["RecordState"];
+            /** Summary Text */
+            summary_text: string | null;
+            /** Timezone */
+            timezone: string | null;
+            /** Timezone Assumed */
+            timezone_assumed: boolean;
+            /** Title */
+            title: string;
+        };
+        /** HealthRecordPage */
+        HealthRecordPage: {
+            /** Items */
+            items: components["schemas"]["HealthRecordOut"][];
+            page: components["schemas"]["PageMetadata"];
+        };
+        /** HealthRecordRevisionOut */
+        HealthRecordRevisionOut: {
+            /**
+             * Batch Id
+             * Format: uuid
+             */
+            batch_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Revision */
+            revision: number;
+        };
         /**
          * InjectionIn
          * @description Emergency injection. Only the clinical essentials are required (SAFE-23).
@@ -3695,6 +4053,8 @@ export interface components {
             normalized_unit: string | null;
             /** Normalized Value */
             normalized_value: string | null;
+            /** Ordered By */
+            ordered_by?: string | null;
             /** Original Reference Range */
             original_reference_range: string | null;
             /** Original Unit */
@@ -3706,12 +4066,20 @@ export interface components {
              * Format: uuid
              */
             panel_id: string;
+            /** Panel Name */
+            panel_name?: string | null;
             /** Qualitative Result */
             qualitative_result: string | null;
             /** Source Document Id */
             source_document_id: string | null;
+            /** Source Normalized Name */
+            source_normalized_name?: string | null;
+            /** Source Organization */
+            source_organization?: string | null;
             /** Source Page Number */
             source_page_number: number | null;
+            /** Source State */
+            source_state?: ("present" | "no_longer_in_source") | null;
             source_type: components["schemas"]["SourceType"];
             specimen_time: components["schemas"]["EventTimeOut"];
             /** Specimen Type */
@@ -4005,6 +4373,13 @@ export interface components {
             exposure_model_version: string;
             /** Feature Version */
             feature_version: string;
+        };
+        /** OrganizationOut */
+        OrganizationOut: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
         };
         /**
          * PageMetadata
@@ -4451,6 +4826,11 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * RecordState
+         * @enum {string}
+         */
+        RecordState: "present" | "no_longer_in_source";
         /** RecordedStressContextOut */
         RecordedStressContextOut: {
             /**
@@ -4726,7 +5106,7 @@ export interface components {
          * @description How a record entered the system. Never inferred (SAFE-14).
          * @enum {string}
          */
-        SourceType: "web" | "telegram" | "csv_import" | "file_import" | "provider" | "migration";
+        SourceType: "web" | "telegram" | "csv_import" | "file_import" | "provider" | "migration" | "health_records_import";
         /** SteroidExposureCurveOut */
         SteroidExposureCurveOut: {
             context_band: components["schemas"]["CircadianContextBandOut"];
@@ -7550,6 +7930,247 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InjectionOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_health_records_api_v1_health_records_get: {
+        parameters: {
+            query?: {
+                dataset_table?: components["schemas"]["DatasetTable"] | null;
+                /** @description Opaque key from /health-records/organizations; names stay out of URLs */
+                organization_key?: string | null;
+                state?: components["schemas"]["RecordState"] | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                sort_order?: "asc" | "desc";
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthRecordPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_visibility_api_v1_health_records_ai_visibility_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiVisibilityPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_ai_visibility_api_v1_health_records_ai_visibility__category__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path: {
+                category: components["schemas"]["AiVisibilityCategory"];
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiVisibilityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiVisibilityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_health_record_batches_api_v1_health_records_batches_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthRecordBatchPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_record_organizations_api_v1_health_records_organizations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_health_record_api_v1_health_records__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthRecordDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_health_record_file_api_v1_health_records__record_id__files__index__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                index: number;
+            };
+            cookie?: {
+                hc_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -63,6 +63,8 @@ class AuditAction(StrEnum):
     INTEGRATION_IMPORT_CONFIRMED = "integration_import_confirmed"
     INTEGRATION_SYNC_COMPLETED = "integration_sync_completed"
     DATA_QUALITY_ACKNOWLEDGED = "data_quality_acknowledged"
+    #: The owner changed which imported health-record categories chat/AI may read.
+    HEALTH_RECORD_AI_VISIBILITY_CHANGED = "health_record_ai_visibility_changed"
 
     AI_ANALYSIS_GENERATED = "ai_analysis_generated"
     AI_ANALYSIS_DELETED = "ai_analysis_deleted"

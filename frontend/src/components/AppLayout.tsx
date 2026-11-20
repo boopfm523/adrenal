@@ -19,6 +19,7 @@ const navigation = [
   ["Symptoms & Meals", "/symptoms-diary"],
   ["Health data", "/health-data"],
   ["Labs", "/labs"],
+  ["Health records", "/health-records"],
   ["Reports", "/reports"],
   ["Data quality", "/data-quality"],
   ["Settings & privacy", "/settings"],

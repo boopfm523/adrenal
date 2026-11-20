@@ -77,6 +77,16 @@ export type TemperaturePage = components["schemas"]["TemperaturePage"];
 export type TemperatureInput = components["schemas"]["TemperatureIn"];
 export type TemperatureCorrectionInput = components["schemas"]["TemperatureCorrectionIn"];
 export type LabResult = components["schemas"]["LabResultOut"];
+export type HealthRecord = components["schemas"]["HealthRecordOut"];
+export type HealthRecordDetail = components["schemas"]["HealthRecordDetailOut"];
+export type HealthRecordPage = components["schemas"]["HealthRecordPage"];
+export type HealthRecordBatchPage = components["schemas"]["HealthRecordBatchPage"];
+export type HealthRecordTable = components["schemas"]["DatasetTable"];
+export type HealthRecordState = components["schemas"]["RecordState"];
+export type AiVisibilityCategory = components["schemas"]["AiVisibilityCategory"];
+export type HealthRecordOrganization = components["schemas"]["OrganizationOut"];
+export type AiVisibility = components["schemas"]["AiVisibilityOut"];
+export type AiVisibilityPage = components["schemas"]["AiVisibilityPage"];
 export type LabResultPage = components["schemas"]["LabResultPage"];
 export type PageMetadata = components["schemas"]["PageMetadata"];
 export type GarminStatus = components["schemas"]["GarminStatusOut"];
@@ -471,6 +481,51 @@ export function getWeight(filters: HealthDataFilters, page = 1): Promise<WeightP
 
 export function getLabResults(filters: RecordedHistoryFilters, page = 1): Promise<LabResultPage> {
   return apiRequest<LabResultPage>(`/labs/results?${recordedHistoryQuery(filters, page).toString()}`);
+}
+
+export interface HealthRecordFilters {
+  table: HealthRecordTable;
+  /** Opaque key from getHealthRecordOrganizations; names never go into URLs. */
+  organizationKey?: string | undefined;
+  state?: HealthRecordState | undefined;
+  dateFrom?: string | undefined;
+  dateTo?: string | undefined;
+}
+
+export function getHealthRecords(filters: HealthRecordFilters, page = 1): Promise<HealthRecordPage> {
+  const query = new URLSearchParams({ page: String(page), page_size: "25", dataset_table: filters.table });
+  if (filters.organizationKey) query.set("organization_key", filters.organizationKey);
+  if (filters.state) query.set("state", filters.state);
+  if (filters.dateFrom) query.set("date_from", filters.dateFrom);
+  if (filters.dateTo) query.set("date_to", filters.dateTo);
+  return apiRequest<HealthRecordPage>(`/health-records?${query.toString()}`);
+}
+
+export function getHealthRecord(recordId: string): Promise<HealthRecordDetail> {
+  return apiRequest<HealthRecordDetail>(`/health-records/${encodeURIComponent(recordId)}`);
+}
+
+export function getHealthRecordOrganizations(): Promise<HealthRecordOrganization[]> {
+  return apiRequest<HealthRecordOrganization[]>("/health-records/organizations");
+}
+
+export function getHealthRecordBatches(page = 1): Promise<HealthRecordBatchPage> {
+  return apiRequest<HealthRecordBatchPage>(`/health-records/batches?page=${String(page)}&page_size=5`);
+}
+
+export function healthRecordFileUrl(recordId: string, index: number): string {
+  return `/api/v1/health-records/${encodeURIComponent(recordId)}/files/${String(index)}`;
+}
+
+export function getAiVisibility(): Promise<AiVisibilityPage> {
+  return apiRequest<AiVisibilityPage>("/health-records/ai-visibility");
+}
+
+export function setAiVisibility(category: AiVisibilityCategory, enabled: boolean): Promise<AiVisibility> {
+  return apiRequest<AiVisibility>(`/health-records/ai-visibility/${category}`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export function getLabDocuments(filters: RecordedHistoryFilters, page = 1): Promise<LabDocumentPage> {

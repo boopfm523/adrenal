@@ -162,6 +162,7 @@ CI fails if a rule marked `enforced` loses its coverage.
 | [docs/credential-encryption.md](docs/credential-encryption.md) | Store, rotate, and recover integration encryption keys |
 | [docs/garmin-import.md](docs/garmin-import.md) | Review and import owner-exported Garmin FIT/CSV data |
 | [docs/garmin-connect.md](docs/garmin-connect.md) | Configure isolated read-only automatic Garmin sync |
+| [docs/health-records-import.md](docs/health-records-import.md) | Import the read-only portal health-records dataset; chat/AI opt-in by category |
 | [docs/backup-runbook.md](docs/backup-runbook.md) | Encrypted backup setup, monitoring, retention, and recovery operations |
 | [docs/private-release-checklist.md](docs/private-release-checklist.md) | Executable gates before relying on the private localhost/Tailscale deployment |
 | [docs/frontend-bundle-budget.md](docs/frontend-bundle-budget.md) | Frontend route-loading strategy and enforced size budget |

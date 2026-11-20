@@ -21,6 +21,7 @@ const DataQualityPage = lazy(() => import("./pages/DataQualityPage").then((modul
 const ReportsPage = lazy(() => import("./pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
 const HelpPage = lazy(() => import("./pages/HelpPage").then((module) => ({ default: module.HelpPage })));
 const HealthDataPage = lazy(() => import("./pages/HealthDataPage").then((module) => ({ default: module.HealthDataPage })));
+const HealthRecordsPage = lazy(() => import("./pages/HealthRecordsPage").then((module) => ({ default: module.HealthRecordsPage })));
 const LabsPage = lazy(() => import("./pages/LabsPage").then((module) => ({ default: module.LabsPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then((module) => ({ default: module.ChatPage })));
 
@@ -57,6 +58,7 @@ export function App(): React.JSX.Element {
             <Route path="/help" element={route(<HelpPage />)} />
             <Route path="/health-data" element={route(<HealthDataPage />)} />
             <Route path="/labs" element={route(<LabsPage />)} />
+            <Route path="/health-records" element={route(<HealthRecordsPage />)} />
             <Route path="/chat" element={route(<ChatPage />)} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>

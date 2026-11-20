@@ -47,6 +47,7 @@ Format: Status, Context, Decision, Consequences, Alternatives considered.
 | [0037](0037-theoretical-exercise-cortisol-response.md) | Theoretical healthy cortisol response to measured exercise load | Accepted; amends 0015 |
 | [0038](0038-timezone-stay-ledger.md) | The owner's timezone is a ledger over time, not a field | Accepted |
 | [0039](0039-prednisone-glucocorticoid-equivalence-model.md) | Combined hydrocortisone + prednisone glucocorticoid-equivalence model (v5) | Accepted; default-selection portion of 0028 superseded |
+| [0040](0040-external-health-records-import.md) | Read-only import of the owner's external health-records dataset | Accepted |
 
 Per `docs/safety-spec.md`, changing or removing a `SAFE-nn` rule also requires an ADR
 here.

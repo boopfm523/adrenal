@@ -32,6 +32,7 @@ from healthcurve.integrations.garmin.models import (
     GarminMetricEvent,
     GarminSleepEvent,
 )
+from healthcurve.integrations.health_records import visibility as health_record_visibility
 from healthcurve.labs.models import LabPanel
 from healthcurve.medications import service as medication_service
 from healthcurve.medications.models import DoseEvent, RegimenVersion
@@ -265,7 +266,14 @@ def build_projection(
     diary = _current_events(session, DiaryEvent, owner_id=owner_id, start=start, end=end)
     life_events = _current_events(session, LifeEvent, owner_id=owner_id, start=start, end=end)
     contexts = _current_events(session, ContextEvent, owner_id=owner_id, start=start, end=end)
-    lab_panels = _current_events(session, LabPanel, owner_id=owner_id, start=start, end=end)
+    # Imported health records reach this model input only when the owner opted labs
+    # in, and never once the source withdrew them (ADR-0040).
+    lab_rows = health_record_visibility.ai_visible_panels(
+        session,
+        owner_id=owner_id,
+        panels=_current_events(session, LabPanel, owner_id=owner_id, start=start, end=end),
+    )
+    lab_panels = [panel for panel, _ in lab_rows]
     garmin_metrics = _current_events(
         session, GarminMetricEvent, owner_id=owner_id, start=start, end=end
     )
@@ -434,10 +442,10 @@ def build_projection(
                         "original_reference_range": result.original_reference_range,
                         "abnormal_flag": result.abnormal_flag,
                     }
-                    for result in panel.results
+                    for result in results
                 ],
             }
-            for panel in lab_panels
+            for panel, results in lab_rows
         ],
         "garmin_intraday_15_minute_buckets": _dense_buckets(provider_samples, zone),
         "garmin_daily_or_point_metrics": [
@@ -544,7 +552,7 @@ def build_projection(
         )
         for row in rows
     }
-    source_ids.update(str(result.id) for panel in lab_panels for result in panel.results)
+    source_ids.update(str(result.id) for _, results in lab_rows for result in results)
     source_ids.update(str(stage.id) for sleep in sleeps for stage in sleep.stage_intervals)
     source_ids.update(
         str(item_id)

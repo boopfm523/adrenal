@@ -90,6 +90,12 @@ class LabPanel(EventMixin, FactBase):
     accession_id: Mapped[str | None] = mapped_column(String(255))
     specimen_type: Mapped[str | None] = mapped_column(String(255))
     report_status: Mapped[str | None] = mapped_column(String(120))
+    #: The order or panel name as the source printed it (ADR-0040 imports).
+    panel_name: Mapped[str | None] = mapped_column(String(300))
+    #: Health system that produced an imported panel, shown as "from" (ADR-0040).
+    source_organization: Mapped[str | None] = mapped_column(String(300))
+    #: Ordering clinician exactly as the source recorded it (ADR-0040).
+    ordered_by: Mapped[str | None] = mapped_column(String(300))
 
     reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reported_local_time: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
@@ -136,6 +142,12 @@ class LabResult(FactBase):
     normalized_unit: Mapped[str | None] = mapped_column(String(64))
     normalization_method: Mapped[str | None] = mapped_column(String(120))
 
+    #: The source dataset's own cross-lab analyte name (ADR-0040), kept for display.
+    #: Never used to merge values; the versioned registry above does that.
+    source_normalized_name: Mapped[str | None] = mapped_column(String(300))
+    #: Stable ``record_id`` of an imported result in the external dataset (ADR-0040).
+    source_record_id: Mapped[str | None] = mapped_column(String(128))
+
     panel: Mapped[LabPanel] = relationship(back_populates="results")
 
     __table_args__ = (
@@ -168,5 +180,6 @@ class LabResult(FactBase):
             name="source_document_page_complete",
         ),
         Index("ix_lab_result_analyte", "owner_id", "analyte_name"),
+        Index("ix_lab_result_source_record", "owner_id", "source_record_id"),
         FACT_SCHEMA,
     )

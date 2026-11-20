@@ -34,9 +34,15 @@ from healthcurve.api.pagination import Pagination, page_metadata
 from healthcurve.api.routers.doses import resolve_time
 from healthcurve.api.schemas import ApiModel, EventTimeIn, LabResultOut, LabResultPage, PageMetadata
 from healthcurve.config import Settings
+from healthcurve.events import service as events
 from healthcurve.events.base import ConfirmationState, SourceType
 from healthcurve.identity import service as auth
 from healthcurve.identity import timezones
+from healthcurve.integrations.health_records.models import (
+    DatasetTable,
+    HealthRecord,
+    RecordState,
+)
 from healthcurve.labs.cleanup_jobs import enqueue_document_cleanup
 from healthcurve.labs.documents import (
     DocumentLayout,
@@ -76,7 +82,13 @@ def list_lab_results(
     query = (
         select(LabResult, LabPanel)
         .join(LabPanel, LabPanel.id == LabResult.panel_id)
-        .where(LabResult.owner_id == owner.id, LabPanel.owner_id == owner.id)
+        .where(
+            LabResult.owner_id == owner.id,
+            LabPanel.owner_id == owner.id,
+            # A corrected panel (an imported source revision, ADR-0040) is history,
+            # not a second current result.
+            events.current_fact_predicate(LabPanel, owner_id=owner.id),
+        )
     )
     window = local_date_window(
         profile_timezone=timezones.current_zone(session, owner),
@@ -95,6 +107,11 @@ def list_lab_results(
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).all()
+    withdrawn = _withdrawn_record_ids(
+        session,
+        owner_id=owner.id,
+        record_ids={r.source_record_id for r, _ in rows if r.source_record_id is not None},
+    )
     payload: list[LabResultOut] = []
     for result, panel in rows:
         definition = analyte_definition(result.normalized_analyte_code)
@@ -122,9 +139,35 @@ def list_lab_results(
                 laboratory_name=panel.laboratory_name,
                 source_type=panel.source_type,
                 confirmation_state=panel.confirmation_state,
+                panel_name=panel.panel_name,
+                source_organization=panel.source_organization,
+                ordered_by=panel.ordered_by,
+                source_normalized_name=result.source_normalized_name,
+                source_state=(
+                    None
+                    if result.source_record_id is None
+                    else RecordState.NO_LONGER_IN_SOURCE.value
+                    if result.source_record_id in withdrawn
+                    else RecordState.PRESENT.value
+                ),
             )
         )
     return LabResultPage(items=payload, page=metadata)
+
+
+def _withdrawn_record_ids(session: Any, *, owner_id: uuid.UUID, record_ids: set[str]) -> set[str]:
+    if not record_ids:
+        return set()
+    return set(
+        session.scalars(
+            select(HealthRecord.record_id).where(
+                HealthRecord.owner_id == owner_id,
+                HealthRecord.dataset_table == DatasetTable.LAB_RESULTS,
+                HealthRecord.record_id.in_(record_ids),
+                HealthRecord.state == RecordState.NO_LONGER_IN_SOURCE,
+            )
+        )
+    )
 
 
 def _owned_document(

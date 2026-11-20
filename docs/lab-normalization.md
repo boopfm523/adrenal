@@ -34,6 +34,12 @@ Every rule uses `Decimal`, a fixed output scale, and an explicit versioned metho
 aliases or factors require synthetic regression tests and a new registry version when
 the mathematical meaning changes.
 
+Imported results from the external health-records dataset ([ADR-0040](adr/0040-external-health-records-import.md))
+try the lab's own name first and then the dataset's cross-lab `test_normalized` name as an
+alias. A `test_normalized` that carries a specimen suffix, such as `Glucose (urine)`, blocks
+normalization entirely so a non-blood specimen never joins a blood trend. Owner-entered names
+are unaffected by this rule.
+
 After installing a new registry version, recompute derived fields for existing records:
 
 ```bash

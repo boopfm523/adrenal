@@ -298,3 +298,35 @@ def normalize_lab_value(
         definition.canonical_unit,
         method,
     )
+
+
+_SPECIMEN_SUFFIX: Final = re.compile(r"\([^()]*\)\s*$")
+
+
+def has_specimen_suffix(name: str | None) -> bool:
+    """True for names such as ``Glucose (urine)`` that mark a non-blood specimen.
+
+    The external dataset (ADR-0040) suffixes non-blood specimens so they never merge
+    with blood values. A suffixed result must not be normalized by this blood-oriented
+    registry under any of its names.
+    """
+    return name is not None and _SPECIMEN_SUFFIX.search(name) is not None
+
+
+def normalize_lab_value_with_alias(
+    analyte_name: str,
+    alias: str | None,
+    original_value: str | None,
+    original_unit: str | None,
+) -> NormalizedLabValue | None:
+    """Try the source name, then the dataset alias, unless the alias marks a specimen.
+
+    Only the alias is checked for a specimen suffix: owner-entered names such as
+    ``Neutrophils (%)`` legitimately contain parentheses and normalize as before.
+    """
+    if has_specimen_suffix(alias):
+        return None
+    normalized = normalize_lab_value(analyte_name, original_value, original_unit)
+    if normalized is None and alias is not None:
+        normalized = normalize_lab_value(alias, original_value, original_unit)
+    return normalized
